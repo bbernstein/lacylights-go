@@ -343,15 +343,101 @@ func TestActiveFadeCount(t *testing.T) {
 		t.Error("ActiveFadeCount should be 0 initially")
 	}
 
-	// Add some fades
-	targets := []ChannelTarget{{Universe: 1, Channel: 1, TargetValue: 255}}
-	engine.FadeChannels(targets, 500*time.Millisecond, "fade1", EasingLinear, nil)
-	engine.FadeChannels(targets, 500*time.Millisecond, "fade2", EasingLinear, nil)
+	// Add two fades on DIFFERENT channels (fades on same channel get consolidated)
+	targets1 := []ChannelTarget{{Universe: 1, Channel: 1, TargetValue: 255}}
+	targets2 := []ChannelTarget{{Universe: 1, Channel: 2, TargetValue: 255}}
+	engine.FadeChannels(targets1, 500*time.Millisecond, "fade1", EasingLinear, nil)
+	engine.FadeChannels(targets2, 500*time.Millisecond, "fade2", EasingLinear, nil)
 
 	time.Sleep(10 * time.Millisecond)
 
 	if engine.ActiveFadeCount() != 2 {
 		t.Errorf("ActiveFadeCount should be 2, got %d", engine.ActiveFadeCount())
+	}
+}
+
+// TestFadeInterrupt verifies that starting a new fade on a channel that's already fading
+// cancels the old fade for that channel, preventing flicker/fighting between fades.
+func TestFadeInterrupt(t *testing.T) {
+	engine, dmxService := createTestEngine()
+	engine.Start()
+	defer engine.Stop()
+
+	// Start fade to 255 on channel 1 with a different ID
+	dmxService.SetChannelValue(1, 1, 0)
+	targets1 := []ChannelTarget{{Universe: 1, Channel: 1, TargetValue: 255}}
+	engine.FadeChannels(targets1, 500*time.Millisecond, "scene-A", EasingLinear, nil)
+
+	// Wait a bit so the first fade is in progress
+	time.Sleep(50 * time.Millisecond)
+
+	// Start a new fade to 100 on the SAME channel but with a DIFFERENT fade ID
+	// This simulates clicking a different scene on the scene board
+	targets2 := []ChannelTarget{{Universe: 1, Channel: 1, TargetValue: 100}}
+	engine.FadeChannels(targets2, 500*time.Millisecond, "scene-B", EasingLinear, nil)
+
+	// The first fade should be cancelled, only scene-B fade should be active
+	if engine.ActiveFadeCount() != 1 {
+		t.Errorf("After interrupt, should have 1 active fade, got %d", engine.ActiveFadeCount())
+	}
+
+	// Wait for fade to complete
+	time.Sleep(600 * time.Millisecond)
+
+	// Final value should be 100 (from scene-B), not 255 (from scene-A)
+	finalValue := dmxService.GetChannelValue(1, 1)
+	if finalValue != 100 {
+		t.Errorf("Final value should be 100 (scene-B), got %d", finalValue)
+	}
+}
+
+// TestFadePartialChannelOverlap verifies that when a new fade overlaps some channels
+// of an existing fade, only the overlapping channels are removed from the old fade.
+func TestFadePartialChannelOverlap(t *testing.T) {
+	engine, dmxService := createTestEngine()
+	engine.Start()
+	defer engine.Stop()
+
+	// Set initial values
+	dmxService.SetChannelValue(1, 1, 0)
+	dmxService.SetChannelValue(1, 2, 0)
+	dmxService.SetChannelValue(1, 3, 0)
+
+	// Start fade on channels 1, 2, 3 to value 255
+	targets1 := []ChannelTarget{
+		{Universe: 1, Channel: 1, TargetValue: 255},
+		{Universe: 1, Channel: 2, TargetValue: 255},
+		{Universe: 1, Channel: 3, TargetValue: 255},
+	}
+	engine.FadeChannels(targets1, 500*time.Millisecond, "fade-A", EasingLinear, nil)
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Start new fade ONLY on channel 2 to value 100
+	targets2 := []ChannelTarget{
+		{Universe: 1, Channel: 2, TargetValue: 100},
+	}
+	engine.FadeChannels(targets2, 500*time.Millisecond, "fade-B", EasingLinear, nil)
+
+	// Should still have 2 active fades (fade-A still controls channels 1 and 3)
+	if engine.ActiveFadeCount() != 2 {
+		t.Errorf("Should have 2 active fades, got %d", engine.ActiveFadeCount())
+	}
+
+	// Wait for both fades to complete
+	time.Sleep(600 * time.Millisecond)
+
+	// Channel 1 should be 255 (from fade-A, uninterrupted)
+	// Channel 2 should be 100 (from fade-B, took over)
+	// Channel 3 should be 255 (from fade-A, uninterrupted)
+	if dmxService.GetChannelValue(1, 1) != 255 {
+		t.Errorf("Channel 1 should be 255, got %d", dmxService.GetChannelValue(1, 1))
+	}
+	if dmxService.GetChannelValue(1, 2) != 100 {
+		t.Errorf("Channel 2 should be 100, got %d", dmxService.GetChannelValue(1, 2))
+	}
+	if dmxService.GetChannelValue(1, 3) != 255 {
+		t.Errorf("Channel 3 should be 255, got %d", dmxService.GetChannelValue(1, 3))
 	}
 }
 
