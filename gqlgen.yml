@@ -1,0 +1,108 @@
+# gqlgen configuration for lacylights-go
+# https://gqlgen.com/config/
+
+schema:
+  - internal/graphql/schema/*.graphql
+
+exec:
+  filename: internal/graphql/generated/generated.go
+  package: generated
+
+model:
+  filename: internal/graphql/generated/models_gen.go
+  package: generated
+
+resolver:
+  layout: follow-schema
+  dir: internal/graphql/resolvers
+  package: resolvers
+  filename_template: "{name}.resolvers.go"
+
+# Autobind maps GraphQL types to Go types
+autobind:
+  - "github.com/bbernstein/lacylights-go/internal/database/models"
+
+# Custom scalar mappings
+models:
+  # Force field resolvers for relations that need lazy loading
+  Project:
+    fields:
+      fixtures:
+        resolver: true
+      scenes:
+        resolver: true
+      cueLists:
+        resolver: true
+  FixtureDefinition:
+    fields:
+      channels:
+        resolver: true
+      modes:
+        resolver: true
+  FixtureMode:
+    fields:
+      channels:
+        resolver: true
+  FixtureInstance:
+    fields:
+      manufacturer:
+        resolver: true
+      model:
+        resolver: true
+      modeName:
+        resolver: true
+      channelCount:
+        resolver: true
+      channels:
+        resolver: true
+  SceneBoardButton:
+    fields:
+      scene:
+        resolver: true
+  CueList:
+    fields:
+      cues:
+        resolver: true
+  Cue:
+    fields:
+      scene:
+        resolver: true
+  Scene:
+    fields:
+      fixtureValues:
+        resolver: true
+  SceneBoard:
+    fields:
+      buttons:
+        resolver: true
+  ID:
+    model:
+      - github.com/99designs/gqlgen/graphql.ID
+  Int:
+    model:
+      - github.com/99designs/gqlgen/graphql.Int
+      - github.com/99designs/gqlgen/graphql.Int64
+      - github.com/99designs/gqlgen/graphql.Int32
+  Float:
+    model:
+      - github.com/99designs/gqlgen/graphql.Float
+  String:
+    model:
+      - github.com/99designs/gqlgen/graphql.String
+  Boolean:
+    model:
+      - github.com/99designs/gqlgen/graphql.Boolean
+
+# Omit getters for resolver implementations
+omit_getters: true
+
+# Enable struct field pointers for optional fields
+struct_fields_always_pointers: false
+
+# Enable nullable input fields
+nullable_input_omittable: true
+
+# Federation support (disabled for now)
+federation:
+  filename: ""
+  package: ""

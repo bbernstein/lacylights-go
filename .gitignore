@@ -1,0 +1,49 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/server
+/lacylights-go
+
+# Test binaries
+*.test
+
+# Output files
+*.out
+
+# Coverage
+coverage.out
+coverage.html
+
+# Database files
+*.db
+*.db-journal
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+/build/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Go workspace
+go.work
+go.work.sum
+
+# Temporary files
+tmp/
+temp/

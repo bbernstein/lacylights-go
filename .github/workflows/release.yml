@@ -1,0 +1,166 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      release_name:
+        description: 'Release name (optional)'
+        required: false
+        type: string
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Run tests before release
+        run: go test -v ./...
+        env:
+          ARTNET_ENABLED: 'false'
+
+      - name: Calculate new version
+        id: version
+        run: |
+          set -e
+
+          # Get current version from latest tag
+          CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          CURRENT_VERSION=${CURRENT_TAG#v}
+
+          # Parse version components
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          MAJOR=${MAJOR:-0}
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+
+          # Calculate new version
+          case "${{ inputs.version_bump }}" in
+            major)
+              NEW_VERSION="$((MAJOR + 1)).0.0"
+              ;;
+            minor)
+              NEW_VERSION="${MAJOR}.$((MINOR + 1)).0"
+              ;;
+            patch)
+              NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+              ;;
+          esac
+
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Build binaries
+        run: |
+          set -e
+          mkdir -p dist
+
+          # Build for multiple platforms
+          PLATFORMS=(
+            "linux/amd64"
+            "linux/arm64"
+            "linux/arm"
+            "darwin/amd64"
+            "darwin/arm64"
+          )
+
+          for PLATFORM in "${PLATFORMS[@]}"; do
+            GOOS="${PLATFORM%/*}"
+            GOARCH="${PLATFORM#*/}"
+            OUTPUT="dist/lacylights-${GOOS}-${GOARCH}"
+
+            if [ "$GOARCH" = "arm" ]; then
+              GOARM=7 GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "-X main.Version=v${{ steps.version.outputs.new_version }}" -o "$OUTPUT" ./cmd/server
+            else
+              GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "-X main.Version=v${{ steps.version.outputs.new_version }}" -o "$OUTPUT" ./cmd/server
+            fi
+
+            echo "Built $OUTPUT"
+          done
+
+      - name: Create archives
+        run: |
+          cd dist
+          for binary in lacylights-*; do
+            tar -czf "${binary}.tar.gz" "$binary"
+            rm "$binary"
+          done
+
+      - name: Create tag
+        run: |
+          set -e
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          NEW_TAG="v${{ steps.version.outputs.new_version }}"
+          git tag -a "$NEW_TAG" -m "Release $NEW_TAG"
+
+          # Push with retry logic
+          for i in 1 2 3; do
+            if git push origin "$NEW_TAG"; then
+              echo "Successfully pushed tag"
+              break
+            fi
+            echo "Push attempt $i failed, retrying..."
+            sleep 5
+          done
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+
+          NEW_TAG="v${{ steps.version.outputs.new_version }}"
+          RELEASE_NAME="${{ inputs.release_name }}"
+
+          if [ -z "$RELEASE_NAME" ]; then
+            RELEASE_NAME="Release $NEW_TAG"
+          fi
+
+          # Check if release already exists
+          if gh release view "$NEW_TAG" &>/dev/null; then
+            echo "Release $NEW_TAG already exists, skipping creation"
+          else
+            gh release create "$NEW_TAG" \
+              --title "$RELEASE_NAME" \
+              --generate-notes \
+              dist/*.tar.gz
+          fi
+
+      - name: Output summary
+        run: |
+          echo "## Release Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** v${{ steps.version.outputs.new_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifacts:**" >> $GITHUB_STEP_SUMMARY
+          for f in dist/*.tar.gz; do
+            echo "- $(basename $f)" >> $GITHUB_STEP_SUMMARY
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[View Release](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.new_version }})" >> $GITHUB_STEP_SUMMARY
