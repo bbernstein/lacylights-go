@@ -175,14 +175,41 @@ func (e *Engine) FadeChannels(targets []ChannelTarget, duration time.Duration, f
 		easingType = EasingInOutSine
 	}
 
-	// Cancel existing fade with the same ID
-	if existing, ok := e.activeFades[fadeID]; ok {
-		// Clean up interpolated values for this fade's channels
-		for _, ch := range existing.channels {
+	// Build a set of channels that this new fade will control
+	newChannelSet := make(map[string]bool)
+	for _, target := range targets {
+		channelKey := fmt.Sprintf("%d-%d", target.Universe, target.Channel)
+		newChannelSet[channelKey] = true
+	}
+
+	// Cancel conflicting channels from ALL existing fades (not just same ID)
+	// This prevents multiple fades from fighting over the same channels
+	var fadesToRemove []string
+	for existingID, existingFade := range e.activeFades {
+		// Filter out channels that conflict with our new fade
+		var remainingChannels []channelFade
+		for _, ch := range existingFade.channels {
 			channelKey := fmt.Sprintf("%d-%d", ch.universe, ch.channel)
-			delete(e.interpolatedValues, channelKey)
+			if !newChannelSet[channelKey] {
+				// This channel is NOT being taken over, keep it
+				remainingChannels = append(remainingChannels, ch)
+			}
+			// If the channel IS being taken over, we don't add it to remaining
+			// but we keep the interpolated value for smooth transition
 		}
-		delete(e.activeFades, fadeID)
+
+		if len(remainingChannels) == 0 {
+			// This fade has no channels left, mark it for removal
+			fadesToRemove = append(fadesToRemove, existingID)
+		} else if len(remainingChannels) < len(existingFade.channels) {
+			// Some channels were removed, update the fade
+			existingFade.channels = remainingChannels
+		}
+	}
+
+	// Remove fades that have no channels left
+	for _, id := range fadesToRemove {
+		delete(e.activeFades, id)
 	}
 
 	// Build channel fades
