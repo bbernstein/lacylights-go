@@ -12,13 +12,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lucsky/cuid"
+
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 	"github.com/bbernstein/lacylights-go/internal/services/fade"
 	importservice "github.com/bbernstein/lacylights-go/internal/services/import"
 	"github.com/bbernstein/lacylights-go/internal/services/network"
 	"github.com/bbernstein/lacylights-go/internal/services/pubsub"
-	"github.com/lucsky/cuid"
 )
 
 // Type is the resolver for the type field.
