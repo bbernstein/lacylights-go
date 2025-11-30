@@ -312,20 +312,6 @@ func (s *Service) cancelExistingProjectSessionsLocked(projectID string) {
 	}
 }
 
-// applyPreviewOverlayLocked applies all channel overrides to DMX.
-// Must be called with lock held.
-func (s *Service) applyPreviewOverlayLocked(session *Session) {
-	if s.dmxService == nil {
-		return
-	}
-
-	for channelKey, value := range session.ChannelOverrides {
-		var universe, channel int
-		_, _ = fmt.Sscanf(channelKey, "%d:%d", &universe, &channel)
-		s.dmxService.SetChannelOverride(universe, channel, byte(value))
-	}
-}
-
 // getCurrentDMXOutputLocked returns the current DMX output for a session.
 // Must be called with lock held.
 func (s *Service) getCurrentDMXOutputLocked(sessionID string) []DMXOutput {
