@@ -1985,13 +1985,13 @@ func (r *mutationResolver) FadeToBlack(ctx context.Context, fadeOutTime float64)
 }
 
 // StartCueList is the resolver for the startCueList field.
-func (r *mutationResolver) StartCueList(ctx context.Context, cueListID string, startFromCue *int) (bool, error) {
+func (r *mutationResolver) StartCueList(ctx context.Context, cueListID string, startFromCue *int, fadeInTime *float64) (bool, error) {
 	var startFromCueNumber *float64
 	if startFromCue != nil {
 		cueNum := float64(*startFromCue)
 		startFromCueNumber = &cueNum
 	}
-	if err := r.PlaybackService.StartCueList(ctx, cueListID, startFromCueNumber); err != nil {
+	if err := r.PlaybackService.StartCueList(ctx, cueListID, startFromCueNumber, fadeInTime); err != nil {
 		return false, err
 	}
 	return true, nil

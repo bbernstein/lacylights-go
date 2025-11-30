@@ -212,19 +212,55 @@ func (e *Engine) FadeChannels(targets []ChannelTarget, duration time.Duration, f
 		delete(e.activeFades, id)
 	}
 
-	// Build channel fades
+	// Build a set of channels that are currently in active fades
+	// so we know which interpolated values are valid
+	activeChannels := make(map[string]bool)
+	for _, existingFade := range e.activeFades {
+		for _, ch := range existingFade.channels {
+			channelKey := fmt.Sprintf("%d-%d", ch.universe, ch.channel)
+			activeChannels[channelKey] = true
+		}
+	}
+
+	// Handle instant fades (duration <= 0) synchronously
+	// This avoids race conditions where the caller checks values before processFades runs
+	if duration <= 0 {
+		for _, target := range targets {
+			channelKey := fmt.Sprintf("%d-%d", target.Universe, target.Channel)
+			// Set the final value immediately
+			e.dmxService.SetChannelValue(target.Universe, target.Channel, byte(target.TargetValue))
+			// Update interpolated value to match
+			e.interpolatedValues[channelKey] = float64(target.TargetValue)
+		}
+		// Execute callback if provided
+		if onComplete != nil {
+			go onComplete()
+		}
+		return fadeID
+	}
+
+	// Build channel fades for non-instant fades
 	startTime := time.Now()
 	var channels []channelFade
 
 	for _, target := range targets {
 		channelKey := fmt.Sprintf("%d-%d", target.Universe, target.Channel)
 
-		// Get current value - prefer interpolated value if available
+		// Get current value - only use interpolated value if channel is in an active fade
+		// This prevents stale interpolated values from being used when channels are set
+		// externally (e.g., via setSceneLive calling SetChannelValue directly)
 		var startValue float64
-		if interpolated, ok := e.interpolatedValues[channelKey]; ok {
-			startValue = interpolated
+		if activeChannels[channelKey] {
+			if interpolated, ok := e.interpolatedValues[channelKey]; ok {
+				startValue = interpolated
+			} else {
+				startValue = float64(e.dmxService.GetChannelValue(target.Universe, target.Channel))
+			}
 		} else {
+			// Channel is not in an active fade, use actual DMX value
 			startValue = float64(e.dmxService.GetChannelValue(target.Universe, target.Channel))
+			// Clear stale interpolated value
+			delete(e.interpolatedValues, channelKey)
 		}
 
 		channels = append(channels, channelFade{
