@@ -601,7 +601,7 @@ func (s *Service) GoToCueName(ctx context.Context, cueListID string, cueName str
 }
 
 // StartCueList starts playing a cue list from the beginning or a specific cue.
-func (s *Service) StartCueList(ctx context.Context, cueListID string, startFromCueNumber *float64) error {
+func (s *Service) StartCueList(ctx context.Context, cueListID string, startFromCueNumber *float64, fadeInTimeOverride *float64) error {
 	// Load cue list with cues
 	var cueList models.CueList
 	result := s.db.WithContext(ctx).
@@ -631,17 +631,23 @@ func (s *Service) StartCueList(ctx context.Context, cueListID string, startFromC
 
 	cue := cueList.Cues[startIndex]
 
-	// Execute DMX
-	if err := s.ExecuteCueDmx(ctx, cue.ID, nil); err != nil {
+	// Execute DMX with optional fade time override
+	if err := s.ExecuteCueDmx(ctx, cue.ID, fadeInTimeOverride); err != nil {
 		return err
 	}
 
-	// Start playback state
+	// Determine the actual fade time for progress tracking
+	actualFadeTime := cue.FadeInTime
+	if fadeInTimeOverride != nil {
+		actualFadeTime = *fadeInTimeOverride
+	}
+
+	// Start playback state with actual fade time
 	cueForPlayback := &CueForPlayback{
 		ID:          cue.ID,
 		Name:        cue.Name,
 		CueNumber:   cue.CueNumber,
-		FadeInTime:  cue.FadeInTime,
+		FadeInTime:  actualFadeTime, // Use actual fade time for tracking
 		FadeOutTime: cue.FadeOutTime,
 		FollowTime:  cue.FollowTime,
 	}

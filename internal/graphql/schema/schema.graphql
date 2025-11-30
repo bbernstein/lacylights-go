@@ -1085,7 +1085,7 @@ type Mutation {
   fadeToBlack(fadeOutTime: Float!): Boolean!
 
   # Cue List Playback Control
-  startCueList(cueListId: ID!, startFromCue: Int): Boolean!
+  startCueList(cueListId: ID!, startFromCue: Int, fadeInTime: Float): Boolean!
   nextCue(cueListId: ID!, fadeInTime: Float): Boolean!
   previousCue(cueListId: ID!, fadeInTime: Float): Boolean!
   goToCue(cueListId: ID!, cueIndex: Int!, fadeInTime: Float): Boolean!

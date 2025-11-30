@@ -341,7 +341,7 @@ type ComplexityRoot struct {
 		SetChannelValue                 func(childComplexity int, universe int, channel int, value int) int
 		SetSceneLive                    func(childComplexity int, sceneID string) int
 		SetWiFiEnabled                  func(childComplexity int, enabled bool) int
-		StartCueList                    func(childComplexity int, cueListID string, startFromCue *int) int
+		StartCueList                    func(childComplexity int, cueListID string, startFromCue *int, fadeInTime *float64) int
 		StartPreviewSession             func(childComplexity int, projectID string) int
 		StopCueList                     func(childComplexity int, cueListID string) int
 		UpdateAllRepositories           func(childComplexity int) int
@@ -758,7 +758,7 @@ type MutationResolver interface {
 	SetSceneLive(ctx context.Context, sceneID string) (bool, error)
 	PlayCue(ctx context.Context, cueID string, fadeInTime *float64) (bool, error)
 	FadeToBlack(ctx context.Context, fadeOutTime float64) (bool, error)
-	StartCueList(ctx context.Context, cueListID string, startFromCue *int) (bool, error)
+	StartCueList(ctx context.Context, cueListID string, startFromCue *int, fadeInTime *float64) (bool, error)
 	NextCue(ctx context.Context, cueListID string, fadeInTime *float64) (bool, error)
 	PreviousCue(ctx context.Context, cueListID string, fadeInTime *float64) (bool, error)
 	GoToCue(ctx context.Context, cueListID string, cueIndex int, fadeInTime *float64) (bool, error)
@@ -2328,7 +2328,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.StartCueList(childComplexity, args["cueListId"].(string), args["startFromCue"].(*int)), true
+		return e.complexity.Mutation.StartCueList(childComplexity, args["cueListId"].(string), args["startFromCue"].(*int), args["fadeInTime"].(*float64)), true
 	case "Mutation.startPreviewSession":
 		if e.complexity.Mutation.StartPreviewSession == nil {
 			break
@@ -5156,7 +5156,7 @@ type Mutation {
   fadeToBlack(fadeOutTime: Float!): Boolean!
 
   # Cue List Playback Control
-  startCueList(cueListId: ID!, startFromCue: Int): Boolean!
+  startCueList(cueListId: ID!, startFromCue: Int, fadeInTime: Float): Boolean!
   nextCue(cueListId: ID!, fadeInTime: Float): Boolean!
   previousCue(cueListId: ID!, fadeInTime: Float): Boolean!
   goToCue(cueListId: ID!, cueIndex: Int!, fadeInTime: Float): Boolean!
@@ -5828,6 +5828,11 @@ func (ec *executionContext) field_Mutation_startCueList_args(ctx context.Context
 		return nil, err
 	}
 	args["startFromCue"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "fadeInTime", ec.unmarshalOFloat2ᚖfloat64)
+	if err != nil {
+		return nil, err
+	}
+	args["fadeInTime"] = arg2
 	return args, nil
 }
 
@@ -14009,7 +14014,7 @@ func (ec *executionContext) _Mutation_startCueList(ctx context.Context, field gr
 		ec.fieldContext_Mutation_startCueList,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().StartCueList(ctx, fc.Args["cueListId"].(string), fc.Args["startFromCue"].(*int))
+			return ec.resolvers.Mutation().StartCueList(ctx, fc.Args["cueListId"].(string), fc.Args["startFromCue"].(*int), fc.Args["fadeInTime"].(*float64))
 		},
 		nil,
 		ec.marshalNBoolean2bool,
