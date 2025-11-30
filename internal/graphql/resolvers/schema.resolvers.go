@@ -1846,6 +1846,8 @@ func (r *mutationResolver) StartPreviewSession(ctx context.Context, projectID st
 
 	// Persist to database so it can be queried
 	if err := r.db.Create(dbSession).Error; err != nil {
+		// Rollback in-memory session if database creation fails
+		_, _ = r.PreviewService.CancelSession(ctx, session.ID)
 		return nil, err
 	}
 
@@ -1866,7 +1868,9 @@ func (r *mutationResolver) CancelPreviewSession(ctx context.Context, sessionID s
 
 	// Also delete from database
 	if success {
-		r.db.Where("id = ?", sessionID).Delete(&models.PreviewSession{})
+		if err := r.db.Where("id = ?", sessionID).Delete(&models.PreviewSession{}).Error; err != nil {
+			return false, err
+		}
 	}
 
 	return success, nil
@@ -1970,12 +1974,16 @@ func (r *mutationResolver) FadeToBlack(ctx context.Context, fadeOutTime float64)
 	if duration == 0 {
 		r.DMXService.FadeToBlack()
 	} else {
-		//  After fade completes, ensure DMX service clears all channels
+		// After fade completes, ensure DMX service clears all channels
 		// This handles channels set directly via SetChannelValue that may not be tracked by fade engine
-		go func() {
+		// Use the fadeID to detect if a new fade has started and skip cleanup if so
+		go func(currentFadeID string) {
 			time.Sleep(duration + 100*time.Millisecond) // Wait for fade to complete
-			r.DMXService.FadeToBlack()
-		}()
+			// Only clear if this is still the active fade (no new fade has started)
+			if r.FadeEngine.ActiveFadeCount() == 0 {
+				r.DMXService.FadeToBlack()
+			}
+		}(fadeID)
 	}
 
 	// Clear active scene tracking
