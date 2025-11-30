@@ -1829,19 +1829,26 @@ func (r *mutationResolver) StartPreviewSession(ctx context.Context, projectID st
 		return nil, err
 	}
 
-	// Convert to models.PreviewSession
+	// Convert to models.PreviewSession and persist to database
 	var userID string
 	if session.UserID != nil {
 		userID = *session.UserID
 	}
 
-	return &models.PreviewSession{
+	dbSession := &models.PreviewSession{
 		ID:        session.ID,
 		ProjectID: session.ProjectID,
 		UserID:    userID,
 		IsActive:  session.IsActive,
 		CreatedAt: session.CreatedAt,
-	}, nil
+	}
+
+	// Persist to database so it can be queried
+	if err := r.db.Create(dbSession).Error; err != nil {
+		return nil, err
+	}
+
+	return dbSession, nil
 }
 
 // CommitPreviewSession is the resolver for the commitPreviewSession field.
@@ -1851,7 +1858,17 @@ func (r *mutationResolver) CommitPreviewSession(ctx context.Context, sessionID s
 
 // CancelPreviewSession is the resolver for the cancelPreviewSession field.
 func (r *mutationResolver) CancelPreviewSession(ctx context.Context, sessionID string) (bool, error) {
-	return r.PreviewService.CancelSession(ctx, sessionID)
+	success, err := r.PreviewService.CancelSession(ctx, sessionID)
+	if err != nil {
+		return false, err
+	}
+
+	// Also delete from database
+	if success {
+		r.db.Where("id = ?", sessionID).Delete(&models.PreviewSession{})
+	}
+
+	return success, nil
 }
 
 // UpdatePreviewChannel is the resolver for the updatePreviewChannel field.
@@ -1944,11 +1961,26 @@ func (r *mutationResolver) FadeToBlack(ctx context.Context, fadeOutTime float64)
 	duration := time.Duration(fadeOutTime * float64(time.Second))
 
 	// Use the fade engine to smoothly fade to black
-	r.FadeEngine.FadeToBlack(duration, "")
+	fadeID := r.FadeEngine.FadeToBlack(duration, "")
+
+	// For instant fades (0 duration), also immediately clear DMX state
+	// For timed fades, the fade engine will handle the gradual transition,
+	// but we still need to ensure the DMX service state is cleared at the end
+	if duration == 0 {
+		r.DMXService.FadeToBlack()
+	} else {
+		//  After fade completes, ensure DMX service clears all channels
+		// This handles channels set directly via SetChannelValue that may not be tracked by fade engine
+		go func() {
+			time.Sleep(duration + 100*time.Millisecond) // Wait for fade to complete
+			r.DMXService.FadeToBlack()
+		}()
+	}
 
 	// Clear active scene tracking
 	r.DMXService.ClearActiveScene()
 
+	_ = fadeID // suppress unused variable warning
 	return true, nil
 }
 
@@ -2208,9 +2240,21 @@ func (r *previewSessionResolver) CreatedAt(ctx context.Context, obj *models.Prev
 
 // DmxOutput is the resolver for the dmxOutput field.
 func (r *previewSessionResolver) DmxOutput(ctx context.Context, obj *models.PreviewSession) ([]*generated.UniverseOutput, error) {
-	// TODO: Implement preview DMX state when PreviewService is implemented
-	// For now, return empty array
-	return []*generated.UniverseOutput{}, nil
+	// Get DMX output from preview service
+	previewOutput := r.PreviewService.GetDMXOutput(obj.ID)
+	if previewOutput == nil {
+		return []*generated.UniverseOutput{}, nil
+	}
+
+	// Convert to GraphQL type
+	result := make([]*generated.UniverseOutput, len(previewOutput))
+	for i, output := range previewOutput {
+		result[i] = &generated.UniverseOutput{
+			Universe: output.Universe,
+			Channels: output.Channels,
+		}
+	}
+	return result, nil
 }
 
 // FixtureCount is the resolver for the fixtureCount field.
