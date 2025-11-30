@@ -198,6 +198,235 @@ jobs:
             rm "$binary"
           done
 
+      - name: Calculate SHA256 checksums
+        id: checksums
+        run: |
+          set -e
+          cd dist
+
+          # Calculate checksums for all archives
+          for archive in *.tar.gz; do
+            sha256sum "$archive" >> checksums.txt
+          done
+
+          cat checksums.txt
+          echo "checksums_file=checksums.txt" >> $GITHUB_OUTPUT
+
+      - name: Calculate release metadata
+        id: release_metadata
+        run: |
+          echo "release_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+
+      - name: Upload to S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DIST_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DIST_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_DIST_REGION }}
+        run: |
+          set -e
+          VERSION="${{ steps.new_version.outputs.version }}"
+
+          echo "Uploading archives to S3..."
+          for archive in dist/*.tar.gz; do
+            FILENAME=$(basename "$archive")
+            aws s3 cp "$archive" \
+              "s3://${{ secrets.AWS_DIST_BUCKET }}/releases/${{ env.COMPONENT }}/$FILENAME" \
+              --content-type "application/gzip"
+            echo "✓ Uploaded $FILENAME"
+          done
+
+      - name: Create version-specific metadata JSON
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DIST_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DIST_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_DIST_REGION }}
+        run: |
+          set -e
+          VERSION="${{ steps.new_version.outputs.version }}"
+          IS_PRERELEASE="${{ steps.prerelease_check.outputs.is_prerelease }}"
+          RELEASE_DATE="${{ steps.release_metadata.outputs.release_date }}"
+
+          # Build platforms array with checksums
+          PLATFORMS_JSON="[]"
+          while IFS= read -r line; do
+            SHA256=$(echo "$line" | awk '{print $1}')
+            FILENAME=$(echo "$line" | awk '{print $2}')
+
+            # Extract platform info from filename: lacylights-{os}-{arch}.tar.gz
+            PLATFORM_INFO=$(echo "$FILENAME" | sed 's/lacylights-//' | sed 's/.tar.gz//')
+            OS=$(echo "$PLATFORM_INFO" | cut -d- -f1)
+            ARCH=$(echo "$PLATFORM_INFO" | cut -d- -f2)
+
+            FILE_SIZE=$(stat -c%s "dist/$FILENAME")
+
+            PLATFORM_ENTRY=$(jq -n \
+              --arg os "$OS" \
+              --arg arch "$ARCH" \
+              --arg url "https://dist.lacylights.com/releases/${{ env.COMPONENT }}/$FILENAME" \
+              --arg sha256 "$SHA256" \
+              --argjson fileSize "$FILE_SIZE" \
+              '{
+                os: $os,
+                arch: $arch,
+                url: $url,
+                sha256: $sha256,
+                fileSize: $fileSize
+              }')
+
+            PLATFORMS_JSON=$(echo "$PLATFORMS_JSON" | jq --argjson entry "$PLATFORM_ENTRY" '. += [$entry]')
+          done < dist/checksums.txt
+
+          # Create version-specific metadata JSON
+          jq -n \
+            --arg version "$VERSION" \
+            --arg releaseDate "$RELEASE_DATE" \
+            --argjson isPrerelease "$IS_PRERELEASE" \
+            --argjson platforms "$PLATFORMS_JSON" \
+            '{
+              version: $version,
+              releaseDate: $releaseDate,
+              isPrerelease: $isPrerelease,
+              platforms: $platforms
+            }' > "${VERSION}.json"
+
+          echo "Uploading ${VERSION}.json..."
+          aws s3 cp "${VERSION}.json" \
+            "s3://${{ secrets.AWS_DIST_BUCKET }}/releases/${{ env.COMPONENT }}/${VERSION}.json" \
+            --content-type "application/json" \
+            --cache-control "max-age=31536000, immutable" \
+            --metadata-directive REPLACE
+
+          echo "✓ ${VERSION}.json uploaded"
+
+      - name: Update latest.json
+        if: ${{ steps.prerelease_check.outputs.is_prerelease == 'false' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DIST_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DIST_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_DIST_REGION }}
+        run: |
+          set -e
+          VERSION="${{ steps.new_version.outputs.version }}"
+          RELEASE_DATE="${{ steps.release_metadata.outputs.release_date }}"
+
+          # Build platforms array with checksums
+          PLATFORMS_JSON="[]"
+          while IFS= read -r line; do
+            SHA256=$(echo "$line" | awk '{print $1}')
+            FILENAME=$(echo "$line" | awk '{print $2}')
+
+            # Extract platform info from filename
+            PLATFORM_INFO=$(echo "$FILENAME" | sed 's/lacylights-//' | sed 's/.tar.gz//')
+            OS=$(echo "$PLATFORM_INFO" | cut -d- -f1)
+            ARCH=$(echo "$PLATFORM_INFO" | cut -d- -f2)
+
+            FILE_SIZE=$(stat -c%s "dist/$FILENAME")
+
+            PLATFORM_ENTRY=$(jq -n \
+              --arg os "$OS" \
+              --arg arch "$ARCH" \
+              --arg url "https://dist.lacylights.com/releases/${{ env.COMPONENT }}/$FILENAME" \
+              --arg sha256 "$SHA256" \
+              --argjson fileSize "$FILE_SIZE" \
+              '{
+                os: $os,
+                arch: $arch,
+                url: $url,
+                sha256: $sha256,
+                fileSize: $fileSize
+              }')
+
+            PLATFORMS_JSON=$(echo "$PLATFORMS_JSON" | jq --argjson entry "$PLATFORM_ENTRY" '. += [$entry]')
+          done < dist/checksums.txt
+
+          # Create latest.json
+          jq -n \
+            --arg version "$VERSION" \
+            --arg releaseDate "$RELEASE_DATE" \
+            --argjson isPrerelease false \
+            --argjson platforms "$PLATFORMS_JSON" \
+            '{
+              version: $version,
+              releaseDate: $releaseDate,
+              isPrerelease: $isPrerelease,
+              platforms: $platforms
+            }' > latest.json
+
+          echo "Uploading latest.json..."
+          aws s3 cp latest.json \
+            "s3://${{ secrets.AWS_DIST_BUCKET }}/releases/${{ env.COMPONENT }}/latest.json" \
+            --content-type "application/json" \
+            --cache-control "max-age=300, must-revalidate" \
+            --metadata-directive REPLACE
+
+          echo "✓ latest.json updated"
+
+      - name: Update DynamoDB
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DIST_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DIST_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_DIST_REGION }}
+        run: |
+          set -e
+          VERSION="${{ steps.new_version.outputs.version }}"
+          IS_PRERELEASE="${{ steps.prerelease_check.outputs.is_prerelease }}"
+          RELEASE_DATE="${{ steps.release_metadata.outputs.release_date }}"
+          TABLE_NAME="${{ secrets.AWS_DIST_TABLE_NAME || 'lacylights-releases' }}"
+
+          # Build platforms array with checksums
+          PLATFORMS_JSON="[]"
+          while IFS= read -r line; do
+            SHA256=$(echo "$line" | awk '{print $1}')
+            FILENAME=$(echo "$line" | awk '{print $2}')
+
+            # Extract platform info from filename
+            PLATFORM_INFO=$(echo "$FILENAME" | sed 's/lacylights-//' | sed 's/.tar.gz//')
+            OS=$(echo "$PLATFORM_INFO" | cut -d- -f1)
+            ARCH=$(echo "$PLATFORM_INFO" | cut -d- -f2)
+
+            FILE_SIZE=$(stat -c%s "dist/$FILENAME")
+
+            PLATFORM_ENTRY=$(jq -n \
+              --arg os "$OS" \
+              --arg arch "$ARCH" \
+              --arg url "https://dist.lacylights.com/releases/${{ env.COMPONENT }}/$FILENAME" \
+              --arg sha256 "$SHA256" \
+              --argjson fileSize "$FILE_SIZE" \
+              '{
+                os: {S: $os},
+                arch: {S: $arch},
+                url: {S: $url},
+                sha256: {S: $sha256},
+                fileSize: {N: ($fileSize | tostring)}
+              }')
+
+            PLATFORMS_JSON=$(echo "$PLATFORMS_JSON" | jq --argjson entry "$PLATFORM_ENTRY" '. += [$entry]')
+          done < dist/checksums.txt
+
+          echo "Updating DynamoDB..."
+
+          # Create DynamoDB item
+          jq -n \
+            --arg component "${{ env.COMPONENT }}" \
+            --arg version "$VERSION" \
+            --arg releaseDate "$RELEASE_DATE" \
+            --arg isPrerelease "$IS_PRERELEASE" \
+            --argjson platforms "$PLATFORMS_JSON" \
+            '{
+              TableName: env.TABLE_NAME,
+              Item: {
+                component: {S: $component},
+                version: {S: $version},
+                releaseDate: {S: $releaseDate},
+                isPrerelease: {BOOL: ($isPrerelease == "true")},
+                platforms: {L: $platforms}
+              }
+            }' | TABLE_NAME="$TABLE_NAME" jq '.TableName = env.TABLE_NAME' > dynamodb-item.json
+
+          aws dynamodb put-item --cli-input-json file://dynamodb-item.json
+
+          echo "✓ DynamoDB updated: component=${{ env.COMPONENT }}, version=$VERSION"
+
       - name: Create Git tag
         run: |
           set -e
@@ -300,9 +529,17 @@ jobs:
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Artifacts:**" >> $GITHUB_STEP_SUMMARY
+          echo "### Distribution" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Platforms:**" >> $GITHUB_STEP_SUMMARY
           for f in dist/*.tar.gz; do
-            echo "- $(basename $f)" >> $GITHUB_STEP_SUMMARY
+            FILENAME=$(basename "$f")
+            echo "- [$FILENAME](https://dist.lacylights.com/releases/${{ env.COMPONENT }}/$FILENAME)" >> $GITHUB_STEP_SUMMARY
           done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**API Endpoints:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Latest: https://dist.lacylights.com/releases/${{ env.COMPONENT }}/latest.json" >> $GITHUB_STEP_SUMMARY
+          echo "- Version-specific: https://dist.lacylights.com/releases/${{ env.COMPONENT }}/${{ steps.new_version.outputs.version }}.json" >> $GITHUB_STEP_SUMMARY
+          echo "- Manifest: https://dist.lacylights.com/api/manifest" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "[View Release](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.new_version.outputs.version }})" >> $GITHUB_STEP_SUMMARY
