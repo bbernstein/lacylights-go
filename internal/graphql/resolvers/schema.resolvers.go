@@ -12,14 +12,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lucsky/cuid"
-
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 	"github.com/bbernstein/lacylights-go/internal/services/fade"
 	importservice "github.com/bbernstein/lacylights-go/internal/services/import"
 	"github.com/bbernstein/lacylights-go/internal/services/network"
 	"github.com/bbernstein/lacylights-go/internal/services/pubsub"
+	"github.com/lucsky/cuid"
 )
 
 // Type is the resolver for the type field.
@@ -297,6 +296,69 @@ func (r *mutationResolver) DeleteProject(ctx context.Context, id string) (bool, 
 	return true, nil
 }
 
+// BulkCreateProjects is the resolver for the bulkCreateProjects field.
+func (r *mutationResolver) BulkCreateProjects(ctx context.Context, input generated.BulkProjectCreateInput) ([]*models.Project, error) {
+	var createdProjects []*models.Project
+
+	for _, projectInput := range input.Projects {
+		project, err := r.CreateProject(ctx, *projectInput)
+		if err != nil {
+			return nil, err
+		}
+		createdProjects = append(createdProjects, project)
+	}
+
+	return createdProjects, nil
+}
+
+// BulkUpdateProjects is the resolver for the bulkUpdateProjects field.
+func (r *mutationResolver) BulkUpdateProjects(ctx context.Context, input generated.BulkProjectUpdateInput) ([]*models.Project, error) {
+	var updatedProjects []*models.Project
+
+	for _, item := range input.Projects {
+		project, err := r.ProjectRepo.FindByID(ctx, item.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		if project == nil {
+			return nil, fmt.Errorf("project not found: %s", item.ProjectID)
+		}
+
+		if item.Name.IsSet() && item.Name.Value() != nil {
+			project.Name = *item.Name.Value()
+		}
+
+		if item.Description.IsSet() {
+			project.Description = item.Description.Value()
+		}
+
+		if err := r.ProjectRepo.Update(ctx, project); err != nil {
+			return nil, err
+		}
+
+		updatedProjects = append(updatedProjects, project)
+	}
+
+	return updatedProjects, nil
+}
+
+// BulkDeleteProjects is the resolver for the bulkDeleteProjects field.
+func (r *mutationResolver) BulkDeleteProjects(ctx context.Context, projectIds []string) (*generated.BulkDeleteResult, error) {
+	var deletedIds []string
+
+	for _, projectID := range projectIds {
+		if err := r.ProjectRepo.Delete(ctx, projectID); err != nil {
+			return nil, err
+		}
+		deletedIds = append(deletedIds, projectID)
+	}
+
+	return &generated.BulkDeleteResult{
+		DeletedCount: len(deletedIds),
+		DeletedIds:   deletedIds,
+	}, nil
+}
+
 // CreateFixtureDefinition is the resolver for the createFixtureDefinition field.
 func (r *mutationResolver) CreateFixtureDefinition(ctx context.Context, input generated.CreateFixtureDefinitionInput) (*models.FixtureDefinition, error) {
 	// Check if definition with same manufacturer/model already exists
@@ -430,6 +492,74 @@ func (r *mutationResolver) DeleteFixtureDefinition(ctx context.Context, id strin
 	}
 
 	return true, nil
+}
+
+// BulkCreateFixtureDefinitions is the resolver for the bulkCreateFixtureDefinitions field.
+func (r *mutationResolver) BulkCreateFixtureDefinitions(ctx context.Context, input generated.BulkFixtureDefinitionCreateInput) ([]*models.FixtureDefinition, error) {
+	var createdDefinitions []*models.FixtureDefinition
+
+	for _, defInput := range input.Definitions {
+		definition, err := r.CreateFixtureDefinition(ctx, *defInput)
+		if err != nil {
+			return nil, err
+		}
+		createdDefinitions = append(createdDefinitions, definition)
+	}
+
+	return createdDefinitions, nil
+}
+
+// BulkUpdateFixtureDefinitions is the resolver for the bulkUpdateFixtureDefinitions field.
+func (r *mutationResolver) BulkUpdateFixtureDefinitions(ctx context.Context, input generated.BulkFixtureDefinitionUpdateInput) ([]*models.FixtureDefinition, error) {
+	var updatedDefinitions []*models.FixtureDefinition
+
+	for _, item := range input.Definitions {
+		definition, err := r.FixtureRepo.FindDefinitionByID(ctx, item.DefinitionID)
+		if err != nil {
+			return nil, err
+		}
+		if definition == nil {
+			return nil, fmt.Errorf("fixture definition not found: %s", item.DefinitionID)
+		}
+
+		if item.Manufacturer.IsSet() && item.Manufacturer.Value() != nil {
+			definition.Manufacturer = *item.Manufacturer.Value()
+		}
+
+		if item.Model.IsSet() && item.Model.Value() != nil {
+			definition.Model = *item.Model.Value()
+		}
+
+		if item.Type.IsSet() && item.Type.Value() != nil {
+			definition.Type = string(*item.Type.Value())
+		}
+
+		if err := r.FixtureRepo.UpdateDefinition(ctx, definition); err != nil {
+			return nil, err
+		}
+
+		updatedDefinitions = append(updatedDefinitions, definition)
+	}
+
+	return updatedDefinitions, nil
+}
+
+// BulkDeleteFixtureDefinitions is the resolver for the bulkDeleteFixtureDefinitions field.
+func (r *mutationResolver) BulkDeleteFixtureDefinitions(ctx context.Context, definitionIds []string) (*generated.BulkDeleteResult, error) {
+	var deletedIds []string
+
+	for _, defID := range definitionIds {
+		_, err := r.DeleteFixtureDefinition(ctx, defID)
+		if err != nil {
+			return nil, err
+		}
+		deletedIds = append(deletedIds, defID)
+	}
+
+	return &generated.BulkDeleteResult{
+		DeletedCount: len(deletedIds),
+		DeletedIds:   deletedIds,
+	}, nil
 }
 
 // CreateFixtureInstance is the resolver for the createFixtureInstance field.
@@ -790,6 +920,24 @@ func (r *mutationResolver) DeleteFixtureInstance(ctx context.Context, id string)
 	return true, nil
 }
 
+// BulkDeleteFixtures is the resolver for the bulkDeleteFixtures field.
+func (r *mutationResolver) BulkDeleteFixtures(ctx context.Context, fixtureIds []string) (*generated.BulkDeleteResult, error) {
+	var deletedIds []string
+
+	for _, fixtureID := range fixtureIds {
+		_, err := r.DeleteFixtureInstance(ctx, fixtureID)
+		if err != nil {
+			return nil, err
+		}
+		deletedIds = append(deletedIds, fixtureID)
+	}
+
+	return &generated.BulkDeleteResult{
+		DeletedCount: len(deletedIds),
+		DeletedIds:   deletedIds,
+	}, nil
+}
+
 // ReorderProjectFixtures is the resolver for the reorderProjectFixtures field.
 func (r *mutationResolver) ReorderProjectFixtures(ctx context.Context, projectID string, fixtureOrders []*generated.FixtureOrderInput) (bool, error) {
 	// Verify project exists
@@ -1076,6 +1224,70 @@ func (r *mutationResolver) DeleteScene(ctx context.Context, id string) (bool, er
 	return true, nil
 }
 
+// BulkCreateScenes is the resolver for the bulkCreateScenes field.
+func (r *mutationResolver) BulkCreateScenes(ctx context.Context, input generated.BulkSceneCreateInput) ([]*models.Scene, error) {
+	var createdScenes []*models.Scene
+
+	for _, sceneInput := range input.Scenes {
+		scene, err := r.CreateScene(ctx, *sceneInput)
+		if err != nil {
+			return nil, err
+		}
+		createdScenes = append(createdScenes, scene)
+	}
+
+	return createdScenes, nil
+}
+
+// BulkUpdateScenes is the resolver for the bulkUpdateScenes field.
+func (r *mutationResolver) BulkUpdateScenes(ctx context.Context, input generated.BulkSceneUpdateInput) ([]*models.Scene, error) {
+	var updatedScenes []*models.Scene
+
+	for _, item := range input.Scenes {
+		scene, err := r.SceneRepo.FindByID(ctx, item.SceneID)
+		if err != nil {
+			return nil, err
+		}
+		if scene == nil {
+			return nil, fmt.Errorf("scene not found: %s", item.SceneID)
+		}
+
+		if item.Name.IsSet() && item.Name.Value() != nil {
+			scene.Name = *item.Name.Value()
+		}
+
+		if item.Description.IsSet() {
+			scene.Description = item.Description.Value()
+		}
+
+		if err := r.SceneRepo.Update(ctx, scene); err != nil {
+			return nil, err
+		}
+
+		updatedScenes = append(updatedScenes, scene)
+	}
+
+	return updatedScenes, nil
+}
+
+// BulkDeleteScenes is the resolver for the bulkDeleteScenes field.
+func (r *mutationResolver) BulkDeleteScenes(ctx context.Context, sceneIds []string) (*generated.BulkDeleteResult, error) {
+	var deletedIds []string
+
+	for _, sceneID := range sceneIds {
+		_, err := r.DeleteScene(ctx, sceneID)
+		if err != nil {
+			return nil, err
+		}
+		deletedIds = append(deletedIds, sceneID)
+	}
+
+	return &generated.BulkDeleteResult{
+		DeletedCount: len(deletedIds),
+		DeletedIds:   deletedIds,
+	}, nil
+}
+
 // AddFixturesToScene is the resolver for the addFixturesToScene field.
 func (r *mutationResolver) AddFixturesToScene(ctx context.Context, sceneID string, fixtureValues []*generated.FixtureValueInput, overwriteExisting *bool) (*models.Scene, error) {
 	scene, err := r.SceneRepo.FindByID(ctx, sceneID)
@@ -1354,6 +1566,85 @@ func (r *mutationResolver) DeleteSceneBoard(ctx context.Context, id string) (boo
 	return true, nil
 }
 
+// BulkCreateSceneBoards is the resolver for the bulkCreateSceneBoards field.
+func (r *mutationResolver) BulkCreateSceneBoards(ctx context.Context, input generated.BulkSceneBoardCreateInput) ([]*models.SceneBoard, error) {
+	var createdBoards []*models.SceneBoard
+
+	for _, boardInput := range input.SceneBoards {
+		board, err := r.CreateSceneBoard(ctx, *boardInput)
+		if err != nil {
+			return nil, err
+		}
+		createdBoards = append(createdBoards, board)
+	}
+
+	return createdBoards, nil
+}
+
+// BulkUpdateSceneBoards is the resolver for the bulkUpdateSceneBoards field.
+func (r *mutationResolver) BulkUpdateSceneBoards(ctx context.Context, input generated.BulkSceneBoardUpdateInput) ([]*models.SceneBoard, error) {
+	var updatedBoards []*models.SceneBoard
+
+	for _, item := range input.SceneBoards {
+		var board models.SceneBoard
+		result := r.db.WithContext(ctx).First(&board, "id = ?", item.SceneBoardID)
+		if result.Error != nil {
+			return nil, result.Error
+		}
+
+		if item.Name.IsSet() && item.Name.Value() != nil {
+			board.Name = *item.Name.Value()
+		}
+
+		if item.Description.IsSet() {
+			board.Description = item.Description.Value()
+		}
+
+		if item.DefaultFadeTime.IsSet() && item.DefaultFadeTime.Value() != nil {
+			board.DefaultFadeTime = *item.DefaultFadeTime.Value()
+		}
+
+		if item.GridSize.IsSet() && item.GridSize.Value() != nil {
+			board.GridSize = item.GridSize.Value()
+		}
+
+		if item.CanvasWidth.IsSet() && item.CanvasWidth.Value() != nil {
+			board.CanvasWidth = *item.CanvasWidth.Value()
+		}
+
+		if item.CanvasHeight.IsSet() && item.CanvasHeight.Value() != nil {
+			board.CanvasHeight = *item.CanvasHeight.Value()
+		}
+
+		result = r.db.WithContext(ctx).Save(&board)
+		if result.Error != nil {
+			return nil, result.Error
+		}
+
+		updatedBoards = append(updatedBoards, &board)
+	}
+
+	return updatedBoards, nil
+}
+
+// BulkDeleteSceneBoards is the resolver for the bulkDeleteSceneBoards field.
+func (r *mutationResolver) BulkDeleteSceneBoards(ctx context.Context, sceneBoardIds []string) (*generated.BulkDeleteResult, error) {
+	var deletedIds []string
+
+	for _, boardID := range sceneBoardIds {
+		_, err := r.DeleteSceneBoard(ctx, boardID)
+		if err != nil {
+			return nil, err
+		}
+		deletedIds = append(deletedIds, boardID)
+	}
+
+	return &generated.BulkDeleteResult{
+		DeletedCount: len(deletedIds),
+		DeletedIds:   deletedIds,
+	}, nil
+}
+
 // AddSceneToBoard is the resolver for the addSceneToBoard field.
 func (r *mutationResolver) AddSceneToBoard(ctx context.Context, input generated.CreateSceneBoardButtonInput) (*models.SceneBoardButton, error) {
 	// Verify scene board exists
@@ -1476,6 +1767,85 @@ func (r *mutationResolver) UpdateSceneBoardButtonPositions(ctx context.Context, 
 		}
 	}
 	return true, nil
+}
+
+// BulkCreateSceneBoardButtons is the resolver for the bulkCreateSceneBoardButtons field.
+func (r *mutationResolver) BulkCreateSceneBoardButtons(ctx context.Context, input generated.BulkSceneBoardButtonCreateInput) ([]*models.SceneBoardButton, error) {
+	var createdButtons []*models.SceneBoardButton
+
+	for _, buttonInput := range input.Buttons {
+		button, err := r.AddSceneToBoard(ctx, *buttonInput)
+		if err != nil {
+			return nil, err
+		}
+		createdButtons = append(createdButtons, button)
+	}
+
+	return createdButtons, nil
+}
+
+// BulkUpdateSceneBoardButtons is the resolver for the bulkUpdateSceneBoardButtons field.
+func (r *mutationResolver) BulkUpdateSceneBoardButtons(ctx context.Context, input generated.BulkSceneBoardButtonUpdateInput) ([]*models.SceneBoardButton, error) {
+	var updatedButtons []*models.SceneBoardButton
+
+	for _, item := range input.Buttons {
+		var button models.SceneBoardButton
+		result := r.db.WithContext(ctx).First(&button, "id = ?", item.ButtonID)
+		if result.Error != nil {
+			return nil, result.Error
+		}
+
+		if item.LayoutX.IsSet() && item.LayoutX.Value() != nil {
+			button.LayoutX = *item.LayoutX.Value()
+		}
+
+		if item.LayoutY.IsSet() && item.LayoutY.Value() != nil {
+			button.LayoutY = *item.LayoutY.Value()
+		}
+
+		if item.Width.IsSet() {
+			button.Width = item.Width.Value()
+		}
+
+		if item.Height.IsSet() {
+			button.Height = item.Height.Value()
+		}
+
+		if item.Color.IsSet() {
+			button.Color = item.Color.Value()
+		}
+
+		if item.Label.IsSet() {
+			button.Label = item.Label.Value()
+		}
+
+		result = r.db.WithContext(ctx).Save(&button)
+		if result.Error != nil {
+			return nil, result.Error
+		}
+
+		updatedButtons = append(updatedButtons, &button)
+	}
+
+	return updatedButtons, nil
+}
+
+// BulkDeleteSceneBoardButtons is the resolver for the bulkDeleteSceneBoardButtons field.
+func (r *mutationResolver) BulkDeleteSceneBoardButtons(ctx context.Context, buttonIds []string) (*generated.BulkDeleteResult, error) {
+	var deletedIds []string
+
+	for _, buttonID := range buttonIds {
+		_, err := r.RemoveSceneFromBoard(ctx, buttonID)
+		if err != nil {
+			return nil, err
+		}
+		deletedIds = append(deletedIds, buttonID)
+	}
+
+	return &generated.BulkDeleteResult{
+		DeletedCount: len(deletedIds),
+		DeletedIds:   deletedIds,
+	}, nil
 }
 
 // ActivateSceneFromBoard is the resolver for the activateSceneFromBoard field.
@@ -1635,6 +2005,74 @@ func (r *mutationResolver) DeleteCueList(ctx context.Context, id string) (bool, 
 	return true, nil
 }
 
+// BulkCreateCueLists is the resolver for the bulkCreateCueLists field.
+func (r *mutationResolver) BulkCreateCueLists(ctx context.Context, input generated.BulkCueListCreateInput) ([]*models.CueList, error) {
+	var createdCueLists []*models.CueList
+
+	for _, cueListInput := range input.CueLists {
+		cueList, err := r.CreateCueList(ctx, *cueListInput)
+		if err != nil {
+			return nil, err
+		}
+		createdCueLists = append(createdCueLists, cueList)
+	}
+
+	return createdCueLists, nil
+}
+
+// BulkUpdateCueLists is the resolver for the bulkUpdateCueLists field.
+func (r *mutationResolver) BulkUpdateCueLists(ctx context.Context, input generated.BulkCueListUpdateInput) ([]*models.CueList, error) {
+	var updatedCueLists []*models.CueList
+
+	for _, item := range input.CueLists {
+		cueList, err := r.CueListRepo.FindByID(ctx, item.CueListID)
+		if err != nil {
+			return nil, err
+		}
+		if cueList == nil {
+			return nil, fmt.Errorf("cue list not found: %s", item.CueListID)
+		}
+
+		if item.Name.IsSet() && item.Name.Value() != nil {
+			cueList.Name = *item.Name.Value()
+		}
+
+		if item.Description.IsSet() {
+			cueList.Description = item.Description.Value()
+		}
+
+		if item.Loop.IsSet() && item.Loop.Value() != nil {
+			cueList.Loop = *item.Loop.Value()
+		}
+
+		if err := r.CueListRepo.Update(ctx, cueList); err != nil {
+			return nil, err
+		}
+
+		updatedCueLists = append(updatedCueLists, cueList)
+	}
+
+	return updatedCueLists, nil
+}
+
+// BulkDeleteCueLists is the resolver for the bulkDeleteCueLists field.
+func (r *mutationResolver) BulkDeleteCueLists(ctx context.Context, cueListIds []string) (*generated.BulkDeleteResult, error) {
+	var deletedIds []string
+
+	for _, cueListID := range cueListIds {
+		_, err := r.DeleteCueList(ctx, cueListID)
+		if err != nil {
+			return nil, err
+		}
+		deletedIds = append(deletedIds, cueListID)
+	}
+
+	return &generated.BulkDeleteResult{
+		DeletedCount: len(deletedIds),
+		DeletedIds:   deletedIds,
+	}, nil
+}
+
 // CreateCue is the resolver for the createCue field.
 func (r *mutationResolver) CreateCue(ctx context.Context, input generated.CreateCueInput) (*models.Cue, error) {
 	// Verify cue list exists
@@ -1779,6 +2217,21 @@ func (r *mutationResolver) ReorderCues(ctx context.Context, cueListID string, cu
 	return true, nil
 }
 
+// BulkCreateCues is the resolver for the bulkCreateCues field.
+func (r *mutationResolver) BulkCreateCues(ctx context.Context, input generated.BulkCueCreateInput) ([]*models.Cue, error) {
+	var createdCues []*models.Cue
+
+	for _, cueInput := range input.Cues {
+		cue, err := r.CreateCue(ctx, *cueInput)
+		if err != nil {
+			return nil, err
+		}
+		createdCues = append(createdCues, cue)
+	}
+
+	return createdCues, nil
+}
+
 // BulkUpdateCues is the resolver for the bulkUpdateCues field.
 func (r *mutationResolver) BulkUpdateCues(ctx context.Context, input generated.BulkCueUpdateInput) ([]*models.Cue, error) {
 	var updatedCues []*models.Cue
@@ -1821,6 +2274,24 @@ func (r *mutationResolver) BulkUpdateCues(ctx context.Context, input generated.B
 	}
 
 	return updatedCues, nil
+}
+
+// BulkDeleteCues is the resolver for the bulkDeleteCues field.
+func (r *mutationResolver) BulkDeleteCues(ctx context.Context, cueIds []string) (*generated.BulkDeleteResult, error) {
+	var deletedIds []string
+
+	for _, cueID := range cueIds {
+		_, err := r.DeleteCue(ctx, cueID)
+		if err != nil {
+			return nil, err
+		}
+		deletedIds = append(deletedIds, cueID)
+	}
+
+	return &generated.BulkDeleteResult{
+		DeletedCount: len(deletedIds),
+		DeletedIds:   deletedIds,
+	}, nil
 }
 
 // StartPreviewSession is the resolver for the startPreviewSession field.
@@ -3398,6 +3869,123 @@ func (r *queryResolver) SystemVersions(ctx context.Context) (*generated.SystemVe
 // Returns empty list - version management not supported on this platform
 func (r *queryResolver) AvailableVersions(ctx context.Context, repository string) ([]string, error) {
 	return []string{}, nil
+}
+
+// FixturesByIds is the resolver for the fixturesByIds field.
+func (r *queryResolver) FixturesByIds(ctx context.Context, ids []string) ([]*models.FixtureInstance, error) {
+	var fixtures []*models.FixtureInstance
+
+	for _, id := range ids {
+		fixture, err := r.FixtureRepo.FindByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if fixture != nil {
+			fixtures = append(fixtures, fixture)
+		}
+	}
+
+	return fixtures, nil
+}
+
+// ScenesByIds is the resolver for the scenesByIds field.
+func (r *queryResolver) ScenesByIds(ctx context.Context, ids []string) ([]*models.Scene, error) {
+	var scenes []*models.Scene
+
+	for _, id := range ids {
+		scene, err := r.SceneRepo.FindByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if scene != nil {
+			scenes = append(scenes, scene)
+		}
+	}
+
+	return scenes, nil
+}
+
+// CuesByIds is the resolver for the cuesByIds field.
+func (r *queryResolver) CuesByIds(ctx context.Context, ids []string) ([]*models.Cue, error) {
+	var cues []*models.Cue
+
+	for _, id := range ids {
+		cue, err := r.CueRepo.FindByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if cue != nil {
+			cues = append(cues, cue)
+		}
+	}
+
+	return cues, nil
+}
+
+// CueListsByIds is the resolver for the cueListsByIds field.
+func (r *queryResolver) CueListsByIds(ctx context.Context, ids []string) ([]*models.CueList, error) {
+	var cueLists []*models.CueList
+
+	for _, id := range ids {
+		cueList, err := r.CueListRepo.FindByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if cueList != nil {
+			cueLists = append(cueLists, cueList)
+		}
+	}
+
+	return cueLists, nil
+}
+
+// SceneBoardsByIds is the resolver for the sceneBoardsByIds field.
+func (r *queryResolver) SceneBoardsByIds(ctx context.Context, ids []string) ([]*models.SceneBoard, error) {
+	var sceneBoards []*models.SceneBoard
+
+	for _, id := range ids {
+		var board models.SceneBoard
+		result := r.db.WithContext(ctx).First(&board, "id = ?", id)
+		if result.Error == nil {
+			sceneBoards = append(sceneBoards, &board)
+		}
+	}
+
+	return sceneBoards, nil
+}
+
+// FixtureDefinitionsByIds is the resolver for the fixtureDefinitionsByIds field.
+func (r *queryResolver) FixtureDefinitionsByIds(ctx context.Context, ids []string) ([]*models.FixtureDefinition, error) {
+	var definitions []*models.FixtureDefinition
+
+	for _, id := range ids {
+		definition, err := r.FixtureRepo.FindDefinitionByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if definition != nil {
+			definitions = append(definitions, definition)
+		}
+	}
+
+	return definitions, nil
+}
+
+// ProjectsByIds is the resolver for the projectsByIds field.
+func (r *queryResolver) ProjectsByIds(ctx context.Context, ids []string) ([]*models.Project, error) {
+	var projects []*models.Project
+
+	for _, id := range ids {
+		project, err := r.ProjectRepo.FindByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if project != nil {
+			projects = append(projects, project)
+		}
+	}
+
+	return projects, nil
 }
 
 // Project is the resolver for the project field.
