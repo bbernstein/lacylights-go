@@ -810,6 +810,116 @@ input BulkFixtureCreateInput {
   fixtures: [CreateFixtureInstanceInput!]!
 }
 
+# =============================================================================
+# BULK OPERATION TYPES
+# =============================================================================
+
+# Common result type for bulk deletes
+type BulkDeleteResult {
+  deletedCount: Int!
+  deletedIds: [ID!]!
+}
+
+# Bulk Create Inputs
+input BulkSceneCreateInput {
+  scenes: [CreateSceneInput!]!
+}
+
+input BulkCueCreateInput {
+  cues: [CreateCueInput!]!
+}
+
+input BulkCueListCreateInput {
+  cueLists: [CreateCueListInput!]!
+}
+
+input BulkSceneBoardCreateInput {
+  sceneBoards: [CreateSceneBoardInput!]!
+}
+
+input BulkSceneBoardButtonCreateInput {
+  buttons: [CreateSceneBoardButtonInput!]!
+}
+
+input BulkFixtureDefinitionCreateInput {
+  definitions: [CreateFixtureDefinitionInput!]!
+}
+
+input BulkProjectCreateInput {
+  projects: [CreateProjectInput!]!
+}
+
+# Bulk Update Inputs
+input BulkSceneUpdateInput {
+  scenes: [SceneUpdateItem!]!
+}
+
+input SceneUpdateItem {
+  sceneId: ID!
+  name: String
+  description: String
+}
+
+input BulkCueListUpdateInput {
+  cueLists: [CueListUpdateItem!]!
+}
+
+input CueListUpdateItem {
+  cueListId: ID!
+  name: String
+  description: String
+  loop: Boolean
+}
+
+input BulkSceneBoardUpdateInput {
+  sceneBoards: [SceneBoardUpdateItem!]!
+}
+
+input SceneBoardUpdateItem {
+  sceneBoardId: ID!
+  name: String
+  description: String
+  defaultFadeTime: Float
+  gridSize: Int
+  canvasWidth: Int
+  canvasHeight: Int
+}
+
+input BulkSceneBoardButtonUpdateInput {
+  buttons: [SceneBoardButtonUpdateItem!]!
+}
+
+input SceneBoardButtonUpdateItem {
+  buttonId: ID!
+  layoutX: Int
+  layoutY: Int
+  width: Int
+  height: Int
+  color: String
+  label: String
+}
+
+input BulkFixtureDefinitionUpdateInput {
+  definitions: [FixtureDefinitionUpdateItem!]!
+}
+
+input FixtureDefinitionUpdateItem {
+  definitionId: ID!
+  manufacturer: String
+  model: String
+  type: FixtureType
+}
+
+input BulkProjectUpdateInput {
+  projects: [ProjectUpdateItem!]!
+}
+
+input ProjectUpdateItem {
+  projectId: ID!
+  name: String
+  description: String
+}
+
 input FixtureMappingInput {
   lacyLightsKey: String!
   qlcManufacturer: String!
@@ -963,6 +1073,15 @@ type Query {
   # Version Management
   systemVersions: SystemVersionInfo!
   availableVersions(repository: String!): [String!]!
+
+  # Bulk Read Queries
+  fixturesByIds(ids: [ID!]!): [FixtureInstance!]!
+  scenesByIds(ids: [ID!]!): [Scene!]!
+  cuesByIds(ids: [ID!]!): [Cue!]!
+  cueListsByIds(ids: [ID!]!): [CueList!]!
+  sceneBoardsByIds(ids: [ID!]!): [SceneBoard!]!
+  fixtureDefinitionsByIds(ids: [ID!]!): [FixtureDefinition!]!
+  projectsByIds(ids: [ID!]!): [Project!]!
 }
 
 # =============================================================================
@@ -974,6 +1093,9 @@ type Mutation {
   createProject(input: CreateProjectInput!): Project!
   updateProject(id: ID!, input: CreateProjectInput!): Project!
   deleteProject(id: ID!): Boolean!
+  bulkCreateProjects(input: BulkProjectCreateInput!): [Project!]!
+  bulkUpdateProjects(input: BulkProjectUpdateInput!): [Project!]!
+  bulkDeleteProjects(projectIds: [ID!]!): BulkDeleteResult!
 
   # Fixture Definitions
   createFixtureDefinition(
@@ -985,6 +1107,9 @@ type Mutation {
     input: CreateFixtureDefinitionInput!
   ): FixtureDefinition!
   deleteFixtureDefinition(id: ID!): Boolean!
+  bulkCreateFixtureDefinitions(input: BulkFixtureDefinitionCreateInput!): [FixtureDefinition!]!
+  bulkUpdateFixtureDefinitions(input: BulkFixtureDefinitionUpdateInput!): [FixtureDefinition!]!
+  bulkDeleteFixtureDefinitions(definitionIds: [ID!]!): BulkDeleteResult!
 
   # Fixture Instances
   createFixtureInstance(input: CreateFixtureInstanceInput!): FixtureInstance!
@@ -995,6 +1120,7 @@ type Mutation {
   bulkUpdateFixtures(input: BulkFixtureUpdateInput!): [FixtureInstance!]!
   bulkCreateFixtures(input: BulkFixtureCreateInput!): [FixtureInstance!]!
   deleteFixtureInstance(id: ID!): Boolean!
+  bulkDeleteFixtures(fixtureIds: [ID!]!): BulkDeleteResult!
 
   # Fixture Ordering
   reorderProjectFixtures(
@@ -1015,6 +1141,9 @@ type Mutation {
   duplicateScene(id: ID!): Scene!
   cloneScene(sceneId: ID!, newName: String!): Scene!
   deleteScene(id: ID!): Boolean!
+  bulkCreateScenes(input: BulkSceneCreateInput!): [Scene!]!
+  bulkUpdateScenes(input: BulkSceneUpdateInput!): [Scene!]!
+  bulkDeleteScenes(sceneIds: [ID!]!): BulkDeleteResult!
 
   # Safe Scene Updates (Additive)
   addFixturesToScene(
@@ -1035,6 +1164,9 @@ type Mutation {
   createSceneBoard(input: CreateSceneBoardInput!): SceneBoard!
   updateSceneBoard(id: ID!, input: UpdateSceneBoardInput!): SceneBoard!
   deleteSceneBoard(id: ID!): Boolean!
+  bulkCreateSceneBoards(input: BulkSceneBoardCreateInput!): [SceneBoard!]!
+  bulkUpdateSceneBoards(input: BulkSceneBoardUpdateInput!): [SceneBoard!]!
+  bulkDeleteSceneBoards(sceneBoardIds: [ID!]!): BulkDeleteResult!
 
   # Scene Board Buttons
   addSceneToBoard(input: CreateSceneBoardButtonInput!): SceneBoardButton!
@@ -1046,6 +1178,9 @@ type Mutation {
   updateSceneBoardButtonPositions(
     positions: [SceneBoardButtonPositionInput!]!
   ): Boolean!
+  bulkCreateSceneBoardButtons(input: BulkSceneBoardButtonCreateInput!): [SceneBoardButton!]!
+  bulkUpdateSceneBoardButtons(input: BulkSceneBoardButtonUpdateInput!): [SceneBoardButton!]!
+  bulkDeleteSceneBoardButtons(buttonIds: [ID!]!): BulkDeleteResult!
 
   # Scene Board Playback (activates scene with board's fade time)
   activateSceneFromBoard(
@@ -1058,13 +1193,18 @@ type Mutation {
   createCueList(input: CreateCueListInput!): CueList!
   updateCueList(id: ID!, input: CreateCueListInput!): CueList!
   deleteCueList(id: ID!): Boolean!
+  bulkCreateCueLists(input: BulkCueListCreateInput!): [CueList!]!
+  bulkUpdateCueLists(input: BulkCueListUpdateInput!): [CueList!]!
+  bulkDeleteCueLists(cueListIds: [ID!]!): BulkDeleteResult!
 
   # Cues
   createCue(input: CreateCueInput!): Cue!
   updateCue(id: ID!, input: CreateCueInput!): Cue!
   deleteCue(id: ID!): Boolean!
   reorderCues(cueListId: ID!, cueOrders: [CueOrderInput!]!): Boolean!
+  bulkCreateCues(input: BulkCueCreateInput!): [Cue!]!
   bulkUpdateCues(input: BulkCueUpdateInput!): [Cue!]!
+  bulkDeleteCues(cueIds: [ID!]!): BulkDeleteResult!
 
   # Preview System
   startPreviewSession(projectId: ID!): PreviewSession!

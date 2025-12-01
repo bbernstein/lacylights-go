@@ -64,6 +64,11 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
+	BulkDeleteResult struct {
+		DeletedCount func(childComplexity int) int
+		DeletedIds   func(childComplexity int) int
+	}
+
 	ChannelAssignmentSuggestion struct {
 		Assignments                func(childComplexity int) int
 		AvailableChannelsRemaining func(childComplexity int) int
@@ -298,9 +303,30 @@ type ComplexityRoot struct {
 		ActivateSceneFromBoard          func(childComplexity int, sceneBoardID string, sceneID string, fadeTimeOverride *float64) int
 		AddFixturesToScene              func(childComplexity int, sceneID string, fixtureValues []*FixtureValueInput, overwriteExisting *bool) int
 		AddSceneToBoard                 func(childComplexity int, input CreateSceneBoardButtonInput) int
+		BulkCreateCueLists              func(childComplexity int, input BulkCueListCreateInput) int
+		BulkCreateCues                  func(childComplexity int, input BulkCueCreateInput) int
+		BulkCreateFixtureDefinitions    func(childComplexity int, input BulkFixtureDefinitionCreateInput) int
 		BulkCreateFixtures              func(childComplexity int, input BulkFixtureCreateInput) int
+		BulkCreateProjects              func(childComplexity int, input BulkProjectCreateInput) int
+		BulkCreateSceneBoardButtons     func(childComplexity int, input BulkSceneBoardButtonCreateInput) int
+		BulkCreateSceneBoards           func(childComplexity int, input BulkSceneBoardCreateInput) int
+		BulkCreateScenes                func(childComplexity int, input BulkSceneCreateInput) int
+		BulkDeleteCueLists              func(childComplexity int, cueListIds []string) int
+		BulkDeleteCues                  func(childComplexity int, cueIds []string) int
+		BulkDeleteFixtureDefinitions    func(childComplexity int, definitionIds []string) int
+		BulkDeleteFixtures              func(childComplexity int, fixtureIds []string) int
+		BulkDeleteProjects              func(childComplexity int, projectIds []string) int
+		BulkDeleteSceneBoardButtons     func(childComplexity int, buttonIds []string) int
+		BulkDeleteSceneBoards           func(childComplexity int, sceneBoardIds []string) int
+		BulkDeleteScenes                func(childComplexity int, sceneIds []string) int
+		BulkUpdateCueLists              func(childComplexity int, input BulkCueListUpdateInput) int
 		BulkUpdateCues                  func(childComplexity int, input BulkCueUpdateInput) int
+		BulkUpdateFixtureDefinitions    func(childComplexity int, input BulkFixtureDefinitionUpdateInput) int
 		BulkUpdateFixtures              func(childComplexity int, input BulkFixtureUpdateInput) int
+		BulkUpdateProjects              func(childComplexity int, input BulkProjectUpdateInput) int
+		BulkUpdateSceneBoardButtons     func(childComplexity int, input BulkSceneBoardButtonUpdateInput) int
+		BulkUpdateSceneBoards           func(childComplexity int, input BulkSceneBoardUpdateInput) int
+		BulkUpdateScenes                func(childComplexity int, input BulkSceneUpdateInput) int
 		CancelPreviewSession            func(childComplexity int, sessionID string) int
 		CloneScene                      func(childComplexity int, sceneID string, newName string) int
 		CommitPreviewSession            func(childComplexity int, sessionID string) int
@@ -455,26 +481,33 @@ type ComplexityRoot struct {
 		CueList                         func(childComplexity int, id string, page *int, perPage *int, includeSceneDetails *bool) int
 		CueListPlaybackStatus           func(childComplexity int, cueListID string) int
 		CueLists                        func(childComplexity int, projectID string) int
+		CueListsByIds                   func(childComplexity int, ids []string) int
+		CuesByIds                       func(childComplexity int, ids []string) int
 		CurrentActiveScene              func(childComplexity int) int
 		DmxOutput                       func(childComplexity int, universe int) int
 		FixtureDefinition               func(childComplexity int, id string) int
 		FixtureDefinitions              func(childComplexity int, filter *FixtureDefinitionFilter) int
+		FixtureDefinitionsByIds         func(childComplexity int, ids []string) int
 		FixtureInstance                 func(childComplexity int, id string) int
 		FixtureInstances                func(childComplexity int, projectID string, page *int, perPage *int, filter *FixtureFilterInput) int
 		FixtureUsage                    func(childComplexity int, fixtureID string) int
+		FixturesByIds                   func(childComplexity int, ids []string) int
 		GetQLCFixtureMappingSuggestions func(childComplexity int, projectID string) int
 		NetworkInterfaceOptions         func(childComplexity int) int
 		PreviewSession                  func(childComplexity int, sessionID string) int
 		Project                         func(childComplexity int, id string) int
 		Projects                        func(childComplexity int) int
+		ProjectsByIds                   func(childComplexity int, ids []string) int
 		SavedWifiNetworks               func(childComplexity int) int
 		Scene                           func(childComplexity int, id string, includeFixtureValues *bool) int
 		SceneBoard                      func(childComplexity int, id string) int
 		SceneBoardButton                func(childComplexity int, id string) int
 		SceneBoards                     func(childComplexity int, projectID string) int
+		SceneBoardsByIds                func(childComplexity int, ids []string) int
 		SceneFixtures                   func(childComplexity int, sceneID string) int
 		SceneUsage                      func(childComplexity int, sceneID string) int
 		Scenes                          func(childComplexity int, projectID string, page *int, perPage *int, filter *SceneFilterInput, sortBy *SceneSortField) int
+		ScenesByIds                     func(childComplexity int, ids []string) int
 		SearchCues                      func(childComplexity int, cueListID string, query string, page *int, perPage *int) int
 		SearchFixtures                  func(childComplexity int, projectID string, query string, filter *FixtureFilterInput, page *int, perPage *int) int
 		SearchScenes                    func(childComplexity int, projectID string, query string, filter *SceneFilterInput, page *int, perPage *int) int
@@ -713,15 +746,22 @@ type MutationResolver interface {
 	CreateProject(ctx context.Context, input CreateProjectInput) (*models.Project, error)
 	UpdateProject(ctx context.Context, id string, input CreateProjectInput) (*models.Project, error)
 	DeleteProject(ctx context.Context, id string) (bool, error)
+	BulkCreateProjects(ctx context.Context, input BulkProjectCreateInput) ([]*models.Project, error)
+	BulkUpdateProjects(ctx context.Context, input BulkProjectUpdateInput) ([]*models.Project, error)
+	BulkDeleteProjects(ctx context.Context, projectIds []string) (*BulkDeleteResult, error)
 	CreateFixtureDefinition(ctx context.Context, input CreateFixtureDefinitionInput) (*models.FixtureDefinition, error)
 	ImportOFLFixture(ctx context.Context, input ImportOFLFixtureInput) (*models.FixtureDefinition, error)
 	UpdateFixtureDefinition(ctx context.Context, id string, input CreateFixtureDefinitionInput) (*models.FixtureDefinition, error)
 	DeleteFixtureDefinition(ctx context.Context, id string) (bool, error)
+	BulkCreateFixtureDefinitions(ctx context.Context, input BulkFixtureDefinitionCreateInput) ([]*models.FixtureDefinition, error)
+	BulkUpdateFixtureDefinitions(ctx context.Context, input BulkFixtureDefinitionUpdateInput) ([]*models.FixtureDefinition, error)
+	BulkDeleteFixtureDefinitions(ctx context.Context, definitionIds []string) (*BulkDeleteResult, error)
 	CreateFixtureInstance(ctx context.Context, input CreateFixtureInstanceInput) (*models.FixtureInstance, error)
 	UpdateFixtureInstance(ctx context.Context, id string, input UpdateFixtureInstanceInput) (*models.FixtureInstance, error)
 	BulkUpdateFixtures(ctx context.Context, input BulkFixtureUpdateInput) ([]*models.FixtureInstance, error)
 	BulkCreateFixtures(ctx context.Context, input BulkFixtureCreateInput) ([]*models.FixtureInstance, error)
 	DeleteFixtureInstance(ctx context.Context, id string) (bool, error)
+	BulkDeleteFixtures(ctx context.Context, fixtureIds []string) (*BulkDeleteResult, error)
 	ReorderProjectFixtures(ctx context.Context, projectID string, fixtureOrders []*FixtureOrderInput) (bool, error)
 	ReorderSceneFixtures(ctx context.Context, sceneID string, fixtureOrders []*FixtureOrderInput) (bool, error)
 	UpdateFixturePositions(ctx context.Context, positions []*FixturePositionInput) (bool, error)
@@ -730,25 +770,39 @@ type MutationResolver interface {
 	DuplicateScene(ctx context.Context, id string) (*models.Scene, error)
 	CloneScene(ctx context.Context, sceneID string, newName string) (*models.Scene, error)
 	DeleteScene(ctx context.Context, id string) (bool, error)
+	BulkCreateScenes(ctx context.Context, input BulkSceneCreateInput) ([]*models.Scene, error)
+	BulkUpdateScenes(ctx context.Context, input BulkSceneUpdateInput) ([]*models.Scene, error)
+	BulkDeleteScenes(ctx context.Context, sceneIds []string) (*BulkDeleteResult, error)
 	AddFixturesToScene(ctx context.Context, sceneID string, fixtureValues []*FixtureValueInput, overwriteExisting *bool) (*models.Scene, error)
 	RemoveFixturesFromScene(ctx context.Context, sceneID string, fixtureIds []string) (*models.Scene, error)
 	UpdateScenePartial(ctx context.Context, sceneID string, name *string, description *string, fixtureValues []*FixtureValueInput, mergeFixtures *bool) (*models.Scene, error)
 	CreateSceneBoard(ctx context.Context, input CreateSceneBoardInput) (*models.SceneBoard, error)
 	UpdateSceneBoard(ctx context.Context, id string, input UpdateSceneBoardInput) (*models.SceneBoard, error)
 	DeleteSceneBoard(ctx context.Context, id string) (bool, error)
+	BulkCreateSceneBoards(ctx context.Context, input BulkSceneBoardCreateInput) ([]*models.SceneBoard, error)
+	BulkUpdateSceneBoards(ctx context.Context, input BulkSceneBoardUpdateInput) ([]*models.SceneBoard, error)
+	BulkDeleteSceneBoards(ctx context.Context, sceneBoardIds []string) (*BulkDeleteResult, error)
 	AddSceneToBoard(ctx context.Context, input CreateSceneBoardButtonInput) (*models.SceneBoardButton, error)
 	UpdateSceneBoardButton(ctx context.Context, id string, input UpdateSceneBoardButtonInput) (*models.SceneBoardButton, error)
 	RemoveSceneFromBoard(ctx context.Context, buttonID string) (bool, error)
 	UpdateSceneBoardButtonPositions(ctx context.Context, positions []*SceneBoardButtonPositionInput) (bool, error)
+	BulkCreateSceneBoardButtons(ctx context.Context, input BulkSceneBoardButtonCreateInput) ([]*models.SceneBoardButton, error)
+	BulkUpdateSceneBoardButtons(ctx context.Context, input BulkSceneBoardButtonUpdateInput) ([]*models.SceneBoardButton, error)
+	BulkDeleteSceneBoardButtons(ctx context.Context, buttonIds []string) (*BulkDeleteResult, error)
 	ActivateSceneFromBoard(ctx context.Context, sceneBoardID string, sceneID string, fadeTimeOverride *float64) (bool, error)
 	CreateCueList(ctx context.Context, input CreateCueListInput) (*models.CueList, error)
 	UpdateCueList(ctx context.Context, id string, input CreateCueListInput) (*models.CueList, error)
 	DeleteCueList(ctx context.Context, id string) (bool, error)
+	BulkCreateCueLists(ctx context.Context, input BulkCueListCreateInput) ([]*models.CueList, error)
+	BulkUpdateCueLists(ctx context.Context, input BulkCueListUpdateInput) ([]*models.CueList, error)
+	BulkDeleteCueLists(ctx context.Context, cueListIds []string) (*BulkDeleteResult, error)
 	CreateCue(ctx context.Context, input CreateCueInput) (*models.Cue, error)
 	UpdateCue(ctx context.Context, id string, input CreateCueInput) (*models.Cue, error)
 	DeleteCue(ctx context.Context, id string) (bool, error)
 	ReorderCues(ctx context.Context, cueListID string, cueOrders []*CueOrderInput) (bool, error)
+	BulkCreateCues(ctx context.Context, input BulkCueCreateInput) ([]*models.Cue, error)
 	BulkUpdateCues(ctx context.Context, input BulkCueUpdateInput) ([]*models.Cue, error)
+	BulkDeleteCues(ctx context.Context, cueIds []string) (*BulkDeleteResult, error)
 	StartPreviewSession(ctx context.Context, projectID string) (*models.PreviewSession, error)
 	CommitPreviewSession(ctx context.Context, sessionID string) (bool, error)
 	CancelPreviewSession(ctx context.Context, sessionID string) (bool, error)
@@ -839,6 +893,13 @@ type QueryResolver interface {
 	GetQLCFixtureMappingSuggestions(ctx context.Context, projectID string) (*QLCFixtureMappingResult, error)
 	SystemVersions(ctx context.Context) (*SystemVersionInfo, error)
 	AvailableVersions(ctx context.Context, repository string) ([]string, error)
+	FixturesByIds(ctx context.Context, ids []string) ([]*models.FixtureInstance, error)
+	ScenesByIds(ctx context.Context, ids []string) ([]*models.Scene, error)
+	CuesByIds(ctx context.Context, ids []string) ([]*models.Cue, error)
+	CueListsByIds(ctx context.Context, ids []string) ([]*models.CueList, error)
+	SceneBoardsByIds(ctx context.Context, ids []string) ([]*models.SceneBoard, error)
+	FixtureDefinitionsByIds(ctx context.Context, ids []string) ([]*models.FixtureDefinition, error)
+	ProjectsByIds(ctx context.Context, ids []string) ([]*models.Project, error)
 }
 type SceneResolver interface {
 	Project(ctx context.Context, obj *models.Scene) (*models.Project, error)
@@ -895,6 +956,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	ec := executionContext{nil, e, 0, 0, nil}
 	_ = ec
 	switch typeName + "." + field {
+
+	case "BulkDeleteResult.deletedCount":
+		if e.complexity.BulkDeleteResult.DeletedCount == nil {
+			break
+		}
+
+		return e.complexity.BulkDeleteResult.DeletedCount(childComplexity), true
+	case "BulkDeleteResult.deletedIds":
+		if e.complexity.BulkDeleteResult.DeletedIds == nil {
+			break
+		}
+
+		return e.complexity.BulkDeleteResult.DeletedIds(childComplexity), true
 
 	case "ChannelAssignmentSuggestion.assignments":
 		if e.complexity.ChannelAssignmentSuggestion.Assignments == nil {
@@ -1850,6 +1924,39 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.AddSceneToBoard(childComplexity, args["input"].(CreateSceneBoardButtonInput)), true
+	case "Mutation.bulkCreateCueLists":
+		if e.complexity.Mutation.BulkCreateCueLists == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkCreateCueLists_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkCreateCueLists(childComplexity, args["input"].(BulkCueListCreateInput)), true
+	case "Mutation.bulkCreateCues":
+		if e.complexity.Mutation.BulkCreateCues == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkCreateCues_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkCreateCues(childComplexity, args["input"].(BulkCueCreateInput)), true
+	case "Mutation.bulkCreateFixtureDefinitions":
+		if e.complexity.Mutation.BulkCreateFixtureDefinitions == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkCreateFixtureDefinitions_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkCreateFixtureDefinitions(childComplexity, args["input"].(BulkFixtureDefinitionCreateInput)), true
 	case "Mutation.bulkCreateFixtures":
 		if e.complexity.Mutation.BulkCreateFixtures == nil {
 			break
@@ -1861,6 +1968,149 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.BulkCreateFixtures(childComplexity, args["input"].(BulkFixtureCreateInput)), true
+	case "Mutation.bulkCreateProjects":
+		if e.complexity.Mutation.BulkCreateProjects == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkCreateProjects_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkCreateProjects(childComplexity, args["input"].(BulkProjectCreateInput)), true
+	case "Mutation.bulkCreateSceneBoardButtons":
+		if e.complexity.Mutation.BulkCreateSceneBoardButtons == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkCreateSceneBoardButtons_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkCreateSceneBoardButtons(childComplexity, args["input"].(BulkSceneBoardButtonCreateInput)), true
+	case "Mutation.bulkCreateSceneBoards":
+		if e.complexity.Mutation.BulkCreateSceneBoards == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkCreateSceneBoards_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkCreateSceneBoards(childComplexity, args["input"].(BulkSceneBoardCreateInput)), true
+	case "Mutation.bulkCreateScenes":
+		if e.complexity.Mutation.BulkCreateScenes == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkCreateScenes_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkCreateScenes(childComplexity, args["input"].(BulkSceneCreateInput)), true
+	case "Mutation.bulkDeleteCueLists":
+		if e.complexity.Mutation.BulkDeleteCueLists == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkDeleteCueLists_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkDeleteCueLists(childComplexity, args["cueListIds"].([]string)), true
+	case "Mutation.bulkDeleteCues":
+		if e.complexity.Mutation.BulkDeleteCues == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkDeleteCues_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkDeleteCues(childComplexity, args["cueIds"].([]string)), true
+	case "Mutation.bulkDeleteFixtureDefinitions":
+		if e.complexity.Mutation.BulkDeleteFixtureDefinitions == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkDeleteFixtureDefinitions_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkDeleteFixtureDefinitions(childComplexity, args["definitionIds"].([]string)), true
+	case "Mutation.bulkDeleteFixtures":
+		if e.complexity.Mutation.BulkDeleteFixtures == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkDeleteFixtures_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkDeleteFixtures(childComplexity, args["fixtureIds"].([]string)), true
+	case "Mutation.bulkDeleteProjects":
+		if e.complexity.Mutation.BulkDeleteProjects == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkDeleteProjects_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkDeleteProjects(childComplexity, args["projectIds"].([]string)), true
+	case "Mutation.bulkDeleteSceneBoardButtons":
+		if e.complexity.Mutation.BulkDeleteSceneBoardButtons == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkDeleteSceneBoardButtons_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkDeleteSceneBoardButtons(childComplexity, args["buttonIds"].([]string)), true
+	case "Mutation.bulkDeleteSceneBoards":
+		if e.complexity.Mutation.BulkDeleteSceneBoards == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkDeleteSceneBoards_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkDeleteSceneBoards(childComplexity, args["sceneBoardIds"].([]string)), true
+	case "Mutation.bulkDeleteScenes":
+		if e.complexity.Mutation.BulkDeleteScenes == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkDeleteScenes_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkDeleteScenes(childComplexity, args["sceneIds"].([]string)), true
+	case "Mutation.bulkUpdateCueLists":
+		if e.complexity.Mutation.BulkUpdateCueLists == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkUpdateCueLists_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkUpdateCueLists(childComplexity, args["input"].(BulkCueListUpdateInput)), true
 	case "Mutation.bulkUpdateCues":
 		if e.complexity.Mutation.BulkUpdateCues == nil {
 			break
@@ -1872,6 +2122,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.BulkUpdateCues(childComplexity, args["input"].(BulkCueUpdateInput)), true
+	case "Mutation.bulkUpdateFixtureDefinitions":
+		if e.complexity.Mutation.BulkUpdateFixtureDefinitions == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkUpdateFixtureDefinitions_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkUpdateFixtureDefinitions(childComplexity, args["input"].(BulkFixtureDefinitionUpdateInput)), true
 	case "Mutation.bulkUpdateFixtures":
 		if e.complexity.Mutation.BulkUpdateFixtures == nil {
 			break
@@ -1883,6 +2144,50 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.BulkUpdateFixtures(childComplexity, args["input"].(BulkFixtureUpdateInput)), true
+	case "Mutation.bulkUpdateProjects":
+		if e.complexity.Mutation.BulkUpdateProjects == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkUpdateProjects_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkUpdateProjects(childComplexity, args["input"].(BulkProjectUpdateInput)), true
+	case "Mutation.bulkUpdateSceneBoardButtons":
+		if e.complexity.Mutation.BulkUpdateSceneBoardButtons == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkUpdateSceneBoardButtons_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkUpdateSceneBoardButtons(childComplexity, args["input"].(BulkSceneBoardButtonUpdateInput)), true
+	case "Mutation.bulkUpdateSceneBoards":
+		if e.complexity.Mutation.BulkUpdateSceneBoards == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkUpdateSceneBoards_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkUpdateSceneBoards(childComplexity, args["input"].(BulkSceneBoardUpdateInput)), true
+	case "Mutation.bulkUpdateScenes":
+		if e.complexity.Mutation.BulkUpdateScenes == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkUpdateScenes_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkUpdateScenes(childComplexity, args["input"].(BulkSceneUpdateInput)), true
 	case "Mutation.cancelPreviewSession":
 		if e.complexity.Mutation.CancelPreviewSession == nil {
 			break
@@ -2935,6 +3240,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.CueLists(childComplexity, args["projectId"].(string)), true
+	case "Query.cueListsByIds":
+		if e.complexity.Query.CueListsByIds == nil {
+			break
+		}
+
+		args, err := ec.field_Query_cueListsByIds_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.CueListsByIds(childComplexity, args["ids"].([]string)), true
+	case "Query.cuesByIds":
+		if e.complexity.Query.CuesByIds == nil {
+			break
+		}
+
+		args, err := ec.field_Query_cuesByIds_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.CuesByIds(childComplexity, args["ids"].([]string)), true
 	case "Query.currentActiveScene":
 		if e.complexity.Query.CurrentActiveScene == nil {
 			break
@@ -2974,6 +3301,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.FixtureDefinitions(childComplexity, args["filter"].(*FixtureDefinitionFilter)), true
+	case "Query.fixtureDefinitionsByIds":
+		if e.complexity.Query.FixtureDefinitionsByIds == nil {
+			break
+		}
+
+		args, err := ec.field_Query_fixtureDefinitionsByIds_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.FixtureDefinitionsByIds(childComplexity, args["ids"].([]string)), true
 	case "Query.fixtureInstance":
 		if e.complexity.Query.FixtureInstance == nil {
 			break
@@ -3007,6 +3345,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.FixtureUsage(childComplexity, args["fixtureId"].(string)), true
+	case "Query.fixturesByIds":
+		if e.complexity.Query.FixturesByIds == nil {
+			break
+		}
+
+		args, err := ec.field_Query_fixturesByIds_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.FixturesByIds(childComplexity, args["ids"].([]string)), true
 	case "Query.getQLCFixtureMappingSuggestions":
 		if e.complexity.Query.GetQLCFixtureMappingSuggestions == nil {
 			break
@@ -3052,6 +3401,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.Projects(childComplexity), true
+	case "Query.projectsByIds":
+		if e.complexity.Query.ProjectsByIds == nil {
+			break
+		}
+
+		args, err := ec.field_Query_projectsByIds_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.ProjectsByIds(childComplexity, args["ids"].([]string)), true
 	case "Query.savedWifiNetworks":
 		if e.complexity.Query.SavedWifiNetworks == nil {
 			break
@@ -3102,6 +3462,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.SceneBoards(childComplexity, args["projectId"].(string)), true
+	case "Query.sceneBoardsByIds":
+		if e.complexity.Query.SceneBoardsByIds == nil {
+			break
+		}
+
+		args, err := ec.field_Query_sceneBoardsByIds_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.SceneBoardsByIds(childComplexity, args["ids"].([]string)), true
 	case "Query.sceneFixtures":
 		if e.complexity.Query.SceneFixtures == nil {
 			break
@@ -3135,6 +3506,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.Scenes(childComplexity, args["projectId"].(string), args["page"].(*int), args["perPage"].(*int), args["filter"].(*SceneFilterInput), args["sortBy"].(*SceneSortField)), true
+	case "Query.scenesByIds":
+		if e.complexity.Query.ScenesByIds == nil {
+			break
+		}
+
+		args, err := ec.field_Query_scenesByIds_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.ScenesByIds(childComplexity, args["ids"].([]string)), true
 	case "Query.searchCues":
 		if e.complexity.Query.SearchCues == nil {
 			break
@@ -3923,9 +4305,22 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	opCtx := graphql.GetOperationContext(ctx)
 	ec := executionContext{opCtx, e, 0, 0, make(chan graphql.DeferredResult)}
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
+		ec.unmarshalInputBulkCueCreateInput,
+		ec.unmarshalInputBulkCueListCreateInput,
+		ec.unmarshalInputBulkCueListUpdateInput,
 		ec.unmarshalInputBulkCueUpdateInput,
 		ec.unmarshalInputBulkFixtureCreateInput,
+		ec.unmarshalInputBulkFixtureDefinitionCreateInput,
+		ec.unmarshalInputBulkFixtureDefinitionUpdateInput,
 		ec.unmarshalInputBulkFixtureUpdateInput,
+		ec.unmarshalInputBulkProjectCreateInput,
+		ec.unmarshalInputBulkProjectUpdateInput,
+		ec.unmarshalInputBulkSceneBoardButtonCreateInput,
+		ec.unmarshalInputBulkSceneBoardButtonUpdateInput,
+		ec.unmarshalInputBulkSceneBoardCreateInput,
+		ec.unmarshalInputBulkSceneBoardUpdateInput,
+		ec.unmarshalInputBulkSceneCreateInput,
+		ec.unmarshalInputBulkSceneUpdateInput,
 		ec.unmarshalInputChannelAssignmentInput,
 		ec.unmarshalInputCreateChannelDefinitionInput,
 		ec.unmarshalInputCreateCueInput,
@@ -3936,9 +4331,11 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCreateSceneBoardButtonInput,
 		ec.unmarshalInputCreateSceneBoardInput,
 		ec.unmarshalInputCreateSceneInput,
+		ec.unmarshalInputCueListUpdateItem,
 		ec.unmarshalInputCueOrderInput,
 		ec.unmarshalInputExportOptionsInput,
 		ec.unmarshalInputFixtureDefinitionFilter,
+		ec.unmarshalInputFixtureDefinitionUpdateItem,
 		ec.unmarshalInputFixtureFilterInput,
 		ec.unmarshalInputFixtureMappingInput,
 		ec.unmarshalInputFixtureOrderInput,
@@ -3948,8 +4345,12 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputFixtureValueInput,
 		ec.unmarshalInputImportOFLFixtureInput,
 		ec.unmarshalInputImportOptionsInput,
+		ec.unmarshalInputProjectUpdateItem,
 		ec.unmarshalInputSceneBoardButtonPositionInput,
+		ec.unmarshalInputSceneBoardButtonUpdateItem,
+		ec.unmarshalInputSceneBoardUpdateItem,
 		ec.unmarshalInputSceneFilterInput,
+		ec.unmarshalInputSceneUpdateItem,
 		ec.unmarshalInputUpdateFixtureInstanceInput,
 		ec.unmarshalInputUpdateSceneBoardButtonInput,
 		ec.unmarshalInputUpdateSceneBoardInput,
@@ -4881,6 +5282,116 @@ input BulkFixtureCreateInput {
   fixtures: [CreateFixtureInstanceInput!]!
 }
 
+# =============================================================================
+# BULK OPERATION TYPES
+# =============================================================================
+
+# Common result type for bulk deletes
+type BulkDeleteResult {
+  deletedCount: Int!
+  deletedIds: [ID!]!
+}
+
+# Bulk Create Inputs
+input BulkSceneCreateInput {
+  scenes: [CreateSceneInput!]!
+}
+
+input BulkCueCreateInput {
+  cues: [CreateCueInput!]!
+}
+
+input BulkCueListCreateInput {
+  cueLists: [CreateCueListInput!]!
+}
+
+input BulkSceneBoardCreateInput {
+  sceneBoards: [CreateSceneBoardInput!]!
+}
+
+input BulkSceneBoardButtonCreateInput {
+  buttons: [CreateSceneBoardButtonInput!]!
+}
+
+input BulkFixtureDefinitionCreateInput {
+  definitions: [CreateFixtureDefinitionInput!]!
+}
+
+input BulkProjectCreateInput {
+  projects: [CreateProjectInput!]!
+}
+
+# Bulk Update Inputs
+input BulkSceneUpdateInput {
+  scenes: [SceneUpdateItem!]!
+}
+
+input SceneUpdateItem {
+  sceneId: ID!
+  name: String
+  description: String
+}
+
+input BulkCueListUpdateInput {
+  cueLists: [CueListUpdateItem!]!
+}
+
+input CueListUpdateItem {
+  cueListId: ID!
+  name: String
+  description: String
+  loop: Boolean
+}
+
+input BulkSceneBoardUpdateInput {
+  sceneBoards: [SceneBoardUpdateItem!]!
+}
+
+input SceneBoardUpdateItem {
+  sceneBoardId: ID!
+  name: String
+  description: String
+  defaultFadeTime: Float
+  gridSize: Int
+  canvasWidth: Int
+  canvasHeight: Int
+}
+
+input BulkSceneBoardButtonUpdateInput {
+  buttons: [SceneBoardButtonUpdateItem!]!
+}
+
+input SceneBoardButtonUpdateItem {
+  buttonId: ID!
+  layoutX: Int
+  layoutY: Int
+  width: Int
+  height: Int
+  color: String
+  label: String
+}
+
+input BulkFixtureDefinitionUpdateInput {
+  definitions: [FixtureDefinitionUpdateItem!]!
+}
+
+input FixtureDefinitionUpdateItem {
+  definitionId: ID!
+  manufacturer: String
+  model: String
+  type: FixtureType
+}
+
+input BulkProjectUpdateInput {
+  projects: [ProjectUpdateItem!]!
+}
+
+input ProjectUpdateItem {
+  projectId: ID!
+  name: String
+  description: String
+}
+
 input FixtureMappingInput {
   lacyLightsKey: String!
   qlcManufacturer: String!
@@ -5034,6 +5545,15 @@ type Query {
   # Version Management
   systemVersions: SystemVersionInfo!
   availableVersions(repository: String!): [String!]!
+
+  # Bulk Read Queries
+  fixturesByIds(ids: [ID!]!): [FixtureInstance!]!
+  scenesByIds(ids: [ID!]!): [Scene!]!
+  cuesByIds(ids: [ID!]!): [Cue!]!
+  cueListsByIds(ids: [ID!]!): [CueList!]!
+  sceneBoardsByIds(ids: [ID!]!): [SceneBoard!]!
+  fixtureDefinitionsByIds(ids: [ID!]!): [FixtureDefinition!]!
+  projectsByIds(ids: [ID!]!): [Project!]!
 }
 
 # =============================================================================
@@ -5045,6 +5565,9 @@ type Mutation {
   createProject(input: CreateProjectInput!): Project!
   updateProject(id: ID!, input: CreateProjectInput!): Project!
   deleteProject(id: ID!): Boolean!
+  bulkCreateProjects(input: BulkProjectCreateInput!): [Project!]!
+  bulkUpdateProjects(input: BulkProjectUpdateInput!): [Project!]!
+  bulkDeleteProjects(projectIds: [ID!]!): BulkDeleteResult!
 
   # Fixture Definitions
   createFixtureDefinition(
@@ -5056,6 +5579,9 @@ type Mutation {
     input: CreateFixtureDefinitionInput!
   ): FixtureDefinition!
   deleteFixtureDefinition(id: ID!): Boolean!
+  bulkCreateFixtureDefinitions(input: BulkFixtureDefinitionCreateInput!): [FixtureDefinition!]!
+  bulkUpdateFixtureDefinitions(input: BulkFixtureDefinitionUpdateInput!): [FixtureDefinition!]!
+  bulkDeleteFixtureDefinitions(definitionIds: [ID!]!): BulkDeleteResult!
 
   # Fixture Instances
   createFixtureInstance(input: CreateFixtureInstanceInput!): FixtureInstance!
@@ -5066,6 +5592,7 @@ type Mutation {
   bulkUpdateFixtures(input: BulkFixtureUpdateInput!): [FixtureInstance!]!
   bulkCreateFixtures(input: BulkFixtureCreateInput!): [FixtureInstance!]!
   deleteFixtureInstance(id: ID!): Boolean!
+  bulkDeleteFixtures(fixtureIds: [ID!]!): BulkDeleteResult!
 
   # Fixture Ordering
   reorderProjectFixtures(
@@ -5086,6 +5613,9 @@ type Mutation {
   duplicateScene(id: ID!): Scene!
   cloneScene(sceneId: ID!, newName: String!): Scene!
   deleteScene(id: ID!): Boolean!
+  bulkCreateScenes(input: BulkSceneCreateInput!): [Scene!]!
+  bulkUpdateScenes(input: BulkSceneUpdateInput!): [Scene!]!
+  bulkDeleteScenes(sceneIds: [ID!]!): BulkDeleteResult!
 
   # Safe Scene Updates (Additive)
   addFixturesToScene(
@@ -5106,6 +5636,9 @@ type Mutation {
   createSceneBoard(input: CreateSceneBoardInput!): SceneBoard!
   updateSceneBoard(id: ID!, input: UpdateSceneBoardInput!): SceneBoard!
   deleteSceneBoard(id: ID!): Boolean!
+  bulkCreateSceneBoards(input: BulkSceneBoardCreateInput!): [SceneBoard!]!
+  bulkUpdateSceneBoards(input: BulkSceneBoardUpdateInput!): [SceneBoard!]!
+  bulkDeleteSceneBoards(sceneBoardIds: [ID!]!): BulkDeleteResult!
 
   # Scene Board Buttons
   addSceneToBoard(input: CreateSceneBoardButtonInput!): SceneBoardButton!
@@ -5117,6 +5650,9 @@ type Mutation {
   updateSceneBoardButtonPositions(
     positions: [SceneBoardButtonPositionInput!]!
   ): Boolean!
+  bulkCreateSceneBoardButtons(input: BulkSceneBoardButtonCreateInput!): [SceneBoardButton!]!
+  bulkUpdateSceneBoardButtons(input: BulkSceneBoardButtonUpdateInput!): [SceneBoardButton!]!
+  bulkDeleteSceneBoardButtons(buttonIds: [ID!]!): BulkDeleteResult!
 
   # Scene Board Playback (activates scene with board's fade time)
   activateSceneFromBoard(
@@ -5129,13 +5665,18 @@ type Mutation {
   createCueList(input: CreateCueListInput!): CueList!
   updateCueList(id: ID!, input: CreateCueListInput!): CueList!
   deleteCueList(id: ID!): Boolean!
+  bulkCreateCueLists(input: BulkCueListCreateInput!): [CueList!]!
+  bulkUpdateCueLists(input: BulkCueListUpdateInput!): [CueList!]!
+  bulkDeleteCueLists(cueListIds: [ID!]!): BulkDeleteResult!
 
   # Cues
   createCue(input: CreateCueInput!): Cue!
   updateCue(id: ID!, input: CreateCueInput!): Cue!
   deleteCue(id: ID!): Boolean!
   reorderCues(cueListId: ID!, cueOrders: [CueOrderInput!]!): Boolean!
+  bulkCreateCues(input: BulkCueCreateInput!): [Cue!]!
   bulkUpdateCues(input: BulkCueUpdateInput!): [Cue!]!
+  bulkDeleteCues(cueIds: [ID!]!): BulkDeleteResult!
 
   # Preview System
   startPreviewSession(projectId: ID!): PreviewSession!
@@ -5263,10 +5804,186 @@ func (ec *executionContext) field_Mutation_addSceneToBoard_args(ctx context.Cont
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_bulkCreateCueLists_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkCueListCreateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkCueListCreateInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkCreateCues_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkCueCreateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkCueCreateInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkCreateFixtureDefinitions_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkFixtureDefinitionCreateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkFixtureDefinitionCreateInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_bulkCreateFixtures_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkFixtureCreateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkFixtureCreateInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkCreateProjects_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkProjectCreateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkProjectCreateInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkCreateSceneBoardButtons_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkSceneBoardButtonCreateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkSceneBoardButtonCreateInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkCreateSceneBoards_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkSceneBoardCreateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkSceneBoardCreateInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkCreateScenes_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkSceneCreateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkSceneCreateInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkDeleteCueLists_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "cueListIds", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["cueListIds"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkDeleteCues_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "cueIds", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["cueIds"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkDeleteFixtureDefinitions_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "definitionIds", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["definitionIds"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkDeleteFixtures_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "fixtureIds", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["fixtureIds"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkDeleteProjects_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectIds", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["projectIds"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkDeleteSceneBoardButtons_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "buttonIds", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["buttonIds"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkDeleteSceneBoards_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sceneBoardIds", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["sceneBoardIds"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkDeleteScenes_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sceneIds", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["sceneIds"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkUpdateCueLists_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkCueListUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkCueListUpdateInput)
 	if err != nil {
 		return nil, err
 	}
@@ -5285,10 +6002,65 @@ func (ec *executionContext) field_Mutation_bulkUpdateCues_args(ctx context.Conte
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_bulkUpdateFixtureDefinitions_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkFixtureDefinitionUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkFixtureDefinitionUpdateInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_bulkUpdateFixtures_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkFixtureUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkFixtureUpdateInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkUpdateProjects_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkProjectUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkProjectUpdateInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkUpdateSceneBoardButtons_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkSceneBoardButtonUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkSceneBoardButtonUpdateInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkUpdateSceneBoards_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkSceneBoardUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkSceneBoardUpdateInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkUpdateScenes_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkSceneUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkSceneUpdateInput)
 	if err != nil {
 		return nil, err
 	}
@@ -6183,6 +6955,17 @@ func (ec *executionContext) field_Query_cueList_args(ctx context.Context, rawArg
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_cueListsByIds_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "ids", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["ids"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_cueLists_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -6205,6 +6988,17 @@ func (ec *executionContext) field_Query_cue_args(ctx context.Context, rawArgs ma
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_cuesByIds_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "ids", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["ids"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_dmxOutput_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -6224,6 +7018,17 @@ func (ec *executionContext) field_Query_fixtureDefinition_args(ctx context.Conte
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_fixtureDefinitionsByIds_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "ids", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["ids"] = arg0
 	return args, nil
 }
 
@@ -6286,6 +7091,17 @@ func (ec *executionContext) field_Query_fixtureUsage_args(ctx context.Context, r
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_fixturesByIds_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "ids", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["ids"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_getQLCFixtureMappingSuggestions_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -6319,6 +7135,17 @@ func (ec *executionContext) field_Query_project_args(ctx context.Context, rawArg
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_projectsByIds_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "ids", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["ids"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_sceneBoardButton_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -6338,6 +7165,17 @@ func (ec *executionContext) field_Query_sceneBoard_args(ctx context.Context, raw
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_sceneBoardsByIds_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "ids", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["ids"] = arg0
 	return args, nil
 }
 
@@ -6387,6 +7225,17 @@ func (ec *executionContext) field_Query_scene_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["includeFixtureValues"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_scenesByIds_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "ids", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["ids"] = arg0
 	return args, nil
 }
 
@@ -6642,6 +7491,64 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 // endregion ************************** directives.gotpl **************************
 
 // region    **************************** field.gotpl *****************************
+
+func (ec *executionContext) _BulkDeleteResult_deletedCount(ctx context.Context, field graphql.CollectedField, obj *BulkDeleteResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BulkDeleteResult_deletedCount,
+		func(ctx context.Context) (any, error) {
+			return obj.DeletedCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BulkDeleteResult_deletedCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BulkDeleteResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BulkDeleteResult_deletedIds(ctx context.Context, field graphql.CollectedField, obj *BulkDeleteResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BulkDeleteResult_deletedIds,
+		func(ctx context.Context) (any, error) {
+			return obj.DeletedIds, nil
+		},
+		nil,
+		ec.marshalNID2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BulkDeleteResult_deletedIds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BulkDeleteResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
 
 func (ec *executionContext) _ChannelAssignmentSuggestion_universe(ctx context.Context, field graphql.CollectedField, obj *ChannelAssignmentSuggestion) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
@@ -11615,6 +12522,191 @@ func (ec *executionContext) fieldContext_Mutation_deleteProject(ctx context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_bulkCreateProjects(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkCreateProjects,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkCreateProjects(ctx, fc.Args["input"].(BulkProjectCreateInput))
+		},
+		nil,
+		ec.marshalNProject2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐProjectᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkCreateProjects(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Project_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Project_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Project_description(ctx, field)
+			case "fixtureCount":
+				return ec.fieldContext_Project_fixtureCount(ctx, field)
+			case "sceneCount":
+				return ec.fieldContext_Project_sceneCount(ctx, field)
+			case "cueListCount":
+				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Project_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "fixtures":
+				return ec.fieldContext_Project_fixtures(ctx, field)
+			case "scenes":
+				return ec.fieldContext_Project_scenes(ctx, field)
+			case "cueLists":
+				return ec.fieldContext_Project_cueLists(ctx, field)
+			case "sceneBoards":
+				return ec.fieldContext_Project_sceneBoards(ctx, field)
+			case "users":
+				return ec.fieldContext_Project_users(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkCreateProjects_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkUpdateProjects(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkUpdateProjects,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkUpdateProjects(ctx, fc.Args["input"].(BulkProjectUpdateInput))
+		},
+		nil,
+		ec.marshalNProject2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐProjectᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkUpdateProjects(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Project_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Project_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Project_description(ctx, field)
+			case "fixtureCount":
+				return ec.fieldContext_Project_fixtureCount(ctx, field)
+			case "sceneCount":
+				return ec.fieldContext_Project_sceneCount(ctx, field)
+			case "cueListCount":
+				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Project_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "fixtures":
+				return ec.fieldContext_Project_fixtures(ctx, field)
+			case "scenes":
+				return ec.fieldContext_Project_scenes(ctx, field)
+			case "cueLists":
+				return ec.fieldContext_Project_cueLists(ctx, field)
+			case "sceneBoards":
+				return ec.fieldContext_Project_sceneBoards(ctx, field)
+			case "users":
+				return ec.fieldContext_Project_users(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkUpdateProjects_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkDeleteProjects(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkDeleteProjects,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkDeleteProjects(ctx, fc.Args["projectIds"].([]string))
+		},
+		nil,
+		ec.marshalNBulkDeleteResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkDeleteResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkDeleteProjects(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "deletedCount":
+				return ec.fieldContext_BulkDeleteResult_deletedCount(ctx, field)
+			case "deletedIds":
+				return ec.fieldContext_BulkDeleteResult_deletedIds(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type BulkDeleteResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkDeleteProjects_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_createFixtureDefinition(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -11827,6 +12919,171 @@ func (ec *executionContext) fieldContext_Mutation_deleteFixtureDefinition(ctx co
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_deleteFixtureDefinition_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkCreateFixtureDefinitions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkCreateFixtureDefinitions,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkCreateFixtureDefinitions(ctx, fc.Args["input"].(BulkFixtureDefinitionCreateInput))
+		},
+		nil,
+		ec.marshalNFixtureDefinition2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureDefinitionᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkCreateFixtureDefinitions(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FixtureDefinition_id(ctx, field)
+			case "manufacturer":
+				return ec.fieldContext_FixtureDefinition_manufacturer(ctx, field)
+			case "model":
+				return ec.fieldContext_FixtureDefinition_model(ctx, field)
+			case "type":
+				return ec.fieldContext_FixtureDefinition_type(ctx, field)
+			case "channels":
+				return ec.fieldContext_FixtureDefinition_channels(ctx, field)
+			case "modes":
+				return ec.fieldContext_FixtureDefinition_modes(ctx, field)
+			case "isBuiltIn":
+				return ec.fieldContext_FixtureDefinition_isBuiltIn(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_FixtureDefinition_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FixtureDefinition", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkCreateFixtureDefinitions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkUpdateFixtureDefinitions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkUpdateFixtureDefinitions,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkUpdateFixtureDefinitions(ctx, fc.Args["input"].(BulkFixtureDefinitionUpdateInput))
+		},
+		nil,
+		ec.marshalNFixtureDefinition2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureDefinitionᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkUpdateFixtureDefinitions(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FixtureDefinition_id(ctx, field)
+			case "manufacturer":
+				return ec.fieldContext_FixtureDefinition_manufacturer(ctx, field)
+			case "model":
+				return ec.fieldContext_FixtureDefinition_model(ctx, field)
+			case "type":
+				return ec.fieldContext_FixtureDefinition_type(ctx, field)
+			case "channels":
+				return ec.fieldContext_FixtureDefinition_channels(ctx, field)
+			case "modes":
+				return ec.fieldContext_FixtureDefinition_modes(ctx, field)
+			case "isBuiltIn":
+				return ec.fieldContext_FixtureDefinition_isBuiltIn(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_FixtureDefinition_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FixtureDefinition", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkUpdateFixtureDefinitions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkDeleteFixtureDefinitions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkDeleteFixtureDefinitions,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkDeleteFixtureDefinitions(ctx, fc.Args["definitionIds"].([]string))
+		},
+		nil,
+		ec.marshalNBulkDeleteResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkDeleteResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkDeleteFixtureDefinitions(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "deletedCount":
+				return ec.fieldContext_BulkDeleteResult_deletedCount(ctx, field)
+			case "deletedIds":
+				return ec.fieldContext_BulkDeleteResult_deletedIds(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type BulkDeleteResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkDeleteFixtureDefinitions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -12192,6 +13449,53 @@ func (ec *executionContext) fieldContext_Mutation_deleteFixtureInstance(ctx cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_deleteFixtureInstance_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkDeleteFixtures(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkDeleteFixtures,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkDeleteFixtures(ctx, fc.Args["fixtureIds"].([]string))
+		},
+		nil,
+		ec.marshalNBulkDeleteResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkDeleteResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkDeleteFixtures(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "deletedCount":
+				return ec.fieldContext_BulkDeleteResult_deletedCount(ctx, field)
+			case "deletedIds":
+				return ec.fieldContext_BulkDeleteResult_deletedIds(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type BulkDeleteResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkDeleteFixtures_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -12590,6 +13894,167 @@ func (ec *executionContext) fieldContext_Mutation_deleteScene(ctx context.Contex
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_bulkCreateScenes(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkCreateScenes,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkCreateScenes(ctx, fc.Args["input"].(BulkSceneCreateInput))
+		},
+		nil,
+		ec.marshalNScene2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐSceneᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkCreateScenes(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Scene_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Scene_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Scene_description(ctx, field)
+			case "project":
+				return ec.fieldContext_Scene_project(ctx, field)
+			case "fixtureValues":
+				return ec.fieldContext_Scene_fixtureValues(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Scene_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Scene_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Scene", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkCreateScenes_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkUpdateScenes(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkUpdateScenes,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkUpdateScenes(ctx, fc.Args["input"].(BulkSceneUpdateInput))
+		},
+		nil,
+		ec.marshalNScene2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐSceneᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkUpdateScenes(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Scene_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Scene_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Scene_description(ctx, field)
+			case "project":
+				return ec.fieldContext_Scene_project(ctx, field)
+			case "fixtureValues":
+				return ec.fieldContext_Scene_fixtureValues(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Scene_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Scene_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Scene", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkUpdateScenes_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkDeleteScenes(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkDeleteScenes,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkDeleteScenes(ctx, fc.Args["sceneIds"].([]string))
+		},
+		nil,
+		ec.marshalNBulkDeleteResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkDeleteResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkDeleteScenes(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "deletedCount":
+				return ec.fieldContext_BulkDeleteResult_deletedCount(ctx, field)
+			case "deletedIds":
+				return ec.fieldContext_BulkDeleteResult_deletedIds(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type BulkDeleteResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkDeleteScenes_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_addFixturesToScene(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -12932,6 +14397,183 @@ func (ec *executionContext) fieldContext_Mutation_deleteSceneBoard(ctx context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_bulkCreateSceneBoards(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkCreateSceneBoards,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkCreateSceneBoards(ctx, fc.Args["input"].(BulkSceneBoardCreateInput))
+		},
+		nil,
+		ec.marshalNSceneBoard2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐSceneBoardᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkCreateSceneBoards(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SceneBoard_id(ctx, field)
+			case "name":
+				return ec.fieldContext_SceneBoard_name(ctx, field)
+			case "description":
+				return ec.fieldContext_SceneBoard_description(ctx, field)
+			case "project":
+				return ec.fieldContext_SceneBoard_project(ctx, field)
+			case "defaultFadeTime":
+				return ec.fieldContext_SceneBoard_defaultFadeTime(ctx, field)
+			case "gridSize":
+				return ec.fieldContext_SceneBoard_gridSize(ctx, field)
+			case "canvasWidth":
+				return ec.fieldContext_SceneBoard_canvasWidth(ctx, field)
+			case "canvasHeight":
+				return ec.fieldContext_SceneBoard_canvasHeight(ctx, field)
+			case "buttons":
+				return ec.fieldContext_SceneBoard_buttons(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SceneBoard_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_SceneBoard_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SceneBoard", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkCreateSceneBoards_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkUpdateSceneBoards(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkUpdateSceneBoards,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkUpdateSceneBoards(ctx, fc.Args["input"].(BulkSceneBoardUpdateInput))
+		},
+		nil,
+		ec.marshalNSceneBoard2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐSceneBoardᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkUpdateSceneBoards(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SceneBoard_id(ctx, field)
+			case "name":
+				return ec.fieldContext_SceneBoard_name(ctx, field)
+			case "description":
+				return ec.fieldContext_SceneBoard_description(ctx, field)
+			case "project":
+				return ec.fieldContext_SceneBoard_project(ctx, field)
+			case "defaultFadeTime":
+				return ec.fieldContext_SceneBoard_defaultFadeTime(ctx, field)
+			case "gridSize":
+				return ec.fieldContext_SceneBoard_gridSize(ctx, field)
+			case "canvasWidth":
+				return ec.fieldContext_SceneBoard_canvasWidth(ctx, field)
+			case "canvasHeight":
+				return ec.fieldContext_SceneBoard_canvasHeight(ctx, field)
+			case "buttons":
+				return ec.fieldContext_SceneBoard_buttons(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SceneBoard_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_SceneBoard_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SceneBoard", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkUpdateSceneBoards_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkDeleteSceneBoards(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkDeleteSceneBoards,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkDeleteSceneBoards(ctx, fc.Args["sceneBoardIds"].([]string))
+		},
+		nil,
+		ec.marshalNBulkDeleteResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkDeleteResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkDeleteSceneBoards(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "deletedCount":
+				return ec.fieldContext_BulkDeleteResult_deletedCount(ctx, field)
+			case "deletedIds":
+				return ec.fieldContext_BulkDeleteResult_deletedIds(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type BulkDeleteResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkDeleteSceneBoards_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_addSceneToBoard(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13138,6 +14780,183 @@ func (ec *executionContext) fieldContext_Mutation_updateSceneBoardButtonPosition
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_updateSceneBoardButtonPositions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkCreateSceneBoardButtons(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkCreateSceneBoardButtons,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkCreateSceneBoardButtons(ctx, fc.Args["input"].(BulkSceneBoardButtonCreateInput))
+		},
+		nil,
+		ec.marshalNSceneBoardButton2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐSceneBoardButtonᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkCreateSceneBoardButtons(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SceneBoardButton_id(ctx, field)
+			case "sceneBoard":
+				return ec.fieldContext_SceneBoardButton_sceneBoard(ctx, field)
+			case "scene":
+				return ec.fieldContext_SceneBoardButton_scene(ctx, field)
+			case "layoutX":
+				return ec.fieldContext_SceneBoardButton_layoutX(ctx, field)
+			case "layoutY":
+				return ec.fieldContext_SceneBoardButton_layoutY(ctx, field)
+			case "width":
+				return ec.fieldContext_SceneBoardButton_width(ctx, field)
+			case "height":
+				return ec.fieldContext_SceneBoardButton_height(ctx, field)
+			case "color":
+				return ec.fieldContext_SceneBoardButton_color(ctx, field)
+			case "label":
+				return ec.fieldContext_SceneBoardButton_label(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SceneBoardButton_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_SceneBoardButton_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SceneBoardButton", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkCreateSceneBoardButtons_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkUpdateSceneBoardButtons(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkUpdateSceneBoardButtons,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkUpdateSceneBoardButtons(ctx, fc.Args["input"].(BulkSceneBoardButtonUpdateInput))
+		},
+		nil,
+		ec.marshalNSceneBoardButton2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐSceneBoardButtonᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkUpdateSceneBoardButtons(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SceneBoardButton_id(ctx, field)
+			case "sceneBoard":
+				return ec.fieldContext_SceneBoardButton_sceneBoard(ctx, field)
+			case "scene":
+				return ec.fieldContext_SceneBoardButton_scene(ctx, field)
+			case "layoutX":
+				return ec.fieldContext_SceneBoardButton_layoutX(ctx, field)
+			case "layoutY":
+				return ec.fieldContext_SceneBoardButton_layoutY(ctx, field)
+			case "width":
+				return ec.fieldContext_SceneBoardButton_width(ctx, field)
+			case "height":
+				return ec.fieldContext_SceneBoardButton_height(ctx, field)
+			case "color":
+				return ec.fieldContext_SceneBoardButton_color(ctx, field)
+			case "label":
+				return ec.fieldContext_SceneBoardButton_label(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SceneBoardButton_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_SceneBoardButton_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SceneBoardButton", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkUpdateSceneBoardButtons_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkDeleteSceneBoardButtons(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkDeleteSceneBoardButtons,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkDeleteSceneBoardButtons(ctx, fc.Args["buttonIds"].([]string))
+		},
+		nil,
+		ec.marshalNBulkDeleteResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkDeleteResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkDeleteSceneBoardButtons(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "deletedCount":
+				return ec.fieldContext_BulkDeleteResult_deletedCount(ctx, field)
+			case "deletedIds":
+				return ec.fieldContext_BulkDeleteResult_deletedIds(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type BulkDeleteResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkDeleteSceneBoardButtons_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -13352,6 +15171,179 @@ func (ec *executionContext) fieldContext_Mutation_deleteCueList(ctx context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_bulkCreateCueLists(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkCreateCueLists,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkCreateCueLists(ctx, fc.Args["input"].(BulkCueListCreateInput))
+		},
+		nil,
+		ec.marshalNCueList2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐCueListᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkCreateCueLists(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_CueList_id(ctx, field)
+			case "name":
+				return ec.fieldContext_CueList_name(ctx, field)
+			case "description":
+				return ec.fieldContext_CueList_description(ctx, field)
+			case "loop":
+				return ec.fieldContext_CueList_loop(ctx, field)
+			case "project":
+				return ec.fieldContext_CueList_project(ctx, field)
+			case "cues":
+				return ec.fieldContext_CueList_cues(ctx, field)
+			case "cueCount":
+				return ec.fieldContext_CueList_cueCount(ctx, field)
+			case "totalDuration":
+				return ec.fieldContext_CueList_totalDuration(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_CueList_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_CueList_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CueList", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkCreateCueLists_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkUpdateCueLists(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkUpdateCueLists,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkUpdateCueLists(ctx, fc.Args["input"].(BulkCueListUpdateInput))
+		},
+		nil,
+		ec.marshalNCueList2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐCueListᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkUpdateCueLists(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_CueList_id(ctx, field)
+			case "name":
+				return ec.fieldContext_CueList_name(ctx, field)
+			case "description":
+				return ec.fieldContext_CueList_description(ctx, field)
+			case "loop":
+				return ec.fieldContext_CueList_loop(ctx, field)
+			case "project":
+				return ec.fieldContext_CueList_project(ctx, field)
+			case "cues":
+				return ec.fieldContext_CueList_cues(ctx, field)
+			case "cueCount":
+				return ec.fieldContext_CueList_cueCount(ctx, field)
+			case "totalDuration":
+				return ec.fieldContext_CueList_totalDuration(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_CueList_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_CueList_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CueList", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkUpdateCueLists_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkDeleteCueLists(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkDeleteCueLists,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkDeleteCueLists(ctx, fc.Args["cueListIds"].([]string))
+		},
+		nil,
+		ec.marshalNBulkDeleteResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkDeleteResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkDeleteCueLists(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "deletedCount":
+				return ec.fieldContext_BulkDeleteResult_deletedCount(ctx, field)
+			case "deletedIds":
+				return ec.fieldContext_BulkDeleteResult_deletedIds(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type BulkDeleteResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkDeleteCueLists_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_createCue(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13560,6 +15552,69 @@ func (ec *executionContext) fieldContext_Mutation_reorderCues(ctx context.Contex
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_bulkCreateCues(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkCreateCues,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkCreateCues(ctx, fc.Args["input"].(BulkCueCreateInput))
+		},
+		nil,
+		ec.marshalNCue2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐCueᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkCreateCues(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Cue_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Cue_name(ctx, field)
+			case "cueNumber":
+				return ec.fieldContext_Cue_cueNumber(ctx, field)
+			case "scene":
+				return ec.fieldContext_Cue_scene(ctx, field)
+			case "cueList":
+				return ec.fieldContext_Cue_cueList(ctx, field)
+			case "fadeInTime":
+				return ec.fieldContext_Cue_fadeInTime(ctx, field)
+			case "fadeOutTime":
+				return ec.fieldContext_Cue_fadeOutTime(ctx, field)
+			case "followTime":
+				return ec.fieldContext_Cue_followTime(ctx, field)
+			case "easingType":
+				return ec.fieldContext_Cue_easingType(ctx, field)
+			case "notes":
+				return ec.fieldContext_Cue_notes(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkCreateCues_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_bulkUpdateCues(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13617,6 +15672,53 @@ func (ec *executionContext) fieldContext_Mutation_bulkUpdateCues(ctx context.Con
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_bulkUpdateCues_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkDeleteCues(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkDeleteCues,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkDeleteCues(ctx, fc.Args["cueIds"].([]string))
+		},
+		nil,
+		ec.marshalNBulkDeleteResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkDeleteResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkDeleteCues(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "deletedCount":
+				return ec.fieldContext_BulkDeleteResult_deletedCount(ctx, field)
+			case "deletedIds":
+				return ec.fieldContext_BulkDeleteResult_deletedIds(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type BulkDeleteResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkDeleteCues_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -18575,6 +20677,463 @@ func (ec *executionContext) fieldContext_Query_availableVersions(ctx context.Con
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_availableVersions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_fixturesByIds(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_fixturesByIds,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().FixturesByIds(ctx, fc.Args["ids"].([]string))
+		},
+		nil,
+		ec.marshalNFixtureInstance2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureInstanceᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_fixturesByIds(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FixtureInstance_id(ctx, field)
+			case "name":
+				return ec.fieldContext_FixtureInstance_name(ctx, field)
+			case "description":
+				return ec.fieldContext_FixtureInstance_description(ctx, field)
+			case "definitionId":
+				return ec.fieldContext_FixtureInstance_definitionId(ctx, field)
+			case "manufacturer":
+				return ec.fieldContext_FixtureInstance_manufacturer(ctx, field)
+			case "model":
+				return ec.fieldContext_FixtureInstance_model(ctx, field)
+			case "type":
+				return ec.fieldContext_FixtureInstance_type(ctx, field)
+			case "modeName":
+				return ec.fieldContext_FixtureInstance_modeName(ctx, field)
+			case "channelCount":
+				return ec.fieldContext_FixtureInstance_channelCount(ctx, field)
+			case "channels":
+				return ec.fieldContext_FixtureInstance_channels(ctx, field)
+			case "project":
+				return ec.fieldContext_FixtureInstance_project(ctx, field)
+			case "universe":
+				return ec.fieldContext_FixtureInstance_universe(ctx, field)
+			case "startChannel":
+				return ec.fieldContext_FixtureInstance_startChannel(ctx, field)
+			case "tags":
+				return ec.fieldContext_FixtureInstance_tags(ctx, field)
+			case "projectOrder":
+				return ec.fieldContext_FixtureInstance_projectOrder(ctx, field)
+			case "layoutX":
+				return ec.fieldContext_FixtureInstance_layoutX(ctx, field)
+			case "layoutY":
+				return ec.fieldContext_FixtureInstance_layoutY(ctx, field)
+			case "layoutRotation":
+				return ec.fieldContext_FixtureInstance_layoutRotation(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_FixtureInstance_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FixtureInstance", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_fixturesByIds_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_scenesByIds(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_scenesByIds,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().ScenesByIds(ctx, fc.Args["ids"].([]string))
+		},
+		nil,
+		ec.marshalNScene2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐSceneᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_scenesByIds(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Scene_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Scene_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Scene_description(ctx, field)
+			case "project":
+				return ec.fieldContext_Scene_project(ctx, field)
+			case "fixtureValues":
+				return ec.fieldContext_Scene_fixtureValues(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Scene_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Scene_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Scene", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_scenesByIds_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_cuesByIds(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_cuesByIds,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().CuesByIds(ctx, fc.Args["ids"].([]string))
+		},
+		nil,
+		ec.marshalNCue2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐCueᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_cuesByIds(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Cue_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Cue_name(ctx, field)
+			case "cueNumber":
+				return ec.fieldContext_Cue_cueNumber(ctx, field)
+			case "scene":
+				return ec.fieldContext_Cue_scene(ctx, field)
+			case "cueList":
+				return ec.fieldContext_Cue_cueList(ctx, field)
+			case "fadeInTime":
+				return ec.fieldContext_Cue_fadeInTime(ctx, field)
+			case "fadeOutTime":
+				return ec.fieldContext_Cue_fadeOutTime(ctx, field)
+			case "followTime":
+				return ec.fieldContext_Cue_followTime(ctx, field)
+			case "easingType":
+				return ec.fieldContext_Cue_easingType(ctx, field)
+			case "notes":
+				return ec.fieldContext_Cue_notes(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_cuesByIds_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_cueListsByIds(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_cueListsByIds,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().CueListsByIds(ctx, fc.Args["ids"].([]string))
+		},
+		nil,
+		ec.marshalNCueList2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐCueListᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_cueListsByIds(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_CueList_id(ctx, field)
+			case "name":
+				return ec.fieldContext_CueList_name(ctx, field)
+			case "description":
+				return ec.fieldContext_CueList_description(ctx, field)
+			case "loop":
+				return ec.fieldContext_CueList_loop(ctx, field)
+			case "project":
+				return ec.fieldContext_CueList_project(ctx, field)
+			case "cues":
+				return ec.fieldContext_CueList_cues(ctx, field)
+			case "cueCount":
+				return ec.fieldContext_CueList_cueCount(ctx, field)
+			case "totalDuration":
+				return ec.fieldContext_CueList_totalDuration(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_CueList_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_CueList_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CueList", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_cueListsByIds_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_sceneBoardsByIds(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_sceneBoardsByIds,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().SceneBoardsByIds(ctx, fc.Args["ids"].([]string))
+		},
+		nil,
+		ec.marshalNSceneBoard2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐSceneBoardᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_sceneBoardsByIds(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SceneBoard_id(ctx, field)
+			case "name":
+				return ec.fieldContext_SceneBoard_name(ctx, field)
+			case "description":
+				return ec.fieldContext_SceneBoard_description(ctx, field)
+			case "project":
+				return ec.fieldContext_SceneBoard_project(ctx, field)
+			case "defaultFadeTime":
+				return ec.fieldContext_SceneBoard_defaultFadeTime(ctx, field)
+			case "gridSize":
+				return ec.fieldContext_SceneBoard_gridSize(ctx, field)
+			case "canvasWidth":
+				return ec.fieldContext_SceneBoard_canvasWidth(ctx, field)
+			case "canvasHeight":
+				return ec.fieldContext_SceneBoard_canvasHeight(ctx, field)
+			case "buttons":
+				return ec.fieldContext_SceneBoard_buttons(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SceneBoard_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_SceneBoard_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SceneBoard", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_sceneBoardsByIds_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_fixtureDefinitionsByIds(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_fixtureDefinitionsByIds,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().FixtureDefinitionsByIds(ctx, fc.Args["ids"].([]string))
+		},
+		nil,
+		ec.marshalNFixtureDefinition2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureDefinitionᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_fixtureDefinitionsByIds(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FixtureDefinition_id(ctx, field)
+			case "manufacturer":
+				return ec.fieldContext_FixtureDefinition_manufacturer(ctx, field)
+			case "model":
+				return ec.fieldContext_FixtureDefinition_model(ctx, field)
+			case "type":
+				return ec.fieldContext_FixtureDefinition_type(ctx, field)
+			case "channels":
+				return ec.fieldContext_FixtureDefinition_channels(ctx, field)
+			case "modes":
+				return ec.fieldContext_FixtureDefinition_modes(ctx, field)
+			case "isBuiltIn":
+				return ec.fieldContext_FixtureDefinition_isBuiltIn(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_FixtureDefinition_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FixtureDefinition", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_fixtureDefinitionsByIds_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_projectsByIds(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_projectsByIds,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().ProjectsByIds(ctx, fc.Args["ids"].([]string))
+		},
+		nil,
+		ec.marshalNProject2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐProjectᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_projectsByIds(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Project_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Project_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Project_description(ctx, field)
+			case "fixtureCount":
+				return ec.fieldContext_Project_fixtureCount(ctx, field)
+			case "sceneCount":
+				return ec.fieldContext_Project_sceneCount(ctx, field)
+			case "cueListCount":
+				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Project_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "fixtures":
+				return ec.fieldContext_Project_fixtures(ctx, field)
+			case "scenes":
+				return ec.fieldContext_Project_scenes(ctx, field)
+			case "cueLists":
+				return ec.fieldContext_Project_cueLists(ctx, field)
+			case "sceneBoards":
+				return ec.fieldContext_Project_sceneBoards(ctx, field)
+			case "users":
+				return ec.fieldContext_Project_users(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_projectsByIds_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -23645,6 +26204,87 @@ func (ec *executionContext) fieldContext___Type_isOneOf(_ context.Context, field
 
 // region    **************************** input.gotpl *****************************
 
+func (ec *executionContext) unmarshalInputBulkCueCreateInput(ctx context.Context, obj any) (BulkCueCreateInput, error) {
+	var it BulkCueCreateInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"cues"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "cues":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("cues"))
+			data, err := ec.unmarshalNCreateCueInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateCueInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Cues = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputBulkCueListCreateInput(ctx context.Context, obj any) (BulkCueListCreateInput, error) {
+	var it BulkCueListCreateInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"cueLists"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "cueLists":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("cueLists"))
+			data, err := ec.unmarshalNCreateCueListInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateCueListInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CueLists = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputBulkCueListUpdateInput(ctx context.Context, obj any) (BulkCueListUpdateInput, error) {
+	var it BulkCueListUpdateInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"cueLists"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "cueLists":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("cueLists"))
+			data, err := ec.unmarshalNCueListUpdateItem2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCueListUpdateItemᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CueLists = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputBulkCueUpdateInput(ctx context.Context, obj any) (BulkCueUpdateInput, error) {
 	var it BulkCueUpdateInput
 	asMap := map[string]any{}
@@ -23727,6 +26367,60 @@ func (ec *executionContext) unmarshalInputBulkFixtureCreateInput(ctx context.Con
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputBulkFixtureDefinitionCreateInput(ctx context.Context, obj any) (BulkFixtureDefinitionCreateInput, error) {
+	var it BulkFixtureDefinitionCreateInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"definitions"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "definitions":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("definitions"))
+			data, err := ec.unmarshalNCreateFixtureDefinitionInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateFixtureDefinitionInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Definitions = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputBulkFixtureDefinitionUpdateInput(ctx context.Context, obj any) (BulkFixtureDefinitionUpdateInput, error) {
+	var it BulkFixtureDefinitionUpdateInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"definitions"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "definitions":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("definitions"))
+			data, err := ec.unmarshalNFixtureDefinitionUpdateItem2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureDefinitionUpdateItemᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Definitions = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputBulkFixtureUpdateInput(ctx context.Context, obj any) (BulkFixtureUpdateInput, error) {
 	var it BulkFixtureUpdateInput
 	asMap := map[string]any{}
@@ -23748,6 +26442,222 @@ func (ec *executionContext) unmarshalInputBulkFixtureUpdateInput(ctx context.Con
 				return it, err
 			}
 			it.Fixtures = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputBulkProjectCreateInput(ctx context.Context, obj any) (BulkProjectCreateInput, error) {
+	var it BulkProjectCreateInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"projects"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "projects":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projects"))
+			data, err := ec.unmarshalNCreateProjectInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateProjectInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Projects = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputBulkProjectUpdateInput(ctx context.Context, obj any) (BulkProjectUpdateInput, error) {
+	var it BulkProjectUpdateInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"projects"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "projects":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projects"))
+			data, err := ec.unmarshalNProjectUpdateItem2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐProjectUpdateItemᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Projects = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputBulkSceneBoardButtonCreateInput(ctx context.Context, obj any) (BulkSceneBoardButtonCreateInput, error) {
+	var it BulkSceneBoardButtonCreateInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"buttons"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "buttons":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("buttons"))
+			data, err := ec.unmarshalNCreateSceneBoardButtonInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateSceneBoardButtonInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Buttons = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputBulkSceneBoardButtonUpdateInput(ctx context.Context, obj any) (BulkSceneBoardButtonUpdateInput, error) {
+	var it BulkSceneBoardButtonUpdateInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"buttons"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "buttons":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("buttons"))
+			data, err := ec.unmarshalNSceneBoardButtonUpdateItem2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐSceneBoardButtonUpdateItemᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Buttons = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputBulkSceneBoardCreateInput(ctx context.Context, obj any) (BulkSceneBoardCreateInput, error) {
+	var it BulkSceneBoardCreateInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sceneBoards"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sceneBoards":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sceneBoards"))
+			data, err := ec.unmarshalNCreateSceneBoardInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateSceneBoardInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SceneBoards = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputBulkSceneBoardUpdateInput(ctx context.Context, obj any) (BulkSceneBoardUpdateInput, error) {
+	var it BulkSceneBoardUpdateInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sceneBoards"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sceneBoards":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sceneBoards"))
+			data, err := ec.unmarshalNSceneBoardUpdateItem2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐSceneBoardUpdateItemᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SceneBoards = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputBulkSceneCreateInput(ctx context.Context, obj any) (BulkSceneCreateInput, error) {
+	var it BulkSceneCreateInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"scenes"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "scenes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scenes"))
+			data, err := ec.unmarshalNCreateSceneInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateSceneInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Scenes = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputBulkSceneUpdateInput(ctx context.Context, obj any) (BulkSceneUpdateInput, error) {
+	var it BulkSceneUpdateInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"scenes"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "scenes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scenes"))
+			data, err := ec.unmarshalNSceneUpdateItem2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐSceneUpdateItemᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Scenes = data
 		}
 	}
 
@@ -24373,6 +27283,54 @@ func (ec *executionContext) unmarshalInputCreateSceneInput(ctx context.Context, 
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputCueListUpdateItem(ctx context.Context, obj any) (CueListUpdateItem, error) {
+	var it CueListUpdateItem
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"cueListId", "name", "description", "loop"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "cueListId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("cueListId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CueListID = data
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = graphql.OmittableOf(data)
+		case "description":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Description = graphql.OmittableOf(data)
+		case "loop":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("loop"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Loop = graphql.OmittableOf(data)
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCueOrderInput(ctx context.Context, obj any) (CueOrderInput, error) {
 	var it CueOrderInput
 	asMap := map[string]any{}
@@ -24504,6 +27462,54 @@ func (ec *executionContext) unmarshalInputFixtureDefinitionFilter(ctx context.Co
 				return it, err
 			}
 			it.ChannelTypes = graphql.OmittableOf(data)
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputFixtureDefinitionUpdateItem(ctx context.Context, obj any) (FixtureDefinitionUpdateItem, error) {
+	var it FixtureDefinitionUpdateItem
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"definitionId", "manufacturer", "model", "type"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "definitionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("definitionId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DefinitionID = data
+		case "manufacturer":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("manufacturer"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Manufacturer = graphql.OmittableOf(data)
+		case "model":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("model"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Model = graphql.OmittableOf(data)
+		case "type":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("type"))
+			data, err := ec.unmarshalOFixtureType2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureType(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Type = graphql.OmittableOf(data)
 		}
 	}
 
@@ -24970,6 +27976,47 @@ func (ec *executionContext) unmarshalInputImportOptionsInput(ctx context.Context
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputProjectUpdateItem(ctx context.Context, obj any) (ProjectUpdateItem, error) {
+	var it ProjectUpdateItem
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"projectId", "name", "description"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "projectId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProjectID = data
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = graphql.OmittableOf(data)
+		case "description":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Description = graphql.OmittableOf(data)
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputSceneBoardButtonPositionInput(ctx context.Context, obj any) (SceneBoardButtonPositionInput, error) {
 	var it SceneBoardButtonPositionInput
 	asMap := map[string]any{}
@@ -25011,6 +28058,144 @@ func (ec *executionContext) unmarshalInputSceneBoardButtonPositionInput(ctx cont
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputSceneBoardButtonUpdateItem(ctx context.Context, obj any) (SceneBoardButtonUpdateItem, error) {
+	var it SceneBoardButtonUpdateItem
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"buttonId", "layoutX", "layoutY", "width", "height", "color", "label"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "buttonId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("buttonId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ButtonID = data
+		case "layoutX":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("layoutX"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LayoutX = graphql.OmittableOf(data)
+		case "layoutY":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("layoutY"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LayoutY = graphql.OmittableOf(data)
+		case "width":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("width"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Width = graphql.OmittableOf(data)
+		case "height":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("height"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Height = graphql.OmittableOf(data)
+		case "color":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("color"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Color = graphql.OmittableOf(data)
+		case "label":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("label"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Label = graphql.OmittableOf(data)
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputSceneBoardUpdateItem(ctx context.Context, obj any) (SceneBoardUpdateItem, error) {
+	var it SceneBoardUpdateItem
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sceneBoardId", "name", "description", "defaultFadeTime", "gridSize", "canvasWidth", "canvasHeight"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sceneBoardId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sceneBoardId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SceneBoardID = data
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = graphql.OmittableOf(data)
+		case "description":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Description = graphql.OmittableOf(data)
+		case "defaultFadeTime":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("defaultFadeTime"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DefaultFadeTime = graphql.OmittableOf(data)
+		case "gridSize":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("gridSize"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.GridSize = graphql.OmittableOf(data)
+		case "canvasWidth":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("canvasWidth"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CanvasWidth = graphql.OmittableOf(data)
+		case "canvasHeight":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("canvasHeight"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CanvasHeight = graphql.OmittableOf(data)
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputSceneFilterInput(ctx context.Context, obj any) (SceneFilterInput, error) {
 	var it SceneFilterInput
 	asMap := map[string]any{}
@@ -25039,6 +28224,47 @@ func (ec *executionContext) unmarshalInputSceneFilterInput(ctx context.Context, 
 				return it, err
 			}
 			it.UsesFixture = graphql.OmittableOf(data)
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputSceneUpdateItem(ctx context.Context, obj any) (SceneUpdateItem, error) {
+	var it SceneUpdateItem
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sceneId", "name", "description"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sceneId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sceneId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SceneID = data
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = graphql.OmittableOf(data)
+		case "description":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Description = graphql.OmittableOf(data)
 		}
 	}
 
@@ -25348,6 +28574,50 @@ func (ec *executionContext) unmarshalInputUpdateSettingInput(ctx context.Context
 // endregion ************************** interface.gotpl ***************************
 
 // region    **************************** object.gotpl ****************************
+
+var bulkDeleteResultImplementors = []string{"BulkDeleteResult"}
+
+func (ec *executionContext) _BulkDeleteResult(ctx context.Context, sel ast.SelectionSet, obj *BulkDeleteResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, bulkDeleteResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("BulkDeleteResult")
+		case "deletedCount":
+			out.Values[i] = ec._BulkDeleteResult_deletedCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deletedIds":
+			out.Values[i] = ec._BulkDeleteResult_deletedIds(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
 
 var channelAssignmentSuggestionImplementors = []string{"ChannelAssignmentSuggestion"}
 
@@ -27866,6 +31136,27 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "bulkCreateProjects":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkCreateProjects(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkUpdateProjects":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkUpdateProjects(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkDeleteProjects":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkDeleteProjects(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "createFixtureDefinition":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createFixtureDefinition(ctx, field)
@@ -27890,6 +31181,27 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "deleteFixtureDefinition":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_deleteFixtureDefinition(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkCreateFixtureDefinitions":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkCreateFixtureDefinitions(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkUpdateFixtureDefinitions":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkUpdateFixtureDefinitions(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkDeleteFixtureDefinitions":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkDeleteFixtureDefinitions(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -27925,6 +31237,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "deleteFixtureInstance":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_deleteFixtureInstance(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkDeleteFixtures":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkDeleteFixtures(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -27985,6 +31304,27 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "bulkCreateScenes":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkCreateScenes(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkUpdateScenes":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkUpdateScenes(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkDeleteScenes":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkDeleteScenes(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "addFixturesToScene":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_addFixturesToScene(ctx, field)
@@ -28027,6 +31367,27 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "bulkCreateSceneBoards":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkCreateSceneBoards(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkUpdateSceneBoards":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkUpdateSceneBoards(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkDeleteSceneBoards":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkDeleteSceneBoards(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "addSceneToBoard":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_addSceneToBoard(ctx, field)
@@ -28051,6 +31412,27 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "updateSceneBoardButtonPositions":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateSceneBoardButtonPositions(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkCreateSceneBoardButtons":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkCreateSceneBoardButtons(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkUpdateSceneBoardButtons":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkUpdateSceneBoardButtons(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkDeleteSceneBoardButtons":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkDeleteSceneBoardButtons(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -28083,6 +31465,27 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "bulkCreateCueLists":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkCreateCueLists(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkUpdateCueLists":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkUpdateCueLists(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkDeleteCueLists":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkDeleteCueLists(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "createCue":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createCue(ctx, field)
@@ -28111,9 +31514,23 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "bulkCreateCues":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkCreateCues(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "bulkUpdateCues":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_bulkUpdateCues(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkDeleteCues":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkDeleteCues(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -30305,6 +33722,160 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "fixturesByIds":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_fixturesByIds(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "scenesByIds":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_scenesByIds(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "cuesByIds":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_cuesByIds(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "cueListsByIds":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_cueListsByIds(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "sceneBoardsByIds":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_sceneBoardsByIds(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "fixtureDefinitionsByIds":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_fixtureDefinitionsByIds(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "projectsByIds":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_projectsByIds(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "__type":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___type(ctx, field)
@@ -32346,9 +35917,38 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
+func (ec *executionContext) unmarshalNBulkCueCreateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkCueCreateInput(ctx context.Context, v any) (BulkCueCreateInput, error) {
+	res, err := ec.unmarshalInputBulkCueCreateInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNBulkCueListCreateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkCueListCreateInput(ctx context.Context, v any) (BulkCueListCreateInput, error) {
+	res, err := ec.unmarshalInputBulkCueListCreateInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNBulkCueListUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkCueListUpdateInput(ctx context.Context, v any) (BulkCueListUpdateInput, error) {
+	res, err := ec.unmarshalInputBulkCueListUpdateInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNBulkCueUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkCueUpdateInput(ctx context.Context, v any) (BulkCueUpdateInput, error) {
 	res, err := ec.unmarshalInputBulkCueUpdateInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNBulkDeleteResult2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkDeleteResult(ctx context.Context, sel ast.SelectionSet, v BulkDeleteResult) graphql.Marshaler {
+	return ec._BulkDeleteResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNBulkDeleteResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkDeleteResult(ctx context.Context, sel ast.SelectionSet, v *BulkDeleteResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._BulkDeleteResult(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNBulkFixtureCreateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkFixtureCreateInput(ctx context.Context, v any) (BulkFixtureCreateInput, error) {
@@ -32356,8 +35956,58 @@ func (ec *executionContext) unmarshalNBulkFixtureCreateInput2githubᚗcomᚋbber
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNBulkFixtureDefinitionCreateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkFixtureDefinitionCreateInput(ctx context.Context, v any) (BulkFixtureDefinitionCreateInput, error) {
+	res, err := ec.unmarshalInputBulkFixtureDefinitionCreateInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNBulkFixtureDefinitionUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkFixtureDefinitionUpdateInput(ctx context.Context, v any) (BulkFixtureDefinitionUpdateInput, error) {
+	res, err := ec.unmarshalInputBulkFixtureDefinitionUpdateInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNBulkFixtureUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkFixtureUpdateInput(ctx context.Context, v any) (BulkFixtureUpdateInput, error) {
 	res, err := ec.unmarshalInputBulkFixtureUpdateInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNBulkProjectCreateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkProjectCreateInput(ctx context.Context, v any) (BulkProjectCreateInput, error) {
+	res, err := ec.unmarshalInputBulkProjectCreateInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNBulkProjectUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkProjectUpdateInput(ctx context.Context, v any) (BulkProjectUpdateInput, error) {
+	res, err := ec.unmarshalInputBulkProjectUpdateInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNBulkSceneBoardButtonCreateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkSceneBoardButtonCreateInput(ctx context.Context, v any) (BulkSceneBoardButtonCreateInput, error) {
+	res, err := ec.unmarshalInputBulkSceneBoardButtonCreateInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNBulkSceneBoardButtonUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkSceneBoardButtonUpdateInput(ctx context.Context, v any) (BulkSceneBoardButtonUpdateInput, error) {
+	res, err := ec.unmarshalInputBulkSceneBoardButtonUpdateInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNBulkSceneBoardCreateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkSceneBoardCreateInput(ctx context.Context, v any) (BulkSceneBoardCreateInput, error) {
+	res, err := ec.unmarshalInputBulkSceneBoardCreateInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNBulkSceneBoardUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkSceneBoardUpdateInput(ctx context.Context, v any) (BulkSceneBoardUpdateInput, error) {
+	res, err := ec.unmarshalInputBulkSceneBoardUpdateInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNBulkSceneCreateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkSceneCreateInput(ctx context.Context, v any) (BulkSceneCreateInput, error) {
+	res, err := ec.unmarshalInputBulkSceneCreateInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNBulkSceneUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkSceneUpdateInput(ctx context.Context, v any) (BulkSceneUpdateInput, error) {
+	res, err := ec.unmarshalInputBulkSceneUpdateInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -32579,14 +36229,74 @@ func (ec *executionContext) unmarshalNCreateCueInput2githubᚗcomᚋbbernstein�
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNCreateCueInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateCueInputᚄ(ctx context.Context, v any) ([]*CreateCueInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*CreateCueInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNCreateCueInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateCueInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNCreateCueInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateCueInput(ctx context.Context, v any) (*CreateCueInput, error) {
+	res, err := ec.unmarshalInputCreateCueInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateCueListInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateCueListInput(ctx context.Context, v any) (CreateCueListInput, error) {
 	res, err := ec.unmarshalInputCreateCueListInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNCreateCueListInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateCueListInputᚄ(ctx context.Context, v any) ([]*CreateCueListInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*CreateCueListInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNCreateCueListInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateCueListInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNCreateCueListInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateCueListInput(ctx context.Context, v any) (*CreateCueListInput, error) {
+	res, err := ec.unmarshalInputCreateCueListInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateFixtureDefinitionInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateFixtureDefinitionInput(ctx context.Context, v any) (CreateFixtureDefinitionInput, error) {
 	res, err := ec.unmarshalInputCreateFixtureDefinitionInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNCreateFixtureDefinitionInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateFixtureDefinitionInputᚄ(ctx context.Context, v any) ([]*CreateFixtureDefinitionInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*CreateFixtureDefinitionInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNCreateFixtureDefinitionInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateFixtureDefinitionInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNCreateFixtureDefinitionInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateFixtureDefinitionInput(ctx context.Context, v any) (*CreateFixtureDefinitionInput, error) {
+	res, err := ec.unmarshalInputCreateFixtureDefinitionInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalNCreateFixtureInstanceInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateFixtureInstanceInput(ctx context.Context, v any) (CreateFixtureInstanceInput, error) {
@@ -32619,9 +36329,49 @@ func (ec *executionContext) unmarshalNCreateProjectInput2githubᚗcomᚋbbernste
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNCreateProjectInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateProjectInputᚄ(ctx context.Context, v any) ([]*CreateProjectInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*CreateProjectInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNCreateProjectInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateProjectInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNCreateProjectInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateProjectInput(ctx context.Context, v any) (*CreateProjectInput, error) {
+	res, err := ec.unmarshalInputCreateProjectInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateSceneBoardButtonInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateSceneBoardButtonInput(ctx context.Context, v any) (CreateSceneBoardButtonInput, error) {
 	res, err := ec.unmarshalInputCreateSceneBoardButtonInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNCreateSceneBoardButtonInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateSceneBoardButtonInputᚄ(ctx context.Context, v any) ([]*CreateSceneBoardButtonInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*CreateSceneBoardButtonInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNCreateSceneBoardButtonInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateSceneBoardButtonInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNCreateSceneBoardButtonInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateSceneBoardButtonInput(ctx context.Context, v any) (*CreateSceneBoardButtonInput, error) {
+	res, err := ec.unmarshalInputCreateSceneBoardButtonInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalNCreateSceneBoardInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateSceneBoardInput(ctx context.Context, v any) (CreateSceneBoardInput, error) {
@@ -32629,9 +36379,49 @@ func (ec *executionContext) unmarshalNCreateSceneBoardInput2githubᚗcomᚋbbern
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNCreateSceneBoardInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateSceneBoardInputᚄ(ctx context.Context, v any) ([]*CreateSceneBoardInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*CreateSceneBoardInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNCreateSceneBoardInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateSceneBoardInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNCreateSceneBoardInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateSceneBoardInput(ctx context.Context, v any) (*CreateSceneBoardInput, error) {
+	res, err := ec.unmarshalInputCreateSceneBoardInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateSceneInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateSceneInput(ctx context.Context, v any) (CreateSceneInput, error) {
 	res, err := ec.unmarshalInputCreateSceneInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNCreateSceneInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateSceneInputᚄ(ctx context.Context, v any) ([]*CreateSceneInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*CreateSceneInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNCreateSceneInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateSceneInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNCreateSceneInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateSceneInput(ctx context.Context, v any) (*CreateSceneInput, error) {
+	res, err := ec.unmarshalInputCreateSceneInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNCue2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐCue(ctx context.Context, sel ast.SelectionSet, v models.Cue) graphql.Marshaler {
@@ -32816,6 +36606,26 @@ func (ec *executionContext) marshalNCueListSummary2ᚖgithubᚗcomᚋbbernstein�
 		return graphql.Null
 	}
 	return ec._CueListSummary(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNCueListUpdateItem2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCueListUpdateItemᚄ(ctx context.Context, v any) ([]*CueListUpdateItem, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*CueListUpdateItem, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNCueListUpdateItem2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCueListUpdateItem(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNCueListUpdateItem2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCueListUpdateItem(ctx context.Context, v any) (*CueListUpdateItem, error) {
+	res, err := ec.unmarshalInputCueListUpdateItem(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalNCueOrderInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCueOrderInputᚄ(ctx context.Context, v any) ([]*CueOrderInput, error) {
@@ -33044,6 +36854,26 @@ func (ec *executionContext) marshalNFixtureDefinition2ᚖgithubᚗcomᚋbbernste
 		return graphql.Null
 	}
 	return ec._FixtureDefinition(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNFixtureDefinitionUpdateItem2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureDefinitionUpdateItemᚄ(ctx context.Context, v any) ([]*FixtureDefinitionUpdateItem, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*FixtureDefinitionUpdateItem, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNFixtureDefinitionUpdateItem2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureDefinitionUpdateItem(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNFixtureDefinitionUpdateItem2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureDefinitionUpdateItem(ctx context.Context, v any) (*FixtureDefinitionUpdateItem, error) {
+	res, err := ec.unmarshalInputFixtureDefinitionUpdateItem(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNFixtureInstance2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureInstance(ctx context.Context, sel ast.SelectionSet, v models.FixtureInstance) graphql.Marshaler {
@@ -33915,6 +37745,26 @@ func (ec *executionContext) marshalNProjectRole2githubᚗcomᚋbbernsteinᚋlacy
 	return v
 }
 
+func (ec *executionContext) unmarshalNProjectUpdateItem2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐProjectUpdateItemᚄ(ctx context.Context, v any) ([]*ProjectUpdateItem, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*ProjectUpdateItem, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNProjectUpdateItem2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐProjectUpdateItem(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNProjectUpdateItem2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐProjectUpdateItem(ctx context.Context, v any) (*ProjectUpdateItem, error) {
+	res, err := ec.unmarshalInputProjectUpdateItem(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNProjectUser2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐProjectUserᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.ProjectUser) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
@@ -34367,6 +38217,46 @@ func (ec *executionContext) unmarshalNSceneBoardButtonPositionInput2ᚖgithubᚗ
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNSceneBoardButtonUpdateItem2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐSceneBoardButtonUpdateItemᚄ(ctx context.Context, v any) ([]*SceneBoardButtonUpdateItem, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*SceneBoardButtonUpdateItem, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNSceneBoardButtonUpdateItem2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐSceneBoardButtonUpdateItem(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNSceneBoardButtonUpdateItem2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐSceneBoardButtonUpdateItem(ctx context.Context, v any) (*SceneBoardButtonUpdateItem, error) {
+	res, err := ec.unmarshalInputSceneBoardButtonUpdateItem(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNSceneBoardUpdateItem2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐSceneBoardUpdateItemᚄ(ctx context.Context, v any) ([]*SceneBoardUpdateItem, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*SceneBoardUpdateItem, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNSceneBoardUpdateItem2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐSceneBoardUpdateItem(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNSceneBoardUpdateItem2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐSceneBoardUpdateItem(ctx context.Context, v any) (*SceneBoardUpdateItem, error) {
+	res, err := ec.unmarshalInputSceneBoardUpdateItem(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNSceneComparison2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐSceneComparison(ctx context.Context, sel ast.SelectionSet, v SceneComparison) graphql.Marshaler {
 	return ec._SceneComparison(ctx, sel, &v)
 }
@@ -34559,6 +38449,26 @@ func (ec *executionContext) marshalNSceneSummary2ᚖgithubᚗcomᚋbbernsteinᚋ
 		return graphql.Null
 	}
 	return ec._SceneSummary(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNSceneUpdateItem2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐSceneUpdateItemᚄ(ctx context.Context, v any) ([]*SceneUpdateItem, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*SceneUpdateItem, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNSceneUpdateItem2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐSceneUpdateItem(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNSceneUpdateItem2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐSceneUpdateItem(ctx context.Context, v any) (*SceneUpdateItem, error) {
+	res, err := ec.unmarshalInputSceneUpdateItem(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNSceneUsage2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐSceneUsage(ctx context.Context, sel ast.SelectionSet, v SceneUsage) graphql.Marshaler {

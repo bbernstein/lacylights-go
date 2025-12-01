@@ -1596,3 +1596,334 @@ func TestSceneBoardButton_Delete(t *testing.T) {
 		t.Error("Expected removeSceneFromBoard to return true")
 	}
 }
+
+// =============================================================================
+// Bulk Operations Tests
+// =============================================================================
+
+func TestBulkCreateProjects(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	var resp struct {
+		BulkCreateProjects []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"bulkCreateProjects"`
+	}
+
+	err := c.Post(`mutation {
+		bulkCreateProjects(input: {
+			projects: [
+				{ name: "Project 1" },
+				{ name: "Project 2" },
+				{ name: "Project 3" }
+			]
+		}) {
+			id
+			name
+		}
+	}`, &resp)
+
+	if err != nil {
+		t.Fatalf("BulkCreateProjects mutation failed: %v", err)
+	}
+
+	if len(resp.BulkCreateProjects) != 3 {
+		t.Errorf("Expected 3 projects, got %d", len(resp.BulkCreateProjects))
+	}
+
+	names := map[string]bool{}
+	for _, p := range resp.BulkCreateProjects {
+		names[p.Name] = true
+	}
+	if !names["Project 1"] || !names["Project 2"] || !names["Project 3"] {
+		t.Error("Expected all projects to be created with correct names")
+	}
+}
+
+func TestBulkDeleteProjects(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Create projects first
+	var createResp struct {
+		BulkCreateProjects []struct {
+			ID string `json:"id"`
+		} `json:"bulkCreateProjects"`
+	}
+	err := c.Post(`mutation {
+		bulkCreateProjects(input: {
+			projects: [
+				{ name: "To Delete 1" },
+				{ name: "To Delete 2" }
+			]
+		}) {
+			id
+		}
+	}`, &createResp)
+	if err != nil {
+		t.Fatalf("BulkCreateProjects failed: %v", err)
+	}
+
+	ids := make([]string, len(createResp.BulkCreateProjects))
+	for i, p := range createResp.BulkCreateProjects {
+		ids[i] = p.ID
+	}
+
+	// Delete them
+	var deleteResp struct {
+		BulkDeleteProjects struct {
+			DeletedCount int      `json:"deletedCount"`
+			DeletedIds   []string `json:"deletedIds"`
+		} `json:"bulkDeleteProjects"`
+	}
+	err = c.Post(`mutation($ids: [ID!]!) {
+		bulkDeleteProjects(projectIds: $ids) {
+			deletedCount
+			deletedIds
+		}
+	}`, &deleteResp, client.Var("ids", ids))
+
+	if err != nil {
+		t.Fatalf("BulkDeleteProjects mutation failed: %v", err)
+	}
+
+	if deleteResp.BulkDeleteProjects.DeletedCount != 2 {
+		t.Errorf("Expected deletedCount 2, got %d", deleteResp.BulkDeleteProjects.DeletedCount)
+	}
+}
+
+func TestBulkCreateScenes(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Create a project first
+	var projectResp struct {
+		CreateProject struct {
+			ID string `json:"id"`
+		} `json:"createProject"`
+	}
+	err := c.Post(`mutation {
+		createProject(input: { name: "Test Project" }) {
+			id
+		}
+	}`, &projectResp)
+	if err != nil {
+		t.Fatalf("CreateProject failed: %v", err)
+	}
+
+	var resp struct {
+		BulkCreateScenes []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"bulkCreateScenes"`
+	}
+
+	err = c.Post(`mutation($projectId: ID!) {
+		bulkCreateScenes(input: {
+			scenes: [
+				{ name: "Scene 1", projectId: $projectId, fixtureValues: [] },
+				{ name: "Scene 2", projectId: $projectId, fixtureValues: [] }
+			]
+		}) {
+			id
+			name
+		}
+	}`, &resp, client.Var("projectId", projectResp.CreateProject.ID))
+
+	if err != nil {
+		t.Fatalf("BulkCreateScenes mutation failed: %v", err)
+	}
+
+	if len(resp.BulkCreateScenes) != 2 {
+		t.Errorf("Expected 2 scenes, got %d", len(resp.BulkCreateScenes))
+	}
+}
+
+func TestBulkDeleteScenes(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Create a project first
+	var projectResp struct {
+		CreateProject struct {
+			ID string `json:"id"`
+		} `json:"createProject"`
+	}
+	err := c.Post(`mutation {
+		createProject(input: { name: "Test Project" }) {
+			id
+		}
+	}`, &projectResp)
+	if err != nil {
+		t.Fatalf("CreateProject failed: %v", err)
+	}
+
+	// Create scenes
+	var createResp struct {
+		BulkCreateScenes []struct {
+			ID string `json:"id"`
+		} `json:"bulkCreateScenes"`
+	}
+	err = c.Post(`mutation($projectId: ID!) {
+		bulkCreateScenes(input: {
+			scenes: [
+				{ name: "To Delete 1", projectId: $projectId, fixtureValues: [] },
+				{ name: "To Delete 2", projectId: $projectId, fixtureValues: [] }
+			]
+		}) {
+			id
+		}
+	}`, &createResp, client.Var("projectId", projectResp.CreateProject.ID))
+	if err != nil {
+		t.Fatalf("BulkCreateScenes failed: %v", err)
+	}
+
+	ids := make([]string, len(createResp.BulkCreateScenes))
+	for i, s := range createResp.BulkCreateScenes {
+		ids[i] = s.ID
+	}
+
+	// Delete them
+	var deleteResp struct {
+		BulkDeleteScenes struct {
+			DeletedCount int      `json:"deletedCount"`
+			DeletedIds   []string `json:"deletedIds"`
+		} `json:"bulkDeleteScenes"`
+	}
+	err = c.Post(`mutation($ids: [ID!]!) {
+		bulkDeleteScenes(sceneIds: $ids) {
+			deletedCount
+			deletedIds
+		}
+	}`, &deleteResp, client.Var("ids", ids))
+
+	if err != nil {
+		t.Fatalf("BulkDeleteScenes mutation failed: %v", err)
+	}
+
+	if deleteResp.BulkDeleteScenes.DeletedCount != 2 {
+		t.Errorf("Expected deletedCount 2, got %d", deleteResp.BulkDeleteScenes.DeletedCount)
+	}
+}
+
+func TestProjectsByIds(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Create projects
+	var createResp struct {
+		BulkCreateProjects []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"bulkCreateProjects"`
+	}
+	err := c.Post(`mutation {
+		bulkCreateProjects(input: {
+			projects: [
+				{ name: "Project A" },
+				{ name: "Project B" },
+				{ name: "Project C" }
+			]
+		}) {
+			id
+			name
+		}
+	}`, &createResp)
+	if err != nil {
+		t.Fatalf("BulkCreateProjects failed: %v", err)
+	}
+
+	// Query by IDs (just first two)
+	ids := []string{createResp.BulkCreateProjects[0].ID, createResp.BulkCreateProjects[1].ID}
+
+	var queryResp struct {
+		ProjectsByIds []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"projectsByIds"`
+	}
+	err = c.Post(`query($ids: [ID!]!) {
+		projectsByIds(ids: $ids) {
+			id
+			name
+		}
+	}`, &queryResp, client.Var("ids", ids))
+
+	if err != nil {
+		t.Fatalf("ProjectsByIds query failed: %v", err)
+	}
+
+	if len(queryResp.ProjectsByIds) != 2 {
+		t.Errorf("Expected 2 projects, got %d", len(queryResp.ProjectsByIds))
+	}
+}
+
+func TestScenesByIds(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Create a project first
+	var projectResp struct {
+		CreateProject struct {
+			ID string `json:"id"`
+		} `json:"createProject"`
+	}
+	err := c.Post(`mutation {
+		createProject(input: { name: "Test Project" }) {
+			id
+		}
+	}`, &projectResp)
+	if err != nil {
+		t.Fatalf("CreateProject failed: %v", err)
+	}
+
+	// Create scenes
+	var createResp struct {
+		BulkCreateScenes []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"bulkCreateScenes"`
+	}
+	err = c.Post(`mutation($projectId: ID!) {
+		bulkCreateScenes(input: {
+			scenes: [
+				{ name: "Scene A", projectId: $projectId, fixtureValues: [] },
+				{ name: "Scene B", projectId: $projectId, fixtureValues: [] }
+			]
+		}) {
+			id
+			name
+		}
+	}`, &createResp, client.Var("projectId", projectResp.CreateProject.ID))
+	if err != nil {
+		t.Fatalf("BulkCreateScenes failed: %v", err)
+	}
+
+	ids := make([]string, len(createResp.BulkCreateScenes))
+	for i, s := range createResp.BulkCreateScenes {
+		ids[i] = s.ID
+	}
+
+	var queryResp struct {
+		ScenesByIds []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"scenesByIds"`
+	}
+	err = c.Post(`query($ids: [ID!]!) {
+		scenesByIds(ids: $ids) {
+			id
+			name
+		}
+	}`, &queryResp, client.Var("ids", ids))
+
+	if err != nil {
+		t.Fatalf("ScenesByIds query failed: %v", err)
+	}
+
+	if len(queryResp.ScenesByIds) != 2 {
+		t.Errorf("Expected 2 scenes, got %d", len(queryResp.ScenesByIds))
+	}
+}

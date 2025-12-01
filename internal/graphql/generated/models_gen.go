@@ -12,6 +12,18 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 )
 
+type BulkCueCreateInput struct {
+	Cues []*CreateCueInput `json:"cues"`
+}
+
+type BulkCueListCreateInput struct {
+	CueLists []*CreateCueListInput `json:"cueLists"`
+}
+
+type BulkCueListUpdateInput struct {
+	CueLists []*CueListUpdateItem `json:"cueLists"`
+}
+
 type BulkCueUpdateInput struct {
 	CueIds      []string                       `json:"cueIds"`
 	FadeInTime  graphql.Omittable[*float64]    `json:"fadeInTime,omitempty"`
@@ -20,12 +32,57 @@ type BulkCueUpdateInput struct {
 	EasingType  graphql.Omittable[*EasingType] `json:"easingType,omitempty"`
 }
 
+type BulkDeleteResult struct {
+	DeletedCount int      `json:"deletedCount"`
+	DeletedIds   []string `json:"deletedIds"`
+}
+
 type BulkFixtureCreateInput struct {
 	Fixtures []*CreateFixtureInstanceInput `json:"fixtures"`
 }
 
+type BulkFixtureDefinitionCreateInput struct {
+	Definitions []*CreateFixtureDefinitionInput `json:"definitions"`
+}
+
+type BulkFixtureDefinitionUpdateInput struct {
+	Definitions []*FixtureDefinitionUpdateItem `json:"definitions"`
+}
+
 type BulkFixtureUpdateInput struct {
 	Fixtures []*FixtureUpdateItem `json:"fixtures"`
+}
+
+type BulkProjectCreateInput struct {
+	Projects []*CreateProjectInput `json:"projects"`
+}
+
+type BulkProjectUpdateInput struct {
+	Projects []*ProjectUpdateItem `json:"projects"`
+}
+
+type BulkSceneBoardButtonCreateInput struct {
+	Buttons []*CreateSceneBoardButtonInput `json:"buttons"`
+}
+
+type BulkSceneBoardButtonUpdateInput struct {
+	Buttons []*SceneBoardButtonUpdateItem `json:"buttons"`
+}
+
+type BulkSceneBoardCreateInput struct {
+	SceneBoards []*CreateSceneBoardInput `json:"sceneBoards"`
+}
+
+type BulkSceneBoardUpdateInput struct {
+	SceneBoards []*SceneBoardUpdateItem `json:"sceneBoards"`
+}
+
+type BulkSceneCreateInput struct {
+	Scenes []*CreateSceneInput `json:"scenes"`
+}
+
+type BulkSceneUpdateInput struct {
+	Scenes []*SceneUpdateItem `json:"scenes"`
 }
 
 type ChannelAssignmentInput struct {
@@ -162,6 +219,13 @@ type CueListSummary struct {
 	CreatedAt     string  `json:"createdAt"`
 }
 
+type CueListUpdateItem struct {
+	CueListID   string                     `json:"cueListId"`
+	Name        graphql.Omittable[*string] `json:"name,omitempty"`
+	Description graphql.Omittable[*string] `json:"description,omitempty"`
+	Loop        graphql.Omittable[*bool]   `json:"loop,omitempty"`
+}
+
 type CueOrderInput struct {
 	CueID     string  `json:"cueId"`
 	CueNumber float64 `json:"cueNumber"`
@@ -219,6 +283,13 @@ type FixtureDefinitionFilter struct {
 	Type         graphql.Omittable[*FixtureType]  `json:"type,omitempty"`
 	IsBuiltIn    graphql.Omittable[*bool]         `json:"isBuiltIn,omitempty"`
 	ChannelTypes graphql.Omittable[[]ChannelType] `json:"channelTypes,omitempty"`
+}
+
+type FixtureDefinitionUpdateItem struct {
+	DefinitionID string                          `json:"definitionId"`
+	Manufacturer graphql.Omittable[*string]      `json:"manufacturer,omitempty"`
+	Model        graphql.Omittable[*string]      `json:"model,omitempty"`
+	Type         graphql.Omittable[*FixtureType] `json:"type,omitempty"`
 }
 
 type FixtureFilterInput struct {
@@ -350,6 +421,12 @@ type PaginationInfo struct {
 	HasMore    bool `json:"hasMore"`
 }
 
+type ProjectUpdateItem struct {
+	ProjectID   string                     `json:"projectId"`
+	Name        graphql.Omittable[*string] `json:"name,omitempty"`
+	Description graphql.Omittable[*string] `json:"description,omitempty"`
+}
+
 type QLCExportResult struct {
 	ProjectName  string `json:"projectName"`
 	XMLContent   string `json:"xmlContent"`
@@ -402,6 +479,26 @@ type SceneBoardButtonPositionInput struct {
 	LayoutY  int    `json:"layoutY"`
 }
 
+type SceneBoardButtonUpdateItem struct {
+	ButtonID string                     `json:"buttonId"`
+	LayoutX  graphql.Omittable[*int]    `json:"layoutX,omitempty"`
+	LayoutY  graphql.Omittable[*int]    `json:"layoutY,omitempty"`
+	Width    graphql.Omittable[*int]    `json:"width,omitempty"`
+	Height   graphql.Omittable[*int]    `json:"height,omitempty"`
+	Color    graphql.Omittable[*string] `json:"color,omitempty"`
+	Label    graphql.Omittable[*string] `json:"label,omitempty"`
+}
+
+type SceneBoardUpdateItem struct {
+	SceneBoardID    string                      `json:"sceneBoardId"`
+	Name            graphql.Omittable[*string]  `json:"name,omitempty"`
+	Description     graphql.Omittable[*string]  `json:"description,omitempty"`
+	DefaultFadeTime graphql.Omittable[*float64] `json:"defaultFadeTime,omitempty"`
+	GridSize        graphql.Omittable[*int]     `json:"gridSize,omitempty"`
+	CanvasWidth     graphql.Omittable[*int]     `json:"canvasWidth,omitempty"`
+	CanvasHeight    graphql.Omittable[*int]     `json:"canvasHeight,omitempty"`
+}
+
 type SceneComparison struct {
 	Scene1                SceneSummary       `json:"scene1"`
 	Scene2                SceneSummary       `json:"scene2"`
@@ -441,6 +538,12 @@ type SceneSummary struct {
 	FixtureCount int     `json:"fixtureCount"`
 	CreatedAt    string  `json:"createdAt"`
 	UpdatedAt    string  `json:"updatedAt"`
+}
+
+type SceneUpdateItem struct {
+	SceneID     string                     `json:"sceneId"`
+	Name        graphql.Omittable[*string] `json:"name,omitempty"`
+	Description graphql.Omittable[*string] `json:"description,omitempty"`
 }
 
 type SceneUsage struct {
