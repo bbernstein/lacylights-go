@@ -98,8 +98,8 @@ while IFS= read -r line; do
             continue
         fi
 
-        # Compare coverage to threshold (using bc for floating point)
-        if echo "$coverage >= $threshold" | bc -l | grep -q 1; then
+        # Compare coverage to threshold (using awk for floating point - universally available)
+        if awk "BEGIN {exit !($coverage >= $threshold)}"; then
             echo -e "${GREEN}PASS${NC} $pkg: ${coverage}% >= ${threshold}%"
             PASSED=$((PASSED + 1))
         else

@@ -5,30 +5,38 @@ import (
 	"time"
 )
 
-func TestLoad_Defaults(t *testing.T) {
-	// Clear any environment variables that might affect the test
-	// Using t.Setenv with empty string effectively unsets the env var for this test
-	envVars := []string{
-		"PORT", "ENV", "DATABASE_URL",
-		"DMX_UNIVERSE_COUNT", "DMX_REFRESH_RATE", "DMX_IDLE_RATE", "DMX_HIGH_RATE_DURATION",
-		"ARTNET_ENABLED", "ARTNET_PORT", "ARTNET_BROADCAST",
-		"DMX_DRIFT_THRESHOLD", "DMX_DRIFT_THROTTLE",
-		"NON_INTERACTIVE", "CORS_ORIGIN",
-	}
-	for _, v := range envVars {
-		t.Setenv(v, "")
-	}
-	// Now unset them properly by setting a non-empty value first then testing defaults
-	// Actually, a better approach is to just not set them in the parallel test
+func TestGetEnv_ReturnsDefault_WhenEnvNotSet(t *testing.T) {
+	// Test that getEnv returns default values when environment variables are not set
+	// Using unique keys that are guaranteed to not exist in the environment
 
-	cfg := Load()
+	// Test string default
+	result := getEnv("LACYLIGHTS_TEST_NONEXISTENT_PORT_12345", "4000")
+	if result != "4000" {
+		t.Errorf("Expected default '4000', got '%s'", result)
+	}
 
-	// Test default values - these will work if the env vars are empty strings
-	// which means getEnv will return them (not defaults)
-	// So we need a different approach - test in isolation
-	if cfg.Port == "" {
-		// Empty string from t.Setenv, so let's just verify the config loads
-		t.Log("Note: t.Setenv sets empty string, not unset. Defaults test may need adjustment.")
+	// Test another string default
+	result = getEnv("LACYLIGHTS_TEST_NONEXISTENT_ENV_12345", "development")
+	if result != "development" {
+		t.Errorf("Expected default 'development', got '%s'", result)
+	}
+
+	// Test int default
+	intResult := getEnvInt("LACYLIGHTS_TEST_NONEXISTENT_INT_12345", 44)
+	if intResult != 44 {
+		t.Errorf("Expected default 44, got %d", intResult)
+	}
+
+	// Test bool default (true)
+	boolResult := getEnvBool("LACYLIGHTS_TEST_NONEXISTENT_BOOL_TRUE_12345", true)
+	if !boolResult {
+		t.Error("Expected default true, got false")
+	}
+
+	// Test bool default (false)
+	boolResult = getEnvBool("LACYLIGHTS_TEST_NONEXISTENT_BOOL_FALSE_12345", false)
+	if boolResult {
+		t.Error("Expected default false, got true")
 	}
 }
 
