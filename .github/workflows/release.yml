@@ -210,7 +210,6 @@ jobs:
           done
 
           cat checksums.txt
-          echo "checksums_file=checksums.txt" >> $GITHUB_OUTPUT
 
       - name: Calculate release metadata
         id: release_metadata
