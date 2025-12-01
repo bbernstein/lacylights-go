@@ -217,48 +217,45 @@ jobs:
         run: |
           echo "release_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
 
-      - name: Upload to S3
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DIST_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DIST_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ secrets.AWS_DIST_REGION }}
+      - name: Build platforms metadata
+        id: platforms
         run: |
           set -e
-          VERSION="${{ steps.new_version.outputs.version }}"
 
-          echo "Uploading archives to S3..."
-          for archive in dist/*.tar.gz; do
-            FILENAME=$(basename "$archive")
-            aws s3 cp "$archive" \
-              "s3://${{ secrets.AWS_DIST_BUCKET }}/releases/${{ env.COMPONENT }}/$FILENAME" \
-              --content-type "application/gzip"
-            echo "✓ Uploaded $FILENAME"
-          done
-
-      - name: Create version-specific metadata JSON
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DIST_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DIST_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ secrets.AWS_DIST_REGION }}
-        run: |
-          set -e
-          VERSION="${{ steps.new_version.outputs.version }}"
-          IS_PRERELEASE="${{ steps.prerelease_check.outputs.is_prerelease }}"
-          RELEASE_DATE="${{ steps.release_metadata.outputs.release_date }}"
+          # Validate checksums file exists and is not empty
+          if [ ! -f "dist/checksums.txt" ] || [ ! -s "dist/checksums.txt" ]; then
+            echo "Error: checksums.txt is missing or empty"
+            exit 1
+          fi
 
           # Build platforms array with checksums
           PLATFORMS_JSON="[]"
+          PLATFORMS_JSON_DYNAMODB="[]"
+
           while IFS= read -r line; do
+            # Skip empty lines
+            if [ -z "$line" ]; then
+              continue
+            fi
+
             SHA256=$(echo "$line" | awk '{print $1}')
             FILENAME=$(echo "$line" | awk '{print $2}')
+
+            # Validate extracted values
+            if [ -z "$SHA256" ] || [ -z "$FILENAME" ]; then
+              echo "Error: Invalid checksum line: $line"
+              exit 1
+            fi
 
             # Extract platform info from filename: lacylights-{os}-{arch}.tar.gz
             PLATFORM_INFO=$(echo "$FILENAME" | sed 's/lacylights-//' | sed 's/.tar.gz//')
             OS=$(echo "$PLATFORM_INFO" | cut -d- -f1)
             ARCH=$(echo "$PLATFORM_INFO" | cut -d- -f2)
 
-            FILE_SIZE=$(stat -c%s "dist/$FILENAME")
+            # Use portable file size command
+            FILE_SIZE=$(wc -c < "dist/$FILENAME" | tr -d ' ')
 
+            # Build platform entry for S3 JSON files
             PLATFORM_ENTRY=$(jq -n \
               --arg os "$OS" \
               --arg arch "$ARCH" \
@@ -274,7 +271,66 @@ jobs:
               }')
 
             PLATFORMS_JSON=$(echo "$PLATFORMS_JSON" | jq --argjson entry "$PLATFORM_ENTRY" '. += [$entry]')
+
+            # Build platform entry for DynamoDB (with type annotations)
+            PLATFORM_ENTRY_DYNAMODB=$(jq -n \
+              --arg os "$OS" \
+              --arg arch "$ARCH" \
+              --arg url "https://dist.lacylights.com/releases/${{ env.COMPONENT }}/$FILENAME" \
+              --arg sha256 "$SHA256" \
+              --argjson fileSize "$FILE_SIZE" \
+              '{
+                M: {
+                  os: {S: $os},
+                  arch: {S: $arch},
+                  url: {S: $url},
+                  sha256: {S: $sha256},
+                  fileSize: {N: ($fileSize | tostring)}
+                }
+              }')
+
+            PLATFORMS_JSON_DYNAMODB=$(echo "$PLATFORMS_JSON_DYNAMODB" | jq --argjson entry "$PLATFORM_ENTRY_DYNAMODB" '. += [$entry]')
           done < dist/checksums.txt
+
+          # Save to file for use in subsequent steps (avoiding step output size limits)
+          echo "$PLATFORMS_JSON" > platforms.json
+          echo "$PLATFORMS_JSON_DYNAMODB" > platforms-dynamodb.json
+
+          echo "platforms_file=platforms.json" >> $GITHUB_OUTPUT
+          echo "platforms_dynamodb_file=platforms-dynamodb.json" >> $GITHUB_OUTPUT
+
+      - name: Upload to S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DIST_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DIST_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_DIST_REGION }}
+        run: |
+          set -e
+          VERSION="${{ steps.new_version.outputs.version }}"
+
+          echo "Uploading archives to S3..."
+          for archive in dist/*.tar.gz; do
+            FILENAME=$(basename "$archive")
+            aws s3 cp "$archive" \
+              "s3://${{ secrets.AWS_DIST_BUCKET }}/releases/${{ env.COMPONENT }}/$FILENAME" \
+              --content-type "application/gzip" \
+              --cache-control "max-age=31536000, immutable"
+            echo "✓ Uploaded $FILENAME"
+          done
+
+      - name: Create version-specific metadata JSON
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DIST_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DIST_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_DIST_REGION }}
+        run: |
+          set -e
+          VERSION="${{ steps.new_version.outputs.version }}"
+          IS_PRERELEASE="${{ steps.prerelease_check.outputs.is_prerelease }}"
+          RELEASE_DATE="${{ steps.release_metadata.outputs.release_date }}"
+
+          # Read platforms JSON from file
+          PLATFORMS_JSON=$(cat platforms.json)
 
           # Create version-specific metadata JSON
           jq -n \
@@ -309,35 +365,8 @@ jobs:
           VERSION="${{ steps.new_version.outputs.version }}"
           RELEASE_DATE="${{ steps.release_metadata.outputs.release_date }}"
 
-          # Build platforms array with checksums
-          PLATFORMS_JSON="[]"
-          while IFS= read -r line; do
-            SHA256=$(echo "$line" | awk '{print $1}')
-            FILENAME=$(echo "$line" | awk '{print $2}')
-
-            # Extract platform info from filename
-            PLATFORM_INFO=$(echo "$FILENAME" | sed 's/lacylights-//' | sed 's/.tar.gz//')
-            OS=$(echo "$PLATFORM_INFO" | cut -d- -f1)
-            ARCH=$(echo "$PLATFORM_INFO" | cut -d- -f2)
-
-            FILE_SIZE=$(stat -c%s "dist/$FILENAME")
-
-            PLATFORM_ENTRY=$(jq -n \
-              --arg os "$OS" \
-              --arg arch "$ARCH" \
-              --arg url "https://dist.lacylights.com/releases/${{ env.COMPONENT }}/$FILENAME" \
-              --arg sha256 "$SHA256" \
-              --argjson fileSize "$FILE_SIZE" \
-              '{
-                os: $os,
-                arch: $arch,
-                url: $url,
-                sha256: $sha256,
-                fileSize: $fileSize
-              }')
-
-            PLATFORMS_JSON=$(echo "$PLATFORMS_JSON" | jq --argjson entry "$PLATFORM_ENTRY" '. += [$entry]')
-          done < dist/checksums.txt
+          # Read platforms JSON from file
+          PLATFORMS_JSON=$(cat platforms.json)
 
           # Create latest.json
           jq -n \
@@ -373,47 +402,21 @@ jobs:
           RELEASE_DATE="${{ steps.release_metadata.outputs.release_date }}"
           TABLE_NAME="${{ secrets.AWS_DIST_TABLE_NAME || 'lacylights-releases' }}"
 
-          # Build platforms array with checksums
-          PLATFORMS_JSON="[]"
-          while IFS= read -r line; do
-            SHA256=$(echo "$line" | awk '{print $1}')
-            FILENAME=$(echo "$line" | awk '{print $2}')
-
-            # Extract platform info from filename
-            PLATFORM_INFO=$(echo "$FILENAME" | sed 's/lacylights-//' | sed 's/.tar.gz//')
-            OS=$(echo "$PLATFORM_INFO" | cut -d- -f1)
-            ARCH=$(echo "$PLATFORM_INFO" | cut -d- -f2)
-
-            FILE_SIZE=$(stat -c%s "dist/$FILENAME")
-
-            PLATFORM_ENTRY=$(jq -n \
-              --arg os "$OS" \
-              --arg arch "$ARCH" \
-              --arg url "https://dist.lacylights.com/releases/${{ env.COMPONENT }}/$FILENAME" \
-              --arg sha256 "$SHA256" \
-              --argjson fileSize "$FILE_SIZE" \
-              '{
-                os: {S: $os},
-                arch: {S: $arch},
-                url: {S: $url},
-                sha256: {S: $sha256},
-                fileSize: {N: ($fileSize | tostring)}
-              }')
-
-            PLATFORMS_JSON=$(echo "$PLATFORMS_JSON" | jq --argjson entry "$PLATFORM_ENTRY" '. += [$entry]')
-          done < dist/checksums.txt
+          # Read platforms JSON from DynamoDB-formatted file
+          PLATFORMS_JSON=$(cat platforms-dynamodb.json)
 
           echo "Updating DynamoDB..."
 
           # Create DynamoDB item
           jq -n \
+            --arg tableName "$TABLE_NAME" \
             --arg component "${{ env.COMPONENT }}" \
             --arg version "$VERSION" \
             --arg releaseDate "$RELEASE_DATE" \
             --arg isPrerelease "$IS_PRERELEASE" \
             --argjson platforms "$PLATFORMS_JSON" \
             '{
-              TableName: env.TABLE_NAME,
+              TableName: $tableName,
               Item: {
                 component: {S: $component},
                 version: {S: $version},
@@ -421,7 +424,7 @@ jobs:
                 isPrerelease: {BOOL: ($isPrerelease == "true")},
                 platforms: {L: $platforms}
               }
-            }' | TABLE_NAME="$TABLE_NAME" jq '.TableName = env.TABLE_NAME' > dynamodb-item.json
+            }' > dynamodb-item.json
 
           aws dynamodb put-item --cli-input-json file://dynamodb-item.json
 
@@ -532,13 +535,17 @@ jobs:
           echo "### Distribution" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Platforms:**" >> $GITHUB_STEP_SUMMARY
-          for f in dist/*.tar.gz; do
-            FILENAME=$(basename "$f")
+          while IFS= read -r line; do
+            SHA256=$(echo "$line" | awk '{print $1}')
+            FILENAME=$(echo "$line" | awk '{print $2}')
             echo "- [$FILENAME](https://dist.lacylights.com/releases/${{ env.COMPONENT }}/$FILENAME)" >> $GITHUB_STEP_SUMMARY
-          done
+            echo "  - SHA256: \`$SHA256\`" >> $GITHUB_STEP_SUMMARY
+          done < dist/checksums.txt
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**API Endpoints:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Latest: https://dist.lacylights.com/releases/${{ env.COMPONENT }}/latest.json" >> $GITHUB_STEP_SUMMARY
+          if [ "$IS_PRERELEASE" = "false" ]; then
+            echo "- Latest: https://dist.lacylights.com/releases/${{ env.COMPONENT }}/latest.json" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "- Version-specific: https://dist.lacylights.com/releases/${{ env.COMPONENT }}/${{ steps.new_version.outputs.version }}.json" >> $GITHUB_STEP_SUMMARY
           echo "- Manifest: https://dist.lacylights.com/api/manifest" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
