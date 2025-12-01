@@ -29,6 +29,11 @@ jobs:
         env:
           ARTNET_ENABLED: 'false'
 
+      - name: Check coverage thresholds
+        run: ./scripts/check-coverage.sh
+        env:
+          ARTNET_ENABLED: 'false'
+
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
