@@ -1,0 +1,30 @@
+# Codecov configuration
+# https://docs.codecov.com/docs/codecov-yaml
+
+coverage:
+  precision: 2
+  round: down
+  range: "50...100"
+
+  status:
+    project:
+      default:
+        # Require coverage to not drop by more than 1%
+        threshold: 1%
+    patch:
+      default:
+        # New code should have at least 50% coverage
+        target: 50%
+
+# Exclude auto-generated code and non-testable packages
+ignore:
+  - "internal/graphql/generated/**/*"
+  - "cmd/server/main.go"
+  - "**/*_gen.go"
+  - "**/mocks/**"
+
+# Comment configuration
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true

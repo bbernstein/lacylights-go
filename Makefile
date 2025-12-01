@@ -19,7 +19,7 @@ TEST_DIR := ./test
 .DEFAULT_GOAL := help
 
 # Phony targets
-.PHONY: all build clean test test-unit test-contracts test-coverage generate dev run lint fmt help install-tools
+.PHONY: all build clean test test-unit test-contracts test-coverage test-coverage-check generate dev run lint fmt help install-tools
 
 # =============================================================================
 # BUILD TARGETS
@@ -86,6 +86,11 @@ test-coverage:
 	$(GO) test -v -race -coverprofile=coverage.out ./...
 	$(GO) tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report: coverage.html"
+
+## test-coverage-check: Run tests and check coverage thresholds
+test-coverage-check:
+	@echo "Running coverage checks..."
+	@./scripts/check-coverage.sh
 
 ## test-contracts: Run contract tests against Go server
 test-contracts:
