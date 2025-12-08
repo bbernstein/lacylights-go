@@ -7,7 +7,7 @@ import (
 
 	"github.com/99designs/gqlgen/client"
 	"github.com/99designs/gqlgen/graphql/handler"
-	"gorm.io/driver/sqlite"
+	"github.com/glebarez/sqlite" // Pure Go SQLite driver (no CGO required)
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
