@@ -459,6 +459,42 @@ jobs:
 
           echo "latest.json updated"
 
+      - name: Update prerelease.json
+        if: ${{ steps.prerelease_check.outputs.is_prerelease == 'true' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DIST_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DIST_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_DIST_REGION }}
+        run: |
+          set -e
+          VERSION="${{ steps.new_version.outputs.version }}"
+          RELEASE_DATE="${{ steps.release_metadata.outputs.release_date }}"
+
+          # Read platforms JSON from file
+          PLATFORMS_JSON=$(cat platforms.json)
+
+          # Create prerelease.json
+          jq -n \
+            --arg version "$VERSION" \
+            --arg releaseDate "$RELEASE_DATE" \
+            --argjson isPrerelease true \
+            --argjson platforms "$PLATFORMS_JSON" \
+            '{
+              version: $version,
+              releaseDate: $releaseDate,
+              isPrerelease: $isPrerelease,
+              platforms: $platforms
+            }' > prerelease.json
+
+          echo "Uploading prerelease.json..."
+          aws s3 cp prerelease.json \
+            "s3://${{ secrets.AWS_DIST_BUCKET }}/releases/${{ env.COMPONENT }}/prerelease.json" \
+            --content-type "application/json" \
+            --cache-control "max-age=300, must-revalidate" \
+            --metadata-directive REPLACE
+
+          echo "prerelease.json updated"
+
       - name: Update DynamoDB
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DIST_ACCESS_KEY_ID }}
@@ -620,6 +656,8 @@ jobs:
           echo "**API Endpoints:**" >> $GITHUB_STEP_SUMMARY
           if [ "$IS_PRERELEASE" = "false" ]; then
             echo "- Latest: https://dist.lacylights.com/releases/${{ env.COMPONENT }}/latest.json" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- Prerelease: https://dist.lacylights.com/releases/${{ env.COMPONENT }}/prerelease.json" >> $GITHUB_STEP_SUMMARY
           fi
           echo "- Version-specific: https://dist.lacylights.com/releases/${{ env.COMPONENT }}/${VERSION}.json" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
