@@ -277,14 +277,12 @@ jobs:
 
           # Calculate checksums for ALL files (archives AND raw binaries)
           # First checksums for archives
-          echo "Archive checksums:" > checksums.txt
+          > checksums.txt
           for archive in *.tar.gz; do
             sha256sum "$archive" >> checksums.txt
           done
 
           # Then checksums for raw binaries
-          echo "" >> checksums.txt
-          echo "Binary checksums:" >> checksums.txt
           for binary in lacylights-*; do
             # Skip archives
             if [[ "$binary" == *.tar.gz ]]; then
@@ -337,8 +335,19 @@ jobs:
             BINARY_NAME="lacylights-${OS}-${ARCH}"
             SHA256_BINARY=$(grep " ${BINARY_NAME}$" dist/checksums.txt | awk '{print $1}')
 
+            if [ -z "$SHA256_BINARY" ]; then
+              echo "Error: No checksum found for binary $BINARY_NAME"
+              exit 1
+            fi
+
             # Use portable file size command
             ARCHIVE_SIZE=$(wc -c < "dist/$FILENAME" | tr -d ' ')
+
+            if [ ! -f "dist/$BINARY_NAME" ]; then
+              echo "Error: Binary file not found: $BINARY_NAME"
+              exit 1
+            fi
+
             BINARY_SIZE=$(wc -c < "dist/$BINARY_NAME" | tr -d ' ')
 
             # Build platform entry for S3 JSON files - WITH VERSIONED URLs
@@ -389,7 +398,10 @@ jobs:
                   sha256Archive: {S: $sha256Archive},
                   sha256Binary: {S: $sha256Binary},
                   archiveSize: {N: ($archiveSize | tostring)},
-                  binarySize: {N: ($binarySize | tostring)}
+                  binarySize: {N: ($binarySize | tostring)},
+                  url: {S: $archiveUrl},
+                  sha256: {S: $sha256Archive},
+                  fileSize: {N: ($archiveSize | tostring)}
                 }
               }')
 
@@ -671,7 +683,7 @@ jobs:
             // Upload assets (both archives and raw binaries)
             const distDir = 'dist';
             const files = fs.readdirSync(distDir).filter(f =>
-              f.endsWith('.tar.gz') || (f.startsWith('lacylights-') && !f.includes('.'))
+              f.endsWith('.tar.gz') || f.match(/^lacylights-[^.]+$/)
             );
 
             for (const file of files) {
