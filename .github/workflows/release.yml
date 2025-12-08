@@ -61,11 +61,17 @@ jobs:
       - name: Get current version
         id: current_version
         run: |
-          # Get current version from latest tag
-          CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          # Get the most recent tag by semantic version (not just reachable tags)
+          # This ensures we see beta tags even when running from main
+          CURRENT_TAG=$(git tag --sort=-v:refname | head -n 1 || echo "v0.0.0")
+          if [ -z "$CURRENT_TAG" ]; then
+            CURRENT_TAG="v0.0.0"
+          fi
           CURRENT_VERSION=${CURRENT_TAG#v}
           echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
           echo "Current version: $CURRENT_VERSION"
+          echo "All recent tags:"
+          git tag --sort=-v:refname | head -n 5
 
       - name: Calculate new version
         id: new_version
