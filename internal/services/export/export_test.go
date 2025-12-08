@@ -9,13 +9,15 @@ import (
 func TestExportedProject_ToJSON(t *testing.T) {
 	desc := "Test project description"
 	project := &ExportedProject{
-		Version:            "1.0",
-		ProjectID:          "proj-123",
-		ProjectName:        "Test Project",
-		ProjectDescription: &desc,
+		Version: "1.0",
+		Project: &ExportProjectInfo{
+			OriginalID:  "proj-123",
+			Name:        "Test Project",
+			Description: &desc,
+		},
 		FixtureDefinitions: []ExportedFixtureDefinition{
 			{
-				ID:           "def-1",
+				RefID:        "def-1",
 				Manufacturer: "TestMfg",
 				Model:        "TestModel",
 				Type:         "DIMMER",
@@ -34,21 +36,21 @@ func TestExportedProject_ToJSON(t *testing.T) {
 		},
 		FixtureInstances: []ExportedFixtureInstance{
 			{
-				ID:           "fix-1",
-				Name:         "Fixture 1",
-				DefinitionID: "def-1",
-				Universe:     1,
-				StartChannel: 1,
-				Tags:         []string{"front", "stage"},
+				RefID:           "fix-1",
+				Name:            "Fixture 1",
+				DefinitionRefID: "def-1",
+				Universe:        1,
+				StartChannel:    1,
+				Tags:            []string{"front", "stage"},
 			},
 		},
 		Scenes: []ExportedScene{
 			{
-				ID:   "scene-1",
-				Name: "Opening",
+				RefID: "scene-1",
+				Name:  "Opening",
 				FixtureValues: []ExportedFixtureValue{
 					{
-						FixtureID:     "fix-1",
+						FixtureRefID:  "fix-1",
 						ChannelValues: []int{255},
 					},
 				},
@@ -56,15 +58,15 @@ func TestExportedProject_ToJSON(t *testing.T) {
 		},
 		CueLists: []ExportedCueList{
 			{
-				ID:   "cuelist-1",
-				Name: "Main",
-				Loop: true,
+				RefID: "cuelist-1",
+				Name:  "Main",
+				Loop:  true,
 				Cues: []ExportedCue{
 					{
-						ID:          "cue-1",
+						OriginalID:  "cue-1",
 						Name:        "Cue 1",
 						CueNumber:   1.0,
-						SceneID:     "scene-1",
+						SceneRefID:  "scene-1",
 						FadeInTime:  2.0,
 						FadeOutTime: 1.0,
 					},
@@ -88,19 +90,22 @@ func TestExportedProject_ToJSON(t *testing.T) {
 	if parsed["version"] != "1.0" {
 		t.Errorf("Expected version '1.0', got '%v'", parsed["version"])
 	}
-	if parsed["projectId"] != "proj-123" {
-		t.Errorf("Expected projectId 'proj-123', got '%v'", parsed["projectId"])
+	projInfo := parsed["project"].(map[string]interface{})
+	if projInfo["originalId"] != "proj-123" {
+		t.Errorf("Expected project.originalId 'proj-123', got '%v'", projInfo["originalId"])
 	}
-	if parsed["projectName"] != "Test Project" {
-		t.Errorf("Expected projectName 'Test Project', got '%v'", parsed["projectName"])
+	if projInfo["name"] != "Test Project" {
+		t.Errorf("Expected project.name 'Test Project', got '%v'", projInfo["name"])
 	}
 }
 
 func TestExportedProject_ToJSON_Empty(t *testing.T) {
 	project := &ExportedProject{
-		Version:     "1.0",
-		ProjectID:   "empty-proj",
-		ProjectName: "Empty Project",
+		Version: "1.0",
+		Project: &ExportProjectInfo{
+			OriginalID: "empty-proj",
+			Name:       "Empty Project",
+		},
 	}
 
 	jsonStr, err := project.ToJSON()
@@ -114,26 +119,34 @@ func TestExportedProject_ToJSON_Empty(t *testing.T) {
 		t.Fatalf("ToJSON() produced invalid JSON: %v", err)
 	}
 
-	if parsed.ProjectName != "Empty Project" {
-		t.Errorf("Expected 'Empty Project', got '%s'", parsed.ProjectName)
+	if parsed.GetProjectName() != "Empty Project" {
+		t.Errorf("Expected 'Empty Project', got '%s'", parsed.GetProjectName())
 	}
 }
 
 func TestParseExportedProject(t *testing.T) {
+	// Test parsing the Node.js export format
 	jsonStr := `{
 		"version": "1.0",
-		"projectId": "test-id",
-		"projectName": "Parsed Project",
-		"projectDescription": "A test description",
+		"metadata": {
+			"exportedAt": "2025-01-01T00:00:00Z",
+			"lacyLightsVersion": "1.0.0"
+		},
+		"project": {
+			"originalId": "test-id",
+			"name": "Parsed Project",
+			"description": "A test description"
+		},
 		"fixtureDefinitions": [
 			{
-				"id": "def-1",
+				"refId": "def-1",
 				"manufacturer": "ACME",
 				"model": "Par64",
 				"type": "PAR",
 				"isBuiltIn": false,
 				"channels": [
 					{
+						"refId": "ch-1",
 						"name": "Dimmer",
 						"type": "INTENSITY",
 						"offset": 0,
@@ -146,9 +159,10 @@ func TestParseExportedProject(t *testing.T) {
 		],
 		"fixtureInstances": [
 			{
-				"id": "inst-1",
+				"refId": "inst-1",
+				"originalId": "orig-inst-1",
 				"name": "Front Wash",
-				"definitionId": "def-1",
+				"definitionRefId": "def-1",
 				"universe": 1,
 				"startChannel": 1,
 				"tags": ["front", "wash"]
@@ -156,11 +170,12 @@ func TestParseExportedProject(t *testing.T) {
 		],
 		"scenes": [
 			{
-				"id": "scene-1",
+				"refId": "scene-1",
+				"originalId": "orig-scene-1",
 				"name": "Full",
 				"fixtureValues": [
 					{
-						"fixtureId": "inst-1",
+						"fixtureRefId": "inst-1",
 						"channelValues": [255]
 					}
 				]
@@ -168,15 +183,16 @@ func TestParseExportedProject(t *testing.T) {
 		],
 		"cueLists": [
 			{
-				"id": "cl-1",
+				"refId": "cl-1",
+				"originalId": "orig-cl-1",
 				"name": "Main",
 				"loop": true,
 				"cues": [
 					{
-						"id": "cue-1",
+						"originalId": "orig-cue-1",
 						"name": "Blackout",
 						"cueNumber": 0,
-						"sceneId": "scene-1",
+						"sceneRefId": "scene-1",
 						"fadeInTime": 1.5,
 						"fadeOutTime": 0.5
 					}
@@ -193,14 +209,11 @@ func TestParseExportedProject(t *testing.T) {
 	if project.Version != "1.0" {
 		t.Errorf("Expected version '1.0', got '%s'", project.Version)
 	}
-	if project.ProjectID != "test-id" {
-		t.Errorf("Expected projectId 'test-id', got '%s'", project.ProjectID)
+	if project.GetProjectName() != "Parsed Project" {
+		t.Errorf("Expected projectName 'Parsed Project', got '%s'", project.GetProjectName())
 	}
-	if project.ProjectName != "Parsed Project" {
-		t.Errorf("Expected projectName 'Parsed Project', got '%s'", project.ProjectName)
-	}
-	if project.ProjectDescription == nil || *project.ProjectDescription != "A test description" {
-		t.Errorf("Expected description 'A test description', got '%v'", project.ProjectDescription)
+	if project.GetProjectDescription() == nil || *project.GetProjectDescription() != "A test description" {
+		t.Errorf("Expected description 'A test description', got '%v'", project.GetProjectDescription())
 	}
 
 	// Check fixture definitions
@@ -253,7 +266,7 @@ func TestParseExportedProject_InvalidJSON(t *testing.T) {
 }
 
 func TestParseExportedProject_MinimalValid(t *testing.T) {
-	jsonStr := `{"version": "1.0", "projectId": "min", "projectName": "Minimal"}`
+	jsonStr := `{"version": "1.0", "project": {"originalId": "min", "name": "Minimal"}}`
 
 	project, err := ParseExportedProject(jsonStr)
 	if err != nil {
@@ -263,8 +276,8 @@ func TestParseExportedProject_MinimalValid(t *testing.T) {
 	if project.Version != "1.0" {
 		t.Errorf("Expected version '1.0', got '%s'", project.Version)
 	}
-	if project.ProjectID != "min" {
-		t.Errorf("Expected projectId 'min', got '%s'", project.ProjectID)
+	if project.GetProjectName() != "Minimal" {
+		t.Errorf("Expected projectName 'Minimal', got '%s'", project.GetProjectName())
 	}
 }
 
@@ -276,13 +289,15 @@ func TestRoundTrip_ToJSON_ParseExportedProject(t *testing.T) {
 	sceneOrder := 0
 
 	original := &ExportedProject{
-		Version:            "1.0",
-		ProjectID:          "round-trip",
-		ProjectName:        "Round Trip Test",
-		ProjectDescription: &desc,
+		Version: "1.0",
+		Project: &ExportProjectInfo{
+			OriginalID:  "round-trip",
+			Name:        "Round Trip Test",
+			Description: &desc,
+		},
 		FixtureDefinitions: []ExportedFixtureDefinition{
 			{
-				ID:           "def-1",
+				RefID:        "def-1",
 				Manufacturer: "Test",
 				Model:        "Model",
 				Type:         "LED",
@@ -296,37 +311,37 @@ func TestRoundTrip_ToJSON_ParseExportedProject(t *testing.T) {
 		},
 		FixtureInstances: []ExportedFixtureInstance{
 			{
-				ID:           "inst-1",
-				Name:         "Instance 1",
-				Description:  &desc,
-				DefinitionID: "def-1",
-				Universe:     2,
-				StartChannel: 100,
-				Tags:         []string{"a", "b", "c"},
+				RefID:           "inst-1",
+				Name:            "Instance 1",
+				Description:     &desc,
+				DefinitionRefID: "def-1",
+				Universe:        2,
+				StartChannel:    100,
+				Tags:            []string{"a", "b", "c"},
 			},
 		},
 		Scenes: []ExportedScene{
 			{
-				ID:          "scene-1",
+				RefID:       "scene-1",
 				Name:        "Test Scene",
 				Description: &desc,
 				FixtureValues: []ExportedFixtureValue{
-					{FixtureID: "inst-1", ChannelValues: []int{255, 128, 64}, SceneOrder: &sceneOrder},
+					{FixtureRefID: "inst-1", ChannelValues: []int{255, 128, 64}, SceneOrder: &sceneOrder},
 				},
 			},
 		},
 		CueLists: []ExportedCueList{
 			{
-				ID:          "cl-1",
+				RefID:       "cl-1",
 				Name:        "Test Cue List",
 				Description: &desc,
 				Loop:        false,
 				Cues: []ExportedCue{
 					{
-						ID:          "cue-1",
+						OriginalID:  "cue-1",
 						Name:        "Test Cue",
 						CueNumber:   1.5,
-						SceneID:     "scene-1",
+						SceneRefID:  "scene-1",
 						FadeInTime:  2.5,
 						FadeOutTime: 1.25,
 						FollowTime:  &followTime,
@@ -354,13 +369,10 @@ func TestRoundTrip_ToJSON_ParseExportedProject(t *testing.T) {
 	if parsed.Version != original.Version {
 		t.Errorf("Version mismatch: got '%s', want '%s'", parsed.Version, original.Version)
 	}
-	if parsed.ProjectID != original.ProjectID {
-		t.Errorf("ProjectID mismatch: got '%s', want '%s'", parsed.ProjectID, original.ProjectID)
+	if parsed.GetProjectName() != original.GetProjectName() {
+		t.Errorf("ProjectName mismatch: got '%s', want '%s'", parsed.GetProjectName(), original.GetProjectName())
 	}
-	if parsed.ProjectName != original.ProjectName {
-		t.Errorf("ProjectName mismatch: got '%s', want '%s'", parsed.ProjectName, original.ProjectName)
-	}
-	if *parsed.ProjectDescription != *original.ProjectDescription {
+	if *parsed.GetProjectDescription() != *original.GetProjectDescription() {
 		t.Errorf("ProjectDescription mismatch")
 	}
 
@@ -434,9 +446,11 @@ func TestExportStats(t *testing.T) {
 
 func TestExportedProject_ToJSON_Formatting(t *testing.T) {
 	project := &ExportedProject{
-		Version:     "1.0",
-		ProjectID:   "format-test",
-		ProjectName: "Format Test",
+		Version: "1.0",
+		Project: &ExportProjectInfo{
+			OriginalID: "format-test",
+			Name:       "Format Test",
+		},
 	}
 
 	jsonStr, err := project.ToJSON()
@@ -450,5 +464,27 @@ func TestExportedProject_ToJSON_Formatting(t *testing.T) {
 	}
 	if !strings.Contains(jsonStr, "  ") {
 		t.Error("Expected pretty-printed JSON with indentation")
+	}
+}
+
+func TestGetProjectName_NilProject(t *testing.T) {
+	project := &ExportedProject{
+		Version: "1.0",
+		Project: nil,
+	}
+
+	if project.GetProjectName() != "" {
+		t.Errorf("Expected empty string for nil project, got '%s'", project.GetProjectName())
+	}
+}
+
+func TestGetProjectDescription_NilProject(t *testing.T) {
+	project := &ExportedProject{
+		Version: "1.0",
+		Project: nil,
+	}
+
+	if project.GetProjectDescription() != nil {
+		t.Errorf("Expected nil for nil project description, got '%v'", project.GetProjectDescription())
 	}
 }

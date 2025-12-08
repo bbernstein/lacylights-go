@@ -9,29 +9,62 @@ import (
 )
 
 // ExportedProject represents a full project export.
+// Matches the LacyLights Node.js export format.
 type ExportedProject struct {
 	Version            string                      `json:"version"`
-	ProjectID          string                      `json:"projectId"`
-	ProjectName        string                      `json:"projectName"`
-	ProjectDescription *string                     `json:"projectDescription,omitempty"`
+	Metadata           *ExportMetadata             `json:"metadata,omitempty"`
+	Project            *ExportProjectInfo          `json:"project,omitempty"`
 	FixtureDefinitions []ExportedFixtureDefinition `json:"fixtureDefinitions"`
 	FixtureInstances   []ExportedFixtureInstance   `json:"fixtureInstances"`
 	Scenes             []ExportedScene             `json:"scenes"`
 	CueLists           []ExportedCueList           `json:"cueLists"`
 }
 
+// ExportMetadata contains export metadata.
+type ExportMetadata struct {
+	ExportedAt        string  `json:"exportedAt"`
+	LacyLightsVersion string  `json:"lacyLightsVersion"`
+	Description       *string `json:"description,omitempty"`
+}
+
+// ExportProjectInfo contains project information.
+type ExportProjectInfo struct {
+	OriginalID  string  `json:"originalId"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+	CreatedAt   string  `json:"createdAt,omitempty"`
+	UpdatedAt   string  `json:"updatedAt,omitempty"`
+}
+
 // ExportedFixtureDefinition represents an exported fixture definition.
 type ExportedFixtureDefinition struct {
-	ID           string                     `json:"id"`
-	Manufacturer string                     `json:"manufacturer"`
-	Model        string                     `json:"model"`
-	Type         string                     `json:"type"`
-	IsBuiltIn    bool                       `json:"isBuiltIn"`
+	RefID        string                      `json:"refId"`
+	Manufacturer string                      `json:"manufacturer"`
+	Model        string                      `json:"model"`
+	Type         string                      `json:"type"`
+	IsBuiltIn    bool                        `json:"isBuiltIn"`
+	Modes        []ExportedFixtureMode       `json:"modes,omitempty"`
 	Channels     []ExportedChannelDefinition `json:"channels"`
+}
+
+// ExportedFixtureMode represents a fixture mode in export.
+type ExportedFixtureMode struct {
+	RefID        string               `json:"refId"`
+	Name         string               `json:"name"`
+	ShortName    *string              `json:"shortName,omitempty"`
+	ChannelCount int                  `json:"channelCount"`
+	ModeChannels []ExportedModeChannel `json:"modeChannels"`
+}
+
+// ExportedModeChannel represents a mode-specific channel mapping.
+type ExportedModeChannel struct {
+	ChannelRefID string `json:"channelRefId"`
+	Offset       int    `json:"offset"`
 }
 
 // ExportedChannelDefinition represents an exported channel definition.
 type ExportedChannelDefinition struct {
+	RefID        string `json:"refId,omitempty"`
 	Name         string `json:"name"`
 	Type         string `json:"type"`
 	Offset       int    `json:"offset"`
@@ -42,50 +75,75 @@ type ExportedChannelDefinition struct {
 
 // ExportedFixtureInstance represents an exported fixture instance.
 type ExportedFixtureInstance struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Description  *string  `json:"description,omitempty"`
-	DefinitionID string   `json:"definitionId"`
-	Universe     int      `json:"universe"`
-	StartChannel int      `json:"startChannel"`
-	Tags         []string `json:"tags,omitempty"`
+	RefID            string                    `json:"refId"`
+	OriginalID       string                    `json:"originalId,omitempty"`
+	Name             string                    `json:"name"`
+	Description      *string                   `json:"description,omitempty"`
+	DefinitionRefID  string                    `json:"definitionRefId"`
+	ModeName         *string                   `json:"modeName,omitempty"`
+	ChannelCount     *int                      `json:"channelCount,omitempty"`
+	Universe         int                       `json:"universe"`
+	StartChannel     int                       `json:"startChannel"`
+	Tags             []string                  `json:"tags,omitempty"`
+	ProjectOrder     *int                      `json:"projectOrder,omitempty"`
+	InstanceChannels []ExportedInstanceChannel `json:"instanceChannels,omitempty"`
+	CreatedAt        string                    `json:"createdAt,omitempty"`
+	UpdatedAt        string                    `json:"updatedAt,omitempty"`
+}
+
+// ExportedInstanceChannel represents an instance-specific channel.
+type ExportedInstanceChannel struct {
+	Name         string `json:"name"`
+	Type         string `json:"type"`
+	Offset       int    `json:"offset"`
+	MinValue     int    `json:"minValue"`
+	MaxValue     int    `json:"maxValue"`
+	DefaultValue int    `json:"defaultValue"`
 }
 
 // ExportedScene represents an exported scene.
 type ExportedScene struct {
-	ID            string                 `json:"id"`
+	RefID         string                 `json:"refId"`
+	OriginalID    string                 `json:"originalId,omitempty"`
 	Name          string                 `json:"name"`
 	Description   *string                `json:"description,omitempty"`
 	FixtureValues []ExportedFixtureValue `json:"fixtureValues"`
+	CreatedAt     string                 `json:"createdAt,omitempty"`
+	UpdatedAt     string                 `json:"updatedAt,omitempty"`
 }
 
 // ExportedFixtureValue represents exported fixture values in a scene.
 type ExportedFixtureValue struct {
-	FixtureID     string `json:"fixtureId"`
+	FixtureRefID  string `json:"fixtureRefId"`
 	ChannelValues []int  `json:"channelValues"`
 	SceneOrder    *int   `json:"sceneOrder,omitempty"`
 }
 
 // ExportedCueList represents an exported cue list.
 type ExportedCueList struct {
-	ID          string        `json:"id"`
+	RefID       string        `json:"refId"`
+	OriginalID  string        `json:"originalId,omitempty"`
 	Name        string        `json:"name"`
 	Description *string       `json:"description,omitempty"`
 	Loop        bool          `json:"loop"`
 	Cues        []ExportedCue `json:"cues"`
+	CreatedAt   string        `json:"createdAt,omitempty"`
+	UpdatedAt   string        `json:"updatedAt,omitempty"`
 }
 
 // ExportedCue represents an exported cue.
 type ExportedCue struct {
-	ID          string   `json:"id"`
+	OriginalID  string   `json:"originalId,omitempty"`
 	Name        string   `json:"name"`
 	CueNumber   float64  `json:"cueNumber"`
-	SceneID     string   `json:"sceneId"`
+	SceneRefID  string   `json:"sceneRefId"`
 	FadeInTime  float64  `json:"fadeInTime"`
 	FadeOutTime float64  `json:"fadeOutTime"`
 	FollowTime  *float64 `json:"followTime,omitempty"`
 	EasingType  *string  `json:"easingType,omitempty"`
 	Notes       *string  `json:"notes,omitempty"`
+	CreatedAt   string   `json:"createdAt,omitempty"`
+	UpdatedAt   string   `json:"updatedAt,omitempty"`
 }
 
 // ExportStats contains statistics about an export.
@@ -135,10 +193,12 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 	}
 
 	exported := &ExportedProject{
-		Version:            "1.0",
-		ProjectID:          project.ID,
-		ProjectName:        project.Name,
-		ProjectDescription: project.Description,
+		Version: "1.0",
+		Project: &ExportProjectInfo{
+			OriginalID:  project.ID,
+			Name:        project.Name,
+			Description: project.Description,
+		},
 	}
 
 	stats := &ExportStats{}
@@ -173,7 +233,7 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 			}
 
 			exportedDef := ExportedFixtureDefinition{
-				ID:           def.ID,
+				RefID:        def.ID,
 				Manufacturer: def.Manufacturer,
 				Model:        def.Model,
 				Type:         def.Type,
@@ -203,13 +263,14 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 			}
 
 			exported.FixtureInstances = append(exported.FixtureInstances, ExportedFixtureInstance{
-				ID:           f.ID,
-				Name:         f.Name,
-				Description:  f.Description,
-				DefinitionID: f.DefinitionID,
-				Universe:     f.Universe,
-				StartChannel: f.StartChannel,
-				Tags:         tags,
+				RefID:           f.ID,
+				OriginalID:      f.ID,
+				Name:            f.Name,
+				Description:     f.Description,
+				DefinitionRefID: f.DefinitionID,
+				Universe:        f.Universe,
+				StartChannel:    f.StartChannel,
+				Tags:            tags,
 			})
 			stats.FixtureInstancesCount++
 		}
@@ -229,7 +290,8 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 			}
 
 			exportedScene := ExportedScene{
-				ID:          scene.ID,
+				RefID:       scene.ID,
+				OriginalID:  scene.ID,
 				Name:        scene.Name,
 				Description: scene.Description,
 			}
@@ -239,7 +301,7 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 				_ = json.Unmarshal([]byte(fv.ChannelValues), &channelValues)
 
 				exportedScene.FixtureValues = append(exportedScene.FixtureValues, ExportedFixtureValue{
-					FixtureID:     fv.FixtureID,
+					FixtureRefID:  fv.FixtureID,
 					ChannelValues: channelValues,
 					SceneOrder:    fv.SceneOrder,
 				})
@@ -264,7 +326,8 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 			}
 
 			exportedCueList := ExportedCueList{
-				ID:          cueList.ID,
+				RefID:       cueList.ID,
+				OriginalID:  cueList.ID,
 				Name:        cueList.Name,
 				Description: cueList.Description,
 				Loop:        cueList.Loop,
@@ -272,10 +335,10 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 
 			for _, cue := range cues {
 				exportedCueList.Cues = append(exportedCueList.Cues, ExportedCue{
-					ID:          cue.ID,
+					OriginalID:  cue.ID,
 					Name:        cue.Name,
 					CueNumber:   cue.CueNumber,
-					SceneID:     cue.SceneID,
+					SceneRefID:  cue.SceneID,
 					FadeInTime:  cue.FadeInTime,
 					FadeOutTime: cue.FadeOutTime,
 					FollowTime:  cue.FollowTime,
@@ -309,4 +372,20 @@ func ParseExportedProject(jsonContent string) (*ExportedProject, error) {
 		return nil, err
 	}
 	return &exported, nil
+}
+
+// GetProjectName returns the project name from the exported data.
+func (e *ExportedProject) GetProjectName() string {
+	if e.Project != nil {
+		return e.Project.Name
+	}
+	return ""
+}
+
+// GetProjectDescription returns the project description from the exported data.
+func (e *ExportedProject) GetProjectDescription() *string {
+	if e.Project != nil {
+		return e.Project.Description
+	}
+	return nil
 }
