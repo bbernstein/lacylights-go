@@ -136,6 +136,15 @@ make test-coverage
 open coverage.html
 ```
 
+## Project Documentation
+
+For comprehensive implementation plans and architecture decisions, see the parent directory documentation:
+
+- [LACYLIGHTS_GO_REWRITE_PLAN.md](../LACYLIGHTS_GO_REWRITE_PLAN.md) - Complete Go rewrite implementation plan and architecture
+- [RASPBERRY_PI_PRODUCT_PLAN.md](../RASPBERRY_PI_PRODUCT_PLAN.md) - Turnkey Raspberry Pi product architecture and deployment
+- [GO_DISTRIBUTION_PLAN.md](../GO_DISTRIBUTION_PLAN.md) - Binary distribution and release workflow coordination
+- [CONTRACT_TESTING_PLAN.md](../CONTRACT_TESTING_PLAN.md) - Contract test suite for API compatibility verification
+
 ## Related Repositories
 
 - [lacylights-node](https://github.com/bbernstein/lacylights-node) - Node.js/TypeScript backend (original)
