@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"gorm.io/driver/sqlite"
+	"github.com/glebarez/sqlite" // Pure Go SQLite driver (no CGO required)
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )

@@ -25,6 +25,7 @@ import (
 
 	"github.com/bbernstein/lacylights-go/internal/config"
 	"github.com/bbernstein/lacylights-go/internal/database"
+	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 	"github.com/bbernstein/lacylights-go/internal/graphql/resolvers"
@@ -63,6 +64,31 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer func() { _ = database.Close() }()
+
+	// Auto-migrate database schema
+	log.Println("Running database migrations...")
+	if err := db.AutoMigrate(
+		&models.User{},
+		&models.Project{},
+		&models.ProjectUser{},
+		&models.FixtureDefinition{},
+		&models.ChannelDefinition{},
+		&models.FixtureMode{},
+		&models.ModeChannel{},
+		&models.FixtureInstance{},
+		&models.InstanceChannel{},
+		&models.Scene{},
+		&models.FixtureValue{},
+		&models.CueList{},
+		&models.Cue{},
+		&models.PreviewSession{},
+		&models.Setting{},
+		&models.SceneBoard{},
+		&models.SceneBoardButton{},
+	); err != nil {
+		log.Fatalf("Failed to migrate database: %v", err)
+	}
+	log.Println("Database migrations complete")
 
 	// Create and initialize DMX service
 	dmxService := dmx.NewService(dmx.Config{
