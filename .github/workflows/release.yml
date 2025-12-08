@@ -193,11 +193,14 @@ jobs:
 
       - name: Create archives
         run: |
+          set -e
           cd dist
           for binary in lacylights-*; do
+            # Create archive containing the binary
             tar -czf "${binary}.tar.gz" "$binary"
-            rm "$binary"
+            echo "Created ${binary}.tar.gz"
           done
+          # NOTE: We keep the raw binaries - they're needed for direct download by RPi
 
       - name: Calculate SHA256 checksums
         id: checksums
@@ -205,9 +208,22 @@ jobs:
           set -e
           cd dist
 
-          # Calculate checksums for all archives
+          # Calculate checksums for ALL files (archives AND raw binaries)
+          # First checksums for archives
+          echo "Archive checksums:" > checksums.txt
           for archive in *.tar.gz; do
             sha256sum "$archive" >> checksums.txt
+          done
+
+          # Then checksums for raw binaries
+          echo "" >> checksums.txt
+          echo "Binary checksums:" >> checksums.txt
+          for binary in lacylights-*; do
+            # Skip archives
+            if [[ "$binary" == *.tar.gz ]]; then
+              continue
+            fi
+            sha256sum "$binary" >> checksums.txt
           done
 
           cat checksums.txt
@@ -221,6 +237,7 @@ jobs:
         id: platforms
         run: |
           set -e
+          VERSION="${{ steps.new_version.outputs.version }}"
 
           # Validate checksums file exists and is not empty
           if [ ! -f "dist/checksums.txt" ] || [ ! -s "dist/checksums.txt" ]; then
@@ -232,18 +249,15 @@ jobs:
           PLATFORMS_JSON="[]"
           PLATFORMS_JSON_DYNAMODB="[]"
 
-          while IFS= read -r line; do
-            # Skip empty lines
-            if [ -z "$line" ]; then
-              continue
-            fi
+          # Process only tar.gz files for platform entries (to avoid duplicates)
+          for archive in dist/*.tar.gz; do
+            FILENAME=$(basename "$archive")
 
-            SHA256=$(echo "$line" | awk '{print $1}')
-            FILENAME=$(echo "$line" | awk '{print $2}')
+            # Get checksum for archive
+            SHA256_ARCHIVE=$(grep " ${FILENAME}$" dist/checksums.txt | awk '{print $1}')
 
-            # Validate extracted values
-            if [ -z "$SHA256" ] || [ -z "$FILENAME" ]; then
-              echo "Error: Invalid checksum line: $line"
+            if [ -z "$SHA256_ARCHIVE" ]; then
+              echo "Error: No checksum found for $FILENAME"
               exit 1
             fi
 
@@ -252,19 +266,36 @@ jobs:
             OS=$(echo "$PLATFORM_INFO" | cut -d- -f1)
             ARCH=$(echo "$PLATFORM_INFO" | cut -d- -f2)
 
-            # Use portable file size command
-            FILE_SIZE=$(wc -c < "dist/$FILENAME" | tr -d ' ')
+            # Get corresponding raw binary name and checksum
+            BINARY_NAME="lacylights-${OS}-${ARCH}"
+            SHA256_BINARY=$(grep " ${BINARY_NAME}$" dist/checksums.txt | awk '{print $1}')
 
-            # Build platform entry for S3 JSON files
+            # Use portable file size command
+            ARCHIVE_SIZE=$(wc -c < "dist/$FILENAME" | tr -d ' ')
+            BINARY_SIZE=$(wc -c < "dist/$BINARY_NAME" | tr -d ' ')
+
+            # Build platform entry for S3 JSON files - WITH VERSIONED URLs
             PLATFORM_ENTRY=$(jq -n \
               --arg os "$OS" \
               --arg arch "$ARCH" \
-              --arg url "https://dist.lacylights.com/releases/${{ env.COMPONENT }}/$FILENAME" \
-              --arg sha256 "$SHA256" \
-              --argjson fileSize "$FILE_SIZE" \
+              --arg archiveUrl "https://dist.lacylights.com/releases/${{ env.COMPONENT }}/v${VERSION}/${FILENAME}" \
+              --arg binaryUrl "https://dist.lacylights.com/releases/${{ env.COMPONENT }}/v${VERSION}/${BINARY_NAME}" \
+              --arg sha256Archive "$SHA256_ARCHIVE" \
+              --arg sha256Binary "$SHA256_BINARY" \
+              --argjson archiveSize "$ARCHIVE_SIZE" \
+              --argjson binarySize "$BINARY_SIZE" \
+              --arg url "https://dist.lacylights.com/releases/${{ env.COMPONENT }}/v${VERSION}/${FILENAME}" \
+              --arg sha256 "$SHA256_ARCHIVE" \
+              --argjson fileSize "$ARCHIVE_SIZE" \
               '{
                 os: $os,
                 arch: $arch,
+                archiveUrl: $archiveUrl,
+                binaryUrl: $binaryUrl,
+                sha256Archive: $sha256Archive,
+                sha256Binary: $sha256Binary,
+                archiveSize: $archiveSize,
+                binarySize: $binarySize,
                 url: $url,
                 sha256: $sha256,
                 fileSize: $fileSize
@@ -276,21 +307,27 @@ jobs:
             PLATFORM_ENTRY_DYNAMODB=$(jq -n \
               --arg os "$OS" \
               --arg arch "$ARCH" \
-              --arg url "https://dist.lacylights.com/releases/${{ env.COMPONENT }}/$FILENAME" \
-              --arg sha256 "$SHA256" \
-              --argjson fileSize "$FILE_SIZE" \
+              --arg archiveUrl "https://dist.lacylights.com/releases/${{ env.COMPONENT }}/v${VERSION}/${FILENAME}" \
+              --arg binaryUrl "https://dist.lacylights.com/releases/${{ env.COMPONENT }}/v${VERSION}/${BINARY_NAME}" \
+              --arg sha256Archive "$SHA256_ARCHIVE" \
+              --arg sha256Binary "$SHA256_BINARY" \
+              --argjson archiveSize "$ARCHIVE_SIZE" \
+              --argjson binarySize "$BINARY_SIZE" \
               '{
                 M: {
                   os: {S: $os},
                   arch: {S: $arch},
-                  url: {S: $url},
-                  sha256: {S: $sha256},
-                  fileSize: {N: ($fileSize | tostring)}
+                  archiveUrl: {S: $archiveUrl},
+                  binaryUrl: {S: $binaryUrl},
+                  sha256Archive: {S: $sha256Archive},
+                  sha256Binary: {S: $sha256Binary},
+                  archiveSize: {N: ($archiveSize | tostring)},
+                  binarySize: {N: ($binarySize | tostring)}
                 }
               }')
 
             PLATFORMS_JSON_DYNAMODB=$(echo "$PLATFORMS_JSON_DYNAMODB" | jq --argjson entry "$PLATFORM_ENTRY_DYNAMODB" '. += [$entry]')
-          done < dist/checksums.txt
+          done
 
           # Save to file for use in subsequent steps (avoiding step output size limits)
           echo "$PLATFORMS_JSON" > platforms.json
@@ -298,6 +335,9 @@ jobs:
 
           echo "platforms_file=platforms.json" >> $GITHUB_OUTPUT
           echo "platforms_dynamodb_file=platforms-dynamodb.json" >> $GITHUB_OUTPUT
+
+          echo "Generated platforms.json:"
+          cat platforms.json | jq .
 
       - name: Upload to S3
         env:
@@ -307,16 +347,45 @@ jobs:
         run: |
           set -e
           VERSION="${{ steps.new_version.outputs.version }}"
+          S3_VERSION_PATH="s3://${{ secrets.AWS_DIST_BUCKET }}/releases/${{ env.COMPONENT }}/v${VERSION}"
 
-          echo "Uploading archives to S3..."
+          echo "Uploading to versioned directory: $S3_VERSION_PATH"
+
+          # Upload archives
+          echo "Uploading archives..."
           for archive in dist/*.tar.gz; do
             FILENAME=$(basename "$archive")
             aws s3 cp "$archive" \
-              "s3://${{ secrets.AWS_DIST_BUCKET }}/releases/${{ env.COMPONENT }}/$FILENAME" \
+              "${S3_VERSION_PATH}/${FILENAME}" \
               --content-type "application/gzip" \
               --cache-control "max-age=31536000, immutable"
-            echo "✓ Uploaded $FILENAME"
+            echo "  Uploaded archive: $FILENAME"
           done
+
+          # Upload raw binaries
+          echo "Uploading raw binaries..."
+          for binary in dist/lacylights-*; do
+            # Skip archives (only upload raw binaries)
+            if [[ "$binary" == *.tar.gz ]]; then
+              continue
+            fi
+            FILENAME=$(basename "$binary")
+            aws s3 cp "$binary" \
+              "${S3_VERSION_PATH}/${FILENAME}" \
+              --content-type "application/octet-stream" \
+              --cache-control "max-age=31536000, immutable"
+            echo "  Uploaded binary: $FILENAME"
+          done
+
+          # Upload checksums.txt
+          echo "Uploading checksums.txt..."
+          aws s3 cp "dist/checksums.txt" \
+            "${S3_VERSION_PATH}/checksums.txt" \
+            --content-type "text/plain" \
+            --cache-control "max-age=31536000, immutable"
+          echo "  Uploaded checksums.txt"
+
+          echo "All files uploaded to ${S3_VERSION_PATH}/"
 
       - name: Create version-specific metadata JSON
         env:
@@ -352,7 +421,7 @@ jobs:
             --cache-control "max-age=31536000, immutable" \
             --metadata-directive REPLACE
 
-          echo "✓ ${VERSION}.json uploaded"
+          echo "${VERSION}.json uploaded"
 
       - name: Update latest.json
         if: ${{ steps.prerelease_check.outputs.is_prerelease == 'false' }}
@@ -388,7 +457,7 @@ jobs:
             --cache-control "max-age=300, must-revalidate" \
             --metadata-directive REPLACE
 
-          echo "✓ latest.json updated"
+          echo "latest.json updated"
 
       - name: Update DynamoDB
         env:
@@ -428,7 +497,7 @@ jobs:
 
           aws dynamodb put-item --cli-input-json file://dynamodb-item.json
 
-          echo "✓ DynamoDB updated: component=${{ env.COMPONENT }}, version=$VERSION"
+          echo "DynamoDB updated: component=${{ env.COMPONENT }}, version=$VERSION"
 
       - name: Create Git tag
         run: |
@@ -496,20 +565,26 @@ jobs:
               generate_release_notes: true
             });
 
-            // Upload assets
+            // Upload assets (both archives and raw binaries)
             const distDir = 'dist';
-            const files = fs.readdirSync(distDir).filter(f => f.endsWith('.tar.gz'));
+            const files = fs.readdirSync(distDir).filter(f =>
+              f.endsWith('.tar.gz') || (f.startsWith('lacylights-') && !f.includes('.'))
+            );
 
             for (const file of files) {
               const filePath = path.join(distDir, file);
               const fileContent = fs.readFileSync(filePath);
+              const contentType = file.endsWith('.tar.gz') ? 'application/gzip' : 'application/octet-stream';
 
               await github.rest.repos.uploadReleaseAsset({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 release_id: release.data.id,
                 name: file,
-                data: fileContent
+                data: fileContent,
+                headers: {
+                  'content-type': contentType
+                }
               });
 
               core.info(`Uploaded ${file}`);
@@ -518,35 +593,34 @@ jobs:
       - name: Output summary
         run: |
           IS_PRERELEASE="${{ steps.prerelease_check.outputs.is_prerelease }}"
+          VERSION="${{ steps.new_version.outputs.version }}"
 
-          echo "## Release Created Successfully! 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "## Release Created Successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** v${{ steps.new_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** v${VERSION}" >> $GITHUB_STEP_SUMMARY
           echo "**Bump Type:** ${{ inputs.version_bump }}" >> $GITHUB_STEP_SUMMARY
           echo "**Previous Version:** v${{ steps.current_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
 
           if [ "$IS_PRERELEASE" = "true" ]; then
-            echo "**Type:** 🧪 Prerelease (Beta)" >> $GITHUB_STEP_SUMMARY
+            echo "**Type:** Prerelease (Beta)" >> $GITHUB_STEP_SUMMARY
           else
-            echo "**Type:** ✅ Stable Release" >> $GITHUB_STEP_SUMMARY
+            echo "**Type:** Stable Release" >> $GITHUB_STEP_SUMMARY
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Distribution" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Release Directory:** https://dist.lacylights.com/releases/${{ env.COMPONENT }}/v${VERSION}/" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Platforms:**" >> $GITHUB_STEP_SUMMARY
-          while IFS= read -r line; do
-            SHA256=$(echo "$line" | awk '{print $1}')
-            FILENAME=$(echo "$line" | awk '{print $2}')
-            echo "- [$FILENAME](https://dist.lacylights.com/releases/${{ env.COMPONENT }}/$FILENAME)" >> $GITHUB_STEP_SUMMARY
-            echo "  - SHA256: \`$SHA256\`" >> $GITHUB_STEP_SUMMARY
-          done < dist/checksums.txt
+          cat platforms.json | jq -r '.[] | "- \(.os)/\(.arch): [Archive](\(.archiveUrl)) | [Binary](\(.binaryUrl))"' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Checksums:** [checksums.txt](https://dist.lacylights.com/releases/${{ env.COMPONENT }}/v${VERSION}/checksums.txt)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**API Endpoints:**" >> $GITHUB_STEP_SUMMARY
           if [ "$IS_PRERELEASE" = "false" ]; then
             echo "- Latest: https://dist.lacylights.com/releases/${{ env.COMPONENT }}/latest.json" >> $GITHUB_STEP_SUMMARY
           fi
-          echo "- Version-specific: https://dist.lacylights.com/releases/${{ env.COMPONENT }}/${{ steps.new_version.outputs.version }}.json" >> $GITHUB_STEP_SUMMARY
-          echo "- Manifest: https://dist.lacylights.com/api/manifest" >> $GITHUB_STEP_SUMMARY
+          echo "- Version-specific: https://dist.lacylights.com/releases/${{ env.COMPONENT }}/${VERSION}.json" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "[View Release](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.new_version.outputs.version }})" >> $GITHUB_STEP_SUMMARY
+          echo "[View Release](https://github.com/${{ github.repository }}/releases/tag/v${VERSION})" >> $GITHUB_STEP_SUMMARY
