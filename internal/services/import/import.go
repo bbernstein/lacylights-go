@@ -90,14 +90,14 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 	switch options.Mode {
 	case ImportModeCreate:
 		// Create a new project
-		projectName := exported.ProjectName
+		projectName := exported.GetProjectName()
 		if options.ProjectName != nil {
 			projectName = *options.ProjectName
 		}
 
 		project := &models.Project{
 			Name:        projectName,
-			Description: exported.ProjectDescription,
+			Description: exported.GetProjectDescription(),
 		}
 		if err := s.projectRepo.Create(ctx, project); err != nil {
 			return "", nil, nil, err
@@ -137,7 +137,7 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 				return "", nil, nil, err
 			}
 			if existing != nil {
-				definitionIDMap[def.ID] = existing.ID
+				definitionIDMap[def.RefID] = existing.ID
 				continue
 			}
 		}
@@ -151,12 +151,12 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 		if existing != nil {
 			switch options.FixtureConflictStrategy {
 			case FixtureConflictSkip:
-				definitionIDMap[def.ID] = existing.ID
+				definitionIDMap[def.RefID] = existing.ID
 				warnings = append(warnings, "Skipped existing fixture definition: "+def.Manufacturer+" "+def.Model)
 				continue
 			case FixtureConflictReplace:
 				// Delete and recreate
-				definitionIDMap[def.ID] = existing.ID
+				definitionIDMap[def.RefID] = existing.ID
 				// For now, just use existing
 				continue
 			case FixtureConflictRename:
@@ -187,13 +187,13 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 		if err := s.fixtureRepo.CreateDefinitionWithChannels(ctx, newDef, channels); err != nil {
 			return "", nil, nil, err
 		}
-		definitionIDMap[def.ID] = newDef.ID
+		definitionIDMap[def.RefID] = newDef.ID
 		stats.FixtureDefinitionsCreated++
 	}
 
 	// Import fixture instances
 	for _, f := range exported.FixtureInstances {
-		newDefID, ok := definitionIDMap[f.DefinitionID]
+		newDefID, ok := definitionIDMap[f.DefinitionRefID]
 		if !ok {
 			warnings = append(warnings, "Skipping fixture instance with unknown definition: "+f.Name)
 			continue
@@ -229,22 +229,36 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 			Type:         &def.Type,
 		}
 
-		// Get channels from definition
-		channels, err := s.fixtureRepo.GetDefinitionChannels(ctx, newDefID)
-		if err != nil {
-			return "", nil, nil, err
-		}
-
+		// Use instance channels from export if available, otherwise get from definition
 		var instanceChannels []models.InstanceChannel
-		for _, ch := range channels {
-			instanceChannels = append(instanceChannels, models.InstanceChannel{
-				Offset:       ch.Offset,
-				Name:         ch.Name,
-				Type:         ch.Type,
-				MinValue:     ch.MinValue,
-				MaxValue:     ch.MaxValue,
-				DefaultValue: ch.DefaultValue,
-			})
+		if len(f.InstanceChannels) > 0 {
+			for _, ch := range f.InstanceChannels {
+				instanceChannels = append(instanceChannels, models.InstanceChannel{
+					Offset:       ch.Offset,
+					Name:         ch.Name,
+					Type:         ch.Type,
+					MinValue:     ch.MinValue,
+					MaxValue:     ch.MaxValue,
+					DefaultValue: ch.DefaultValue,
+				})
+			}
+		} else {
+			// Get channels from definition
+			channels, err := s.fixtureRepo.GetDefinitionChannels(ctx, newDefID)
+			if err != nil {
+				return "", nil, nil, err
+			}
+
+			for _, ch := range channels {
+				instanceChannels = append(instanceChannels, models.InstanceChannel{
+					Offset:       ch.Offset,
+					Name:         ch.Name,
+					Type:         ch.Type,
+					MinValue:     ch.MinValue,
+					MaxValue:     ch.MaxValue,
+					DefaultValue: ch.DefaultValue,
+				})
+			}
 		}
 		channelCount := len(instanceChannels)
 		newFixture.ChannelCount = &channelCount
@@ -252,7 +266,7 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 		if err := s.fixtureRepo.CreateWithChannels(ctx, newFixture, instanceChannels); err != nil {
 			return "", nil, nil, err
 		}
-		fixtureIDMap[f.ID] = newFixture.ID
+		fixtureIDMap[f.RefID] = newFixture.ID
 		stats.FixtureInstancesCreated++
 	}
 
@@ -266,7 +280,7 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 
 		var fixtureValues []models.FixtureValue
 		for _, fv := range scene.FixtureValues {
-			newFixtureID, ok := fixtureIDMap[fv.FixtureID]
+			newFixtureID, ok := fixtureIDMap[fv.FixtureRefID]
 			if !ok {
 				warnings = append(warnings, "Skipping fixture value with unknown fixture in scene: "+scene.Name)
 				continue
@@ -284,7 +298,7 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 		if err := s.sceneRepo.CreateWithFixtureValues(ctx, newScene, fixtureValues); err != nil {
 			return "", nil, nil, err
 		}
-		sceneIDMap[scene.ID] = newScene.ID
+		sceneIDMap[scene.RefID] = newScene.ID
 		stats.ScenesCreated++
 	}
 
@@ -304,7 +318,7 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 
 		// Import cues
 		for _, cue := range cueList.Cues {
-			newSceneID, ok := sceneIDMap[cue.SceneID]
+			newSceneID, ok := sceneIDMap[cue.SceneRefID]
 			if !ok {
 				warnings = append(warnings, "Skipping cue with unknown scene in cue list: "+cueList.Name)
 				continue
