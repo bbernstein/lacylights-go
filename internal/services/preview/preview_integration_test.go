@@ -3,6 +3,7 @@ package preview
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -509,28 +510,40 @@ func TestSessionUpdateCallback_Integration(t *testing.T) {
 	ctx := context.Background()
 	project, fixture := createTestProjectWithFixture(t, testDB)
 
-	// Set up callback
+	// Set up callback with thread-safe access
+	var mu sync.Mutex
 	callbackCount := 0
 	var lastSession *Session
 	service.SetSessionUpdateCallback(func(session *Session, dmxOutput []DMXOutput) {
+		mu.Lock()
 		callbackCount++
 		lastSession = session
+		mu.Unlock()
 	})
 
 	// Start session should trigger callback
 	session, _ := service.StartSession(ctx, project.ID, nil)
 	time.Sleep(10 * time.Millisecond) // Let goroutine run
 
-	if callbackCount == 0 {
+	mu.Lock()
+	count := callbackCount
+	mu.Unlock()
+	if count == 0 {
 		t.Error("Expected callback on start")
 	}
+
+	mu.Lock()
 	initialCount := callbackCount
+	mu.Unlock()
 
 	// Update channel should trigger callback
 	_, _ = service.UpdateChannelValue(ctx, session.ID, fixture.ID, 0, 128)
 	time.Sleep(10 * time.Millisecond)
 
-	if callbackCount <= initialCount {
+	mu.Lock()
+	count = callbackCount
+	mu.Unlock()
+	if count <= initialCount {
 		t.Error("Expected callback on update")
 	}
 
@@ -538,7 +551,10 @@ func TestSessionUpdateCallback_Integration(t *testing.T) {
 	_, _ = service.CancelSession(ctx, session.ID)
 	time.Sleep(10 * time.Millisecond)
 
-	if lastSession == nil || lastSession.IsActive {
+	mu.Lock()
+	lastSess := lastSession
+	mu.Unlock()
+	if lastSess == nil || lastSess.IsActive {
 		t.Error("Expected callback with inactive session on cancel")
 	}
 }
