@@ -22,11 +22,13 @@ get_threshold() {
         "internal/database/repositories") echo 92 ;;  # Integration tests
         "internal/services/preview") echo 91 ;;  # Integration tests provide good coverage
         "internal/services/fade") echo 91 ;;
+        "internal/database") echo 86 ;;  # Connect/Close functions
         "internal/services/network") echo 64 ;;  # macOS-specific code paths not covered on Linux CI
         "internal/services/export") echo 87 ;;  # Integration tests provide good coverage
         "internal/services/dmx") echo 85 ;;
         "internal/services/playback") echo 82 ;;  # Integration tests provide good coverage
         "internal/services/import") echo 78 ;;  # Integration tests provide good coverage
+        "cmd/server") echo 18 ;;  # main() is untestable, helper functions covered
         "internal/graphql/resolvers") echo 17 ;;  # Auto-generated code, coverage via service tests
         *) echo "" ;;
     esac
@@ -37,8 +39,6 @@ should_skip() {
     local pkg="$1"
     case "$pkg" in
         "github.com/bbernstein/lacylights-go/internal/graphql/generated") return 0 ;;  # Auto-generated code
-        "github.com/bbernstein/lacylights-go/cmd/server") return 0 ;;  # Main entry point, hard to unit test
-        "github.com/bbernstein/lacylights-go/internal/database") return 0 ;;  # DB connection, tested via integration tests
         "github.com/bbernstein/lacylights-go/internal/services/testutil") return 0 ;;  # Test utilities only
         *) return 1 ;;
     esac
