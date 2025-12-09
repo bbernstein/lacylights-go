@@ -17,7 +17,9 @@ get_threshold() {
     case "$pkg" in
         "pkg/artnet") echo 100 ;;
         "internal/config") echo 100 ;;
+        "internal/database/models") echo 100 ;;  # TableName methods
         "internal/services/pubsub") echo 100 ;;
+        "internal/database/repositories") echo 92 ;;  # Integration tests
         "internal/services/preview") echo 91 ;;  # Integration tests provide good coverage
         "internal/services/fade") echo 91 ;;
         "internal/services/network") echo 64 ;;  # macOS-specific code paths not covered on Linux CI
@@ -34,11 +36,9 @@ get_threshold() {
 should_skip() {
     local pkg="$1"
     case "$pkg" in
-        "github.com/bbernstein/lacylights-go/internal/graphql/generated") return 0 ;;
-        "github.com/bbernstein/lacylights-go/cmd/server") return 0 ;;
-        "github.com/bbernstein/lacylights-go/internal/database") return 0 ;;
-        "github.com/bbernstein/lacylights-go/internal/database/models") return 0 ;;
-        "github.com/bbernstein/lacylights-go/internal/database/repositories") return 0 ;;
+        "github.com/bbernstein/lacylights-go/internal/graphql/generated") return 0 ;;  # Auto-generated code
+        "github.com/bbernstein/lacylights-go/cmd/server") return 0 ;;  # Main entry point, hard to unit test
+        "github.com/bbernstein/lacylights-go/internal/database") return 0 ;;  # DB connection, tested via integration tests
         "github.com/bbernstein/lacylights-go/internal/services/testutil") return 0 ;;  # Test utilities only
         *) return 1 ;;
     esac
