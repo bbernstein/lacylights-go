@@ -488,3 +488,264 @@ func TestGetProjectDescription_NilProject(t *testing.T) {
 		t.Errorf("Expected nil for nil project description, got '%v'", project.GetProjectDescription())
 	}
 }
+
+func TestNewService(t *testing.T) {
+	// Test that NewService creates a service with nil repos
+	service := NewService(nil, nil, nil, nil, nil)
+
+	if service == nil {
+		t.Error("Expected NewService to return non-nil service")
+	}
+}
+
+func TestService_Structure(t *testing.T) {
+	// Verify Service struct has expected fields
+	service := &Service{}
+	_ = service.projectRepo
+	_ = service.fixtureRepo
+	_ = service.sceneRepo
+	_ = service.cueListRepo
+	_ = service.cueRepo
+}
+
+func TestExportMetadata(t *testing.T) {
+	desc := "Test export"
+	metadata := &ExportMetadata{
+		ExportedAt:        "2025-01-01T00:00:00Z",
+		LacyLightsVersion: "1.0.0",
+		Description:       &desc,
+	}
+
+	if metadata.ExportedAt != "2025-01-01T00:00:00Z" {
+		t.Errorf("Expected ExportedAt '2025-01-01T00:00:00Z', got '%s'", metadata.ExportedAt)
+	}
+	if metadata.LacyLightsVersion != "1.0.0" {
+		t.Errorf("Expected LacyLightsVersion '1.0.0', got '%s'", metadata.LacyLightsVersion)
+	}
+	if metadata.Description == nil || *metadata.Description != "Test export" {
+		t.Errorf("Expected Description 'Test export', got '%v'", metadata.Description)
+	}
+}
+
+func TestExportedFixtureMode(t *testing.T) {
+	shortName := "RGB"
+	mode := ExportedFixtureMode{
+		RefID:        "mode-1",
+		Name:         "RGB Mode",
+		ShortName:    &shortName,
+		ChannelCount: 3,
+		ModeChannels: []ExportedModeChannel{
+			{ChannelRefID: "ch-1", Offset: 0},
+			{ChannelRefID: "ch-2", Offset: 1},
+			{ChannelRefID: "ch-3", Offset: 2},
+		},
+	}
+
+	if mode.RefID != "mode-1" {
+		t.Errorf("Expected RefID 'mode-1', got '%s'", mode.RefID)
+	}
+	if mode.Name != "RGB Mode" {
+		t.Errorf("Expected Name 'RGB Mode', got '%s'", mode.Name)
+	}
+	if mode.ShortName == nil || *mode.ShortName != "RGB" {
+		t.Error("Expected ShortName 'RGB'")
+	}
+	if mode.ChannelCount != 3 {
+		t.Errorf("Expected ChannelCount 3, got %d", mode.ChannelCount)
+	}
+	if len(mode.ModeChannels) != 3 {
+		t.Errorf("Expected 3 ModeChannels, got %d", len(mode.ModeChannels))
+	}
+}
+
+func TestExportedInstanceChannel(t *testing.T) {
+	ch := ExportedInstanceChannel{
+		Name:         "Intensity",
+		Type:         "INTENSITY",
+		Offset:       0,
+		MinValue:     0,
+		MaxValue:     255,
+		DefaultValue: 0,
+	}
+
+	if ch.Name != "Intensity" {
+		t.Errorf("Expected Name 'Intensity', got '%s'", ch.Name)
+	}
+	if ch.Type != "INTENSITY" {
+		t.Errorf("Expected Type 'INTENSITY', got '%s'", ch.Type)
+	}
+	if ch.Offset != 0 {
+		t.Errorf("Expected Offset 0, got %d", ch.Offset)
+	}
+	if ch.MinValue != 0 {
+		t.Errorf("Expected MinValue 0, got %d", ch.MinValue)
+	}
+	if ch.MaxValue != 255 {
+		t.Errorf("Expected MaxValue 255, got %d", ch.MaxValue)
+	}
+	if ch.DefaultValue != 0 {
+		t.Errorf("Expected DefaultValue 0, got %d", ch.DefaultValue)
+	}
+}
+
+func TestExportedProject_AllFields(t *testing.T) {
+	desc := "Full test"
+	followTime := 1.5
+	easingType := "LINEAR"
+	notes := "Test notes"
+	sceneOrder := 1
+	channelCount := 4
+	projectOrder := 2
+	shortName := "4CH"
+
+	project := &ExportedProject{
+		Version: "1.0",
+		Metadata: &ExportMetadata{
+			ExportedAt:        "2025-01-01T00:00:00Z",
+			LacyLightsVersion: "1.0.0",
+			Description:       &desc,
+		},
+		Project: &ExportProjectInfo{
+			OriginalID:  "proj-1",
+			Name:        "Full Test",
+			Description: &desc,
+			CreatedAt:   "2025-01-01T00:00:00Z",
+			UpdatedAt:   "2025-01-02T00:00:00Z",
+		},
+		FixtureDefinitions: []ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "TestMfg",
+				Model:        "TestModel",
+				Type:         "LED",
+				IsBuiltIn:    false,
+				Modes: []ExportedFixtureMode{
+					{
+						RefID:        "mode-1",
+						Name:         "4 Channel",
+						ShortName:    &shortName,
+						ChannelCount: 4,
+						ModeChannels: []ExportedModeChannel{
+							{ChannelRefID: "ch-1", Offset: 0},
+						},
+					},
+				},
+				Channels: []ExportedChannelDefinition{
+					{RefID: "ch-1", Name: "Red", Type: "COLOR", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+				},
+			},
+		},
+		FixtureInstances: []ExportedFixtureInstance{
+			{
+				RefID:           "inst-1",
+				OriginalID:      "orig-inst-1",
+				Name:            "LED 1",
+				Description:     &desc,
+				DefinitionRefID: "def-1",
+				ModeName:        &shortName,
+				ChannelCount:    &channelCount,
+				Universe:        1,
+				StartChannel:    1,
+				Tags:            []string{"tag1", "tag2"},
+				ProjectOrder:    &projectOrder,
+				InstanceChannels: []ExportedInstanceChannel{
+					{Name: "Red", Type: "COLOR", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+				},
+				CreatedAt: "2025-01-01T00:00:00Z",
+				UpdatedAt: "2025-01-02T00:00:00Z",
+			},
+		},
+		Scenes: []ExportedScene{
+			{
+				RefID:       "scene-1",
+				OriginalID:  "orig-scene-1",
+				Name:        "Test Scene",
+				Description: &desc,
+				FixtureValues: []ExportedFixtureValue{
+					{FixtureRefID: "inst-1", ChannelValues: []int{255, 0, 0, 0}, SceneOrder: &sceneOrder},
+				},
+				CreatedAt: "2025-01-01T00:00:00Z",
+				UpdatedAt: "2025-01-02T00:00:00Z",
+			},
+		},
+		CueLists: []ExportedCueList{
+			{
+				RefID:       "cl-1",
+				OriginalID:  "orig-cl-1",
+				Name:        "Test Cue List",
+				Description: &desc,
+				Loop:        true,
+				Cues: []ExportedCue{
+					{
+						OriginalID:  "cue-1",
+						Name:        "Cue 1",
+						CueNumber:   1.0,
+						SceneRefID:  "scene-1",
+						FadeInTime:  2.0,
+						FadeOutTime: 1.0,
+						FollowTime:  &followTime,
+						EasingType:  &easingType,
+						Notes:       &notes,
+						CreatedAt:   "2025-01-01T00:00:00Z",
+						UpdatedAt:   "2025-01-02T00:00:00Z",
+					},
+				},
+				CreatedAt: "2025-01-01T00:00:00Z",
+				UpdatedAt: "2025-01-02T00:00:00Z",
+			},
+		},
+	}
+
+	// Test JSON round-trip for all fields
+	jsonStr, err := project.ToJSON()
+	if err != nil {
+		t.Fatalf("ToJSON() error: %v", err)
+	}
+
+	parsed, err := ParseExportedProject(jsonStr)
+	if err != nil {
+		t.Fatalf("ParseExportedProject() error: %v", err)
+	}
+
+	// Verify metadata
+	if parsed.Metadata == nil {
+		t.Fatal("Expected Metadata to be present")
+	}
+	if parsed.Metadata.LacyLightsVersion != "1.0.0" {
+		t.Errorf("Expected LacyLightsVersion '1.0.0', got '%s'", parsed.Metadata.LacyLightsVersion)
+	}
+
+	// Verify fixture definition modes
+	if len(parsed.FixtureDefinitions) != 1 {
+		t.Fatal("Expected 1 fixture definition")
+	}
+	if len(parsed.FixtureDefinitions[0].Modes) != 1 {
+		t.Errorf("Expected 1 mode, got %d", len(parsed.FixtureDefinitions[0].Modes))
+	}
+
+	// Verify fixture instance channels
+	if len(parsed.FixtureInstances) != 1 {
+		t.Fatal("Expected 1 fixture instance")
+	}
+	if len(parsed.FixtureInstances[0].InstanceChannels) != 1 {
+		t.Errorf("Expected 1 instance channel, got %d", len(parsed.FixtureInstances[0].InstanceChannels))
+	}
+	if parsed.FixtureInstances[0].ModeName == nil || *parsed.FixtureInstances[0].ModeName != "4CH" {
+		t.Error("Expected ModeName '4CH'")
+	}
+
+	// Verify cue follow time, easing, notes
+	if len(parsed.CueLists) != 1 || len(parsed.CueLists[0].Cues) != 1 {
+		t.Fatal("Expected 1 cue list with 1 cue")
+	}
+	cue := parsed.CueLists[0].Cues[0]
+	if cue.FollowTime == nil || *cue.FollowTime != 1.5 {
+		t.Error("Expected FollowTime 1.5")
+	}
+	if cue.EasingType == nil || *cue.EasingType != "LINEAR" {
+		t.Error("Expected EasingType 'LINEAR'")
+	}
+	if cue.Notes == nil || *cue.Notes != "Test notes" {
+		t.Error("Expected Notes 'Test notes'")
+	}
+}
