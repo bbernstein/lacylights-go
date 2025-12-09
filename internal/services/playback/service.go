@@ -58,9 +58,10 @@ type Service struct {
 	// Playback states by cue list ID
 	states map[string]*PlaybackState
 
-	// Timers for fade progress tracking and follow times
+	// Timers for fade progress tracking, follow times, and fade completion
 	fadeProgressTickers map[string]*time.Ticker
 	followTimers        map[string]*time.Timer
+	fadeCompleteTimers  map[string]*time.Timer
 
 	// Callback for subscription updates (optional)
 	onUpdate func(status *CueListPlaybackStatus)
@@ -75,6 +76,7 @@ func NewService(db *gorm.DB, dmxService *dmx.Service, fadeEngine *fade.Engine) *
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 }
 
@@ -188,16 +190,25 @@ func (s *Service) StartCue(cueListID string, cueIndex int, cue *CueForPlayback) 
 
 	// Mark fade as complete after fadeInTime (but keep isPlaying true - scene is still active)
 	fadeTime := time.Duration(cue.FadeInTime * float64(time.Second))
-	time.AfterFunc(fadeTime, func() {
+	s.mu.Lock()
+	// Stop any existing fade complete timer for this cue list
+	if existingTimer := s.fadeCompleteTimers[cueListID]; existingTimer != nil {
+		existingTimer.Stop()
+	}
+	fadeCompleteTimer := time.AfterFunc(fadeTime, func() {
 		s.mu.Lock()
 		currentState := s.states[cueListID]
 		if currentState != nil && currentState.CurrentCueIndex != nil && *currentState.CurrentCueIndex == cueIndex {
 			currentState.IsFading = false // Fade complete, but scene still playing
 			currentState.LastUpdated = time.Now()
 		}
+		// Clean up the timer from the map
+		delete(s.fadeCompleteTimers, cueListID)
 		s.mu.Unlock()
 		s.emitUpdate(cueListID)
 	})
+	s.fadeCompleteTimers[cueListID] = fadeCompleteTimer
+	s.mu.Unlock()
 }
 
 // ExecuteCueDmx executes a cue's DMX output.
@@ -361,6 +372,12 @@ func (s *Service) StopCueList(cueListID string) {
 	if timer := s.followTimers[cueListID]; timer != nil {
 		timer.Stop()
 		delete(s.followTimers, cueListID)
+	}
+
+	// Stop fade completion timer
+	if timer := s.fadeCompleteTimers[cueListID]; timer != nil {
+		timer.Stop()
+		delete(s.fadeCompleteTimers, cueListID)
 	}
 
 	// Update state - scene is no longer active on DMX
@@ -759,7 +776,13 @@ func (s *Service) Cleanup() {
 		timer.Stop()
 	}
 
+	// Stop all fade completion timers
+	for _, timer := range s.fadeCompleteTimers {
+		timer.Stop()
+	}
+
 	s.fadeProgressTickers = make(map[string]*time.Ticker)
 	s.followTimers = make(map[string]*time.Timer)
+	s.fadeCompleteTimers = make(map[string]*time.Timer)
 	s.states = make(map[string]*PlaybackState)
 }

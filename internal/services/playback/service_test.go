@@ -117,6 +117,7 @@ func TestGetFormattedStatus_NilState(t *testing.T) {
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 
 	status := service.GetFormattedStatus("nonexistent-cue-list")
@@ -143,6 +144,7 @@ func TestGetPlaybackState_NilState(t *testing.T) {
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 
 	state := service.GetPlaybackState("nonexistent-cue-list")
@@ -156,6 +158,7 @@ func TestSetUpdateCallback(t *testing.T) {
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 
 	callbackCalled := false
@@ -176,6 +179,7 @@ func TestStopCueList(t *testing.T) {
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 
 	// Set up a playing state
@@ -221,6 +225,7 @@ func TestCleanup(t *testing.T) {
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 
 	// Add some test data
@@ -259,6 +264,7 @@ func TestStopAllCueLists(t *testing.T) {
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 
 	// Set up multiple playing states
@@ -299,6 +305,7 @@ func TestIsFadingTransitions(t *testing.T) {
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 
 	cueListID := "test-cue-list"
@@ -343,6 +350,7 @@ func TestIsPlayingStaysAfterFade(t *testing.T) {
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 
 	cueListID := "test-cue-list"
@@ -393,6 +401,7 @@ func TestStopCueListSetsIsPlayingAndIsFadingToFalse(t *testing.T) {
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 
 	cueListID := "test-cue-list"
@@ -431,12 +440,104 @@ func TestStopCueListSetsIsPlayingAndIsFadingToFalse(t *testing.T) {
 	}
 }
 
+// TestStopCueListCleansFadeCompleteTimer tests that StopCueList properly stops the fade completion timer.
+func TestStopCueListCleansFadeCompleteTimer(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	cueListID := "test-cue-list"
+	cueIndex := 0
+	cue := &CueForPlayback{
+		ID:          "cue-1",
+		Name:        "Test Cue",
+		CueNumber:   1.0,
+		FadeInTime:  1.0, // 1 second fade
+		FadeOutTime: 0.5,
+		FollowTime:  nil,
+	}
+
+	// Start the cue - this should create a fade completion timer
+	service.StartCue(cueListID, cueIndex, cue)
+
+	// Verify the fade completion timer was created
+	if _, exists := service.fadeCompleteTimers[cueListID]; !exists {
+		t.Error("Expected fade completion timer to be created")
+	}
+
+	// Stop the cue list before fade completes
+	service.StopCueList(cueListID)
+
+	// Verify the fade completion timer was cleaned up
+	if _, exists := service.fadeCompleteTimers[cueListID]; exists {
+		t.Error("Expected fade completion timer to be removed after StopCueList")
+	}
+
+	// Verify state shows not fading
+	state := service.GetPlaybackState(cueListID)
+	if state.IsFading {
+		t.Error("Expected IsFading to be false after stop")
+	}
+	if state.IsPlaying {
+		t.Error("Expected IsPlaying to be false after stop")
+	}
+}
+
+// TestFadeCompleteTimerDoesNotFireAfterStop tests that stopped timers don't incorrectly modify state.
+func TestFadeCompleteTimerDoesNotFireAfterStop(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	cueListID := "test-cue-list"
+	cueIndex := 0
+	cue := &CueForPlayback{
+		ID:          "cue-1",
+		Name:        "Test Cue",
+		CueNumber:   1.0,
+		FadeInTime:  0.1, // 100ms fade
+		FadeOutTime: 0.05,
+		FollowTime:  nil,
+	}
+
+	// Start a cue
+	service.StartCue(cueListID, cueIndex, cue)
+
+	// Immediately stop it (before fade completes)
+	service.StopCueList(cueListID)
+
+	// Verify IsFading is false after stop
+	state := service.GetPlaybackState(cueListID)
+	if state.IsFading {
+		t.Error("Expected IsFading to be false immediately after stop")
+	}
+
+	// Wait longer than the fade time to ensure the timer doesn't fire and change state
+	time.Sleep(200 * time.Millisecond)
+
+	// IsFading should still be false (the stopped timer shouldn't have changed it)
+	state = service.GetPlaybackState(cueListID)
+	if state.IsFading {
+		t.Error("Expected IsFading to remain false after timer would have fired")
+	}
+	if state.IsPlaying {
+		t.Error("Expected IsPlaying to remain false after timer would have fired")
+	}
+}
+
 // TestGetFormattedStatusIncludesIsFading tests that formatted status includes isFading field.
 func TestGetFormattedStatusIncludesIsFading(t *testing.T) {
 	service := &Service{
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 
 	cueListID := "test-cue-list"
