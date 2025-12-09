@@ -28,7 +28,8 @@ type CueForPlayback struct {
 type PlaybackState struct {
 	CueListID       string
 	CurrentCueIndex *int
-	IsPlaying       bool
+	IsPlaying       bool // True when scene values are active on DMX (stays true after fade until stopped)
+	IsFading        bool // True when a fade transition is in progress
 	CurrentCue      *CueForPlayback
 	FadeProgress    float64
 	StartTime       *time.Time
@@ -39,7 +40,8 @@ type PlaybackState struct {
 type CueListPlaybackStatus struct {
 	CueListID       string
 	CurrentCueIndex *int
-	IsPlaying       bool
+	IsPlaying       bool // True when scene values are active on DMX (stays true after fade until stopped)
+	IsFading        bool // True when a fade transition is in progress
 	CurrentCue      *CueForPlayback
 	FadeProgress    float64
 	LastUpdated     string
@@ -56,9 +58,10 @@ type Service struct {
 	// Playback states by cue list ID
 	states map[string]*PlaybackState
 
-	// Timers for fade progress tracking and follow times
+	// Timers for fade progress tracking, follow times, and fade completion
 	fadeProgressTickers map[string]*time.Ticker
 	followTimers        map[string]*time.Timer
+	fadeCompleteTimers  map[string]*time.Timer
 
 	// Callback for subscription updates (optional)
 	onUpdate func(status *CueListPlaybackStatus)
@@ -73,6 +76,7 @@ func NewService(db *gorm.DB, dmxService *dmx.Service, fadeEngine *fade.Engine) *
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 }
 
@@ -83,24 +87,45 @@ func (s *Service) SetUpdateCallback(callback func(status *CueListPlaybackStatus)
 	s.onUpdate = callback
 }
 
-// GetPlaybackState returns the current playback state for a cue list.
+// GetPlaybackState returns a copy of the current playback state for a cue list.
+// Returns nil if no state exists for the given cue list ID.
 func (s *Service) GetPlaybackState(cueListID string) *PlaybackState {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.states[cueListID]
+	state := s.states[cueListID]
+	if state == nil {
+		return nil
+	}
+	// Return a copy to avoid data races
+	stateCopy := *state
+	if state.CurrentCueIndex != nil {
+		cueIndexCopy := *state.CurrentCueIndex
+		stateCopy.CurrentCueIndex = &cueIndexCopy
+	}
+	if state.CurrentCue != nil {
+		cueCopy := *state.CurrentCue
+		stateCopy.CurrentCue = &cueCopy
+	}
+	if state.StartTime != nil {
+		startTimeCopy := *state.StartTime
+		stateCopy.StartTime = &startTimeCopy
+	}
+	return &stateCopy
 }
 
 // GetFormattedStatus returns the GraphQL-compatible status for a cue list.
 func (s *Service) GetFormattedStatus(cueListID string) *CueListPlaybackStatus {
 	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	state := s.states[cueListID]
-	s.mu.RUnlock()
 
 	if state == nil {
 		return &CueListPlaybackStatus{
 			CueListID:       cueListID,
 			CurrentCueIndex: nil,
 			IsPlaying:       false,
+			IsFading:        false,
 			CurrentCue:      nil,
 			FadeProgress:    0,
 			LastUpdated:     time.Now().Format(time.RFC3339),
@@ -111,6 +136,7 @@ func (s *Service) GetFormattedStatus(cueListID string) *CueListPlaybackStatus {
 		CueListID:       state.CueListID,
 		CurrentCueIndex: state.CurrentCueIndex,
 		IsPlaying:       state.IsPlaying,
+		IsFading:        state.IsFading,
 		CurrentCue:      state.CurrentCue,
 		FadeProgress:    state.FadeProgress,
 		LastUpdated:     state.LastUpdated.Format(time.RFC3339),
@@ -127,7 +153,8 @@ func (s *Service) StartCue(cueListID string, cueIndex int, cue *CueForPlayback) 
 	state := &PlaybackState{
 		CueListID:       cueListID,
 		CurrentCueIndex: &cueIndex,
-		IsPlaying:       true,
+		IsPlaying:       true,  // Scene is now active on DMX
+		IsFading:        true,  // Fade transition is starting
 		CurrentCue: &CueForPlayback{
 			ID:          cue.ID,
 			Name:        cue.Name,
@@ -160,20 +187,29 @@ func (s *Service) StartCue(cueListID string, cueIndex int, cue *CueForPlayback) 
 		})
 		s.followTimers[cueListID] = timer
 		s.mu.Unlock()
-	} else {
-		// Mark as not playing after fade completes
-		fadeTime := time.Duration(cue.FadeInTime * float64(time.Second))
-		time.AfterFunc(fadeTime, func() {
-			s.mu.Lock()
-			currentState := s.states[cueListID]
-			if currentState != nil && currentState.CurrentCueIndex != nil && *currentState.CurrentCueIndex == cueIndex {
-				currentState.IsPlaying = false
-				currentState.LastUpdated = time.Now()
-			}
-			s.mu.Unlock()
-			s.emitUpdate(cueListID)
-		})
 	}
+
+	// Mark fade as complete after fadeInTime (but keep isPlaying true - scene is still active)
+	fadeTime := time.Duration(cue.FadeInTime * float64(time.Second))
+	s.mu.Lock()
+	// Stop any existing fade complete timer for this cue list
+	if existingTimer := s.fadeCompleteTimers[cueListID]; existingTimer != nil {
+		existingTimer.Stop()
+	}
+	fadeCompleteTimer := time.AfterFunc(fadeTime, func() {
+		s.mu.Lock()
+		currentState := s.states[cueListID]
+		if currentState != nil && currentState.CurrentCueIndex != nil && *currentState.CurrentCueIndex == cueIndex {
+			currentState.IsFading = false // Fade complete, but scene still playing
+			currentState.LastUpdated = time.Now()
+		}
+		// Clean up the timer from the map
+		delete(s.fadeCompleteTimers, cueListID)
+		s.mu.Unlock()
+		s.emitUpdate(cueListID)
+	})
+	s.fadeCompleteTimers[cueListID] = fadeCompleteTimer
+	s.mu.Unlock()
 }
 
 // ExecuteCueDmx executes a cue's DMX output.
@@ -339,10 +375,17 @@ func (s *Service) StopCueList(cueListID string) {
 		delete(s.followTimers, cueListID)
 	}
 
-	// Update state (do NOT cancel the fade, let the scene hold)
+	// Stop fade completion timer
+	if timer := s.fadeCompleteTimers[cueListID]; timer != nil {
+		timer.Stop()
+		delete(s.fadeCompleteTimers, cueListID)
+	}
+
+	// Update state - scene is no longer active on DMX
 	state := s.states[cueListID]
 	if state != nil {
-		state.IsPlaying = false
+		state.IsPlaying = false  // Scene no longer active on DMX
+		state.IsFading = false   // No fade in progress
 		state.FadeProgress = 0
 		state.LastUpdated = time.Now()
 	}
@@ -734,7 +777,13 @@ func (s *Service) Cleanup() {
 		timer.Stop()
 	}
 
+	// Stop all fade completion timers
+	for _, timer := range s.fadeCompleteTimers {
+		timer.Stop()
+	}
+
 	s.fadeProgressTickers = make(map[string]*time.Ticker)
 	s.followTimers = make(map[string]*time.Timer)
+	s.fadeCompleteTimers = make(map[string]*time.Timer)
 	s.states = make(map[string]*PlaybackState)
 }

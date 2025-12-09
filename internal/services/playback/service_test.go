@@ -43,6 +43,7 @@ func TestPlaybackState(t *testing.T) {
 		CueListID:       "cue-list-1",
 		CurrentCueIndex: &cueIndex,
 		IsPlaying:       true,
+		IsFading:        true,
 		CurrentCue: &CueForPlayback{
 			ID:          "cue-1",
 			Name:        "Opening",
@@ -61,6 +62,9 @@ func TestPlaybackState(t *testing.T) {
 	if !state.IsPlaying {
 		t.Error("Expected IsPlaying to be true")
 	}
+	if !state.IsFading {
+		t.Error("Expected IsFading to be true")
+	}
 	if state.CurrentCueIndex == nil || *state.CurrentCueIndex != 0 {
 		t.Errorf("Expected CurrentCueIndex 0, got %v", state.CurrentCueIndex)
 	}
@@ -75,6 +79,7 @@ func TestCueListPlaybackStatus(t *testing.T) {
 		CueListID:       "cue-list-1",
 		CurrentCueIndex: &cueIndex,
 		IsPlaying:       true,
+		IsFading:        true,
 		CurrentCue: &CueForPlayback{
 			ID:          "cue-2",
 			Name:        "Scene Two",
@@ -91,6 +96,9 @@ func TestCueListPlaybackStatus(t *testing.T) {
 	}
 	if !status.IsPlaying {
 		t.Error("Expected IsPlaying to be true")
+	}
+	if !status.IsFading {
+		t.Error("Expected IsFading to be true")
 	}
 	if status.CurrentCueIndex == nil || *status.CurrentCueIndex != 1 {
 		t.Errorf("Expected CurrentCueIndex 1, got %v", status.CurrentCueIndex)
@@ -109,6 +117,7 @@ func TestGetFormattedStatus_NilState(t *testing.T) {
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 
 	status := service.GetFormattedStatus("nonexistent-cue-list")
@@ -118,6 +127,9 @@ func TestGetFormattedStatus_NilState(t *testing.T) {
 	}
 	if status.IsPlaying {
 		t.Error("Expected IsPlaying to be false for nonexistent cue list")
+	}
+	if status.IsFading {
+		t.Error("Expected IsFading to be false for nonexistent cue list")
 	}
 	if status.CurrentCueIndex != nil {
 		t.Error("Expected CurrentCueIndex to be nil")
@@ -132,6 +144,7 @@ func TestGetPlaybackState_NilState(t *testing.T) {
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 
 	state := service.GetPlaybackState("nonexistent-cue-list")
@@ -145,6 +158,7 @@ func TestSetUpdateCallback(t *testing.T) {
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 
 	callbackCalled := false
@@ -165,6 +179,7 @@ func TestStopCueList(t *testing.T) {
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 
 	// Set up a playing state
@@ -210,6 +225,7 @@ func TestCleanup(t *testing.T) {
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 
 	// Add some test data
@@ -248,6 +264,7 @@ func TestStopAllCueLists(t *testing.T) {
 		states:              make(map[string]*PlaybackState),
 		fadeProgressTickers: make(map[string]*time.Ticker),
 		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
 	}
 
 	// Set up multiple playing states
@@ -279,5 +296,342 @@ func TestStopAllCueLists(t *testing.T) {
 		if state.FadeProgress != 0 {
 			t.Errorf("Expected %s FadeProgress 0, got %f", id, state.FadeProgress)
 		}
+	}
+}
+
+// TestIsFadingTransitions tests the isFading state transitions during cue playback.
+func TestIsFadingTransitions(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	cueListID := "test-cue-list"
+	cueIndex := 0
+	cue := &CueForPlayback{
+		ID:          "cue-1",
+		Name:        "Test Cue",
+		CueNumber:   1.0,
+		FadeInTime:  0.2, // 200ms for quick test
+		FadeOutTime: 0.1,
+		FollowTime:  nil,
+	}
+
+	// Start the cue
+	service.StartCue(cueListID, cueIndex, cue)
+
+	// Immediately check: both should be true at start
+	state := service.GetPlaybackState(cueListID)
+	if !state.IsPlaying {
+		t.Error("Expected IsPlaying to be true at start")
+	}
+	if !state.IsFading {
+		t.Error("Expected IsFading to be true at start")
+	}
+
+	// Wait for fade to complete (200ms + buffer)
+	time.Sleep(300 * time.Millisecond)
+
+	// After fade completes: IsPlaying should still be true, IsFading should be false
+	state = service.GetPlaybackState(cueListID)
+	if !state.IsPlaying {
+		t.Error("Expected IsPlaying to be true after fade completes (scene still active)")
+	}
+	if state.IsFading {
+		t.Error("Expected IsFading to be false after fade completes")
+	}
+}
+
+// TestIsPlayingStaysAfterFade tests that isPlaying stays true after fade completes.
+func TestIsPlayingStaysAfterFade(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	cueListID := "test-cue-list"
+	cueIndex := 0
+	cue := &CueForPlayback{
+		ID:          "cue-1",
+		Name:        "Test Cue",
+		CueNumber:   1.0,
+		FadeInTime:  0.15, // 150ms
+		FadeOutTime: 0.1,
+		FollowTime:  nil,
+	}
+
+	// Start the cue
+	service.StartCue(cueListID, cueIndex, cue)
+
+	// Check state during fade (within first 150ms)
+	time.Sleep(50 * time.Millisecond)
+	state := service.GetPlaybackState(cueListID)
+	if !state.IsPlaying {
+		t.Error("Expected IsPlaying true during fade")
+	}
+	if !state.IsFading {
+		t.Error("Expected IsFading true during fade")
+	}
+
+	// Wait for fade to complete
+	time.Sleep(200 * time.Millisecond)
+
+	// Check state after fade: scene should still be active (IsPlaying=true) but not fading
+	state = service.GetPlaybackState(cueListID)
+	if !state.IsPlaying {
+		t.Error("Expected IsPlaying to remain true after fade completes")
+	}
+	if state.IsFading {
+		t.Error("Expected IsFading to be false after fade completes")
+	}
+
+	// Verify FadeProgress is at 100%
+	if state.FadeProgress != 100.0 {
+		t.Errorf("Expected FadeProgress to be 100.0, got %f", state.FadeProgress)
+	}
+}
+
+// TestStopCueListSetsIsPlayingAndIsFadingToFalse tests that StopCueList sets both flags to false.
+func TestStopCueListSetsIsPlayingAndIsFadingToFalse(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	cueListID := "test-cue-list"
+	cueIndex := 0
+
+	// Set up a playing and fading state
+	service.states[cueListID] = &PlaybackState{
+		CueListID:       cueListID,
+		CurrentCueIndex: &cueIndex,
+		IsPlaying:       true,
+		IsFading:        true,
+		FadeProgress:    50.0,
+		LastUpdated:     time.Now(),
+	}
+
+	// Create a ticker and timer to test cleanup
+	ticker := time.NewTicker(100 * time.Millisecond)
+	service.fadeProgressTickers[cueListID] = ticker
+
+	timer := time.NewTimer(10 * time.Second)
+	service.followTimers[cueListID] = timer
+
+	// Stop the cue list
+	service.StopCueList(cueListID)
+
+	// Verify both IsPlaying and IsFading are false
+	state := service.GetPlaybackState(cueListID)
+	if state.IsPlaying {
+		t.Error("Expected IsPlaying to be false after stop")
+	}
+	if state.IsFading {
+		t.Error("Expected IsFading to be false after stop")
+	}
+	if state.FadeProgress != 0 {
+		t.Errorf("Expected FadeProgress 0 after stop, got %f", state.FadeProgress)
+	}
+}
+
+// TestStopCueListCleansFadeCompleteTimer tests that StopCueList properly stops the fade completion timer.
+func TestStopCueListCleansFadeCompleteTimer(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	cueListID := "test-cue-list"
+	cueIndex := 0
+	cue := &CueForPlayback{
+		ID:          "cue-1",
+		Name:        "Test Cue",
+		CueNumber:   1.0,
+		FadeInTime:  1.0, // 1 second fade
+		FadeOutTime: 0.5,
+		FollowTime:  nil,
+	}
+
+	// Start the cue - this should create a fade completion timer
+	service.StartCue(cueListID, cueIndex, cue)
+
+	// Verify the fade completion timer was created
+	if _, exists := service.fadeCompleteTimers[cueListID]; !exists {
+		t.Error("Expected fade completion timer to be created")
+	}
+
+	// Stop the cue list before fade completes
+	service.StopCueList(cueListID)
+
+	// Verify the fade completion timer was cleaned up
+	if _, exists := service.fadeCompleteTimers[cueListID]; exists {
+		t.Error("Expected fade completion timer to be removed after StopCueList")
+	}
+
+	// Verify state shows not fading
+	state := service.GetPlaybackState(cueListID)
+	if state.IsFading {
+		t.Error("Expected IsFading to be false after stop")
+	}
+	if state.IsPlaying {
+		t.Error("Expected IsPlaying to be false after stop")
+	}
+}
+
+// TestFadeCompleteTimerDoesNotFireAfterStop tests that stopped timers don't incorrectly modify state.
+func TestFadeCompleteTimerDoesNotFireAfterStop(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	cueListID := "test-cue-list"
+	cueIndex := 0
+	cue := &CueForPlayback{
+		ID:          "cue-1",
+		Name:        "Test Cue",
+		CueNumber:   1.0,
+		FadeInTime:  0.1, // 100ms fade
+		FadeOutTime: 0.05,
+		FollowTime:  nil,
+	}
+
+	// Start a cue
+	service.StartCue(cueListID, cueIndex, cue)
+
+	// Immediately stop it (before fade completes)
+	service.StopCueList(cueListID)
+
+	// Verify IsFading is false after stop
+	state := service.GetPlaybackState(cueListID)
+	if state.IsFading {
+		t.Error("Expected IsFading to be false immediately after stop")
+	}
+
+	// Wait longer than the fade time to ensure the timer doesn't fire and change state
+	time.Sleep(200 * time.Millisecond)
+
+	// IsFading should still be false (the stopped timer shouldn't have changed it)
+	state = service.GetPlaybackState(cueListID)
+	if state.IsFading {
+		t.Error("Expected IsFading to remain false after timer would have fired")
+	}
+	if state.IsPlaying {
+		t.Error("Expected IsPlaying to remain false after timer would have fired")
+	}
+}
+
+// TestGetFormattedStatusIncludesIsFading tests that formatted status includes isFading field.
+func TestGetFormattedStatusIncludesIsFading(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	cueListID := "test-cue-list"
+	cueIndex := 0
+
+	// Set up a state with IsFading true
+	service.states[cueListID] = &PlaybackState{
+		CueListID:       cueListID,
+		CurrentCueIndex: &cueIndex,
+		IsPlaying:       true,
+		IsFading:        true,
+		FadeProgress:    25.0,
+		LastUpdated:     time.Now(),
+	}
+
+	// Get formatted status
+	status := service.GetFormattedStatus(cueListID)
+
+	// Verify IsFading is included
+	if !status.IsFading {
+		t.Error("Expected IsFading to be true in formatted status")
+	}
+	if !status.IsPlaying {
+		t.Error("Expected IsPlaying to be true in formatted status")
+	}
+
+	// Now set IsFading to false and verify
+	service.states[cueListID].IsFading = false
+
+	status = service.GetFormattedStatus(cueListID)
+	if status.IsFading {
+		t.Error("Expected IsFading to be false in formatted status")
+	}
+	if !status.IsPlaying {
+		t.Error("Expected IsPlaying to still be true in formatted status")
+	}
+}
+
+// TestPlaybackStateStructHasIsFading verifies PlaybackState has IsFading field.
+func TestPlaybackStateStructHasIsFading(t *testing.T) {
+	now := time.Now()
+	cueIndex := 0
+	state := &PlaybackState{
+		CueListID:       "cue-list-1",
+		CurrentCueIndex: &cueIndex,
+		IsPlaying:       true,
+		IsFading:        true,
+		CurrentCue: &CueForPlayback{
+			ID:          "cue-1",
+			Name:        "Test",
+			CueNumber:   1.0,
+			FadeInTime:  3.0,
+			FadeOutTime: 2.0,
+		},
+		FadeProgress: 50.0,
+		StartTime:    &now,
+		LastUpdated:  now,
+	}
+
+	if !state.IsFading {
+		t.Error("Expected IsFading to be true")
+	}
+
+	state.IsFading = false
+	if state.IsFading {
+		t.Error("Expected IsFading to be false after setting to false")
+	}
+}
+
+// TestCueListPlaybackStatusStructHasIsFading verifies CueListPlaybackStatus has IsFading field.
+func TestCueListPlaybackStatusStructHasIsFading(t *testing.T) {
+	cueIndex := 1
+	status := &CueListPlaybackStatus{
+		CueListID:       "cue-list-1",
+		CurrentCueIndex: &cueIndex,
+		IsPlaying:       true,
+		IsFading:        true,
+		CurrentCue: &CueForPlayback{
+			ID:          "cue-2",
+			Name:        "Scene Two",
+			CueNumber:   2.0,
+			FadeInTime:  2.0,
+			FadeOutTime: 1.0,
+		},
+		FadeProgress: 75.5,
+		LastUpdated:  "2025-11-26T10:00:00Z",
+	}
+
+	if !status.IsFading {
+		t.Error("Expected IsFading to be true")
+	}
+
+	status.IsFading = false
+	if status.IsFading {
+		t.Error("Expected IsFading to be false after setting to false")
 	}
 }

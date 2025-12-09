@@ -16,12 +16,14 @@ coverage:
         # New code should have at least 50% coverage
         target: 50%
 
-# Exclude auto-generated code and non-testable packages
+# Exclude auto-generated code and packages requiring integration tests
 ignore:
   - "internal/graphql/generated/**/*"
   - "cmd/server/main.go"
   - "**/*_gen.go"
   - "**/mocks/**"
+  # Database layer requires integration tests with real database
+  - "internal/database/**/*"
 
 # Comment configuration
 comment:

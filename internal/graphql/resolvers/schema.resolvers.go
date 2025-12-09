@@ -3668,12 +3668,33 @@ func (r *queryResolver) CueList(ctx context.Context, id string, page *int, perPa
 
 // CueListPlaybackStatus is the resolver for the cueListPlaybackStatus field.
 func (r *queryResolver) CueListPlaybackStatus(ctx context.Context, cueListID string) (*generated.CueListPlaybackStatus, error) {
-	// TODO: Implement proper playback tracking when PlaybackService is implemented
-	// For now, return a stopped status
-	return &generated.CueListPlaybackStatus{
-		CueListID: cueListID,
-		IsPlaying: false,
-	}, nil
+	// Get the current playback status from the PlaybackService
+	status := r.PlaybackService.GetFormattedStatus(cueListID)
+
+	// Convert playback service status to generated GraphQL type
+	fadeProgress := status.FadeProgress
+	gqlStatus := &generated.CueListPlaybackStatus{
+		CueListID:       status.CueListID,
+		CurrentCueIndex: status.CurrentCueIndex,
+		IsPlaying:       status.IsPlaying,
+		IsFading:        status.IsFading,
+		FadeProgress:    &fadeProgress,
+		LastUpdated:     status.LastUpdated,
+	}
+
+	// Convert current cue if present
+	if status.CurrentCue != nil {
+		gqlStatus.CurrentCue = &models.Cue{
+			ID:          status.CurrentCue.ID,
+			Name:        status.CurrentCue.Name,
+			CueNumber:   status.CurrentCue.CueNumber,
+			FadeInTime:  status.CurrentCue.FadeInTime,
+			FadeOutTime: status.CurrentCue.FadeOutTime,
+			FollowTime:  status.CurrentCue.FollowTime,
+		}
+	}
+
+	return gqlStatus, nil
 }
 
 // Cue is the resolver for the cue field.

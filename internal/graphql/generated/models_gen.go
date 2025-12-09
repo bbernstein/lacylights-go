@@ -199,14 +199,17 @@ type CreateSceneInput struct {
 }
 
 type CueListPlaybackStatus struct {
-	CueListID       string      `json:"cueListId"`
-	CurrentCueIndex *int        `json:"currentCueIndex,omitempty"`
-	IsPlaying       bool        `json:"isPlaying"`
-	CurrentCue      *models.Cue `json:"currentCue,omitempty"`
-	NextCue         *models.Cue `json:"nextCue,omitempty"`
-	PreviousCue     *models.Cue `json:"previousCue,omitempty"`
-	FadeProgress    *float64    `json:"fadeProgress,omitempty"`
-	LastUpdated     string      `json:"lastUpdated"`
+	CueListID       string `json:"cueListId"`
+	CurrentCueIndex *int   `json:"currentCueIndex,omitempty"`
+	// True when a scene's values are currently active on DMX fixtures (stays true after fade completes until stopped)
+	IsPlaying bool `json:"isPlaying"`
+	// True when a scene is currently transitioning (fade-in, fade-out, or crossfade in progress)
+	IsFading     bool        `json:"isFading"`
+	CurrentCue   *models.Cue `json:"currentCue,omitempty"`
+	NextCue      *models.Cue `json:"nextCue,omitempty"`
+	PreviousCue  *models.Cue `json:"previousCue,omitempty"`
+	FadeProgress *float64    `json:"fadeProgress,omitempty"`
+	LastUpdated  string      `json:"lastUpdated"`
 }
 
 type CueListSummary struct {

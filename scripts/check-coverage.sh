@@ -9,31 +9,40 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Coverage thresholds by package (percentage)
-# Packages with 100% should maintain 100%
-# Other testable packages start at current coverage as floor
-declare -A THRESHOLDS=(
-    ["github.com/bbernstein/lacylights-go/pkg/artnet"]=100
-    ["github.com/bbernstein/lacylights-go/internal/config"]=100
-    ["github.com/bbernstein/lacylights-go/internal/services/pubsub"]=100
-    ["github.com/bbernstein/lacylights-go/internal/services/fade"]=85
-    ["github.com/bbernstein/lacylights-go/internal/services/dmx"]=80
-    ["github.com/bbernstein/lacylights-go/internal/services/network"]=60
-    ["github.com/bbernstein/lacylights-go/internal/services/preview"]=35
-    ["github.com/bbernstein/lacylights-go/internal/services/playback"]=15
-    ["github.com/bbernstein/lacylights-go/internal/services/export"]=8
-    ["github.com/bbernstein/lacylights-go/internal/graphql/resolvers"]=15
-)
+# Get threshold for a package
+# These thresholds represent high-water marks - coverage should not drop below these values
+# Update thresholds when coverage improves to prevent regression
+get_threshold() {
+    local pkg="$1"
+    case "$pkg" in
+        "pkg/artnet") echo 100 ;;
+        "internal/config") echo 100 ;;
+        "internal/database/models") echo 100 ;;  # TableName methods
+        "internal/services/pubsub") echo 100 ;;
+        "internal/database/repositories") echo 92 ;;  # Integration tests
+        "internal/services/preview") echo 91 ;;  # Integration tests provide good coverage
+        "internal/services/fade") echo 91 ;;
+        "internal/database") echo 86 ;;  # Connect/Close functions
+        "internal/services/network") echo 64 ;;  # macOS-specific code paths not covered on Linux CI
+        "internal/services/export") echo 87 ;;  # Integration tests provide good coverage
+        "internal/services/dmx") echo 85 ;;
+        "internal/services/playback") echo 82 ;;  # Integration tests provide good coverage
+        "internal/services/import") echo 78 ;;  # Integration tests provide good coverage
+        "cmd/server") echo 18 ;;  # main() is untestable, helper functions covered
+        "internal/graphql/resolvers") echo 17 ;;  # Auto-generated code, coverage via service tests
+        *) echo "" ;;
+    esac
+}
 
-# Packages to skip coverage checks (auto-generated, main, etc.)
-SKIP_PACKAGES=(
-    "github.com/bbernstein/lacylights-go/internal/graphql/generated"
-    "github.com/bbernstein/lacylights-go/cmd/server"
-    "github.com/bbernstein/lacylights-go/internal/database"
-    "github.com/bbernstein/lacylights-go/internal/database/models"
-    "github.com/bbernstein/lacylights-go/internal/database/repositories"
-    "github.com/bbernstein/lacylights-go/internal/services/import"
-)
+# Check if package should be skipped
+should_skip() {
+    local pkg="$1"
+    case "$pkg" in
+        "github.com/bbernstein/lacylights-go/internal/graphql/generated") return 0 ;;  # Auto-generated code
+        "github.com/bbernstein/lacylights-go/internal/services/testutil") return 0 ;;  # Test utilities only
+        *) return 1 ;;
+    esac
+}
 
 echo "Running tests with coverage..."
 echo ""
@@ -62,7 +71,6 @@ PASSED=0
 # Process each line from test output
 while IFS= read -r line; do
     # Match lines like: ok  	github.com/bbernstein/lacylights-go/internal/config	0.016s	coverage: 100.0% of statements
-    # Also match lines without "ok" prefix for packages with 0% coverage
     if [[ $line =~ (github\.com/bbernstein/lacylights-go/[^[:space:]]+) ]]; then
         pkg="${BASH_REMATCH[1]}"
 
@@ -77,28 +85,21 @@ while IFS= read -r line; do
         fi
 
         # Check if package should be skipped
-        skip=false
-        for skip_pkg in "${SKIP_PACKAGES[@]}"; do
-            if [[ "$pkg" == "$skip_pkg" ]]; then
-                skip=true
-                break
-            fi
-        done
-
-        if [[ "$skip" == "true" ]]; then
+        if should_skip "$pkg"; then
             echo -e "${YELLOW}SKIP${NC} $pkg (excluded from coverage checks)"
             continue
         fi
 
-        # Get threshold for this package
-        threshold="${THRESHOLDS[$pkg]}"
+        # Get threshold for this package (strip the prefix for lookup)
+        short_pkg="${pkg#github.com/bbernstein/lacylights-go/}"
+        threshold=$(get_threshold "$short_pkg")
 
         if [[ -z "$threshold" ]]; then
             echo -e "${YELLOW}WARN${NC} $pkg: ${coverage}% (no threshold defined)"
             continue
         fi
 
-        # Compare coverage to threshold (using awk for floating point - universally available)
+        # Compare coverage to threshold (using awk for floating point)
         if awk "BEGIN {exit !($coverage >= $threshold)}"; then
             echo -e "${GREEN}PASS${NC} $pkg: ${coverage}% >= ${threshold}%"
             PASSED=$((PASSED + 1))

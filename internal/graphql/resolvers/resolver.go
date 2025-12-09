@@ -83,6 +83,7 @@ func (r *Resolver) wirePubSub() {
 			CueListID:       status.CueListID,
 			CurrentCueIndex: status.CurrentCueIndex,
 			IsPlaying:       status.IsPlaying,
+			IsFading:        status.IsFading,
 			FadeProgress:    &fadeProgress,
 			LastUpdated:     status.LastUpdated,
 		}
