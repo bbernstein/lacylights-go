@@ -2,6 +2,7 @@ package playback
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -794,10 +795,13 @@ func TestUpdateCallback_Integration(t *testing.T) {
 	_, scene := createTestFixtureWithScene(t, testDB, project)
 	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene}, false)
 
-	// Set up callback
+	// Set up callback with thread-safe access
+	var mu sync.Mutex
 	callbackCount := 0
 	service.SetUpdateCallback(func(status *CueListPlaybackStatus) {
+		mu.Lock()
 		callbackCount++
+		mu.Unlock()
 	})
 
 	// Start cue list
@@ -809,7 +813,11 @@ func TestUpdateCallback_Integration(t *testing.T) {
 	// Wait for callbacks
 	time.Sleep(150 * time.Millisecond)
 
-	if callbackCount == 0 {
+	mu.Lock()
+	count := callbackCount
+	mu.Unlock()
+
+	if count == 0 {
 		t.Error("Expected callbacks to be triggered")
 	}
 }

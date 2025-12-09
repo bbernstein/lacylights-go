@@ -116,8 +116,9 @@ func (s *Service) GetPlaybackState(cueListID string) *PlaybackState {
 // GetFormattedStatus returns the GraphQL-compatible status for a cue list.
 func (s *Service) GetFormattedStatus(cueListID string) *CueListPlaybackStatus {
 	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	state := s.states[cueListID]
-	s.mu.RUnlock()
 
 	if state == nil {
 		return &CueListPlaybackStatus{
