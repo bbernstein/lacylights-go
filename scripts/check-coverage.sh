@@ -18,14 +18,14 @@ get_threshold() {
         "pkg/artnet") echo 100 ;;
         "internal/config") echo 100 ;;
         "internal/services/pubsub") echo 100 ;;
+        "internal/services/preview") echo 91 ;;  # Integration tests provide good coverage
         "internal/services/fade") echo 91 ;;
+        "internal/services/network") echo 88 ;;  # Some tests require actual network, coverage varies by environment
         "internal/services/export") echo 87 ;;  # Integration tests provide good coverage
         "internal/services/dmx") echo 85 ;;
+        "internal/services/playback") echo 82 ;;  # Integration tests provide good coverage
         "internal/services/import") echo 78 ;;  # Integration tests provide good coverage
-        "internal/services/network") echo 64 ;;  # Some tests require actual network, coverage varies by environment
-        "internal/services/preview") echo 40 ;;
-        "internal/services/playback") echo 37 ;;
-        "internal/graphql/resolvers") echo 17 ;;
+        "internal/graphql/resolvers") echo 17 ;;  # Auto-generated code, coverage via service tests
         *) echo "" ;;
     esac
 }
