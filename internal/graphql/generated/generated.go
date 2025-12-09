@@ -137,6 +137,7 @@ type ComplexityRoot struct {
 		CurrentCue      func(childComplexity int) int
 		CurrentCueIndex func(childComplexity int) int
 		FadeProgress    func(childComplexity int) int
+		IsFading        func(childComplexity int) int
 		IsPlaying       func(childComplexity int) int
 		LastUpdated     func(childComplexity int) int
 		NextCue         func(childComplexity int) int
@@ -1253,6 +1254,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.CueListPlaybackStatus.FadeProgress(childComplexity), true
+	case "CueListPlaybackStatus.isFading":
+		if e.complexity.CueListPlaybackStatus.IsFading == nil {
+			break
+		}
+
+		return e.complexity.CueListPlaybackStatus.IsFading(childComplexity), true
 	case "CueListPlaybackStatus.isPlaying":
 		if e.complexity.CueListPlaybackStatus.IsPlaying == nil {
 			break
@@ -4729,7 +4736,10 @@ type Cue {
 type CueListPlaybackStatus {
   cueListId: ID!
   currentCueIndex: Int
+  "True when a scene's values are currently active on DMX fixtures (stays true after fade completes until stopped)"
   isPlaying: Boolean!
+  "True when a scene is currently transitioning (fade-in, fade-out, or crossfade in progress)"
+  isFading: Boolean!
   currentCue: Cue
   nextCue: Cue
   previousCue: Cue
@@ -8961,6 +8971,35 @@ func (ec *executionContext) _CueListPlaybackStatus_isPlaying(ctx context.Context
 }
 
 func (ec *executionContext) fieldContext_CueListPlaybackStatus_isPlaying(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CueListPlaybackStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CueListPlaybackStatus_isFading(ctx context.Context, field graphql.CollectedField, obj *CueListPlaybackStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CueListPlaybackStatus_isFading,
+		func(ctx context.Context) (any, error) {
+			return obj.IsFading, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CueListPlaybackStatus_isFading(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "CueListPlaybackStatus",
 		Field:      field,
@@ -19925,6 +19964,8 @@ func (ec *executionContext) fieldContext_Query_cueListPlaybackStatus(ctx context
 				return ec.fieldContext_CueListPlaybackStatus_currentCueIndex(ctx, field)
 			case "isPlaying":
 				return ec.fieldContext_CueListPlaybackStatus_isPlaying(ctx, field)
+			case "isFading":
+				return ec.fieldContext_CueListPlaybackStatus_isFading(ctx, field)
 			case "currentCue":
 				return ec.fieldContext_CueListPlaybackStatus_currentCue(ctx, field)
 			case "nextCue":
@@ -23456,6 +23497,8 @@ func (ec *executionContext) fieldContext_Subscription_cueListPlaybackUpdated(ctx
 				return ec.fieldContext_CueListPlaybackStatus_currentCueIndex(ctx, field)
 			case "isPlaying":
 				return ec.fieldContext_CueListPlaybackStatus_isPlaying(ctx, field)
+			case "isFading":
+				return ec.fieldContext_CueListPlaybackStatus_isFading(ctx, field)
 			case "currentCue":
 				return ec.fieldContext_CueListPlaybackStatus_currentCue(ctx, field)
 			case "nextCue":
@@ -29385,6 +29428,11 @@ func (ec *executionContext) _CueListPlaybackStatus(ctx context.Context, sel ast.
 			out.Values[i] = ec._CueListPlaybackStatus_currentCueIndex(ctx, field, obj)
 		case "isPlaying":
 			out.Values[i] = ec._CueListPlaybackStatus_isPlaying(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isFading":
+			out.Values[i] = ec._CueListPlaybackStatus_isFading(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

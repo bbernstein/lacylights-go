@@ -28,7 +28,8 @@ type CueForPlayback struct {
 type PlaybackState struct {
 	CueListID       string
 	CurrentCueIndex *int
-	IsPlaying       bool
+	IsPlaying       bool // True when scene values are active on DMX (stays true after fade until stopped)
+	IsFading        bool // True when a fade transition is in progress
 	CurrentCue      *CueForPlayback
 	FadeProgress    float64
 	StartTime       *time.Time
@@ -39,7 +40,8 @@ type PlaybackState struct {
 type CueListPlaybackStatus struct {
 	CueListID       string
 	CurrentCueIndex *int
-	IsPlaying       bool
+	IsPlaying       bool // True when scene values are active on DMX (stays true after fade until stopped)
+	IsFading        bool // True when a fade transition is in progress
 	CurrentCue      *CueForPlayback
 	FadeProgress    float64
 	LastUpdated     string
@@ -101,6 +103,7 @@ func (s *Service) GetFormattedStatus(cueListID string) *CueListPlaybackStatus {
 			CueListID:       cueListID,
 			CurrentCueIndex: nil,
 			IsPlaying:       false,
+			IsFading:        false,
 			CurrentCue:      nil,
 			FadeProgress:    0,
 			LastUpdated:     time.Now().Format(time.RFC3339),
@@ -111,6 +114,7 @@ func (s *Service) GetFormattedStatus(cueListID string) *CueListPlaybackStatus {
 		CueListID:       state.CueListID,
 		CurrentCueIndex: state.CurrentCueIndex,
 		IsPlaying:       state.IsPlaying,
+		IsFading:        state.IsFading,
 		CurrentCue:      state.CurrentCue,
 		FadeProgress:    state.FadeProgress,
 		LastUpdated:     state.LastUpdated.Format(time.RFC3339),
@@ -127,7 +131,8 @@ func (s *Service) StartCue(cueListID string, cueIndex int, cue *CueForPlayback) 
 	state := &PlaybackState{
 		CueListID:       cueListID,
 		CurrentCueIndex: &cueIndex,
-		IsPlaying:       true,
+		IsPlaying:       true,  // Scene is now active on DMX
+		IsFading:        true,  // Fade transition is starting
 		CurrentCue: &CueForPlayback{
 			ID:          cue.ID,
 			Name:        cue.Name,
@@ -160,20 +165,20 @@ func (s *Service) StartCue(cueListID string, cueIndex int, cue *CueForPlayback) 
 		})
 		s.followTimers[cueListID] = timer
 		s.mu.Unlock()
-	} else {
-		// Mark as not playing after fade completes
-		fadeTime := time.Duration(cue.FadeInTime * float64(time.Second))
-		time.AfterFunc(fadeTime, func() {
-			s.mu.Lock()
-			currentState := s.states[cueListID]
-			if currentState != nil && currentState.CurrentCueIndex != nil && *currentState.CurrentCueIndex == cueIndex {
-				currentState.IsPlaying = false
-				currentState.LastUpdated = time.Now()
-			}
-			s.mu.Unlock()
-			s.emitUpdate(cueListID)
-		})
 	}
+
+	// Mark fade as complete after fadeInTime (but keep isPlaying true - scene is still active)
+	fadeTime := time.Duration(cue.FadeInTime * float64(time.Second))
+	time.AfterFunc(fadeTime, func() {
+		s.mu.Lock()
+		currentState := s.states[cueListID]
+		if currentState != nil && currentState.CurrentCueIndex != nil && *currentState.CurrentCueIndex == cueIndex {
+			currentState.IsFading = false // Fade complete, but scene still playing
+			currentState.LastUpdated = time.Now()
+		}
+		s.mu.Unlock()
+		s.emitUpdate(cueListID)
+	})
 }
 
 // ExecuteCueDmx executes a cue's DMX output.
@@ -339,10 +344,11 @@ func (s *Service) StopCueList(cueListID string) {
 		delete(s.followTimers, cueListID)
 	}
 
-	// Update state (do NOT cancel the fade, let the scene hold)
+	// Update state - scene is no longer active on DMX
 	state := s.states[cueListID]
 	if state != nil {
-		state.IsPlaying = false
+		state.IsPlaying = false  // Scene no longer active on DMX
+		state.IsFading = false   // No fade in progress
 		state.FadeProgress = 0
 		state.LastUpdated = time.Now()
 	}
