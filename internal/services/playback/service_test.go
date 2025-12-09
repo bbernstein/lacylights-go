@@ -43,6 +43,7 @@ func TestPlaybackState(t *testing.T) {
 		CueListID:       "cue-list-1",
 		CurrentCueIndex: &cueIndex,
 		IsPlaying:       true,
+		IsFading:        true,
 		CurrentCue: &CueForPlayback{
 			ID:          "cue-1",
 			Name:        "Opening",
@@ -61,6 +62,9 @@ func TestPlaybackState(t *testing.T) {
 	if !state.IsPlaying {
 		t.Error("Expected IsPlaying to be true")
 	}
+	if !state.IsFading {
+		t.Error("Expected IsFading to be true")
+	}
 	if state.CurrentCueIndex == nil || *state.CurrentCueIndex != 0 {
 		t.Errorf("Expected CurrentCueIndex 0, got %v", state.CurrentCueIndex)
 	}
@@ -75,6 +79,7 @@ func TestCueListPlaybackStatus(t *testing.T) {
 		CueListID:       "cue-list-1",
 		CurrentCueIndex: &cueIndex,
 		IsPlaying:       true,
+		IsFading:        true,
 		CurrentCue: &CueForPlayback{
 			ID:          "cue-2",
 			Name:        "Scene Two",
@@ -91,6 +96,9 @@ func TestCueListPlaybackStatus(t *testing.T) {
 	}
 	if !status.IsPlaying {
 		t.Error("Expected IsPlaying to be true")
+	}
+	if !status.IsFading {
+		t.Error("Expected IsFading to be true")
 	}
 	if status.CurrentCueIndex == nil || *status.CurrentCueIndex != 1 {
 		t.Errorf("Expected CurrentCueIndex 1, got %v", status.CurrentCueIndex)
@@ -118,6 +126,9 @@ func TestGetFormattedStatus_NilState(t *testing.T) {
 	}
 	if status.IsPlaying {
 		t.Error("Expected IsPlaying to be false for nonexistent cue list")
+	}
+	if status.IsFading {
+		t.Error("Expected IsFading to be false for nonexistent cue list")
 	}
 	if status.CurrentCueIndex != nil {
 		t.Error("Expected CurrentCueIndex to be nil")

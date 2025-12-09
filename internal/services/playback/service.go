@@ -85,11 +85,30 @@ func (s *Service) SetUpdateCallback(callback func(status *CueListPlaybackStatus)
 	s.onUpdate = callback
 }
 
-// GetPlaybackState returns the current playback state for a cue list.
+// GetPlaybackState returns a copy of the current playback state for a cue list.
+// Returns nil if no state exists for the given cue list ID.
 func (s *Service) GetPlaybackState(cueListID string) *PlaybackState {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.states[cueListID]
+	state := s.states[cueListID]
+	if state == nil {
+		return nil
+	}
+	// Return a copy to avoid data races
+	stateCopy := *state
+	if state.CurrentCueIndex != nil {
+		cueIndexCopy := *state.CurrentCueIndex
+		stateCopy.CurrentCueIndex = &cueIndexCopy
+	}
+	if state.CurrentCue != nil {
+		cueCopy := *state.CurrentCue
+		stateCopy.CurrentCue = &cueCopy
+	}
+	if state.StartTime != nil {
+		startTimeCopy := *state.StartTime
+		stateCopy.StartTime = &startTimeCopy
+	}
+	return &stateCopy
 }
 
 // GetFormattedStatus returns the GraphQL-compatible status for a cue list.
