@@ -25,7 +25,7 @@ get_threshold() {
         "internal/services/playback") echo 37 ;;
         "internal/services/export") echo 17 ;;
         "internal/graphql/resolvers") echo 17 ;;
-        "internal/services/import") echo 0 ;;
+        "internal/services/import") echo 15 ;;  # Limited by database-dependent code
         *) echo "" ;;
     esac
 }
