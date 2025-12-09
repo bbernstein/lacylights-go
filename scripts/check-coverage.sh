@@ -19,13 +19,13 @@ get_threshold() {
         "internal/config") echo 100 ;;
         "internal/services/pubsub") echo 100 ;;
         "internal/services/fade") echo 91 ;;
+        "internal/services/export") echo 87 ;;  # Integration tests provide good coverage
         "internal/services/dmx") echo 85 ;;
+        "internal/services/import") echo 78 ;;  # Integration tests provide good coverage
         "internal/services/network") echo 64 ;;  # Some tests require actual network, coverage varies by environment
         "internal/services/preview") echo 40 ;;
         "internal/services/playback") echo 37 ;;
-        "internal/services/export") echo 17 ;;
         "internal/graphql/resolvers") echo 17 ;;
-        "internal/services/import") echo 15 ;;  # Limited by database-dependent code
         *) echo "" ;;
     esac
 }
@@ -39,6 +39,7 @@ should_skip() {
         "github.com/bbernstein/lacylights-go/internal/database") return 0 ;;
         "github.com/bbernstein/lacylights-go/internal/database/models") return 0 ;;
         "github.com/bbernstein/lacylights-go/internal/database/repositories") return 0 ;;
+        "github.com/bbernstein/lacylights-go/internal/services/testutil") return 0 ;;  # Test utilities only
         *) return 1 ;;
     esac
 }
