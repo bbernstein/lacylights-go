@@ -20,7 +20,7 @@ get_threshold() {
         "internal/services/pubsub") echo 100 ;;
         "internal/services/preview") echo 91 ;;  # Integration tests provide good coverage
         "internal/services/fade") echo 91 ;;
-        "internal/services/network") echo 88 ;;  # Some tests require actual network, coverage varies by environment
+        "internal/services/network") echo 64 ;;  # macOS-specific code paths not covered on Linux CI
         "internal/services/export") echo 87 ;;  # Integration tests provide good coverage
         "internal/services/dmx") echo 85 ;;
         "internal/services/playback") echo 82 ;;  # Integration tests provide good coverage
