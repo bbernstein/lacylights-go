@@ -128,7 +128,10 @@ func (s *Service) GetSystemVersions() (*SystemVersionInfo, error) {
 	// Build repository list from the shared repositoryNames constant
 	repos := make([]*RepositoryVersion, 0, len(repositoryNames))
 	for _, repoName := range repositoryNames {
-		v := versions[repoName]
+		v, exists := versions[repoName]
+		if !exists {
+			log.Printf("Warning: repository %s not found in version data", repoName)
+		}
 		repos = append(repos, &RepositoryVersion{
 			Repository:      repoName,
 			Installed:       v.Installed,
@@ -164,13 +167,19 @@ func (s *Service) GetAvailableVersions(repository string) ([]string, error) {
 		return nil, fmt.Errorf("failed to get available versions: %w", err)
 	}
 
-	// Parse output (one version per line)
+	// Parse output (one version per line) with validation
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	var versions []string
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line != "" && line != "[]" {
-			versions = append(versions, line)
+			// Validate that returned versions match expected semver pattern
+			// to prevent malicious or buggy script output from reaching clients
+			if semverPattern.MatchString(line) {
+				versions = append(versions, line)
+			} else {
+				log.Printf("Warning: skipping invalid version string from script: %q", line)
+			}
 		}
 	}
 
