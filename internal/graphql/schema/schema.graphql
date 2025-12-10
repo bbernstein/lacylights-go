@@ -651,6 +651,11 @@ input CreateChannelDefinitionInput {
   isDiscrete: Boolean
 }
 
+input ChannelFadeBehaviorInput {
+  channelId: ID!
+  fadeBehavior: FadeBehavior!
+}
+
 input ImportOFLFixtureInput {
   manufacturer: String!
   oflFixtureJson: String!
@@ -1142,6 +1147,15 @@ type Mutation {
   bulkCreateFixtures(input: BulkFixtureCreateInput!): [FixtureInstance!]!
   deleteFixtureInstance(id: ID!): Boolean!
   bulkDeleteFixtures(fixtureIds: [ID!]!): BulkDeleteResult!
+
+  # Instance Channel Updates
+  updateInstanceChannelFadeBehavior(
+    channelId: ID!
+    fadeBehavior: FadeBehavior!
+  ): InstanceChannel!
+  bulkUpdateInstanceChannelsFadeBehavior(
+    updates: [ChannelFadeBehaviorInput!]!
+  ): [InstanceChannel!]!
 
   # Fixture Ordering
   reorderProjectFixtures(

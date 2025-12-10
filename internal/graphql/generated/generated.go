@@ -305,91 +305,93 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
-		ActivateSceneFromBoard          func(childComplexity int, sceneBoardID string, sceneID string, fadeTimeOverride *float64) int
-		AddFixturesToScene              func(childComplexity int, sceneID string, fixtureValues []*FixtureValueInput, overwriteExisting *bool) int
-		AddSceneToBoard                 func(childComplexity int, input CreateSceneBoardButtonInput) int
-		BulkCreateCueLists              func(childComplexity int, input BulkCueListCreateInput) int
-		BulkCreateCues                  func(childComplexity int, input BulkCueCreateInput) int
-		BulkCreateFixtureDefinitions    func(childComplexity int, input BulkFixtureDefinitionCreateInput) int
-		BulkCreateFixtures              func(childComplexity int, input BulkFixtureCreateInput) int
-		BulkCreateProjects              func(childComplexity int, input BulkProjectCreateInput) int
-		BulkCreateSceneBoardButtons     func(childComplexity int, input BulkSceneBoardButtonCreateInput) int
-		BulkCreateSceneBoards           func(childComplexity int, input BulkSceneBoardCreateInput) int
-		BulkCreateScenes                func(childComplexity int, input BulkSceneCreateInput) int
-		BulkDeleteCueLists              func(childComplexity int, cueListIds []string) int
-		BulkDeleteCues                  func(childComplexity int, cueIds []string) int
-		BulkDeleteFixtureDefinitions    func(childComplexity int, definitionIds []string) int
-		BulkDeleteFixtures              func(childComplexity int, fixtureIds []string) int
-		BulkDeleteProjects              func(childComplexity int, projectIds []string) int
-		BulkDeleteSceneBoardButtons     func(childComplexity int, buttonIds []string) int
-		BulkDeleteSceneBoards           func(childComplexity int, sceneBoardIds []string) int
-		BulkDeleteScenes                func(childComplexity int, sceneIds []string) int
-		BulkUpdateCueLists              func(childComplexity int, input BulkCueListUpdateInput) int
-		BulkUpdateCues                  func(childComplexity int, input BulkCueUpdateInput) int
-		BulkUpdateFixtureDefinitions    func(childComplexity int, input BulkFixtureDefinitionUpdateInput) int
-		BulkUpdateFixtures              func(childComplexity int, input BulkFixtureUpdateInput) int
-		BulkUpdateProjects              func(childComplexity int, input BulkProjectUpdateInput) int
-		BulkUpdateSceneBoardButtons     func(childComplexity int, input BulkSceneBoardButtonUpdateInput) int
-		BulkUpdateSceneBoards           func(childComplexity int, input BulkSceneBoardUpdateInput) int
-		BulkUpdateScenes                func(childComplexity int, input BulkSceneUpdateInput) int
-		CancelPreviewSession            func(childComplexity int, sessionID string) int
-		CloneScene                      func(childComplexity int, sceneID string, newName string) int
-		CommitPreviewSession            func(childComplexity int, sessionID string) int
-		ConnectWiFi                     func(childComplexity int, ssid string, password *string) int
-		CreateCue                       func(childComplexity int, input CreateCueInput) int
-		CreateCueList                   func(childComplexity int, input CreateCueListInput) int
-		CreateFixtureDefinition         func(childComplexity int, input CreateFixtureDefinitionInput) int
-		CreateFixtureInstance           func(childComplexity int, input CreateFixtureInstanceInput) int
-		CreateProject                   func(childComplexity int, input CreateProjectInput) int
-		CreateScene                     func(childComplexity int, input CreateSceneInput) int
-		CreateSceneBoard                func(childComplexity int, input CreateSceneBoardInput) int
-		DeleteCue                       func(childComplexity int, id string) int
-		DeleteCueList                   func(childComplexity int, id string) int
-		DeleteFixtureDefinition         func(childComplexity int, id string) int
-		DeleteFixtureInstance           func(childComplexity int, id string) int
-		DeleteProject                   func(childComplexity int, id string) int
-		DeleteScene                     func(childComplexity int, id string) int
-		DeleteSceneBoard                func(childComplexity int, id string) int
-		DisconnectWiFi                  func(childComplexity int) int
-		DuplicateScene                  func(childComplexity int, id string) int
-		ExportProject                   func(childComplexity int, projectID string, options *ExportOptionsInput) int
-		ExportProjectToQlc              func(childComplexity int, projectID string, fixtureMappings []*FixtureMappingInput) int
-		FadeToBlack                     func(childComplexity int, fadeOutTime float64) int
-		ForgetWiFiNetwork               func(childComplexity int, ssid string) int
-		GoToCue                         func(childComplexity int, cueListID string, cueIndex int, fadeInTime *float64) int
-		ImportOFLFixture                func(childComplexity int, input ImportOFLFixtureInput) int
-		ImportProject                   func(childComplexity int, jsonContent string, options ImportOptionsInput) int
-		ImportProjectFromQlc            func(childComplexity int, xmlContent string, originalFileName string) int
-		InitializePreviewWithScene      func(childComplexity int, sessionID string, sceneID string) int
-		NextCue                         func(childComplexity int, cueListID string, fadeInTime *float64) int
-		PlayCue                         func(childComplexity int, cueID string, fadeInTime *float64) int
-		PreviousCue                     func(childComplexity int, cueListID string, fadeInTime *float64) int
-		RemoveFixturesFromScene         func(childComplexity int, sceneID string, fixtureIds []string) int
-		RemoveSceneFromBoard            func(childComplexity int, buttonID string) int
-		ReorderCues                     func(childComplexity int, cueListID string, cueOrders []*CueOrderInput) int
-		ReorderProjectFixtures          func(childComplexity int, projectID string, fixtureOrders []*FixtureOrderInput) int
-		ReorderSceneFixtures            func(childComplexity int, sceneID string, fixtureOrders []*FixtureOrderInput) int
-		SetChannelValue                 func(childComplexity int, universe int, channel int, value int) int
-		SetSceneLive                    func(childComplexity int, sceneID string) int
-		SetWiFiEnabled                  func(childComplexity int, enabled bool) int
-		StartCueList                    func(childComplexity int, cueListID string, startFromCue *int, fadeInTime *float64) int
-		StartPreviewSession             func(childComplexity int, projectID string) int
-		StopCueList                     func(childComplexity int, cueListID string) int
-		UpdateAllRepositories           func(childComplexity int) int
-		UpdateCue                       func(childComplexity int, id string, input CreateCueInput) int
-		UpdateCueList                   func(childComplexity int, id string, input CreateCueListInput) int
-		UpdateFixtureDefinition         func(childComplexity int, id string, input CreateFixtureDefinitionInput) int
-		UpdateFixtureInstance           func(childComplexity int, id string, input UpdateFixtureInstanceInput) int
-		UpdateFixturePositions          func(childComplexity int, positions []*FixturePositionInput) int
-		UpdatePreviewChannel            func(childComplexity int, sessionID string, fixtureID string, channelIndex int, value int) int
-		UpdateProject                   func(childComplexity int, id string, input CreateProjectInput) int
-		UpdateRepository                func(childComplexity int, repository string, version *string) int
-		UpdateScene                     func(childComplexity int, id string, input UpdateSceneInput) int
-		UpdateSceneBoard                func(childComplexity int, id string, input UpdateSceneBoardInput) int
-		UpdateSceneBoardButton          func(childComplexity int, id string, input UpdateSceneBoardButtonInput) int
-		UpdateSceneBoardButtonPositions func(childComplexity int, positions []*SceneBoardButtonPositionInput) int
-		UpdateScenePartial              func(childComplexity int, sceneID string, name *string, description *string, fixtureValues []*FixtureValueInput, mergeFixtures *bool) int
-		UpdateSetting                   func(childComplexity int, input UpdateSettingInput) int
+		ActivateSceneFromBoard                 func(childComplexity int, sceneBoardID string, sceneID string, fadeTimeOverride *float64) int
+		AddFixturesToScene                     func(childComplexity int, sceneID string, fixtureValues []*FixtureValueInput, overwriteExisting *bool) int
+		AddSceneToBoard                        func(childComplexity int, input CreateSceneBoardButtonInput) int
+		BulkCreateCueLists                     func(childComplexity int, input BulkCueListCreateInput) int
+		BulkCreateCues                         func(childComplexity int, input BulkCueCreateInput) int
+		BulkCreateFixtureDefinitions           func(childComplexity int, input BulkFixtureDefinitionCreateInput) int
+		BulkCreateFixtures                     func(childComplexity int, input BulkFixtureCreateInput) int
+		BulkCreateProjects                     func(childComplexity int, input BulkProjectCreateInput) int
+		BulkCreateSceneBoardButtons            func(childComplexity int, input BulkSceneBoardButtonCreateInput) int
+		BulkCreateSceneBoards                  func(childComplexity int, input BulkSceneBoardCreateInput) int
+		BulkCreateScenes                       func(childComplexity int, input BulkSceneCreateInput) int
+		BulkDeleteCueLists                     func(childComplexity int, cueListIds []string) int
+		BulkDeleteCues                         func(childComplexity int, cueIds []string) int
+		BulkDeleteFixtureDefinitions           func(childComplexity int, definitionIds []string) int
+		BulkDeleteFixtures                     func(childComplexity int, fixtureIds []string) int
+		BulkDeleteProjects                     func(childComplexity int, projectIds []string) int
+		BulkDeleteSceneBoardButtons            func(childComplexity int, buttonIds []string) int
+		BulkDeleteSceneBoards                  func(childComplexity int, sceneBoardIds []string) int
+		BulkDeleteScenes                       func(childComplexity int, sceneIds []string) int
+		BulkUpdateCueLists                     func(childComplexity int, input BulkCueListUpdateInput) int
+		BulkUpdateCues                         func(childComplexity int, input BulkCueUpdateInput) int
+		BulkUpdateFixtureDefinitions           func(childComplexity int, input BulkFixtureDefinitionUpdateInput) int
+		BulkUpdateFixtures                     func(childComplexity int, input BulkFixtureUpdateInput) int
+		BulkUpdateInstanceChannelsFadeBehavior func(childComplexity int, updates []*ChannelFadeBehaviorInput) int
+		BulkUpdateProjects                     func(childComplexity int, input BulkProjectUpdateInput) int
+		BulkUpdateSceneBoardButtons            func(childComplexity int, input BulkSceneBoardButtonUpdateInput) int
+		BulkUpdateSceneBoards                  func(childComplexity int, input BulkSceneBoardUpdateInput) int
+		BulkUpdateScenes                       func(childComplexity int, input BulkSceneUpdateInput) int
+		CancelPreviewSession                   func(childComplexity int, sessionID string) int
+		CloneScene                             func(childComplexity int, sceneID string, newName string) int
+		CommitPreviewSession                   func(childComplexity int, sessionID string) int
+		ConnectWiFi                            func(childComplexity int, ssid string, password *string) int
+		CreateCue                              func(childComplexity int, input CreateCueInput) int
+		CreateCueList                          func(childComplexity int, input CreateCueListInput) int
+		CreateFixtureDefinition                func(childComplexity int, input CreateFixtureDefinitionInput) int
+		CreateFixtureInstance                  func(childComplexity int, input CreateFixtureInstanceInput) int
+		CreateProject                          func(childComplexity int, input CreateProjectInput) int
+		CreateScene                            func(childComplexity int, input CreateSceneInput) int
+		CreateSceneBoard                       func(childComplexity int, input CreateSceneBoardInput) int
+		DeleteCue                              func(childComplexity int, id string) int
+		DeleteCueList                          func(childComplexity int, id string) int
+		DeleteFixtureDefinition                func(childComplexity int, id string) int
+		DeleteFixtureInstance                  func(childComplexity int, id string) int
+		DeleteProject                          func(childComplexity int, id string) int
+		DeleteScene                            func(childComplexity int, id string) int
+		DeleteSceneBoard                       func(childComplexity int, id string) int
+		DisconnectWiFi                         func(childComplexity int) int
+		DuplicateScene                         func(childComplexity int, id string) int
+		ExportProject                          func(childComplexity int, projectID string, options *ExportOptionsInput) int
+		ExportProjectToQlc                     func(childComplexity int, projectID string, fixtureMappings []*FixtureMappingInput) int
+		FadeToBlack                            func(childComplexity int, fadeOutTime float64) int
+		ForgetWiFiNetwork                      func(childComplexity int, ssid string) int
+		GoToCue                                func(childComplexity int, cueListID string, cueIndex int, fadeInTime *float64) int
+		ImportOFLFixture                       func(childComplexity int, input ImportOFLFixtureInput) int
+		ImportProject                          func(childComplexity int, jsonContent string, options ImportOptionsInput) int
+		ImportProjectFromQlc                   func(childComplexity int, xmlContent string, originalFileName string) int
+		InitializePreviewWithScene             func(childComplexity int, sessionID string, sceneID string) int
+		NextCue                                func(childComplexity int, cueListID string, fadeInTime *float64) int
+		PlayCue                                func(childComplexity int, cueID string, fadeInTime *float64) int
+		PreviousCue                            func(childComplexity int, cueListID string, fadeInTime *float64) int
+		RemoveFixturesFromScene                func(childComplexity int, sceneID string, fixtureIds []string) int
+		RemoveSceneFromBoard                   func(childComplexity int, buttonID string) int
+		ReorderCues                            func(childComplexity int, cueListID string, cueOrders []*CueOrderInput) int
+		ReorderProjectFixtures                 func(childComplexity int, projectID string, fixtureOrders []*FixtureOrderInput) int
+		ReorderSceneFixtures                   func(childComplexity int, sceneID string, fixtureOrders []*FixtureOrderInput) int
+		SetChannelValue                        func(childComplexity int, universe int, channel int, value int) int
+		SetSceneLive                           func(childComplexity int, sceneID string) int
+		SetWiFiEnabled                         func(childComplexity int, enabled bool) int
+		StartCueList                           func(childComplexity int, cueListID string, startFromCue *int, fadeInTime *float64) int
+		StartPreviewSession                    func(childComplexity int, projectID string) int
+		StopCueList                            func(childComplexity int, cueListID string) int
+		UpdateAllRepositories                  func(childComplexity int) int
+		UpdateCue                              func(childComplexity int, id string, input CreateCueInput) int
+		UpdateCueList                          func(childComplexity int, id string, input CreateCueListInput) int
+		UpdateFixtureDefinition                func(childComplexity int, id string, input CreateFixtureDefinitionInput) int
+		UpdateFixtureInstance                  func(childComplexity int, id string, input UpdateFixtureInstanceInput) int
+		UpdateFixturePositions                 func(childComplexity int, positions []*FixturePositionInput) int
+		UpdateInstanceChannelFadeBehavior      func(childComplexity int, channelID string, fadeBehavior FadeBehavior) int
+		UpdatePreviewChannel                   func(childComplexity int, sessionID string, fixtureID string, channelIndex int, value int) int
+		UpdateProject                          func(childComplexity int, id string, input CreateProjectInput) int
+		UpdateRepository                       func(childComplexity int, repository string, version *string) int
+		UpdateScene                            func(childComplexity int, id string, input UpdateSceneInput) int
+		UpdateSceneBoard                       func(childComplexity int, id string, input UpdateSceneBoardInput) int
+		UpdateSceneBoardButton                 func(childComplexity int, id string, input UpdateSceneBoardButtonInput) int
+		UpdateSceneBoardButtonPositions        func(childComplexity int, positions []*SceneBoardButtonPositionInput) int
+		UpdateScenePartial                     func(childComplexity int, sceneID string, name *string, description *string, fixtureValues []*FixtureValueInput, mergeFixtures *bool) int
+		UpdateSetting                          func(childComplexity int, input UpdateSettingInput) int
 	}
 
 	NetworkInterfaceOption struct {
@@ -771,6 +773,8 @@ type MutationResolver interface {
 	BulkCreateFixtures(ctx context.Context, input BulkFixtureCreateInput) ([]*models.FixtureInstance, error)
 	DeleteFixtureInstance(ctx context.Context, id string) (bool, error)
 	BulkDeleteFixtures(ctx context.Context, fixtureIds []string) (*BulkDeleteResult, error)
+	UpdateInstanceChannelFadeBehavior(ctx context.Context, channelID string, fadeBehavior FadeBehavior) (*models.InstanceChannel, error)
+	BulkUpdateInstanceChannelsFadeBehavior(ctx context.Context, updates []*ChannelFadeBehaviorInput) ([]*models.InstanceChannel, error)
 	ReorderProjectFixtures(ctx context.Context, projectID string, fixtureOrders []*FixtureOrderInput) (bool, error)
 	ReorderSceneFixtures(ctx context.Context, sceneID string, fixtureOrders []*FixtureOrderInput) (bool, error)
 	UpdateFixturePositions(ctx context.Context, positions []*FixturePositionInput) (bool, error)
@@ -2183,6 +2187,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.BulkUpdateFixtures(childComplexity, args["input"].(BulkFixtureUpdateInput)), true
+	case "Mutation.bulkUpdateInstanceChannelsFadeBehavior":
+		if e.complexity.Mutation.BulkUpdateInstanceChannelsFadeBehavior == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkUpdateInstanceChannelsFadeBehavior_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkUpdateInstanceChannelsFadeBehavior(childComplexity, args["updates"].([]*ChannelFadeBehaviorInput)), true
 	case "Mutation.bulkUpdateProjects":
 		if e.complexity.Mutation.BulkUpdateProjects == nil {
 			break
@@ -2756,6 +2771,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.UpdateFixturePositions(childComplexity, args["positions"].([]*FixturePositionInput)), true
+	case "Mutation.updateInstanceChannelFadeBehavior":
+		if e.complexity.Mutation.UpdateInstanceChannelFadeBehavior == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateInstanceChannelFadeBehavior_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UpdateInstanceChannelFadeBehavior(childComplexity, args["channelId"].(string), args["fadeBehavior"].(FadeBehavior)), true
 	case "Mutation.updatePreviewChannel":
 		if e.complexity.Mutation.UpdatePreviewChannel == nil {
 			break
@@ -4361,6 +4387,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputBulkSceneCreateInput,
 		ec.unmarshalInputBulkSceneUpdateInput,
 		ec.unmarshalInputChannelAssignmentInput,
+		ec.unmarshalInputChannelFadeBehaviorInput,
 		ec.unmarshalInputCreateChannelDefinitionInput,
 		ec.unmarshalInputCreateCueInput,
 		ec.unmarshalInputCreateCueListInput,
@@ -5162,6 +5189,11 @@ input CreateChannelDefinitionInput {
   isDiscrete: Boolean
 }
 
+input ChannelFadeBehaviorInput {
+  channelId: ID!
+  fadeBehavior: FadeBehavior!
+}
+
 input ImportOFLFixtureInput {
   manufacturer: String!
   oflFixtureJson: String!
@@ -5654,6 +5686,15 @@ type Mutation {
   deleteFixtureInstance(id: ID!): Boolean!
   bulkDeleteFixtures(fixtureIds: [ID!]!): BulkDeleteResult!
 
+  # Instance Channel Updates
+  updateInstanceChannelFadeBehavior(
+    channelId: ID!
+    fadeBehavior: FadeBehavior!
+  ): InstanceChannel!
+  bulkUpdateInstanceChannelsFadeBehavior(
+    updates: [ChannelFadeBehaviorInput!]!
+  ): [InstanceChannel!]!
+
   # Fixture Ordering
   reorderProjectFixtures(
     projectId: ID!
@@ -6081,6 +6122,17 @@ func (ec *executionContext) field_Mutation_bulkUpdateFixtures_args(ctx context.C
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkUpdateInstanceChannelsFadeBehavior_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "updates", ec.unmarshalNChannelFadeBehaviorInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐChannelFadeBehaviorInputᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["updates"] = arg0
 	return args, nil
 }
 
@@ -6762,6 +6814,22 @@ func (ec *executionContext) field_Mutation_updateFixturePositions_args(ctx conte
 		return nil, err
 	}
 	args["positions"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateInstanceChannelFadeBehavior_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "channelId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["channelId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "fadeBehavior", ec.unmarshalNFadeBehavior2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFadeBehavior)
+	if err != nil {
+		return nil, err
+	}
+	args["fadeBehavior"] = arg1
 	return args, nil
 }
 
@@ -13713,6 +13781,128 @@ func (ec *executionContext) fieldContext_Mutation_bulkDeleteFixtures(ctx context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_bulkDeleteFixtures_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateInstanceChannelFadeBehavior(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateInstanceChannelFadeBehavior,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UpdateInstanceChannelFadeBehavior(ctx, fc.Args["channelId"].(string), fc.Args["fadeBehavior"].(FadeBehavior))
+		},
+		nil,
+		ec.marshalNInstanceChannel2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐInstanceChannel,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateInstanceChannelFadeBehavior(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_InstanceChannel_id(ctx, field)
+			case "offset":
+				return ec.fieldContext_InstanceChannel_offset(ctx, field)
+			case "name":
+				return ec.fieldContext_InstanceChannel_name(ctx, field)
+			case "type":
+				return ec.fieldContext_InstanceChannel_type(ctx, field)
+			case "minValue":
+				return ec.fieldContext_InstanceChannel_minValue(ctx, field)
+			case "maxValue":
+				return ec.fieldContext_InstanceChannel_maxValue(ctx, field)
+			case "defaultValue":
+				return ec.fieldContext_InstanceChannel_defaultValue(ctx, field)
+			case "fadeBehavior":
+				return ec.fieldContext_InstanceChannel_fadeBehavior(ctx, field)
+			case "isDiscrete":
+				return ec.fieldContext_InstanceChannel_isDiscrete(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type InstanceChannel", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateInstanceChannelFadeBehavior_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkUpdateInstanceChannelsFadeBehavior(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkUpdateInstanceChannelsFadeBehavior,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkUpdateInstanceChannelsFadeBehavior(ctx, fc.Args["updates"].([]*ChannelFadeBehaviorInput))
+		},
+		nil,
+		ec.marshalNInstanceChannel2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐInstanceChannelᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkUpdateInstanceChannelsFadeBehavior(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_InstanceChannel_id(ctx, field)
+			case "offset":
+				return ec.fieldContext_InstanceChannel_offset(ctx, field)
+			case "name":
+				return ec.fieldContext_InstanceChannel_name(ctx, field)
+			case "type":
+				return ec.fieldContext_InstanceChannel_type(ctx, field)
+			case "minValue":
+				return ec.fieldContext_InstanceChannel_minValue(ctx, field)
+			case "maxValue":
+				return ec.fieldContext_InstanceChannel_maxValue(ctx, field)
+			case "defaultValue":
+				return ec.fieldContext_InstanceChannel_defaultValue(ctx, field)
+			case "fadeBehavior":
+				return ec.fieldContext_InstanceChannel_fadeBehavior(ctx, field)
+			case "isDiscrete":
+				return ec.fieldContext_InstanceChannel_isDiscrete(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type InstanceChannel", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkUpdateInstanceChannelsFadeBehavior_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -26940,6 +27130,40 @@ func (ec *executionContext) unmarshalInputChannelAssignmentInput(ctx context.Con
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputChannelFadeBehaviorInput(ctx context.Context, obj any) (ChannelFadeBehaviorInput, error) {
+	var it ChannelFadeBehaviorInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"channelId", "fadeBehavior"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "channelId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channelId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ChannelID = data
+		case "fadeBehavior":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("fadeBehavior"))
+			data, err := ec.unmarshalNFadeBehavior2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFadeBehavior(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FadeBehavior = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCreateChannelDefinitionInput(ctx context.Context, obj any) (CreateChannelDefinitionInput, error) {
 	var it CreateChannelDefinitionInput
 	asMap := map[string]any{}
@@ -31566,6 +31790,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "bulkDeleteFixtures":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_bulkDeleteFixtures(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateInstanceChannelFadeBehavior":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateInstanceChannelFadeBehavior(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkUpdateInstanceChannelsFadeBehavior":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkUpdateInstanceChannelsFadeBehavior(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -36410,6 +36648,26 @@ func (ec *executionContext) marshalNChannelDefinition2ᚖgithubᚗcomᚋbbernste
 	return ec._ChannelDefinition(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNChannelFadeBehaviorInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐChannelFadeBehaviorInputᚄ(ctx context.Context, v any) ([]*ChannelFadeBehaviorInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*ChannelFadeBehaviorInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNChannelFadeBehaviorInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐChannelFadeBehaviorInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNChannelFadeBehaviorInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐChannelFadeBehaviorInput(ctx context.Context, v any) (*ChannelFadeBehaviorInput, error) {
+	res, err := ec.unmarshalInputChannelFadeBehaviorInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNChannelMapFixture2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐChannelMapFixtureᚄ(ctx context.Context, sel ast.SelectionSet, v []*ChannelMapFixture) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
@@ -37723,6 +37981,10 @@ func (ec *executionContext) marshalNImportResult2ᚖgithubᚗcomᚋbbernsteinᚋ
 
 func (ec *executionContext) marshalNImportStats2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐImportStats(ctx context.Context, sel ast.SelectionSet, v ImportStats) graphql.Marshaler {
 	return ec._ImportStats(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNInstanceChannel2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐInstanceChannel(ctx context.Context, sel ast.SelectionSet, v models.InstanceChannel) graphql.Marshaler {
+	return ec._InstanceChannel(ctx, sel, &v)
 }
 
 func (ec *executionContext) marshalNInstanceChannel2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐInstanceChannelᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.InstanceChannel) graphql.Marshaler {

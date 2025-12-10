@@ -19,6 +19,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/services/network"
 	"github.com/bbernstein/lacylights-go/internal/services/pubsub"
 	"github.com/lucsky/cuid"
+	"gorm.io/gorm"
 )
 
 // Type is the resolver for the type field.
@@ -960,6 +961,54 @@ func (r *mutationResolver) BulkDeleteFixtures(ctx context.Context, fixtureIds []
 		DeletedCount: len(deletedIds),
 		DeletedIds:   deletedIds,
 	}, nil
+}
+
+// UpdateInstanceChannelFadeBehavior is the resolver for the updateInstanceChannelFadeBehavior field.
+// Updates the fade behavior for a single instance channel.
+func (r *mutationResolver) UpdateInstanceChannelFadeBehavior(ctx context.Context, channelID string, fadeBehavior generated.FadeBehavior) (*models.InstanceChannel, error) {
+	// Find the channel
+	var channel models.InstanceChannel
+	if err := r.db.WithContext(ctx).First(&channel, "id = ?", channelID).Error; err != nil {
+		return nil, fmt.Errorf("instance channel not found: %s", channelID)
+	}
+
+	// Update the fade behavior
+	channel.FadeBehavior = string(fadeBehavior)
+	if err := r.db.WithContext(ctx).Save(&channel).Error; err != nil {
+		return nil, fmt.Errorf("failed to update channel fade behavior: %w", err)
+	}
+
+	return &channel, nil
+}
+
+// BulkUpdateInstanceChannelsFadeBehavior is the resolver for the bulkUpdateInstanceChannelsFadeBehavior field.
+// Updates fade behavior for multiple instance channels in a single operation.
+func (r *mutationResolver) BulkUpdateInstanceChannelsFadeBehavior(ctx context.Context, updates []*generated.ChannelFadeBehaviorInput) ([]*models.InstanceChannel, error) {
+	var results []*models.InstanceChannel
+
+	// Process all updates in a transaction
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, update := range updates {
+			var channel models.InstanceChannel
+			if err := tx.First(&channel, "id = ?", update.ChannelID).Error; err != nil {
+				return fmt.Errorf("instance channel not found: %s", update.ChannelID)
+			}
+
+			channel.FadeBehavior = string(update.FadeBehavior)
+			if err := tx.Save(&channel).Error; err != nil {
+				return fmt.Errorf("failed to update channel %s: %w", update.ChannelID, err)
+			}
+
+			results = append(results, &channel)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return results, nil
 }
 
 // ReorderProjectFixtures is the resolver for the reorderProjectFixtures field.

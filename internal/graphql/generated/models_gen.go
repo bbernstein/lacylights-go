@@ -99,6 +99,11 @@ type ChannelAssignmentSuggestion struct {
 	AvailableChannelsRemaining int                         `json:"availableChannelsRemaining"`
 }
 
+type ChannelFadeBehaviorInput struct {
+	ChannelID    string       `json:"channelId"`
+	FadeBehavior FadeBehavior `json:"fadeBehavior"`
+}
+
 type ChannelMapFixture struct {
 	ID           string      `json:"id"`
 	Name         string      `json:"name"`
