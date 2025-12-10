@@ -203,7 +203,7 @@ type CueListPlaybackStatus struct {
 	CurrentCueIndex *int   `json:"currentCueIndex,omitempty"`
 	// True when a scene's values are currently active on DMX fixtures (stays true after fade completes until stopped)
 	IsPlaying bool `json:"isPlaying"`
-	// True when a scene is currently transitioning (fade-in, fade-out, or crossfade in progress)
+	// True when a fade-in transition is in progress
 	IsFading     bool        `json:"isFading"`
 	CurrentCue   *models.Cue `json:"currentCue,omitempty"`
 	NextCue      *models.Cue `json:"nextCue,omitempty"`

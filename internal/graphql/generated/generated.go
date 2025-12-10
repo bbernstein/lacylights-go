@@ -4738,7 +4738,7 @@ type CueListPlaybackStatus {
   currentCueIndex: Int
   "True when a scene's values are currently active on DMX fixtures (stays true after fade completes until stopped)"
   isPlaying: Boolean!
-  "True when a scene is currently transitioning (fade-in, fade-out, or crossfade in progress)"
+  "True when a fade-in transition is in progress"
   isFading: Boolean!
   currentCue: Cue
   nextCue: Cue

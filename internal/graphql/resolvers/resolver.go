@@ -14,6 +14,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/services/playback"
 	"github.com/bbernstein/lacylights-go/internal/services/preview"
 	"github.com/bbernstein/lacylights-go/internal/services/pubsub"
+	"github.com/bbernstein/lacylights-go/internal/services/version"
 	"gorm.io/gorm"
 )
 
@@ -37,6 +38,7 @@ type Resolver struct {
 	ExportService   *export.Service
 	ImportService   *importservice.Service
 	PreviewService  *preview.Service
+	VersionService  *version.Service
 	PubSub          *pubsub.PubSub
 }
 
@@ -64,6 +66,7 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *fade.Engine, 
 		ExportService:   export.NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo),
 		ImportService:   importservice.NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo),
 		PreviewService:  preview.NewService(fixtureRepo, sceneRepo, dmxService),
+		VersionService:  version.NewService(),
 		PubSub:          ps,
 	}
 
