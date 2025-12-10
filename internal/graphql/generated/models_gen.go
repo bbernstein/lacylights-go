@@ -120,12 +120,14 @@ type ChannelUsage struct {
 }
 
 type CreateChannelDefinitionInput struct {
-	Name         string      `json:"name"`
-	Type         ChannelType `json:"type"`
-	Offset       int         `json:"offset"`
-	MinValue     int         `json:"minValue"`
-	MaxValue     int         `json:"maxValue"`
-	DefaultValue int         `json:"defaultValue"`
+	Name         string                           `json:"name"`
+	Type         ChannelType                      `json:"type"`
+	Offset       int                              `json:"offset"`
+	MinValue     int                              `json:"minValue"`
+	MaxValue     int                              `json:"maxValue"`
+	DefaultValue int                              `json:"defaultValue"`
+	FadeBehavior graphql.Omittable[*FadeBehavior] `json:"fadeBehavior,omitempty"`
+	IsDiscrete   graphql.Omittable[*bool]         `json:"isDiscrete,omitempty"`
 }
 
 type CreateCueInput struct {
@@ -862,6 +864,67 @@ func (e *EasingType) UnmarshalJSON(b []byte) error {
 }
 
 func (e EasingType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Determines how a channel behaves during scene transitions.
+// FADE - Interpolate smoothly between values (default for intensity, colors)
+// SNAP - Jump to target value at start of transition (for gobos, macros, effects)
+// SNAP_END - Jump to target value at end of transition
+type FadeBehavior string
+
+const (
+	FadeBehaviorFade    FadeBehavior = "FADE"
+	FadeBehaviorSnap    FadeBehavior = "SNAP"
+	FadeBehaviorSnapEnd FadeBehavior = "SNAP_END"
+)
+
+var AllFadeBehavior = []FadeBehavior{
+	FadeBehaviorFade,
+	FadeBehaviorSnap,
+	FadeBehaviorSnapEnd,
+}
+
+func (e FadeBehavior) IsValid() bool {
+	switch e {
+	case FadeBehaviorFade, FadeBehaviorSnap, FadeBehaviorSnapEnd:
+		return true
+	}
+	return false
+}
+
+func (e FadeBehavior) String() string {
+	return string(e)
+}
+
+func (e *FadeBehavior) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = FadeBehavior(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid FadeBehavior", str)
+	}
+	return nil
+}
+
+func (e FadeBehavior) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *FadeBehavior) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e FadeBehavior) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

@@ -78,7 +78,9 @@ type ComplexityRoot struct {
 
 	ChannelDefinition struct {
 		DefaultValue func(childComplexity int) int
+		FadeBehavior func(childComplexity int) int
 		ID           func(childComplexity int) int
+		IsDiscrete   func(childComplexity int) int
 		MaxValue     func(childComplexity int) int
 		MinValue     func(childComplexity int) int
 		Name         func(childComplexity int) int
@@ -281,7 +283,9 @@ type ComplexityRoot struct {
 
 	InstanceChannel struct {
 		DefaultValue func(childComplexity int) int
+		FadeBehavior func(childComplexity int) int
 		ID           func(childComplexity int) int
+		IsDiscrete   func(childComplexity int) int
 		MaxValue     func(childComplexity int) int
 		MinValue     func(childComplexity int) int
 		Name         func(childComplexity int) int
@@ -695,6 +699,8 @@ type ComplexityRoot struct {
 
 type ChannelDefinitionResolver interface {
 	Type(ctx context.Context, obj *models.ChannelDefinition) (ChannelType, error)
+
+	FadeBehavior(ctx context.Context, obj *models.ChannelDefinition) (FadeBehavior, error)
 }
 type CueResolver interface {
 	Scene(ctx context.Context, obj *models.Cue) (*models.Scene, error)
@@ -739,6 +745,8 @@ type FixtureValueResolver interface {
 }
 type InstanceChannelResolver interface {
 	Type(ctx context.Context, obj *models.InstanceChannel) (ChannelType, error)
+
+	FadeBehavior(ctx context.Context, obj *models.InstanceChannel) (FadeBehavior, error)
 }
 type ModeChannelResolver interface {
 	Channel(ctx context.Context, obj *models.ModeChannel) (*models.ChannelDefinition, error)
@@ -1002,12 +1010,24 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelDefinition.DefaultValue(childComplexity), true
+	case "ChannelDefinition.fadeBehavior":
+		if e.complexity.ChannelDefinition.FadeBehavior == nil {
+			break
+		}
+
+		return e.complexity.ChannelDefinition.FadeBehavior(childComplexity), true
 	case "ChannelDefinition.id":
 		if e.complexity.ChannelDefinition.ID == nil {
 			break
 		}
 
 		return e.complexity.ChannelDefinition.ID(childComplexity), true
+	case "ChannelDefinition.isDiscrete":
+		if e.complexity.ChannelDefinition.IsDiscrete == nil {
+			break
+		}
+
+		return e.complexity.ChannelDefinition.IsDiscrete(childComplexity), true
 	case "ChannelDefinition.maxValue":
 		if e.complexity.ChannelDefinition.MaxValue == nil {
 			break
@@ -1829,12 +1849,24 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.InstanceChannel.DefaultValue(childComplexity), true
+	case "InstanceChannel.fadeBehavior":
+		if e.complexity.InstanceChannel.FadeBehavior == nil {
+			break
+		}
+
+		return e.complexity.InstanceChannel.FadeBehavior(childComplexity), true
 	case "InstanceChannel.id":
 		if e.complexity.InstanceChannel.ID == nil {
 			break
 		}
 
 		return e.complexity.InstanceChannel.ID(childComplexity), true
+	case "InstanceChannel.isDiscrete":
+		if e.complexity.InstanceChannel.IsDiscrete == nil {
+			break
+		}
+
+		return e.complexity.InstanceChannel.IsDiscrete(childComplexity), true
 	case "InstanceChannel.maxValue":
 		if e.complexity.InstanceChannel.MaxValue == nil {
 			break
@@ -4533,6 +4565,18 @@ enum EasingType {
   S_CURVE
 }
 
+"""
+Determines how a channel behaves during scene transitions.
+FADE - Interpolate smoothly between values (default for intensity, colors)
+SNAP - Jump to target value at start of transition (for gobos, macros, effects)
+SNAP_END - Jump to target value at end of transition
+"""
+enum FadeBehavior {
+  FADE
+  SNAP
+  SNAP_END
+}
+
 enum SceneSortField {
   NAME
   CREATED_AT
@@ -4619,6 +4663,8 @@ type ChannelDefinition {
   minValue: Int!
   maxValue: Int!
   defaultValue: Int!
+  fadeBehavior: FadeBehavior!
+  isDiscrete: Boolean!
 }
 
 type FixtureInstance {
@@ -4660,6 +4706,8 @@ type InstanceChannel {
   minValue: Int!
   maxValue: Int!
   defaultValue: Int!
+  fadeBehavior: FadeBehavior!
+  isDiscrete: Boolean!
 }
 
 type Scene {
@@ -5110,6 +5158,8 @@ input CreateChannelDefinitionInput {
   minValue: Int!
   maxValue: Int!
   defaultValue: Int!
+  fadeBehavior: FadeBehavior
+  isDiscrete: Boolean
 }
 
 input ImportOFLFixtureInput {
@@ -7897,6 +7947,64 @@ func (ec *executionContext) fieldContext_ChannelDefinition_defaultValue(_ contex
 	return fc, nil
 }
 
+func (ec *executionContext) _ChannelDefinition_fadeBehavior(ctx context.Context, field graphql.CollectedField, obj *models.ChannelDefinition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelDefinition_fadeBehavior,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.ChannelDefinition().FadeBehavior(ctx, obj)
+		},
+		nil,
+		ec.marshalNFadeBehavior2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFadeBehavior,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelDefinition_fadeBehavior(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelDefinition",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type FadeBehavior does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelDefinition_isDiscrete(ctx context.Context, field graphql.CollectedField, obj *models.ChannelDefinition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelDefinition_isDiscrete,
+		func(ctx context.Context) (any, error) {
+			return obj.IsDiscrete, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelDefinition_isDiscrete(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelDefinition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ChannelMapFixture_id(ctx context.Context, field graphql.CollectedField, obj *ChannelMapFixture) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10322,6 +10430,10 @@ func (ec *executionContext) fieldContext_FixtureDefinition_channels(_ context.Co
 				return ec.fieldContext_ChannelDefinition_maxValue(ctx, field)
 			case "defaultValue":
 				return ec.fieldContext_ChannelDefinition_defaultValue(ctx, field)
+			case "fadeBehavior":
+				return ec.fieldContext_ChannelDefinition_fadeBehavior(ctx, field)
+			case "isDiscrete":
+				return ec.fieldContext_ChannelDefinition_isDiscrete(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ChannelDefinition", field.Name)
 		},
@@ -10727,6 +10839,10 @@ func (ec *executionContext) fieldContext_FixtureInstance_channels(_ context.Cont
 				return ec.fieldContext_InstanceChannel_maxValue(ctx, field)
 			case "defaultValue":
 				return ec.fieldContext_InstanceChannel_defaultValue(ctx, field)
+			case "fadeBehavior":
+				return ec.fieldContext_InstanceChannel_fadeBehavior(ctx, field)
+			case "isDiscrete":
+				return ec.fieldContext_InstanceChannel_isDiscrete(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type InstanceChannel", field.Name)
 		},
@@ -12221,6 +12337,64 @@ func (ec *executionContext) fieldContext_InstanceChannel_defaultValue(_ context.
 	return fc, nil
 }
 
+func (ec *executionContext) _InstanceChannel_fadeBehavior(ctx context.Context, field graphql.CollectedField, obj *models.InstanceChannel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_InstanceChannel_fadeBehavior,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.InstanceChannel().FadeBehavior(ctx, obj)
+		},
+		nil,
+		ec.marshalNFadeBehavior2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFadeBehavior,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_InstanceChannel_fadeBehavior(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "InstanceChannel",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type FadeBehavior does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _InstanceChannel_isDiscrete(ctx context.Context, field graphql.CollectedField, obj *models.InstanceChannel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_InstanceChannel_isDiscrete,
+		func(ctx context.Context) (any, error) {
+			return obj.IsDiscrete, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_InstanceChannel_isDiscrete(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "InstanceChannel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _LacyLightsFixture_manufacturer(ctx context.Context, field graphql.CollectedField, obj *LacyLightsFixture) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -12375,6 +12549,10 @@ func (ec *executionContext) fieldContext_ModeChannel_channel(_ context.Context, 
 				return ec.fieldContext_ChannelDefinition_maxValue(ctx, field)
 			case "defaultValue":
 				return ec.fieldContext_ChannelDefinition_defaultValue(ctx, field)
+			case "fadeBehavior":
+				return ec.fieldContext_ChannelDefinition_fadeBehavior(ctx, field)
+			case "isDiscrete":
+				return ec.fieldContext_ChannelDefinition_isDiscrete(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ChannelDefinition", field.Name)
 		},
@@ -26769,7 +26947,7 @@ func (ec *executionContext) unmarshalInputCreateChannelDefinitionInput(ctx conte
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "type", "offset", "minValue", "maxValue", "defaultValue"}
+	fieldsInOrder := [...]string{"name", "type", "offset", "minValue", "maxValue", "defaultValue", "fadeBehavior", "isDiscrete"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -26818,6 +26996,20 @@ func (ec *executionContext) unmarshalInputCreateChannelDefinitionInput(ctx conte
 				return it, err
 			}
 			it.DefaultValue = data
+		case "fadeBehavior":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("fadeBehavior"))
+			data, err := ec.unmarshalOFadeBehavior2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFadeBehavior(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FadeBehavior = graphql.OmittableOf(data)
+		case "isDiscrete":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("isDiscrete"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.IsDiscrete = graphql.OmittableOf(data)
 		}
 	}
 
@@ -28790,6 +28982,47 @@ func (ec *executionContext) _ChannelDefinition(ctx context.Context, sel ast.Sele
 			}
 		case "defaultValue":
 			out.Values[i] = ec._ChannelDefinition_defaultValue(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "fadeBehavior":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._ChannelDefinition_fadeBehavior(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "isDiscrete":
+			out.Values[i] = ec._ChannelDefinition_isDiscrete(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
@@ -30994,6 +31227,47 @@ func (ec *executionContext) _InstanceChannel(ctx context.Context, sel ast.Select
 			}
 		case "defaultValue":
 			out.Values[i] = ec._InstanceChannel_defaultValue(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "fadeBehavior":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._InstanceChannel_fadeBehavior(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "isDiscrete":
+			out.Values[i] = ec._InstanceChannel_isDiscrete(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
@@ -36792,6 +37066,16 @@ func (ec *executionContext) marshalNExportStats2githubᚗcomᚋbbernsteinᚋlacy
 	return ec._ExportStats(ctx, sel, &v)
 }
 
+func (ec *executionContext) unmarshalNFadeBehavior2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFadeBehavior(ctx context.Context, v any) (FadeBehavior, error) {
+	var res FadeBehavior
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNFadeBehavior2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFadeBehavior(ctx context.Context, sel ast.SelectionSet, v FadeBehavior) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) marshalNFixtureChannelAssignment2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureChannelAssignmentᚄ(ctx context.Context, sel ast.SelectionSet, v []*FixtureChannelAssignment) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
@@ -39374,6 +39658,22 @@ func (ec *executionContext) unmarshalOExportOptionsInput2ᚖgithubᚗcomᚋbbern
 	}
 	res, err := ec.unmarshalInputExportOptionsInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalOFadeBehavior2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFadeBehavior(ctx context.Context, v any) (*FadeBehavior, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(FadeBehavior)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOFadeBehavior2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFadeBehavior(ctx context.Context, sel ast.SelectionSet, v *FadeBehavior) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) unmarshalOFixtureConflictStrategy2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureConflictStrategy(ctx context.Context, v any) (*FixtureConflictStrategy, error) {

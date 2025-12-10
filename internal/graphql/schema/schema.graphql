@@ -54,6 +54,18 @@ enum EasingType {
   S_CURVE
 }
 
+"""
+Determines how a channel behaves during scene transitions.
+FADE - Interpolate smoothly between values (default for intensity, colors)
+SNAP - Jump to target value at start of transition (for gobos, macros, effects)
+SNAP_END - Jump to target value at end of transition
+"""
+enum FadeBehavior {
+  FADE
+  SNAP
+  SNAP_END
+}
+
 enum SceneSortField {
   NAME
   CREATED_AT
@@ -140,6 +152,8 @@ type ChannelDefinition {
   minValue: Int!
   maxValue: Int!
   defaultValue: Int!
+  fadeBehavior: FadeBehavior!
+  isDiscrete: Boolean!
 }
 
 type FixtureInstance {
@@ -181,6 +195,8 @@ type InstanceChannel {
   minValue: Int!
   maxValue: Int!
   defaultValue: Int!
+  fadeBehavior: FadeBehavior!
+  isDiscrete: Boolean!
 }
 
 type Scene {
@@ -631,6 +647,8 @@ input CreateChannelDefinitionInput {
   minValue: Int!
   maxValue: Int!
   defaultValue: Int!
+  fadeBehavior: FadeBehavior
+  isDiscrete: Boolean
 }
 
 input ImportOFLFixtureInput {

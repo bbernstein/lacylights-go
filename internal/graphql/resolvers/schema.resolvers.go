@@ -21,19 +21,18 @@ import (
 	"github.com/lucsky/cuid"
 )
 
-// stringToPointer converts a string to a string pointer, returning nil for empty strings.
-// This helper eliminates code duplication in resolver functions that need to convert
-// optional string fields to pointer types for GraphQL responses.
-func stringToPointer(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
 // Type is the resolver for the type field.
 func (r *channelDefinitionResolver) Type(ctx context.Context, obj *models.ChannelDefinition) (generated.ChannelType, error) {
 	return generated.ChannelType(obj.Type), nil
+}
+
+// FadeBehavior is the resolver for the fadeBehavior field.
+func (r *channelDefinitionResolver) FadeBehavior(ctx context.Context, obj *models.ChannelDefinition) (generated.FadeBehavior, error) {
+	// Return the stored value, defaulting to FADE if empty
+	if obj.FadeBehavior == "" {
+		return generated.FadeBehaviorFade, nil
+	}
+	return generated.FadeBehavior(obj.FadeBehavior), nil
 }
 
 // Scene is the resolver for the scene field.
@@ -253,6 +252,15 @@ func (r *fixtureValueResolver) ChannelValues(ctx context.Context, obj *models.Fi
 // Type is the resolver for the type field.
 func (r *instanceChannelResolver) Type(ctx context.Context, obj *models.InstanceChannel) (generated.ChannelType, error) {
 	return generated.ChannelType(obj.Type), nil
+}
+
+// FadeBehavior is the resolver for the fadeBehavior field.
+func (r *instanceChannelResolver) FadeBehavior(ctx context.Context, obj *models.InstanceChannel) (generated.FadeBehavior, error) {
+	// Return the stored value, defaulting to FADE if empty
+	if obj.FadeBehavior == "" {
+		return generated.FadeBehaviorFade, nil
+	}
+	return generated.FadeBehavior(obj.FadeBehavior), nil
 }
 
 // Channel is the resolver for the channel field.
@@ -4477,3 +4485,18 @@ type sceneBoardButtonResolver struct{ *Resolver }
 type settingResolver struct{ *Resolver }
 type subscriptionResolver struct{ *Resolver }
 type userResolver struct{ *Resolver }
+
+// !!! WARNING !!!
+// The code below was going to be deleted when updating resolvers. It has been copied here so you have
+// one last chance to move it out of harms way if you want. There are two reasons this happens:
+//  - When renaming or deleting a resolver the old code will be put in here. You can safely delete
+//    it when you're done.
+//  - You have helper methods in this file. Move them out to keep these resolver files clean.
+/*
+	func (r *channelDefinitionResolver) IsDiscrete(ctx context.Context, obj *models.ChannelDefinition) (bool, error) {
+	return obj.IsDiscrete, nil
+}
+func (r *instanceChannelResolver) IsDiscrete(ctx context.Context, obj *models.InstanceChannel) (bool, error) {
+	return obj.IsDiscrete, nil
+}
+*/

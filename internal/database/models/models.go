@@ -77,6 +77,8 @@ type ChannelDefinition struct {
 	MinValue     int    `gorm:"column:min_value;default:0"`
 	MaxValue     int    `gorm:"column:max_value;default:255"`
 	DefaultValue int    `gorm:"column:default_value;default:0"`
+	FadeBehavior string `gorm:"column:fade_behavior;default:FADE"` // FadeBehavior enum: FADE, SNAP, SNAP_END
+	IsDiscrete   bool   `gorm:"column:is_discrete;default:false"`  // True if channel has multiple discrete DMX ranges
 	DefinitionID string `gorm:"column:definition_id;index"`
 }
 
@@ -151,6 +153,8 @@ type InstanceChannel struct {
 	MinValue     int    `gorm:"column:min_value;default:0"`
 	MaxValue     int    `gorm:"column:max_value;default:255"`
 	DefaultValue int    `gorm:"column:default_value;default:0"`
+	FadeBehavior string `gorm:"column:fade_behavior;default:FADE"` // FadeBehavior enum: FADE, SNAP, SNAP_END
+	IsDiscrete   bool   `gorm:"column:is_discrete;default:false"`  // True if channel has multiple discrete DMX ranges
 }
 
 func (InstanceChannel) TableName() string { return "instance_channels" }
