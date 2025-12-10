@@ -9,26 +9,36 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/services/dmx"
 )
 
+// FadeBehavior constants for channel transition behavior
+const (
+	FadeBehaviorFade    = "FADE"     // Interpolate smoothly between values (default)
+	FadeBehaviorSnap    = "SNAP"     // Jump to target value at start of transition
+	FadeBehaviorSnapEnd = "SNAP_END" // Jump to target value at end of transition
+)
+
 // ChannelTarget represents a target value for a channel.
 type ChannelTarget struct {
-	Universe    int
-	Channel     int
-	TargetValue int
+	Universe     int
+	Channel      int
+	TargetValue  int
+	FadeBehavior string // "FADE", "SNAP", or "SNAP_END" - defaults to "FADE" if empty
 }
 
 // SceneChannel represents a channel value in a scene.
 type SceneChannel struct {
-	Universe int
-	Channel  int
-	Value    int
+	Universe     int
+	Channel      int
+	Value        int
+	FadeBehavior string // "FADE", "SNAP", or "SNAP_END" - defaults to "FADE" if empty
 }
 
 // channelFade represents a fade operation on a single channel.
 type channelFade struct {
-	universe   int
-	channel    int
-	startValue float64
-	endValue   float64
+	universe     int
+	channel      int
+	startValue   float64
+	endValue     float64
+	fadeBehavior string // "FADE", "SNAP", or "SNAP_END"
 }
 
 // activeFade represents an active fade operation.
@@ -124,7 +134,7 @@ func (e *Engine) processFades() {
 		progress := float64(elapsed) / float64(fade.duration)
 
 		if progress >= 1 {
-			// Fade complete - set final values
+			// Fade complete - set final values for all channels
 			for _, ch := range fade.channels {
 				channelKey := fmt.Sprintf("%d-%d", ch.universe, ch.channel)
 				e.interpolatedValues[channelKey] = ch.endValue
@@ -136,9 +146,24 @@ func (e *Engine) processFades() {
 				callbacks = append(callbacks, fade.onComplete)
 			}
 		} else {
-			// Interpolate values
+			// Interpolate values based on channel's fade behavior
 			for _, ch := range fade.channels {
-				currentValue := Interpolate(ch.startValue, ch.endValue, progress, fade.easingType)
+				var currentValue float64
+
+				switch ch.fadeBehavior {
+				case FadeBehaviorSnap:
+					// SNAP: Jump to target value immediately at start of transition
+					currentValue = ch.endValue
+
+				case FadeBehaviorSnapEnd:
+					// SNAP_END: Hold start value until fade completes (handled in progress >= 1 block)
+					currentValue = ch.startValue
+
+				default: // FadeBehaviorFade or empty string
+					// FADE: Interpolate smoothly between values
+					currentValue = Interpolate(ch.startValue, ch.endValue, progress, fade.easingType)
+				}
+
 				roundedValue := math.Round(currentValue)
 				clampedValue := clamp(int(roundedValue), 0, 255)
 
@@ -263,11 +288,18 @@ func (e *Engine) FadeChannels(targets []ChannelTarget, duration time.Duration, f
 			delete(e.interpolatedValues, channelKey)
 		}
 
+		// Default to FADE behavior if not specified
+		behavior := target.FadeBehavior
+		if behavior == "" {
+			behavior = FadeBehaviorFade
+		}
+
 		channels = append(channels, channelFade{
-			universe:   target.Universe,
-			channel:    target.Channel,
-			startValue: startValue,
-			endValue:   float64(target.TargetValue),
+			universe:     target.Universe,
+			channel:      target.Channel,
+			startValue:   startValue,
+			endValue:     float64(target.TargetValue),
+			fadeBehavior: behavior,
 		})
 	}
 
@@ -288,9 +320,10 @@ func (e *Engine) FadeToScene(sceneChannels []SceneChannel, fadeInTime time.Durat
 	targets := make([]ChannelTarget, len(sceneChannels))
 	for i, ch := range sceneChannels {
 		targets[i] = ChannelTarget{
-			Universe:    ch.Universe,
-			Channel:     ch.Channel,
-			TargetValue: ch.Value,
+			Universe:     ch.Universe,
+			Channel:      ch.Channel,
+			TargetValue:  ch.Value,
+			FadeBehavior: ch.FadeBehavior, // Pass through fade behavior
 		}
 	}
 
