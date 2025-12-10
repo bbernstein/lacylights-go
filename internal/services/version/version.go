@@ -112,9 +112,9 @@ func (s *Service) GetSystemVersions() (*SystemVersionInfo, error) {
 
 	// Execute update-repos.sh versions json
 	cmd := exec.Command(UpdateScriptPath, "versions", "json")
-	output, err := cmd.Output()
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get versions: %w", err)
+		return nil, fmt.Errorf("failed to get versions: %w\nOutput: %s", err, string(output))
 	}
 
 	// Parse JSON output dynamically to avoid duplicating repository names
@@ -155,9 +155,9 @@ func (s *Service) GetAvailableVersions(repository string) ([]string, error) {
 
 	// Execute update-repos.sh available <repo>
 	cmd := exec.Command(UpdateScriptPath, "available", repository)
-	output, err := cmd.Output()
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get available versions: %w", err)
+		return nil, fmt.Errorf("failed to get available versions: %w\nOutput: %s", err, string(output))
 	}
 
 	// Parse output (one version per line)
