@@ -418,9 +418,15 @@ func (r *mutationResolver) CreateFixtureDefinition(ctx context.Context, input ge
 }
 
 // ImportOFLFixture is the resolver for the importOFLFixture field.
-// Returns error - OFL fixture import not available on this platform
+// Imports a fixture definition from OFL (Open Fixture Library) JSON format.
+// Automatically detects and sets FadeBehavior and IsDiscrete based on channel types.
 func (r *mutationResolver) ImportOFLFixture(ctx context.Context, input generated.ImportOFLFixtureInput) (*models.FixtureDefinition, error) {
-	return nil, fmt.Errorf("OFL fixture import not available on this platform")
+	replace := false
+	if replacePtr := input.Replace.Value(); replacePtr != nil {
+		replace = *replacePtr
+	}
+
+	return r.OFLService.ImportFixture(ctx, input.Manufacturer, input.OflFixtureJSON, replace)
 }
 
 // UpdateFixtureDefinition is the resolver for the updateFixtureDefinition field.
@@ -4485,18 +4491,3 @@ type sceneBoardButtonResolver struct{ *Resolver }
 type settingResolver struct{ *Resolver }
 type subscriptionResolver struct{ *Resolver }
 type userResolver struct{ *Resolver }
-
-// !!! WARNING !!!
-// The code below was going to be deleted when updating resolvers. It has been copied here so you have
-// one last chance to move it out of harms way if you want. There are two reasons this happens:
-//  - When renaming or deleting a resolver the old code will be put in here. You can safely delete
-//    it when you're done.
-//  - You have helper methods in this file. Move them out to keep these resolver files clean.
-/*
-	func (r *channelDefinitionResolver) IsDiscrete(ctx context.Context, obj *models.ChannelDefinition) (bool, error) {
-	return obj.IsDiscrete, nil
-}
-func (r *instanceChannelResolver) IsDiscrete(ctx context.Context, obj *models.InstanceChannel) (bool, error) {
-	return obj.IsDiscrete, nil
-}
-*/
