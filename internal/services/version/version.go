@@ -114,7 +114,9 @@ func (s *Service) GetSystemVersions() (*SystemVersionInfo, error) {
 	cmd := exec.Command(UpdateScriptPath, "versions", "json")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get versions: %w\nOutput: %s", err, string(output))
+		// Log full output server-side for debugging, return sanitized error to client
+		log.Printf("Failed to get versions: %v\nFull output: %s", err, string(output))
+		return nil, fmt.Errorf("failed to get versions: %w", err)
 	}
 
 	// Parse JSON output dynamically to avoid duplicating repository names
@@ -157,7 +159,9 @@ func (s *Service) GetAvailableVersions(repository string) ([]string, error) {
 	cmd := exec.Command(UpdateScriptPath, "available", repository)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get available versions: %w\nOutput: %s", err, string(output))
+		// Log full output server-side for debugging, return sanitized error to client
+		log.Printf("Failed to get available versions for %s: %v\nFull output: %s", repository, err, string(output))
+		return nil, fmt.Errorf("failed to get available versions: %w", err)
 	}
 
 	// Parse output (one version per line)
@@ -231,11 +235,13 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 	cmd := exec.Command(UpdateScriptPath, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		// Log full output server-side for debugging, return sanitized error to client
+		log.Printf("Update failed for repository %s: %v\nFull output: %s", repository, err, string(output))
 		return &UpdateResult{
 			Success:         false,
 			Repository:      repository,
 			PreviousVersion: previousVersion,
-			Error:           fmt.Sprintf("Update failed: %v\nOutput: %s", err, string(output)),
+			Error:           fmt.Sprintf("Update failed: %v", err),
 		}, nil
 	}
 
@@ -318,6 +324,8 @@ func (s *Service) UpdateAllRepositories() ([]*UpdateResult, error) {
 	var results []*UpdateResult
 
 	if cmdErr != nil {
+		// Log full output server-side for debugging, return sanitized error to client
+		log.Printf("Update-all failed: %v\nFull output: %s", cmdErr, string(output))
 		// Update failed
 		for _, repo := range repositoryNames {
 			results = append(results, &UpdateResult{
@@ -325,7 +333,7 @@ func (s *Service) UpdateAllRepositories() ([]*UpdateResult, error) {
 				Repository:      repo,
 				PreviousVersion: previousVersions[repo],
 				NewVersion:      newVersions[repo],
-				Error:           fmt.Sprintf("Update failed: %v\nOutput: %s", cmdErr, string(output)),
+				Error:           fmt.Sprintf("Update failed: %v", cmdErr),
 			})
 		}
 	} else {
