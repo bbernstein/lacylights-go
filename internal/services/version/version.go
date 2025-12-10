@@ -285,6 +285,10 @@ func (s *Service) UpdateAllRepositories() ([]*UpdateResult, error) {
 	previousVersions := make(map[string]string)
 	if err != nil {
 		log.Printf("Warning: failed to get versions before update: %v", err)
+		// Initialize with "unknown" to provide clearer feedback to users
+		for _, repo := range repositoryNames {
+			previousVersions[repo] = "unknown"
+		}
 	} else if infoBefore != nil {
 		for _, repo := range infoBefore.Repositories {
 			previousVersions[repo.Repository] = repo.Installed
@@ -297,11 +301,14 @@ func (s *Service) UpdateAllRepositories() ([]*UpdateResult, error) {
 
 	// Get versions after update
 	infoAfter, err := s.GetSystemVersions()
+	newVersions := make(map[string]string)
 	if err != nil {
 		log.Printf("Warning: failed to get versions after update: %v", err)
-	}
-	newVersions := make(map[string]string)
-	if infoAfter != nil {
+		// Initialize with "unknown" to provide clearer feedback to users
+		for _, repo := range repositoryNames {
+			newVersions[repo] = "unknown"
+		}
+	} else if infoAfter != nil {
 		for _, repo := range infoAfter.Repositories {
 			newVersions[repo.Repository] = repo.Installed
 		}
