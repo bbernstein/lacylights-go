@@ -21,6 +21,16 @@ import (
 	"github.com/lucsky/cuid"
 )
 
+// stringToPointer converts a string to a string pointer, returning nil for empty strings.
+// This helper eliminates code duplication in resolver functions that need to convert
+// optional string fields to pointer types for GraphQL responses.
+func stringToPointer(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 // Type is the resolver for the type field.
 func (r *channelDefinitionResolver) Type(ctx context.Context, obj *models.ChannelDefinition) (generated.ChannelType, error) {
 	return generated.ChannelType(obj.Type), nil
@@ -2691,22 +2701,13 @@ func (r *mutationResolver) UpdateRepository(ctx context.Context, repository stri
 		}, nil
 	}
 
-	var errPtr *string
-	if result.Error != "" {
-		errPtr = &result.Error
-	}
-	var msgPtr *string
-	if result.Message != "" {
-		msgPtr = &result.Message
-	}
-
 	return &generated.UpdateResult{
 		Success:         result.Success,
 		Repository:      result.Repository,
 		PreviousVersion: result.PreviousVersion,
 		NewVersion:      result.NewVersion,
-		Message:         msgPtr,
-		Error:           errPtr,
+		Message:         stringToPointer(result.Message),
+		Error:           stringToPointer(result.Error),
 	}, nil
 }
 
@@ -2720,22 +2721,13 @@ func (r *mutationResolver) UpdateAllRepositories(ctx context.Context) ([]*genera
 
 	var gqlResults []*generated.UpdateResult
 	for _, result := range results {
-		var errPtr *string
-		if result.Error != "" {
-			errPtr = &result.Error
-		}
-		var msgPtr *string
-		if result.Message != "" {
-			msgPtr = &result.Message
-		}
-
 		gqlResults = append(gqlResults, &generated.UpdateResult{
 			Success:         result.Success,
 			Repository:      result.Repository,
 			PreviousVersion: result.PreviousVersion,
 			NewVersion:      result.NewVersion,
-			Message:         msgPtr,
-			Error:           errPtr,
+			Message:         stringToPointer(result.Message),
+			Error:           stringToPointer(result.Error),
 		})
 	}
 
