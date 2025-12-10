@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -18,12 +19,19 @@ const (
 )
 
 var (
+	// repositoryNames is the canonical list of managed repositories
+	repositoryNames = []string{"lacylights-fe", "lacylights-go", "lacylights-mcp"}
+
 	// validRepositories defines the allowed repository names to prevent command injection
-	validRepositories = map[string]bool{
-		"lacylights-fe":  true,
-		"lacylights-go":  true,
-		"lacylights-mcp": true,
-	}
+	// Derived from repositoryNames to avoid duplication
+	validRepositories = func() map[string]bool {
+		m := make(map[string]bool)
+		for _, name := range repositoryNames {
+			m[name] = true
+		}
+		return m
+	}()
+
 	// semverPattern validates version strings to prevent command injection
 	semverPattern = regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$`)
 )
@@ -82,7 +90,7 @@ func NewService() *Service {
 
 // IsSupported checks if version management is available on this system
 func (s *Service) IsSupported() bool {
-	_, err := exec.LookPath(UpdateScriptPath)
+	_, err := os.Stat(UpdateScriptPath)
 	return err == nil
 }
 
@@ -319,13 +327,12 @@ func (s *Service) UpdateAllRepositories() ([]*UpdateResult, error) {
 		}
 	}
 
-	// Build results for each repository
-	repos := []string{"lacylights-fe", "lacylights-go", "lacylights-mcp"}
+	// Build results for each repository (using shared repositoryNames)
 	var results []*UpdateResult
 
 	if cmdErr != nil {
 		// Update failed
-		for _, repo := range repos {
+		for _, repo := range repositoryNames {
 			results = append(results, &UpdateResult{
 				Success:         false,
 				Repository:      repo,
@@ -336,7 +343,7 @@ func (s *Service) UpdateAllRepositories() ([]*UpdateResult, error) {
 		}
 	} else {
 		// Update succeeded
-		for _, repo := range repos {
+		for _, repo := range repositoryNames {
 			results = append(results, &UpdateResult{
 				Success:         true,
 				Repository:      repo,
