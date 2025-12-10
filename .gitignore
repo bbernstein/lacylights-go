@@ -6,6 +6,7 @@
 *.dylib
 /server
 /lacylights-go
+/lacylights-server
 
 # Test binaries
 *.test

@@ -21,6 +21,16 @@ import (
 	"github.com/lucsky/cuid"
 )
 
+// stringToPointer converts a string to a string pointer, returning nil for empty strings.
+// This helper eliminates code duplication in resolver functions that need to convert
+// optional string fields to pointer types for GraphQL responses.
+func stringToPointer(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 // Type is the resolver for the type field.
 func (r *channelDefinitionResolver) Type(ctx context.Context, obj *models.ChannelDefinition) (generated.ChannelType, error) {
 	return generated.ChannelType(obj.Type), nil
@@ -2677,22 +2687,51 @@ func (r *mutationResolver) ForgetWiFiNetwork(ctx context.Context, ssid string) (
 }
 
 // UpdateRepository is the resolver for the updateRepository field.
-// Returns failure - version management not available on this platform
+// Updates a specific repository to a specific version
 func (r *mutationResolver) UpdateRepository(ctx context.Context, repository string, version *string) (*generated.UpdateResult, error) {
-	errMsg := "Version management not available on this platform"
+	result, err := r.VersionService.UpdateRepository(repository, version)
+	if err != nil {
+		errMsg := err.Error()
+		return &generated.UpdateResult{
+			Success:         false,
+			Repository:      repository,
+			PreviousVersion: "",
+			NewVersion:      "",
+			Error:           &errMsg,
+		}, nil
+	}
+
 	return &generated.UpdateResult{
-		Success:         false,
-		Repository:      repository,
-		PreviousVersion: "",
-		NewVersion:      "",
-		Error:           &errMsg,
+		Success:         result.Success,
+		Repository:      result.Repository,
+		PreviousVersion: result.PreviousVersion,
+		NewVersion:      result.NewVersion,
+		Message:         stringToPointer(result.Message),
+		Error:           stringToPointer(result.Error),
 	}, nil
 }
 
 // UpdateAllRepositories is the resolver for the updateAllRepositories field.
-// Returns empty list - version management not available on this platform
+// Updates all repositories to their latest versions
 func (r *mutationResolver) UpdateAllRepositories(ctx context.Context) ([]*generated.UpdateResult, error) {
-	return []*generated.UpdateResult{}, nil
+	results, err := r.VersionService.UpdateAllRepositories()
+	if err != nil {
+		return nil, err
+	}
+
+	var gqlResults []*generated.UpdateResult
+	for _, result := range results {
+		gqlResults = append(gqlResults, &generated.UpdateResult{
+			Success:         result.Success,
+			Repository:      result.Repository,
+			PreviousVersion: result.PreviousVersion,
+			NewVersion:      result.NewVersion,
+			Message:         stringToPointer(result.Message),
+			Error:           stringToPointer(result.Error),
+		})
+	}
+
+	return gqlResults, nil
 }
 
 // Project is the resolver for the project field.
@@ -3877,19 +3916,35 @@ func (r *queryResolver) GetQLCFixtureMappingSuggestions(ctx context.Context, pro
 }
 
 // SystemVersions is the resolver for the systemVersions field.
-// Returns status indicating version management is not supported on this platform
+// Returns version information for all LacyLights components
 func (r *queryResolver) SystemVersions(ctx context.Context) (*generated.SystemVersionInfo, error) {
+	info, err := r.VersionService.GetSystemVersions()
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to GraphQL types
+	var repos []*generated.RepositoryVersion
+	for _, repo := range info.Repositories {
+		repos = append(repos, &generated.RepositoryVersion{
+			Repository:      repo.Repository,
+			Installed:       repo.Installed,
+			Latest:          repo.Latest,
+			UpdateAvailable: repo.UpdateAvailable,
+		})
+	}
+
 	return &generated.SystemVersionInfo{
-		Repositories:               []*generated.RepositoryVersion{},
-		LastChecked:                "",
-		VersionManagementSupported: false,
+		Repositories:               repos,
+		LastChecked:                info.LastChecked,
+		VersionManagementSupported: info.VersionManagementSupported,
 	}, nil
 }
 
 // AvailableVersions is the resolver for the availableVersions field.
-// Returns empty list - version management not supported on this platform
+// Returns available versions for a specific repository
 func (r *queryResolver) AvailableVersions(ctx context.Context, repository string) ([]string, error) {
-	return []string{}, nil
+	return r.VersionService.GetAvailableVersions(repository)
 }
 
 // FixturesByIds is the resolver for the fixturesByIds field.
