@@ -94,20 +94,10 @@ func (s *Service) IsSupported() bool {
 	return err == nil
 }
 
-// versionsJSON represents the JSON output from update-repos.sh versions json
-type versionsJSON struct {
-	LacylightsFE struct {
-		Installed string `json:"installed"`
-		Latest    string `json:"latest"`
-	} `json:"lacylights-fe"`
-	LacylightsGo struct {
-		Installed string `json:"installed"`
-		Latest    string `json:"latest"`
-	} `json:"lacylights-go"`
-	LacylightsMCP struct {
-		Installed string `json:"installed"`
-		Latest    string `json:"latest"`
-	} `json:"lacylights-mcp"`
+// repoVersionInfo represents version info for a single repository in the JSON output
+type repoVersionInfo struct {
+	Installed string `json:"installed"`
+	Latest    string `json:"latest"`
 }
 
 // GetSystemVersions returns version information for all repositories
@@ -127,32 +117,22 @@ func (s *Service) GetSystemVersions() (*SystemVersionInfo, error) {
 		return nil, fmt.Errorf("failed to get versions: %w", err)
 	}
 
-	// Parse JSON output
-	var versions versionsJSON
+	// Parse JSON output dynamically to avoid duplicating repository names
+	var versions map[string]repoVersionInfo
 	if err := json.Unmarshal(output, &versions); err != nil {
 		return nil, fmt.Errorf("failed to parse versions JSON: %w", err)
 	}
 
-	// Build repository list
-	repos := []*RepositoryVersion{
-		{
-			Repository:      "lacylights-fe",
-			Installed:       versions.LacylightsFE.Installed,
-			Latest:          versions.LacylightsFE.Latest,
-			UpdateAvailable: isUpdateAvailable(versions.LacylightsFE.Installed, versions.LacylightsFE.Latest),
-		},
-		{
-			Repository:      "lacylights-go",
-			Installed:       versions.LacylightsGo.Installed,
-			Latest:          versions.LacylightsGo.Latest,
-			UpdateAvailable: isUpdateAvailable(versions.LacylightsGo.Installed, versions.LacylightsGo.Latest),
-		},
-		{
-			Repository:      "lacylights-mcp",
-			Installed:       versions.LacylightsMCP.Installed,
-			Latest:          versions.LacylightsMCP.Latest,
-			UpdateAvailable: isUpdateAvailable(versions.LacylightsMCP.Installed, versions.LacylightsMCP.Latest),
-		},
+	// Build repository list from the shared repositoryNames constant
+	repos := make([]*RepositoryVersion, 0, len(repositoryNames))
+	for _, repoName := range repositoryNames {
+		v := versions[repoName]
+		repos = append(repos, &RepositoryVersion{
+			Repository:      repoName,
+			Installed:       v.Installed,
+			Latest:          v.Latest,
+			UpdateAvailable: isUpdateAvailable(v.Installed, v.Latest),
+		})
 	}
 
 	return &SystemVersionInfo{
