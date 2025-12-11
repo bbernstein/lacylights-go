@@ -129,11 +129,15 @@ func (s *Service) UpdateChannelValue(ctx context.Context, sessionID string, fixt
 		value = 255
 	}
 
-	// Update the channel override (stored in memory only, not applied to live DMX)
+	// Update the channel override in session state
 	session.ChannelOverrides[channelKey] = value
 
-	// NOTE: We do NOT apply to live DMX output to maintain preview isolation
-	// Preview output is computed on-demand in getCurrentDMXOutputLocked()
+	// Apply to live DMX output immediately via channel override.
+	// Preview overrides take precedence over scene playback, allowing
+	// real-time channel adjustments to be visible on the physical fixtures.
+	if s.dmxService != nil {
+		s.dmxService.SetChannelOverride(fixture.Universe, absoluteChannel, byte(value))
+	}
 
 	// Reset session timeout
 	if timer, exists := s.sessionTimers[sessionID]; exists {
@@ -244,11 +248,13 @@ func (s *Service) InitializeWithScene(ctx context.Context, sessionID string, sce
 			}
 
 			session.ChannelOverrides[channelKey] = value
+
+			// Apply to live DMX output via override (preview takes precedence)
+			if s.dmxService != nil {
+				s.dmxService.SetChannelOverride(fixture.Universe, absoluteChannel, byte(value))
+			}
 		}
 	}
-
-	// NOTE: We do NOT apply to live DMX output to maintain preview isolation
-	// Preview output is computed on-demand in getCurrentDMXOutputLocked()
 
 	// Notify subscribers
 	if s.onSessionUpdate != nil {

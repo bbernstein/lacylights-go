@@ -1490,3 +1490,40 @@ func TestNewFixtureRepository(t *testing.T) {
 		t.Error("Expected non-nil repository")
 	}
 }
+
+// TestFixtureRepository_CountDefinitions tests the definition count operation.
+func TestFixtureRepository_CountDefinitions(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewFixtureRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Test count (should be 0)
+	count, err := repo.CountDefinitions(ctx)
+	if err != nil {
+		t.Fatalf("CountDefinitions failed: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("Expected 0 definitions, got %d", count)
+	}
+
+	// Create definitions
+	for i := 0; i < 3; i++ {
+		def := &models.FixtureDefinition{
+			ID:           cuid.New(),
+			Manufacturer: "Test",
+			Model:        "Model" + string(rune('A'+i)),
+			Type:         "led",
+		}
+		testDB.DB.Create(def)
+	}
+
+	count, err = repo.CountDefinitions(ctx)
+	if err != nil {
+		t.Fatalf("CountDefinitions failed: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("Expected 3 definitions, got %d", count)
+	}
+}

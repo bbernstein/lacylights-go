@@ -235,7 +235,8 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 
 	var fixtures []models.FixtureInstance
 	if len(fixtureIDs) > 0 {
-		s.db.WithContext(ctx).Where("id IN ?", fixtureIDs).Find(&fixtures)
+		// Load fixtures with their channels to get fadeBehavior
+		s.db.WithContext(ctx).Preload("Channels").Where("id IN ?", fixtureIDs).Find(&fixtures)
 	}
 
 	// Create fixture lookup map
@@ -265,13 +266,29 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 			continue
 		}
 
-		// Build channel targets
+		// Build channel targets with fade behavior from channel definitions
 		for channelIndex, value := range channelValues {
 			dmxChannel := fixture.StartChannel + channelIndex
+
+			// Get fade behavior from channel definition (if available)
+			fadeBehavior := fade.FadeBehaviorFade // Default to FADE
+			if channelIndex < len(fixture.Channels) {
+				// Find the channel with matching offset
+				for _, ch := range fixture.Channels {
+					if ch.Offset == channelIndex {
+						if ch.FadeBehavior != "" {
+							fadeBehavior = ch.FadeBehavior
+						}
+						break
+					}
+				}
+			}
+
 			sceneChannels = append(sceneChannels, fade.SceneChannel{
-				Universe: fixture.Universe,
-				Channel:  dmxChannel,
-				Value:    value,
+				Universe:     fixture.Universe,
+				Channel:      dmxChannel,
+				Value:        value,
+				FadeBehavior: fadeBehavior,
 			})
 		}
 	}

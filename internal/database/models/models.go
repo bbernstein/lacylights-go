@@ -60,6 +60,10 @@ type FixtureDefinition struct {
 	CreatedAt    time.Time `gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt    time.Time `gorm:"column:updated_at;autoUpdateTime"`
 
+	// OFL tracking fields for change detection
+	OFLSourceHash *string `gorm:"column:ofl_source_hash"` // SHA256 of the original OFL JSON
+	OFLVersion    *string `gorm:"column:ofl_version"`     // OFL commit/version when imported
+
 	// Relations
 	Channels []ChannelDefinition `gorm:"foreignKey:DefinitionID"`
 	Modes    []FixtureMode       `gorm:"foreignKey:DefinitionID"`
@@ -77,6 +81,8 @@ type ChannelDefinition struct {
 	MinValue     int    `gorm:"column:min_value;default:0"`
 	MaxValue     int    `gorm:"column:max_value;default:255"`
 	DefaultValue int    `gorm:"column:default_value;default:0"`
+	FadeBehavior string `gorm:"column:fade_behavior;default:FADE"` // FadeBehavior enum: FADE, SNAP, SNAP_END
+	IsDiscrete   bool   `gorm:"column:is_discrete;default:false"`  // True if channel has multiple discrete DMX ranges
 	DefinitionID string `gorm:"column:definition_id;index"`
 }
 
@@ -151,6 +157,8 @@ type InstanceChannel struct {
 	MinValue     int    `gorm:"column:min_value;default:0"`
 	MaxValue     int    `gorm:"column:max_value;default:255"`
 	DefaultValue int    `gorm:"column:default_value;default:0"`
+	FadeBehavior string `gorm:"column:fade_behavior;default:FADE"` // FadeBehavior enum: FADE, SNAP, SNAP_END
+	IsDiscrete   bool   `gorm:"column:is_discrete;default:false"`  // True if channel has multiple discrete DMX ranges
 }
 
 func (InstanceChannel) TableName() string { return "instance_channels" }
@@ -287,3 +295,21 @@ type SceneBoardButton struct {
 }
 
 func (SceneBoardButton) TableName() string { return "scene_board_buttons" }
+
+// OFLImportMeta tracks the history of OFL imports.
+// Table: ofl_import_meta
+type OFLImportMeta struct {
+	ID                string    `gorm:"column:id;primaryKey"`
+	OFLVersion        string    `gorm:"column:ofl_version"`        // Commit SHA or version tag
+	StartedAt         time.Time `gorm:"column:started_at"`         // When import started
+	CompletedAt       time.Time `gorm:"column:completed_at"`       // When import completed
+	TotalFixtures     int       `gorm:"column:total_fixtures"`     // Total fixtures in OFL
+	SuccessfulImports int       `gorm:"column:successful_imports"` // Successfully imported
+	FailedImports     int       `gorm:"column:failed_imports"`     // Failed to import
+	SkippedDuplicates int       `gorm:"column:skipped_duplicates"` // Already existed
+	UpdatedFixtures   int       `gorm:"column:updated_fixtures"`   // Updated existing fixtures
+	UsedBundledData   bool      `gorm:"column:used_bundled_data"`  // True if imported from bundle
+	ErrorMessage      *string   `gorm:"column:error_message"`      // Error if import failed
+}
+
+func (OFLImportMeta) TableName() string { return "ofl_import_meta" }

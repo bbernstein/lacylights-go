@@ -31,6 +31,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/graphql/resolvers"
 	"github.com/bbernstein/lacylights-go/internal/services/dmx"
 	"github.com/bbernstein/lacylights-go/internal/services/fade"
+	"github.com/bbernstein/lacylights-go/internal/services/ofl"
 	"github.com/bbernstein/lacylights-go/internal/services/playback"
 )
 
@@ -85,10 +86,34 @@ func main() {
 		&models.Setting{},
 		&models.SceneBoard{},
 		&models.SceneBoardButton{},
+		&models.OFLImportMeta{},
 	); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 	log.Println("Database migrations complete")
+
+	// Load Open Fixture Library if enabled and database is empty
+	if cfg.OFLImportEnabled {
+		fixtureRepo := repositories.NewFixtureRepository(db)
+		oflLoader := ofl.NewLoader(db, fixtureRepo, cfg.OFLCachePath)
+
+		needsImport, err := oflLoader.NeedsImport(context.Background())
+		if err != nil {
+			log.Printf("Warning: failed to check if OFL import needed: %v", err)
+		} else if needsImport {
+			log.Println("📦 No fixture definitions found, importing Open Fixture Library...")
+			status, err := oflLoader.LoadAll(context.Background())
+			if err != nil {
+				log.Printf("Warning: OFL import failed: %v", err)
+				log.Println("You can still use the app but will need to import fixtures manually")
+			} else {
+				log.Printf("✅ OFL import complete: %d fixtures imported", status.SuccessfulImports)
+			}
+		} else {
+			count, _ := fixtureRepo.CountDefinitions(context.Background())
+			log.Printf("📋 Found %d fixture definitions in database", count)
+		}
+	}
 
 	// Create and initialize DMX service
 	dmxService := dmx.NewService(dmx.Config{
@@ -248,5 +273,6 @@ func printBanner(cfg *config.Config) {
 	fmt.Printf("  Port:        %s\n", cfg.Port)
 	fmt.Printf("  Database:    %s\n", cfg.DatabaseURL)
 	fmt.Printf("  Art-Net:     %v\n", cfg.ArtNetEnabled)
+	fmt.Printf("  OFL Import:  %v\n", cfg.OFLImportEnabled)
 	fmt.Println("============================================")
 }

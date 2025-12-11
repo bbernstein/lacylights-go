@@ -545,3 +545,216 @@ func TestClamp(t *testing.T) {
 		}
 	}
 }
+
+// TestFadeBehavior_FADE tests that FADE channels interpolate smoothly
+func TestFadeBehavior_FADE(t *testing.T) {
+	engine, dmxService := createTestEngine()
+	engine.Start()
+	defer engine.Stop()
+
+	// Set initial value
+	dmxService.SetChannelValue(1, 1, 0)
+
+	// Start fade with FADE behavior
+	targets := []ChannelTarget{
+		{Universe: 1, Channel: 1, TargetValue: 100, FadeBehavior: FadeBehaviorFade},
+	}
+
+	engine.FadeChannels(targets, 200*time.Millisecond, "", EasingLinear, nil)
+
+	// Wait for ~50% of the fade
+	time.Sleep(100 * time.Millisecond)
+
+	// FADE behavior: channel should be interpolating (roughly 50% of the way)
+	value := dmxService.GetChannelValue(1, 1)
+	if value < 30 || value > 70 {
+		t.Errorf("FADE channel at 50%% should be ~50, got %d", value)
+	}
+
+	// Wait for fade to complete
+	time.Sleep(150 * time.Millisecond)
+
+	// Final value should be target
+	if dmxService.GetChannelValue(1, 1) != 100 {
+		t.Errorf("FADE channel after completion should be 100, got %d", dmxService.GetChannelValue(1, 1))
+	}
+}
+
+// TestFadeBehavior_SNAP tests that SNAP channels jump immediately to target
+func TestFadeBehavior_SNAP(t *testing.T) {
+	engine, dmxService := createTestEngine()
+	engine.Start()
+	defer engine.Stop()
+
+	// Set initial value
+	dmxService.SetChannelValue(1, 1, 0)
+
+	// Start fade with SNAP behavior
+	targets := []ChannelTarget{
+		{Universe: 1, Channel: 1, TargetValue: 100, FadeBehavior: FadeBehaviorSnap},
+	}
+
+	engine.FadeChannels(targets, 500*time.Millisecond, "", EasingLinear, nil)
+
+	// Wait for just one update cycle
+	time.Sleep(50 * time.Millisecond)
+
+	// SNAP behavior: channel should already be at target
+	value := dmxService.GetChannelValue(1, 1)
+	if value != 100 {
+		t.Errorf("SNAP channel should immediately be at target 100, got %d", value)
+	}
+}
+
+// TestFadeBehavior_SNAP_END tests that SNAP_END channels hold start value until fade completes
+func TestFadeBehavior_SNAP_END(t *testing.T) {
+	engine, dmxService := createTestEngine()
+	engine.Start()
+	defer engine.Stop()
+
+	// Set initial value
+	dmxService.SetChannelValue(1, 1, 50)
+
+	// Start fade with SNAP_END behavior
+	targets := []ChannelTarget{
+		{Universe: 1, Channel: 1, TargetValue: 200, FadeBehavior: FadeBehaviorSnapEnd},
+	}
+
+	engine.FadeChannels(targets, 200*time.Millisecond, "", EasingLinear, nil)
+
+	// Wait for 50% of the fade
+	time.Sleep(100 * time.Millisecond)
+
+	// SNAP_END behavior: channel should still be at start value
+	value := dmxService.GetChannelValue(1, 1)
+	if value != 50 {
+		t.Errorf("SNAP_END channel during fade should hold start value 50, got %d", value)
+	}
+
+	// Wait for fade to complete
+	time.Sleep(150 * time.Millisecond)
+
+	// After completion, should jump to target
+	if dmxService.GetChannelValue(1, 1) != 200 {
+		t.Errorf("SNAP_END channel after completion should be 200, got %d", dmxService.GetChannelValue(1, 1))
+	}
+}
+
+// TestFadeBehavior_Mixed tests mixed fade behaviors in the same scene
+func TestFadeBehavior_Mixed(t *testing.T) {
+	engine, dmxService := createTestEngine()
+	engine.Start()
+	defer engine.Stop()
+
+	// Set initial values
+	dmxService.SetChannelValue(1, 1, 0)   // Will FADE
+	dmxService.SetChannelValue(1, 2, 0)   // Will SNAP
+	dmxService.SetChannelValue(1, 3, 100) // Will SNAP_END
+
+	// Start fade with mixed behaviors
+	targets := []ChannelTarget{
+		{Universe: 1, Channel: 1, TargetValue: 100, FadeBehavior: FadeBehaviorFade},
+		{Universe: 1, Channel: 2, TargetValue: 100, FadeBehavior: FadeBehaviorSnap},
+		{Universe: 1, Channel: 3, TargetValue: 200, FadeBehavior: FadeBehaviorSnapEnd},
+	}
+
+	engine.FadeChannels(targets, 200*time.Millisecond, "", EasingLinear, nil)
+
+	// Wait for 50% of the fade
+	time.Sleep(100 * time.Millisecond)
+
+	// Check each channel's behavior
+	fadeValue := dmxService.GetChannelValue(1, 1)
+	snapValue := dmxService.GetChannelValue(1, 2)
+	snapEndValue := dmxService.GetChannelValue(1, 3)
+
+	// FADE should be interpolating (~50)
+	if fadeValue < 30 || fadeValue > 70 {
+		t.Errorf("FADE channel should be ~50 at 50%%, got %d", fadeValue)
+	}
+
+	// SNAP should already be at target
+	if snapValue != 100 {
+		t.Errorf("SNAP channel should be at target 100, got %d", snapValue)
+	}
+
+	// SNAP_END should still be at start
+	if snapEndValue != 100 {
+		t.Errorf("SNAP_END channel should hold start value 100, got %d", snapEndValue)
+	}
+
+	// Wait for fade to complete
+	time.Sleep(150 * time.Millisecond)
+
+	// All channels should now be at their target values
+	if dmxService.GetChannelValue(1, 1) != 100 {
+		t.Errorf("FADE channel should be at 100, got %d", dmxService.GetChannelValue(1, 1))
+	}
+	if dmxService.GetChannelValue(1, 2) != 100 {
+		t.Errorf("SNAP channel should be at 100, got %d", dmxService.GetChannelValue(1, 2))
+	}
+	if dmxService.GetChannelValue(1, 3) != 200 {
+		t.Errorf("SNAP_END channel should now be at 200, got %d", dmxService.GetChannelValue(1, 3))
+	}
+}
+
+// TestFadeBehavior_Default tests that empty FadeBehavior defaults to FADE
+func TestFadeBehavior_Default(t *testing.T) {
+	engine, dmxService := createTestEngine()
+	engine.Start()
+	defer engine.Stop()
+
+	// Set initial value
+	dmxService.SetChannelValue(1, 1, 0)
+
+	// Start fade with empty (default) behavior
+	targets := []ChannelTarget{
+		{Universe: 1, Channel: 1, TargetValue: 100, FadeBehavior: ""}, // Empty = default FADE
+	}
+
+	engine.FadeChannels(targets, 200*time.Millisecond, "", EasingLinear, nil)
+
+	// Wait for 50% of the fade
+	time.Sleep(100 * time.Millisecond)
+
+	// Should behave like FADE (interpolating)
+	value := dmxService.GetChannelValue(1, 1)
+	if value < 30 || value > 70 {
+		t.Errorf("Default (empty) FadeBehavior should interpolate like FADE, got %d at 50%%", value)
+	}
+}
+
+// TestFadeToScene_WithBehavior tests FadeToScene passes through FadeBehavior
+func TestFadeToScene_WithBehavior(t *testing.T) {
+	engine, dmxService := createTestEngine()
+	engine.Start()
+	defer engine.Stop()
+
+	// Set initial values
+	dmxService.SetChannelValue(1, 1, 0)
+	dmxService.SetChannelValue(1, 2, 0)
+
+	// Create scene channels with different behaviors
+	sceneChannels := []SceneChannel{
+		{Universe: 1, Channel: 1, Value: 100, FadeBehavior: FadeBehaviorFade},
+		{Universe: 1, Channel: 2, Value: 100, FadeBehavior: FadeBehaviorSnap},
+	}
+
+	engine.FadeToScene(sceneChannels, 200*time.Millisecond, "", EasingLinear)
+
+	// Wait for 50% of the fade
+	time.Sleep(100 * time.Millisecond)
+
+	fadeValue := dmxService.GetChannelValue(1, 1)
+	snapValue := dmxService.GetChannelValue(1, 2)
+
+	// FADE should be interpolating
+	if fadeValue < 30 || fadeValue > 70 {
+		t.Errorf("FADE channel via FadeToScene should be ~50, got %d", fadeValue)
+	}
+
+	// SNAP should be at target
+	if snapValue != 100 {
+		t.Errorf("SNAP channel via FadeToScene should be at 100, got %d", snapValue)
+	}
+}

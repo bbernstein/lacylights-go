@@ -544,3 +544,176 @@ func TestConcurrentChannelOperations(t *testing.T) {
 	// Should not have panicked or deadlocked
 	_ = resolver // Just verify resolver is still accessible
 }
+
+// TestSceneBoardFadeBehavior tests that when activating a scene from the scene board,
+// channels with SNAP behavior jump immediately while channels with FADE behavior interpolate smoothly.
+// This tests the fix for the bug where all channels were being faded regardless of their FadeBehavior.
+func TestSceneBoardFadeBehavior(t *testing.T) {
+	c, resolver, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Create a project
+	project := &models.Project{
+		ID:   "test-project-fade",
+		Name: "Test Project for Fade Behavior",
+	}
+	resolver.db.Create(project)
+
+	// Create a fixture definition with channels that have different fade behaviors
+	fixtureDef := &models.FixtureDefinition{
+		ID:           "test-fixture-def-fade",
+		Manufacturer: "Test",
+		Model:        "FadeBehaviorTest",
+		Type:         "LED_PAR",
+	}
+	resolver.db.Create(fixtureDef)
+
+	// Create a fixture instance with channel definitions
+	fixture := &models.FixtureInstance{
+		ID:           "test-fixture-fade",
+		Name:         "Test Fixture",
+		ProjectID:    project.ID,
+		DefinitionID: fixtureDef.ID,
+		Universe:     1,
+		StartChannel: 1,
+	}
+	resolver.db.Create(fixture)
+
+	// Create channel definitions with different fade behaviors:
+	// Channel 0 (offset 0): Dimmer - FADE
+	// Channel 1 (offset 1): Red - FADE
+	// Channel 2 (offset 2): Green - FADE
+	// Channel 3 (offset 3): Blue - FADE
+	// Channel 4 (offset 4): Color Macro - SNAP
+	// Channel 5 (offset 5): Strobe - SNAP
+	channels := []models.InstanceChannel{
+		{ID: "ch-0", FixtureID: fixture.ID, Name: "Dimmer", Type: "INTENSITY", Offset: 0, FadeBehavior: "FADE"},
+		{ID: "ch-1", FixtureID: fixture.ID, Name: "Red", Type: "COLOR", Offset: 1, FadeBehavior: "FADE"},
+		{ID: "ch-2", FixtureID: fixture.ID, Name: "Green", Type: "COLOR", Offset: 2, FadeBehavior: "FADE"},
+		{ID: "ch-3", FixtureID: fixture.ID, Name: "Blue", Type: "COLOR", Offset: 3, FadeBehavior: "FADE"},
+		{ID: "ch-4", FixtureID: fixture.ID, Name: "Color Macro", Type: "COLOR_MACRO", Offset: 4, FadeBehavior: "SNAP"},
+		{ID: "ch-5", FixtureID: fixture.ID, Name: "Strobe", Type: "STROBE", Offset: 5, FadeBehavior: "SNAP"},
+	}
+	for _, ch := range channels {
+		resolver.db.Create(&ch)
+	}
+
+	// Create a scene board
+	sceneBoard := &models.SceneBoard{
+		ID:              "test-board-fade",
+		Name:            "Test Board",
+		ProjectID:       project.ID,
+		DefaultFadeTime: 0.5, // 500ms fade time
+	}
+	resolver.db.Create(sceneBoard)
+
+	// Create a scene with fixture values
+	scene := &models.Scene{
+		ID:        "test-scene-fade",
+		Name:      "Test Scene",
+		ProjectID: project.ID,
+	}
+	resolver.db.Create(scene)
+
+	// Create fixture values: [Dimmer=200, R=150, G=100, B=50, ColorMacro=180, Strobe=255]
+	fixtureValue := &models.FixtureValue{
+		ID:            "fv-fade-test",
+		SceneID:       scene.ID,
+		FixtureID:     fixture.ID,
+		ChannelValues: "[200, 150, 100, 50, 180, 255]",
+	}
+	resolver.db.Create(fixtureValue)
+
+	// Create a scene board button for this scene
+	width := 100
+	height := 100
+	button := &models.SceneBoardButton{
+		ID:           "btn-fade-test",
+		SceneBoardID: sceneBoard.ID,
+		SceneID:      scene.ID,
+		LayoutX:      0,
+		LayoutY:      0,
+		Width:        &width,
+		Height:       &height,
+	}
+	resolver.db.Create(button)
+
+	// Set initial DMX values to 0
+	for i := 1; i <= 6; i++ {
+		resolver.DMXService.SetChannelValue(1, i, 0)
+	}
+
+	// Activate the scene from the scene board with a fade
+	var resp struct {
+		ActivateSceneFromBoard bool `json:"activateSceneFromBoard"`
+	}
+
+	err := c.Post(`mutation($boardId: ID!, $sceneId: ID!) {
+		activateSceneFromBoard(sceneBoardId: $boardId, sceneId: $sceneId)
+	}`, &resp,
+		client.Var("boardId", sceneBoard.ID),
+		client.Var("sceneId", scene.ID),
+	)
+
+	if err != nil {
+		t.Fatalf("ActivateSceneFromBoard mutation failed: %v", err)
+	}
+
+	if !resp.ActivateSceneFromBoard {
+		t.Error("Expected activateSceneFromBoard to return true")
+	}
+
+	// Wait for ~50% of the fade (250ms into a 500ms fade)
+	time.Sleep(250 * time.Millisecond)
+
+	// Check SNAP channels - they should already be at their target values
+	colorMacroValue := resolver.DMXService.GetChannelValue(1, 5) // Channel 5 = Color Macro (offset 4 + start 1)
+	strobeValue := resolver.DMXService.GetChannelValue(1, 6)     // Channel 6 = Strobe (offset 5 + start 1)
+
+	if colorMacroValue != 180 {
+		t.Errorf("SNAP channel 'Color Macro' should be at target 180 immediately, got %d", colorMacroValue)
+	}
+	if strobeValue != 255 {
+		t.Errorf("SNAP channel 'Strobe' should be at target 255 immediately, got %d", strobeValue)
+	}
+
+	// Check FADE channels - they should be somewhere between start (0) and target
+	// At 50% through a linear fade, they should be approximately half way
+	dimmerValue := resolver.DMXService.GetChannelValue(1, 1)
+	redValue := resolver.DMXService.GetChannelValue(1, 2)
+	greenValue := resolver.DMXService.GetChannelValue(1, 3)
+	blueValue := resolver.DMXService.GetChannelValue(1, 4)
+
+	// Allow for timing variance - check they're interpolating (not at 0 and not at target yet)
+	if dimmerValue == 0 || dimmerValue >= 200 {
+		t.Errorf("FADE channel 'Dimmer' should be interpolating (0 < x < 200), got %d", dimmerValue)
+	}
+	if redValue == 0 || redValue >= 150 {
+		t.Errorf("FADE channel 'Red' should be interpolating (0 < x < 150), got %d", redValue)
+	}
+	if greenValue == 0 || greenValue >= 100 {
+		t.Errorf("FADE channel 'Green' should be interpolating (0 < x < 100), got %d", greenValue)
+	}
+	if blueValue == 0 || blueValue >= 50 {
+		t.Errorf("FADE channel 'Blue' should be interpolating (0 < x < 50), got %d", blueValue)
+	}
+
+	// Wait for fade to complete
+	time.Sleep(300 * time.Millisecond)
+
+	// All channels should now be at their target values
+	if resolver.DMXService.GetChannelValue(1, 1) != 200 {
+		t.Errorf("Dimmer should be at target 200 after fade, got %d", resolver.DMXService.GetChannelValue(1, 1))
+	}
+	if resolver.DMXService.GetChannelValue(1, 2) != 150 {
+		t.Errorf("Red should be at target 150 after fade, got %d", resolver.DMXService.GetChannelValue(1, 2))
+	}
+	if resolver.DMXService.GetChannelValue(1, 3) != 100 {
+		t.Errorf("Green should be at target 100 after fade, got %d", resolver.DMXService.GetChannelValue(1, 3))
+	}
+	if resolver.DMXService.GetChannelValue(1, 4) != 50 {
+		t.Errorf("Blue should be at target 50 after fade, got %d", resolver.DMXService.GetChannelValue(1, 4))
+	}
+
+	t.Logf("Test passed - SNAP channels (Color Macro, Strobe) jumped immediately, FADE channels (Dimmer, RGB) interpolated smoothly")
+}

@@ -54,6 +54,18 @@ enum EasingType {
   S_CURVE
 }
 
+"""
+Determines how a channel behaves during scene transitions.
+FADE - Interpolate smoothly between values (default for intensity, colors)
+SNAP - Jump to target value at start of transition (for gobos, macros, effects)
+SNAP_END - Jump to target value at end of transition
+"""
+enum FadeBehavior {
+  FADE
+  SNAP
+  SNAP_END
+}
+
 enum SceneSortField {
   NAME
   CREATED_AT
@@ -74,6 +86,29 @@ enum WiFiSecurityType {
   WPA3_PSK
   WPA3_EAP
   OWE
+}
+
+"""
+Phases of the OFL import process
+"""
+enum OFLImportPhase {
+  IDLE
+  DOWNLOADING
+  EXTRACTING
+  PARSING
+  IMPORTING
+  COMPLETE
+  FAILED
+  CANCELLED
+}
+
+"""
+Type of fixture change detected during OFL update check
+"""
+enum OFLFixtureChangeType {
+  NEW
+  UPDATED
+  UNCHANGED
 }
 
 enum ImportMode {
@@ -140,6 +175,8 @@ type ChannelDefinition {
   minValue: Int!
   maxValue: Int!
   defaultValue: Int!
+  fadeBehavior: FadeBehavior!
+  isDiscrete: Boolean!
 }
 
 type FixtureInstance {
@@ -181,6 +218,8 @@ type InstanceChannel {
   minValue: Int!
   maxValue: Int!
   defaultValue: Int!
+  fadeBehavior: FadeBehavior!
+  isDiscrete: Boolean!
 }
 
 type Scene {
@@ -455,6 +494,112 @@ type FixtureChannelAssignment {
 }
 
 # =============================================================================
+# OFL (OPEN FIXTURE LIBRARY) TYPES
+# =============================================================================
+
+"""
+Real-time status of an OFL import operation
+"""
+type OFLImportStatus {
+  "Whether an import is currently in progress"
+  isImporting: Boolean!
+  "Current phase of the import"
+  phase: OFLImportPhase!
+  "Total number of fixtures to import"
+  totalFixtures: Int!
+  "Number of fixtures successfully imported"
+  importedCount: Int!
+  "Number of fixtures that failed to import"
+  failedCount: Int!
+  "Number of fixtures skipped (already exist)"
+  skippedCount: Int!
+  "Percentage complete (0-100)"
+  percentComplete: Float!
+  "Name of the current fixture being imported"
+  currentFixture: String
+  "Current manufacturer being processed"
+  currentManufacturer: String
+  "Estimated seconds remaining (null if unknown)"
+  estimatedSecondsRemaining: Int
+  "Error message if phase is FAILED"
+  errorMessage: String
+  "When the import started"
+  startedAt: String
+  "When the import completed (if done)"
+  completedAt: String
+  "OFL version/commit being imported"
+  oflVersion: String
+  "Whether using bundled data (offline) or fetched from GitHub"
+  usingBundledData: Boolean!
+}
+
+"""
+Information about a fixture that may need updating
+"""
+type OFLFixtureUpdate {
+  "Unique key (manufacturer/model)"
+  fixtureKey: String!
+  "Manufacturer name"
+  manufacturer: String!
+  "Model name"
+  model: String!
+  "Type of change"
+  changeType: OFLFixtureChangeType!
+  "Whether this fixture is currently in use by any project"
+  isInUse: Boolean!
+  "Number of instances using this definition"
+  instanceCount: Int!
+  "Current hash (null if new)"
+  currentHash: String
+  "New hash from OFL"
+  newHash: String!
+}
+
+"""
+Result of checking for OFL updates
+"""
+type OFLUpdateCheckResult {
+  "Total fixtures in current database"
+  currentFixtureCount: Int!
+  "Total fixtures in OFL source"
+  oflFixtureCount: Int!
+  "Number of new fixtures available"
+  newFixtureCount: Int!
+  "Number of changed fixtures"
+  changedFixtureCount: Int!
+  "Number of changed fixtures that are in use"
+  changedInUseCount: Int!
+  "Detailed list of fixture changes (limited)"
+  fixtureUpdates: [OFLFixtureUpdate!]!
+  "OFL version/commit being checked"
+  oflVersion: String!
+  "When this check was performed"
+  checkedAt: String!
+}
+
+"""
+Statistics about an OFL import
+"""
+type OFLImportStats {
+  totalProcessed: Int!
+  successfulImports: Int!
+  failedImports: Int!
+  skippedDuplicates: Int!
+  updatedFixtures: Int!
+  durationSeconds: Float!
+}
+
+"""
+Final result of an OFL import operation
+"""
+type OFLImportResult {
+  success: Boolean!
+  stats: OFLImportStats!
+  errorMessage: String
+  oflVersion: String!
+}
+
+# =============================================================================
 # VERSION MANAGEMENT TYPES
 # =============================================================================
 
@@ -631,6 +776,13 @@ input CreateChannelDefinitionInput {
   minValue: Int!
   maxValue: Int!
   defaultValue: Int!
+  fadeBehavior: FadeBehavior
+  isDiscrete: Boolean
+}
+
+input ChannelFadeBehaviorInput {
+  channelId: ID!
+  fadeBehavior: FadeBehavior!
 }
 
 input ImportOFLFixtureInput {
@@ -965,6 +1117,20 @@ input UpdateSettingInput {
   value: String!
 }
 
+"""
+Options for triggering an OFL import
+"""
+input OFLImportOptionsInput {
+  "Force reimport of all fixtures, even if unchanged"
+  forceReimport: Boolean = false
+  "Update fixtures that are currently in use by projects"
+  updateInUseFixtures: Boolean = false
+  "Only import specific manufacturers (empty = all)"
+  manufacturers: [String!]
+  "Prefer bundled data over fetching from GitHub"
+  preferBundled: Boolean = false
+}
+
 # =============================================================================
 # QUERIES
 # =============================================================================
@@ -1077,6 +1243,12 @@ type Query {
   systemVersions: SystemVersionInfo!
   availableVersions(repository: String!): [String!]!
 
+  # Open Fixture Library
+  "Get the current status of any ongoing OFL import"
+  oflImportStatus: OFLImportStatus!
+  "Check for available OFL updates without importing"
+  checkOFLUpdates: OFLUpdateCheckResult!
+
   # Bulk Read Queries
   fixturesByIds(ids: [ID!]!): [FixtureInstance!]!
   scenesByIds(ids: [ID!]!): [Scene!]!
@@ -1124,6 +1296,15 @@ type Mutation {
   bulkCreateFixtures(input: BulkFixtureCreateInput!): [FixtureInstance!]!
   deleteFixtureInstance(id: ID!): Boolean!
   bulkDeleteFixtures(fixtureIds: [ID!]!): BulkDeleteResult!
+
+  # Instance Channel Updates
+  updateInstanceChannelFadeBehavior(
+    channelId: ID!
+    fadeBehavior: FadeBehavior!
+  ): InstanceChannel!
+  bulkUpdateInstanceChannelsFadeBehavior(
+    updates: [ChannelFadeBehaviorInput!]!
+  ): [InstanceChannel!]!
 
   # Fixture Ordering
   reorderProjectFixtures(
@@ -1260,6 +1441,12 @@ type Mutation {
   # Version Management
   updateRepository(repository: String!, version: String = "latest"): UpdateResult!
   updateAllRepositories: [UpdateResult!]!
+
+  # Open Fixture Library
+  "Trigger an OFL import/update operation"
+  triggerOFLImport(options: OFLImportOptionsInput): OFLImportResult!
+  "Cancel an ongoing OFL import"
+  cancelOFLImport: Boolean!
 }
 
 # =============================================================================
@@ -1273,4 +1460,6 @@ type Subscription {
   cueListPlaybackUpdated(cueListId: ID!): CueListPlaybackStatus!
   systemInfoUpdated: SystemInfo!
   wifiStatusUpdated: WiFiStatus!
+  "Real-time updates during OFL import"
+  oflImportProgress: OFLImportStatus!
 }
