@@ -1,0 +1,84 @@
+name: Check OFL Updates
+
+on:
+  schedule:
+    # Run on the 1st of every month at 00:00 UTC
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+
+jobs:
+  check-ofl:
+    name: Check OFL Library for Updates
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download latest OFL bundle
+        run: ./scripts/download-ofl.sh
+
+      - name: Analyze OFL bundle
+        id: bundle_info
+        run: |
+          BUNDLE_FILE="internal/services/ofl/data/ofl-bundle.zip"
+
+          if [ ! -f "$BUNDLE_FILE" ]; then
+            echo "ERROR: Bundle download failed"
+            exit 1
+          fi
+
+          # Get bundle stats
+          BUNDLE_SIZE=$(wc -c < "$BUNDLE_FILE" | tr -d ' ')
+          BUNDLE_HASH=$(sha256sum "$BUNDLE_FILE" | awk '{print $1}')
+          BUNDLE_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          # Count manufacturers and fixtures
+          TEMP_DIR=$(mktemp -d)
+          unzip -q "$BUNDLE_FILE" -d "$TEMP_DIR"
+
+          # Find the fixtures directory (it's nested in the zip with a commit hash prefix)
+          FIXTURES_DIR=$(find "$TEMP_DIR" -type d -name "fixtures" | head -1)
+
+          if [ -n "$FIXTURES_DIR" ]; then
+            MANUFACTURER_COUNT=$(ls -d "$FIXTURES_DIR"/*/ 2>/dev/null | wc -l | tr -d ' ')
+            FIXTURE_COUNT=$(find "$FIXTURES_DIR" -name "*.json" | wc -l | tr -d ' ')
+          else
+            MANUFACTURER_COUNT="unknown"
+            FIXTURE_COUNT="unknown"
+          fi
+
+          rm -rf "$TEMP_DIR"
+
+          # Output results
+          echo "size=$BUNDLE_SIZE" >> $GITHUB_OUTPUT
+          echo "hash=$BUNDLE_HASH" >> $GITHUB_OUTPUT
+          echo "date=$BUNDLE_DATE" >> $GITHUB_OUTPUT
+          echo "manufacturers=$MANUFACTURER_COUNT" >> $GITHUB_OUTPUT
+          echo "fixtures=$FIXTURE_COUNT" >> $GITHUB_OUTPUT
+
+          echo "Bundle Statistics:"
+          echo "  Size: $BUNDLE_SIZE bytes"
+          echo "  SHA256: $BUNDLE_HASH"
+          echo "  Manufacturers: $MANUFACTURER_COUNT"
+          echo "  Fixtures: $FIXTURE_COUNT"
+
+      - name: Create summary
+        run: |
+          echo "## OFL Library Check - $(date +%Y-%m-%d)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The Open Fixture Library was successfully downloaded and analyzed." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Bundle Statistics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Size | ${{ steps.bundle_info.outputs.size }} bytes |" >> $GITHUB_STEP_SUMMARY
+          echo "| Manufacturers | ${{ steps.bundle_info.outputs.manufacturers }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Fixtures | ${{ steps.bundle_info.outputs.fixtures }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SHA256 | \`${{ steps.bundle_info.outputs.hash }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Notes" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The OFL bundle is downloaded fresh during each release build." >> $GITHUB_STEP_SUMMARY
+          echo "This workflow runs monthly to verify OFL availability and track library growth." >> $GITHUB_STEP_SUMMARY

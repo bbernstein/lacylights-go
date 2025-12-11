@@ -86,6 +86,7 @@ func main() {
 		&models.Setting{},
 		&models.SceneBoard{},
 		&models.SceneBoardButton{},
+		&models.OFLImportMeta{},
 	); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}

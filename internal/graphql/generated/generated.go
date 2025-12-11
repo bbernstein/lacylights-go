@@ -333,6 +333,7 @@ type ComplexityRoot struct {
 		BulkUpdateSceneBoardButtons            func(childComplexity int, input BulkSceneBoardButtonUpdateInput) int
 		BulkUpdateSceneBoards                  func(childComplexity int, input BulkSceneBoardUpdateInput) int
 		BulkUpdateScenes                       func(childComplexity int, input BulkSceneUpdateInput) int
+		CancelOFLImport                        func(childComplexity int) int
 		CancelPreviewSession                   func(childComplexity int, sessionID string) int
 		CloneScene                             func(childComplexity int, sceneID string, newName string) int
 		CommitPreviewSession                   func(childComplexity int, sessionID string) int
@@ -376,6 +377,7 @@ type ComplexityRoot struct {
 		StartCueList                           func(childComplexity int, cueListID string, startFromCue *int, fadeInTime *float64) int
 		StartPreviewSession                    func(childComplexity int, projectID string) int
 		StopCueList                            func(childComplexity int, cueListID string) int
+		TriggerOFLImport                       func(childComplexity int, options *OFLImportOptionsInput) int
 		UpdateAllRepositories                  func(childComplexity int) int
 		UpdateCue                              func(childComplexity int, id string, input CreateCueInput) int
 		UpdateCueList                          func(childComplexity int, id string, input CreateCueListInput) int
@@ -400,6 +402,62 @@ type ComplexityRoot struct {
 		Description   func(childComplexity int) int
 		InterfaceType func(childComplexity int) int
 		Name          func(childComplexity int) int
+	}
+
+	OFLFixtureUpdate struct {
+		ChangeType    func(childComplexity int) int
+		CurrentHash   func(childComplexity int) int
+		FixtureKey    func(childComplexity int) int
+		InstanceCount func(childComplexity int) int
+		IsInUse       func(childComplexity int) int
+		Manufacturer  func(childComplexity int) int
+		Model         func(childComplexity int) int
+		NewHash       func(childComplexity int) int
+	}
+
+	OFLImportResult struct {
+		ErrorMessage func(childComplexity int) int
+		OflVersion   func(childComplexity int) int
+		Stats        func(childComplexity int) int
+		Success      func(childComplexity int) int
+	}
+
+	OFLImportStats struct {
+		DurationSeconds   func(childComplexity int) int
+		FailedImports     func(childComplexity int) int
+		SkippedDuplicates func(childComplexity int) int
+		SuccessfulImports func(childComplexity int) int
+		TotalProcessed    func(childComplexity int) int
+		UpdatedFixtures   func(childComplexity int) int
+	}
+
+	OFLImportStatus struct {
+		CompletedAt               func(childComplexity int) int
+		CurrentFixture            func(childComplexity int) int
+		CurrentManufacturer       func(childComplexity int) int
+		ErrorMessage              func(childComplexity int) int
+		EstimatedSecondsRemaining func(childComplexity int) int
+		FailedCount               func(childComplexity int) int
+		ImportedCount             func(childComplexity int) int
+		IsImporting               func(childComplexity int) int
+		OflVersion                func(childComplexity int) int
+		PercentComplete           func(childComplexity int) int
+		Phase                     func(childComplexity int) int
+		SkippedCount              func(childComplexity int) int
+		StartedAt                 func(childComplexity int) int
+		TotalFixtures             func(childComplexity int) int
+		UsingBundledData          func(childComplexity int) int
+	}
+
+	OFLUpdateCheckResult struct {
+		ChangedFixtureCount func(childComplexity int) int
+		ChangedInUseCount   func(childComplexity int) int
+		CheckedAt           func(childComplexity int) int
+		CurrentFixtureCount func(childComplexity int) int
+		FixtureUpdates      func(childComplexity int) int
+		NewFixtureCount     func(childComplexity int) int
+		OflFixtureCount     func(childComplexity int) int
+		OflVersion          func(childComplexity int) int
 	}
 
 	PaginationInfo struct {
@@ -483,6 +541,7 @@ type ComplexityRoot struct {
 		AllDmxOutput                    func(childComplexity int) int
 		AvailableVersions               func(childComplexity int, repository string) int
 		ChannelMap                      func(childComplexity int, projectID string, universe *int) int
+		CheckOFLUpdates                 func(childComplexity int) int
 		CompareScenes                   func(childComplexity int, sceneID1 string, sceneID2 string) int
 		Cue                             func(childComplexity int, id string) int
 		CueList                         func(childComplexity int, id string, page *int, perPage *int, includeSceneDetails *bool) int
@@ -501,6 +560,7 @@ type ComplexityRoot struct {
 		FixturesByIds                   func(childComplexity int, ids []string) int
 		GetQLCFixtureMappingSuggestions func(childComplexity int, projectID string) int
 		NetworkInterfaceOptions         func(childComplexity int) int
+		OflImportStatus                 func(childComplexity int) int
 		PreviewSession                  func(childComplexity int, sessionID string) int
 		Project                         func(childComplexity int, id string) int
 		Projects                        func(childComplexity int) int
@@ -625,6 +685,7 @@ type ComplexityRoot struct {
 	Subscription struct {
 		CueListPlaybackUpdated func(childComplexity int, cueListID string) int
 		DmxOutputChanged       func(childComplexity int, universe *int) int
+		OflImportProgress      func(childComplexity int) int
 		PreviewSessionUpdated  func(childComplexity int, projectID string) int
 		ProjectUpdated         func(childComplexity int, projectID string) int
 		SystemInfoUpdated      func(childComplexity int) int
@@ -841,6 +902,8 @@ type MutationResolver interface {
 	ForgetWiFiNetwork(ctx context.Context, ssid string) (bool, error)
 	UpdateRepository(ctx context.Context, repository string, version *string) (*UpdateResult, error)
 	UpdateAllRepositories(ctx context.Context) ([]*UpdateResult, error)
+	TriggerOFLImport(ctx context.Context, options *OFLImportOptionsInput) (*OFLImportResult, error)
+	CancelOFLImport(ctx context.Context) (bool, error)
 }
 type PreviewSessionResolver interface {
 	Project(ctx context.Context, obj *models.PreviewSession) (*models.Project, error)
@@ -906,6 +969,8 @@ type QueryResolver interface {
 	GetQLCFixtureMappingSuggestions(ctx context.Context, projectID string) (*QLCFixtureMappingResult, error)
 	SystemVersions(ctx context.Context) (*SystemVersionInfo, error)
 	AvailableVersions(ctx context.Context, repository string) ([]string, error)
+	OflImportStatus(ctx context.Context) (*OFLImportStatus, error)
+	CheckOFLUpdates(ctx context.Context) (*OFLUpdateCheckResult, error)
 	FixturesByIds(ctx context.Context, ids []string) ([]*models.FixtureInstance, error)
 	ScenesByIds(ctx context.Context, ids []string) ([]*models.Scene, error)
 	CuesByIds(ctx context.Context, ids []string) ([]*models.Cue, error)
@@ -945,6 +1010,7 @@ type SubscriptionResolver interface {
 	CueListPlaybackUpdated(ctx context.Context, cueListID string) (<-chan *CueListPlaybackStatus, error)
 	SystemInfoUpdated(ctx context.Context) (<-chan *SystemInfo, error)
 	WifiStatusUpdated(ctx context.Context) (<-chan *WiFiStatus, error)
+	OflImportProgress(ctx context.Context) (<-chan *OFLImportStatus, error)
 }
 type UserResolver interface {
 	Role(ctx context.Context, obj *models.User) (UserRole, error)
@@ -2242,6 +2308,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.BulkUpdateScenes(childComplexity, args["input"].(BulkSceneUpdateInput)), true
+	case "Mutation.cancelOFLImport":
+		if e.complexity.Mutation.CancelOFLImport == nil {
+			break
+		}
+
+		return e.complexity.Mutation.CancelOFLImport(childComplexity), true
 	case "Mutation.cancelPreviewSession":
 		if e.complexity.Mutation.CancelPreviewSession == nil {
 			break
@@ -2710,6 +2782,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.StopCueList(childComplexity, args["cueListId"].(string)), true
+	case "Mutation.triggerOFLImport":
+		if e.complexity.Mutation.TriggerOFLImport == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_triggerOFLImport_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.TriggerOFLImport(childComplexity, args["options"].(*OFLImportOptionsInput)), true
 	case "Mutation.updateAllRepositories":
 		if e.complexity.Mutation.UpdateAllRepositories == nil {
 			break
@@ -2912,6 +2995,257 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.NetworkInterfaceOption.Name(childComplexity), true
+
+	case "OFLFixtureUpdate.changeType":
+		if e.complexity.OFLFixtureUpdate.ChangeType == nil {
+			break
+		}
+
+		return e.complexity.OFLFixtureUpdate.ChangeType(childComplexity), true
+	case "OFLFixtureUpdate.currentHash":
+		if e.complexity.OFLFixtureUpdate.CurrentHash == nil {
+			break
+		}
+
+		return e.complexity.OFLFixtureUpdate.CurrentHash(childComplexity), true
+	case "OFLFixtureUpdate.fixtureKey":
+		if e.complexity.OFLFixtureUpdate.FixtureKey == nil {
+			break
+		}
+
+		return e.complexity.OFLFixtureUpdate.FixtureKey(childComplexity), true
+	case "OFLFixtureUpdate.instanceCount":
+		if e.complexity.OFLFixtureUpdate.InstanceCount == nil {
+			break
+		}
+
+		return e.complexity.OFLFixtureUpdate.InstanceCount(childComplexity), true
+	case "OFLFixtureUpdate.isInUse":
+		if e.complexity.OFLFixtureUpdate.IsInUse == nil {
+			break
+		}
+
+		return e.complexity.OFLFixtureUpdate.IsInUse(childComplexity), true
+	case "OFLFixtureUpdate.manufacturer":
+		if e.complexity.OFLFixtureUpdate.Manufacturer == nil {
+			break
+		}
+
+		return e.complexity.OFLFixtureUpdate.Manufacturer(childComplexity), true
+	case "OFLFixtureUpdate.model":
+		if e.complexity.OFLFixtureUpdate.Model == nil {
+			break
+		}
+
+		return e.complexity.OFLFixtureUpdate.Model(childComplexity), true
+	case "OFLFixtureUpdate.newHash":
+		if e.complexity.OFLFixtureUpdate.NewHash == nil {
+			break
+		}
+
+		return e.complexity.OFLFixtureUpdate.NewHash(childComplexity), true
+
+	case "OFLImportResult.errorMessage":
+		if e.complexity.OFLImportResult.ErrorMessage == nil {
+			break
+		}
+
+		return e.complexity.OFLImportResult.ErrorMessage(childComplexity), true
+	case "OFLImportResult.oflVersion":
+		if e.complexity.OFLImportResult.OflVersion == nil {
+			break
+		}
+
+		return e.complexity.OFLImportResult.OflVersion(childComplexity), true
+	case "OFLImportResult.stats":
+		if e.complexity.OFLImportResult.Stats == nil {
+			break
+		}
+
+		return e.complexity.OFLImportResult.Stats(childComplexity), true
+	case "OFLImportResult.success":
+		if e.complexity.OFLImportResult.Success == nil {
+			break
+		}
+
+		return e.complexity.OFLImportResult.Success(childComplexity), true
+
+	case "OFLImportStats.durationSeconds":
+		if e.complexity.OFLImportStats.DurationSeconds == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStats.DurationSeconds(childComplexity), true
+	case "OFLImportStats.failedImports":
+		if e.complexity.OFLImportStats.FailedImports == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStats.FailedImports(childComplexity), true
+	case "OFLImportStats.skippedDuplicates":
+		if e.complexity.OFLImportStats.SkippedDuplicates == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStats.SkippedDuplicates(childComplexity), true
+	case "OFLImportStats.successfulImports":
+		if e.complexity.OFLImportStats.SuccessfulImports == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStats.SuccessfulImports(childComplexity), true
+	case "OFLImportStats.totalProcessed":
+		if e.complexity.OFLImportStats.TotalProcessed == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStats.TotalProcessed(childComplexity), true
+	case "OFLImportStats.updatedFixtures":
+		if e.complexity.OFLImportStats.UpdatedFixtures == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStats.UpdatedFixtures(childComplexity), true
+
+	case "OFLImportStatus.completedAt":
+		if e.complexity.OFLImportStatus.CompletedAt == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStatus.CompletedAt(childComplexity), true
+	case "OFLImportStatus.currentFixture":
+		if e.complexity.OFLImportStatus.CurrentFixture == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStatus.CurrentFixture(childComplexity), true
+	case "OFLImportStatus.currentManufacturer":
+		if e.complexity.OFLImportStatus.CurrentManufacturer == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStatus.CurrentManufacturer(childComplexity), true
+	case "OFLImportStatus.errorMessage":
+		if e.complexity.OFLImportStatus.ErrorMessage == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStatus.ErrorMessage(childComplexity), true
+	case "OFLImportStatus.estimatedSecondsRemaining":
+		if e.complexity.OFLImportStatus.EstimatedSecondsRemaining == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStatus.EstimatedSecondsRemaining(childComplexity), true
+	case "OFLImportStatus.failedCount":
+		if e.complexity.OFLImportStatus.FailedCount == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStatus.FailedCount(childComplexity), true
+	case "OFLImportStatus.importedCount":
+		if e.complexity.OFLImportStatus.ImportedCount == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStatus.ImportedCount(childComplexity), true
+	case "OFLImportStatus.isImporting":
+		if e.complexity.OFLImportStatus.IsImporting == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStatus.IsImporting(childComplexity), true
+	case "OFLImportStatus.oflVersion":
+		if e.complexity.OFLImportStatus.OflVersion == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStatus.OflVersion(childComplexity), true
+	case "OFLImportStatus.percentComplete":
+		if e.complexity.OFLImportStatus.PercentComplete == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStatus.PercentComplete(childComplexity), true
+	case "OFLImportStatus.phase":
+		if e.complexity.OFLImportStatus.Phase == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStatus.Phase(childComplexity), true
+	case "OFLImportStatus.skippedCount":
+		if e.complexity.OFLImportStatus.SkippedCount == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStatus.SkippedCount(childComplexity), true
+	case "OFLImportStatus.startedAt":
+		if e.complexity.OFLImportStatus.StartedAt == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStatus.StartedAt(childComplexity), true
+	case "OFLImportStatus.totalFixtures":
+		if e.complexity.OFLImportStatus.TotalFixtures == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStatus.TotalFixtures(childComplexity), true
+	case "OFLImportStatus.usingBundledData":
+		if e.complexity.OFLImportStatus.UsingBundledData == nil {
+			break
+		}
+
+		return e.complexity.OFLImportStatus.UsingBundledData(childComplexity), true
+
+	case "OFLUpdateCheckResult.changedFixtureCount":
+		if e.complexity.OFLUpdateCheckResult.ChangedFixtureCount == nil {
+			break
+		}
+
+		return e.complexity.OFLUpdateCheckResult.ChangedFixtureCount(childComplexity), true
+	case "OFLUpdateCheckResult.changedInUseCount":
+		if e.complexity.OFLUpdateCheckResult.ChangedInUseCount == nil {
+			break
+		}
+
+		return e.complexity.OFLUpdateCheckResult.ChangedInUseCount(childComplexity), true
+	case "OFLUpdateCheckResult.checkedAt":
+		if e.complexity.OFLUpdateCheckResult.CheckedAt == nil {
+			break
+		}
+
+		return e.complexity.OFLUpdateCheckResult.CheckedAt(childComplexity), true
+	case "OFLUpdateCheckResult.currentFixtureCount":
+		if e.complexity.OFLUpdateCheckResult.CurrentFixtureCount == nil {
+			break
+		}
+
+		return e.complexity.OFLUpdateCheckResult.CurrentFixtureCount(childComplexity), true
+	case "OFLUpdateCheckResult.fixtureUpdates":
+		if e.complexity.OFLUpdateCheckResult.FixtureUpdates == nil {
+			break
+		}
+
+		return e.complexity.OFLUpdateCheckResult.FixtureUpdates(childComplexity), true
+	case "OFLUpdateCheckResult.newFixtureCount":
+		if e.complexity.OFLUpdateCheckResult.NewFixtureCount == nil {
+			break
+		}
+
+		return e.complexity.OFLUpdateCheckResult.NewFixtureCount(childComplexity), true
+	case "OFLUpdateCheckResult.oflFixtureCount":
+		if e.complexity.OFLUpdateCheckResult.OflFixtureCount == nil {
+			break
+		}
+
+		return e.complexity.OFLUpdateCheckResult.OflFixtureCount(childComplexity), true
+	case "OFLUpdateCheckResult.oflVersion":
+		if e.complexity.OFLUpdateCheckResult.OflVersion == nil {
+			break
+		}
+
+		return e.complexity.OFLUpdateCheckResult.OflVersion(childComplexity), true
 
 	case "PaginationInfo.hasMore":
 		if e.complexity.PaginationInfo.HasMore == nil {
@@ -3250,6 +3584,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.ChannelMap(childComplexity, args["projectId"].(string), args["universe"].(*int)), true
+	case "Query.checkOFLUpdates":
+		if e.complexity.Query.CheckOFLUpdates == nil {
+			break
+		}
+
+		return e.complexity.Query.CheckOFLUpdates(childComplexity), true
 	case "Query.compareScenes":
 		if e.complexity.Query.CompareScenes == nil {
 			break
@@ -3438,6 +3778,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.NetworkInterfaceOptions(childComplexity), true
+	case "Query.oflImportStatus":
+		if e.complexity.Query.OflImportStatus == nil {
+			break
+		}
+
+		return e.complexity.Query.OflImportStatus(childComplexity), true
 	case "Query.previewSession":
 		if e.complexity.Query.PreviewSession == nil {
 			break
@@ -4078,6 +4424,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Subscription.DmxOutputChanged(childComplexity, args["universe"].(*int)), true
+	case "Subscription.oflImportProgress":
+		if e.complexity.Subscription.OflImportProgress == nil {
+			break
+		}
+
+		return e.complexity.Subscription.OflImportProgress(childComplexity), true
 	case "Subscription.previewSessionUpdated":
 		if e.complexity.Subscription.PreviewSessionUpdated == nil {
 			break
@@ -4411,6 +4763,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputFixtureValueInput,
 		ec.unmarshalInputImportOFLFixtureInput,
 		ec.unmarshalInputImportOptionsInput,
+		ec.unmarshalInputOFLImportOptionsInput,
 		ec.unmarshalInputProjectUpdateItem,
 		ec.unmarshalInputSceneBoardButtonPositionInput,
 		ec.unmarshalInputSceneBoardButtonUpdateItem,
@@ -4624,6 +4977,29 @@ enum WiFiSecurityType {
   WPA3_PSK
   WPA3_EAP
   OWE
+}
+
+"""
+Phases of the OFL import process
+"""
+enum OFLImportPhase {
+  IDLE
+  DOWNLOADING
+  EXTRACTING
+  PARSING
+  IMPORTING
+  COMPLETE
+  FAILED
+  CANCELLED
+}
+
+"""
+Type of fixture change detected during OFL update check
+"""
+enum OFLFixtureChangeType {
+  NEW
+  UPDATED
+  UNCHANGED
 }
 
 enum ImportMode {
@@ -5006,6 +5382,112 @@ type FixtureChannelAssignment {
   endChannel: Int!
   channelCount: Int!
   channelRange: String!
+}
+
+# =============================================================================
+# OFL (OPEN FIXTURE LIBRARY) TYPES
+# =============================================================================
+
+"""
+Real-time status of an OFL import operation
+"""
+type OFLImportStatus {
+  "Whether an import is currently in progress"
+  isImporting: Boolean!
+  "Current phase of the import"
+  phase: OFLImportPhase!
+  "Total number of fixtures to import"
+  totalFixtures: Int!
+  "Number of fixtures successfully imported"
+  importedCount: Int!
+  "Number of fixtures that failed to import"
+  failedCount: Int!
+  "Number of fixtures skipped (already exist)"
+  skippedCount: Int!
+  "Percentage complete (0-100)"
+  percentComplete: Float!
+  "Name of the current fixture being imported"
+  currentFixture: String
+  "Current manufacturer being processed"
+  currentManufacturer: String
+  "Estimated seconds remaining (null if unknown)"
+  estimatedSecondsRemaining: Int
+  "Error message if phase is FAILED"
+  errorMessage: String
+  "When the import started"
+  startedAt: String
+  "When the import completed (if done)"
+  completedAt: String
+  "OFL version/commit being imported"
+  oflVersion: String
+  "Whether using bundled data (offline) or fetched from GitHub"
+  usingBundledData: Boolean!
+}
+
+"""
+Information about a fixture that may need updating
+"""
+type OFLFixtureUpdate {
+  "Unique key (manufacturer/model)"
+  fixtureKey: String!
+  "Manufacturer name"
+  manufacturer: String!
+  "Model name"
+  model: String!
+  "Type of change"
+  changeType: OFLFixtureChangeType!
+  "Whether this fixture is currently in use by any project"
+  isInUse: Boolean!
+  "Number of instances using this definition"
+  instanceCount: Int!
+  "Current hash (null if new)"
+  currentHash: String
+  "New hash from OFL"
+  newHash: String!
+}
+
+"""
+Result of checking for OFL updates
+"""
+type OFLUpdateCheckResult {
+  "Total fixtures in current database"
+  currentFixtureCount: Int!
+  "Total fixtures in OFL source"
+  oflFixtureCount: Int!
+  "Number of new fixtures available"
+  newFixtureCount: Int!
+  "Number of changed fixtures"
+  changedFixtureCount: Int!
+  "Number of changed fixtures that are in use"
+  changedInUseCount: Int!
+  "Detailed list of fixture changes (limited)"
+  fixtureUpdates: [OFLFixtureUpdate!]!
+  "OFL version/commit being checked"
+  oflVersion: String!
+  "When this check was performed"
+  checkedAt: String!
+}
+
+"""
+Statistics about an OFL import
+"""
+type OFLImportStats {
+  totalProcessed: Int!
+  successfulImports: Int!
+  failedImports: Int!
+  skippedDuplicates: Int!
+  updatedFixtures: Int!
+  durationSeconds: Float!
+}
+
+"""
+Final result of an OFL import operation
+"""
+type OFLImportResult {
+  success: Boolean!
+  stats: OFLImportStats!
+  errorMessage: String
+  oflVersion: String!
 }
 
 # =============================================================================
@@ -5526,6 +6008,20 @@ input UpdateSettingInput {
   value: String!
 }
 
+"""
+Options for triggering an OFL import
+"""
+input OFLImportOptionsInput {
+  "Force reimport of all fixtures, even if unchanged"
+  forceReimport: Boolean = false
+  "Update fixtures that are currently in use by projects"
+  updateInUseFixtures: Boolean = false
+  "Only import specific manufacturers (empty = all)"
+  manufacturers: [String!]
+  "Prefer bundled data over fetching from GitHub"
+  preferBundled: Boolean = false
+}
+
 # =============================================================================
 # QUERIES
 # =============================================================================
@@ -5637,6 +6133,12 @@ type Query {
   # Version Management
   systemVersions: SystemVersionInfo!
   availableVersions(repository: String!): [String!]!
+
+  # Open Fixture Library
+  "Get the current status of any ongoing OFL import"
+  oflImportStatus: OFLImportStatus!
+  "Check for available OFL updates without importing"
+  checkOFLUpdates: OFLUpdateCheckResult!
 
   # Bulk Read Queries
   fixturesByIds(ids: [ID!]!): [FixtureInstance!]!
@@ -5830,6 +6332,12 @@ type Mutation {
   # Version Management
   updateRepository(repository: String!, version: String = "latest"): UpdateResult!
   updateAllRepositories: [UpdateResult!]!
+
+  # Open Fixture Library
+  "Trigger an OFL import/update operation"
+  triggerOFLImport(options: OFLImportOptionsInput): OFLImportResult!
+  "Cancel an ongoing OFL import"
+  cancelOFLImport: Boolean!
 }
 
 # =============================================================================
@@ -5843,6 +6351,8 @@ type Subscription {
   cueListPlaybackUpdated(cueListId: ID!): CueListPlaybackStatus!
   systemInfoUpdated: SystemInfo!
   wifiStatusUpdated: WiFiStatus!
+  "Real-time updates during OFL import"
+  oflImportProgress: OFLImportStatus!
 }
 `, BuiltIn: false},
 }
@@ -6739,6 +7249,17 @@ func (ec *executionContext) field_Mutation_stopCueList_args(ctx context.Context,
 		return nil, err
 	}
 	args["cueListId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_triggerOFLImport_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "options", ec.unmarshalOOFLImportOptionsInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLImportOptionsInput)
+	if err != nil {
+		return nil, err
+	}
+	args["options"] = arg0
 	return args, nil
 }
 
@@ -17265,6 +17786,86 @@ func (ec *executionContext) fieldContext_Mutation_updateAllRepositories(_ contex
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_triggerOFLImport(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_triggerOFLImport,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().TriggerOFLImport(ctx, fc.Args["options"].(*OFLImportOptionsInput))
+		},
+		nil,
+		ec.marshalNOFLImportResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLImportResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_triggerOFLImport(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "success":
+				return ec.fieldContext_OFLImportResult_success(ctx, field)
+			case "stats":
+				return ec.fieldContext_OFLImportResult_stats(ctx, field)
+			case "errorMessage":
+				return ec.fieldContext_OFLImportResult_errorMessage(ctx, field)
+			case "oflVersion":
+				return ec.fieldContext_OFLImportResult_oflVersion(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type OFLImportResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_triggerOFLImport_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_cancelOFLImport(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_cancelOFLImport,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Mutation().CancelOFLImport(ctx)
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_cancelOFLImport(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _NetworkInterfaceOption_name(ctx context.Context, field graphql.CollectedField, obj *NetworkInterfaceOption) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -17400,6 +18001,1227 @@ func (ec *executionContext) _NetworkInterfaceOption_interfaceType(ctx context.Co
 func (ec *executionContext) fieldContext_NetworkInterfaceOption_interfaceType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "NetworkInterfaceOption",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLFixtureUpdate_fixtureKey(ctx context.Context, field graphql.CollectedField, obj *OFLFixtureUpdate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLFixtureUpdate_fixtureKey,
+		func(ctx context.Context) (any, error) {
+			return obj.FixtureKey, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLFixtureUpdate_fixtureKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLFixtureUpdate",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLFixtureUpdate_manufacturer(ctx context.Context, field graphql.CollectedField, obj *OFLFixtureUpdate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLFixtureUpdate_manufacturer,
+		func(ctx context.Context) (any, error) {
+			return obj.Manufacturer, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLFixtureUpdate_manufacturer(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLFixtureUpdate",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLFixtureUpdate_model(ctx context.Context, field graphql.CollectedField, obj *OFLFixtureUpdate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLFixtureUpdate_model,
+		func(ctx context.Context) (any, error) {
+			return obj.Model, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLFixtureUpdate_model(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLFixtureUpdate",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLFixtureUpdate_changeType(ctx context.Context, field graphql.CollectedField, obj *OFLFixtureUpdate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLFixtureUpdate_changeType,
+		func(ctx context.Context) (any, error) {
+			return obj.ChangeType, nil
+		},
+		nil,
+		ec.marshalNOFLFixtureChangeType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLFixtureChangeType,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLFixtureUpdate_changeType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLFixtureUpdate",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type OFLFixtureChangeType does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLFixtureUpdate_isInUse(ctx context.Context, field graphql.CollectedField, obj *OFLFixtureUpdate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLFixtureUpdate_isInUse,
+		func(ctx context.Context) (any, error) {
+			return obj.IsInUse, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLFixtureUpdate_isInUse(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLFixtureUpdate",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLFixtureUpdate_instanceCount(ctx context.Context, field graphql.CollectedField, obj *OFLFixtureUpdate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLFixtureUpdate_instanceCount,
+		func(ctx context.Context) (any, error) {
+			return obj.InstanceCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLFixtureUpdate_instanceCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLFixtureUpdate",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLFixtureUpdate_currentHash(ctx context.Context, field graphql.CollectedField, obj *OFLFixtureUpdate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLFixtureUpdate_currentHash,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentHash, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLFixtureUpdate_currentHash(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLFixtureUpdate",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLFixtureUpdate_newHash(ctx context.Context, field graphql.CollectedField, obj *OFLFixtureUpdate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLFixtureUpdate_newHash,
+		func(ctx context.Context) (any, error) {
+			return obj.NewHash, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLFixtureUpdate_newHash(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLFixtureUpdate",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportResult_success(ctx context.Context, field graphql.CollectedField, obj *OFLImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportResult_success,
+		func(ctx context.Context) (any, error) {
+			return obj.Success, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportResult_success(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportResult_stats(ctx context.Context, field graphql.CollectedField, obj *OFLImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportResult_stats,
+		func(ctx context.Context) (any, error) {
+			return obj.Stats, nil
+		},
+		nil,
+		ec.marshalNOFLImportStats2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLImportStats,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportResult_stats(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "totalProcessed":
+				return ec.fieldContext_OFLImportStats_totalProcessed(ctx, field)
+			case "successfulImports":
+				return ec.fieldContext_OFLImportStats_successfulImports(ctx, field)
+			case "failedImports":
+				return ec.fieldContext_OFLImportStats_failedImports(ctx, field)
+			case "skippedDuplicates":
+				return ec.fieldContext_OFLImportStats_skippedDuplicates(ctx, field)
+			case "updatedFixtures":
+				return ec.fieldContext_OFLImportStats_updatedFixtures(ctx, field)
+			case "durationSeconds":
+				return ec.fieldContext_OFLImportStats_durationSeconds(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type OFLImportStats", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportResult_errorMessage(ctx context.Context, field graphql.CollectedField, obj *OFLImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportResult_errorMessage,
+		func(ctx context.Context) (any, error) {
+			return obj.ErrorMessage, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportResult_errorMessage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportResult_oflVersion(ctx context.Context, field graphql.CollectedField, obj *OFLImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportResult_oflVersion,
+		func(ctx context.Context) (any, error) {
+			return obj.OflVersion, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportResult_oflVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStats_totalProcessed(ctx context.Context, field graphql.CollectedField, obj *OFLImportStats) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStats_totalProcessed,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalProcessed, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStats_totalProcessed(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStats_successfulImports(ctx context.Context, field graphql.CollectedField, obj *OFLImportStats) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStats_successfulImports,
+		func(ctx context.Context) (any, error) {
+			return obj.SuccessfulImports, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStats_successfulImports(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStats_failedImports(ctx context.Context, field graphql.CollectedField, obj *OFLImportStats) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStats_failedImports,
+		func(ctx context.Context) (any, error) {
+			return obj.FailedImports, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStats_failedImports(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStats_skippedDuplicates(ctx context.Context, field graphql.CollectedField, obj *OFLImportStats) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStats_skippedDuplicates,
+		func(ctx context.Context) (any, error) {
+			return obj.SkippedDuplicates, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStats_skippedDuplicates(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStats_updatedFixtures(ctx context.Context, field graphql.CollectedField, obj *OFLImportStats) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStats_updatedFixtures,
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedFixtures, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStats_updatedFixtures(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStats_durationSeconds(ctx context.Context, field graphql.CollectedField, obj *OFLImportStats) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStats_durationSeconds,
+		func(ctx context.Context) (any, error) {
+			return obj.DurationSeconds, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStats_durationSeconds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStatus_isImporting(ctx context.Context, field graphql.CollectedField, obj *OFLImportStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStatus_isImporting,
+		func(ctx context.Context) (any, error) {
+			return obj.IsImporting, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStatus_isImporting(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStatus_phase(ctx context.Context, field graphql.CollectedField, obj *OFLImportStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStatus_phase,
+		func(ctx context.Context) (any, error) {
+			return obj.Phase, nil
+		},
+		nil,
+		ec.marshalNOFLImportPhase2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLImportPhase,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStatus_phase(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type OFLImportPhase does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStatus_totalFixtures(ctx context.Context, field graphql.CollectedField, obj *OFLImportStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStatus_totalFixtures,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalFixtures, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStatus_totalFixtures(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStatus_importedCount(ctx context.Context, field graphql.CollectedField, obj *OFLImportStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStatus_importedCount,
+		func(ctx context.Context) (any, error) {
+			return obj.ImportedCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStatus_importedCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStatus_failedCount(ctx context.Context, field graphql.CollectedField, obj *OFLImportStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStatus_failedCount,
+		func(ctx context.Context) (any, error) {
+			return obj.FailedCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStatus_failedCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStatus_skippedCount(ctx context.Context, field graphql.CollectedField, obj *OFLImportStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStatus_skippedCount,
+		func(ctx context.Context) (any, error) {
+			return obj.SkippedCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStatus_skippedCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStatus_percentComplete(ctx context.Context, field graphql.CollectedField, obj *OFLImportStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStatus_percentComplete,
+		func(ctx context.Context) (any, error) {
+			return obj.PercentComplete, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStatus_percentComplete(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStatus_currentFixture(ctx context.Context, field graphql.CollectedField, obj *OFLImportStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStatus_currentFixture,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentFixture, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStatus_currentFixture(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStatus_currentManufacturer(ctx context.Context, field graphql.CollectedField, obj *OFLImportStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStatus_currentManufacturer,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentManufacturer, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStatus_currentManufacturer(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStatus_estimatedSecondsRemaining(ctx context.Context, field graphql.CollectedField, obj *OFLImportStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStatus_estimatedSecondsRemaining,
+		func(ctx context.Context) (any, error) {
+			return obj.EstimatedSecondsRemaining, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStatus_estimatedSecondsRemaining(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStatus_errorMessage(ctx context.Context, field graphql.CollectedField, obj *OFLImportStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStatus_errorMessage,
+		func(ctx context.Context) (any, error) {
+			return obj.ErrorMessage, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStatus_errorMessage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStatus_startedAt(ctx context.Context, field graphql.CollectedField, obj *OFLImportStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStatus_startedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.StartedAt, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStatus_startedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStatus_completedAt(ctx context.Context, field graphql.CollectedField, obj *OFLImportStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStatus_completedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CompletedAt, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStatus_completedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStatus_oflVersion(ctx context.Context, field graphql.CollectedField, obj *OFLImportStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStatus_oflVersion,
+		func(ctx context.Context) (any, error) {
+			return obj.OflVersion, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStatus_oflVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLImportStatus_usingBundledData(ctx context.Context, field graphql.CollectedField, obj *OFLImportStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLImportStatus_usingBundledData,
+		func(ctx context.Context) (any, error) {
+			return obj.UsingBundledData, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLImportStatus_usingBundledData(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLImportStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLUpdateCheckResult_currentFixtureCount(ctx context.Context, field graphql.CollectedField, obj *OFLUpdateCheckResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLUpdateCheckResult_currentFixtureCount,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentFixtureCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLUpdateCheckResult_currentFixtureCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLUpdateCheckResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLUpdateCheckResult_oflFixtureCount(ctx context.Context, field graphql.CollectedField, obj *OFLUpdateCheckResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLUpdateCheckResult_oflFixtureCount,
+		func(ctx context.Context) (any, error) {
+			return obj.OflFixtureCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLUpdateCheckResult_oflFixtureCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLUpdateCheckResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLUpdateCheckResult_newFixtureCount(ctx context.Context, field graphql.CollectedField, obj *OFLUpdateCheckResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLUpdateCheckResult_newFixtureCount,
+		func(ctx context.Context) (any, error) {
+			return obj.NewFixtureCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLUpdateCheckResult_newFixtureCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLUpdateCheckResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLUpdateCheckResult_changedFixtureCount(ctx context.Context, field graphql.CollectedField, obj *OFLUpdateCheckResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLUpdateCheckResult_changedFixtureCount,
+		func(ctx context.Context) (any, error) {
+			return obj.ChangedFixtureCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLUpdateCheckResult_changedFixtureCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLUpdateCheckResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLUpdateCheckResult_changedInUseCount(ctx context.Context, field graphql.CollectedField, obj *OFLUpdateCheckResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLUpdateCheckResult_changedInUseCount,
+		func(ctx context.Context) (any, error) {
+			return obj.ChangedInUseCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLUpdateCheckResult_changedInUseCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLUpdateCheckResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLUpdateCheckResult_fixtureUpdates(ctx context.Context, field graphql.CollectedField, obj *OFLUpdateCheckResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLUpdateCheckResult_fixtureUpdates,
+		func(ctx context.Context) (any, error) {
+			return obj.FixtureUpdates, nil
+		},
+		nil,
+		ec.marshalNOFLFixtureUpdate2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLFixtureUpdateᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLUpdateCheckResult_fixtureUpdates(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLUpdateCheckResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "fixtureKey":
+				return ec.fieldContext_OFLFixtureUpdate_fixtureKey(ctx, field)
+			case "manufacturer":
+				return ec.fieldContext_OFLFixtureUpdate_manufacturer(ctx, field)
+			case "model":
+				return ec.fieldContext_OFLFixtureUpdate_model(ctx, field)
+			case "changeType":
+				return ec.fieldContext_OFLFixtureUpdate_changeType(ctx, field)
+			case "isInUse":
+				return ec.fieldContext_OFLFixtureUpdate_isInUse(ctx, field)
+			case "instanceCount":
+				return ec.fieldContext_OFLFixtureUpdate_instanceCount(ctx, field)
+			case "currentHash":
+				return ec.fieldContext_OFLFixtureUpdate_currentHash(ctx, field)
+			case "newHash":
+				return ec.fieldContext_OFLFixtureUpdate_newHash(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type OFLFixtureUpdate", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLUpdateCheckResult_oflVersion(ctx context.Context, field graphql.CollectedField, obj *OFLUpdateCheckResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLUpdateCheckResult_oflVersion,
+		func(ctx context.Context) (any, error) {
+			return obj.OflVersion, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLUpdateCheckResult_oflVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLUpdateCheckResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OFLUpdateCheckResult_checkedAt(ctx context.Context, field graphql.CollectedField, obj *OFLUpdateCheckResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OFLUpdateCheckResult_checkedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CheckedAt, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OFLUpdateCheckResult_checkedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OFLUpdateCheckResult",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -21092,6 +22914,114 @@ func (ec *executionContext) fieldContext_Query_availableVersions(ctx context.Con
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_oflImportStatus(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_oflImportStatus,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().OflImportStatus(ctx)
+		},
+		nil,
+		ec.marshalNOFLImportStatus2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLImportStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_oflImportStatus(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "isImporting":
+				return ec.fieldContext_OFLImportStatus_isImporting(ctx, field)
+			case "phase":
+				return ec.fieldContext_OFLImportStatus_phase(ctx, field)
+			case "totalFixtures":
+				return ec.fieldContext_OFLImportStatus_totalFixtures(ctx, field)
+			case "importedCount":
+				return ec.fieldContext_OFLImportStatus_importedCount(ctx, field)
+			case "failedCount":
+				return ec.fieldContext_OFLImportStatus_failedCount(ctx, field)
+			case "skippedCount":
+				return ec.fieldContext_OFLImportStatus_skippedCount(ctx, field)
+			case "percentComplete":
+				return ec.fieldContext_OFLImportStatus_percentComplete(ctx, field)
+			case "currentFixture":
+				return ec.fieldContext_OFLImportStatus_currentFixture(ctx, field)
+			case "currentManufacturer":
+				return ec.fieldContext_OFLImportStatus_currentManufacturer(ctx, field)
+			case "estimatedSecondsRemaining":
+				return ec.fieldContext_OFLImportStatus_estimatedSecondsRemaining(ctx, field)
+			case "errorMessage":
+				return ec.fieldContext_OFLImportStatus_errorMessage(ctx, field)
+			case "startedAt":
+				return ec.fieldContext_OFLImportStatus_startedAt(ctx, field)
+			case "completedAt":
+				return ec.fieldContext_OFLImportStatus_completedAt(ctx, field)
+			case "oflVersion":
+				return ec.fieldContext_OFLImportStatus_oflVersion(ctx, field)
+			case "usingBundledData":
+				return ec.fieldContext_OFLImportStatus_usingBundledData(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type OFLImportStatus", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_checkOFLUpdates(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_checkOFLUpdates,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().CheckOFLUpdates(ctx)
+		},
+		nil,
+		ec.marshalNOFLUpdateCheckResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLUpdateCheckResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_checkOFLUpdates(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "currentFixtureCount":
+				return ec.fieldContext_OFLUpdateCheckResult_currentFixtureCount(ctx, field)
+			case "oflFixtureCount":
+				return ec.fieldContext_OFLUpdateCheckResult_oflFixtureCount(ctx, field)
+			case "newFixtureCount":
+				return ec.fieldContext_OFLUpdateCheckResult_newFixtureCount(ctx, field)
+			case "changedFixtureCount":
+				return ec.fieldContext_OFLUpdateCheckResult_changedFixtureCount(ctx, field)
+			case "changedInUseCount":
+				return ec.fieldContext_OFLUpdateCheckResult_changedInUseCount(ctx, field)
+			case "fixtureUpdates":
+				return ec.fieldContext_OFLUpdateCheckResult_fixtureUpdates(ctx, field)
+			case "oflVersion":
+				return ec.fieldContext_OFLUpdateCheckResult_oflVersion(ctx, field)
+			case "checkedAt":
+				return ec.fieldContext_OFLUpdateCheckResult_checkedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type OFLUpdateCheckResult", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_fixturesByIds(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -23972,6 +25902,67 @@ func (ec *executionContext) fieldContext_Subscription_wifiStatusUpdated(_ contex
 				return ec.fieldContext_WiFiStatus_frequency(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WiFiStatus", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_oflImportProgress(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_oflImportProgress,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Subscription().OflImportProgress(ctx)
+		},
+		nil,
+		ec.marshalNOFLImportStatus2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLImportStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_oflImportProgress(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "isImporting":
+				return ec.fieldContext_OFLImportStatus_isImporting(ctx, field)
+			case "phase":
+				return ec.fieldContext_OFLImportStatus_phase(ctx, field)
+			case "totalFixtures":
+				return ec.fieldContext_OFLImportStatus_totalFixtures(ctx, field)
+			case "importedCount":
+				return ec.fieldContext_OFLImportStatus_importedCount(ctx, field)
+			case "failedCount":
+				return ec.fieldContext_OFLImportStatus_failedCount(ctx, field)
+			case "skippedCount":
+				return ec.fieldContext_OFLImportStatus_skippedCount(ctx, field)
+			case "percentComplete":
+				return ec.fieldContext_OFLImportStatus_percentComplete(ctx, field)
+			case "currentFixture":
+				return ec.fieldContext_OFLImportStatus_currentFixture(ctx, field)
+			case "currentManufacturer":
+				return ec.fieldContext_OFLImportStatus_currentManufacturer(ctx, field)
+			case "estimatedSecondsRemaining":
+				return ec.fieldContext_OFLImportStatus_estimatedSecondsRemaining(ctx, field)
+			case "errorMessage":
+				return ec.fieldContext_OFLImportStatus_errorMessage(ctx, field)
+			case "startedAt":
+				return ec.fieldContext_OFLImportStatus_startedAt(ctx, field)
+			case "completedAt":
+				return ec.fieldContext_OFLImportStatus_completedAt(ctx, field)
+			case "oflVersion":
+				return ec.fieldContext_OFLImportStatus_oflVersion(ctx, field)
+			case "usingBundledData":
+				return ec.fieldContext_OFLImportStatus_usingBundledData(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type OFLImportStatus", field.Name)
 		},
 	}
 	return fc, nil
@@ -28435,6 +30426,64 @@ func (ec *executionContext) unmarshalInputImportOptionsInput(ctx context.Context
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputOFLImportOptionsInput(ctx context.Context, obj any) (OFLImportOptionsInput, error) {
+	var it OFLImportOptionsInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	if _, present := asMap["forceReimport"]; !present {
+		asMap["forceReimport"] = false
+	}
+	if _, present := asMap["updateInUseFixtures"]; !present {
+		asMap["updateInUseFixtures"] = false
+	}
+	if _, present := asMap["preferBundled"]; !present {
+		asMap["preferBundled"] = false
+	}
+
+	fieldsInOrder := [...]string{"forceReimport", "updateInUseFixtures", "manufacturers", "preferBundled"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "forceReimport":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("forceReimport"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ForceReimport = graphql.OmittableOf(data)
+		case "updateInUseFixtures":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("updateInUseFixtures"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.UpdateInUseFixtures = graphql.OmittableOf(data)
+		case "manufacturers":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("manufacturers"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Manufacturers = graphql.OmittableOf(data)
+		case "preferBundled":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("preferBundled"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PreferBundled = graphql.OmittableOf(data)
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputProjectUpdateItem(ctx context.Context, obj any) (ProjectUpdateItem, error) {
 	var it ProjectUpdateItem
 	asMap := map[string]any{}
@@ -32270,6 +34319,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "triggerOFLImport":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_triggerOFLImport(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cancelOFLImport":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_cancelOFLImport(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -32326,6 +34389,354 @@ func (ec *executionContext) _NetworkInterfaceOption(ctx context.Context, sel ast
 			}
 		case "interfaceType":
 			out.Values[i] = ec._NetworkInterfaceOption_interfaceType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var oFLFixtureUpdateImplementors = []string{"OFLFixtureUpdate"}
+
+func (ec *executionContext) _OFLFixtureUpdate(ctx context.Context, sel ast.SelectionSet, obj *OFLFixtureUpdate) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, oFLFixtureUpdateImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OFLFixtureUpdate")
+		case "fixtureKey":
+			out.Values[i] = ec._OFLFixtureUpdate_fixtureKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "manufacturer":
+			out.Values[i] = ec._OFLFixtureUpdate_manufacturer(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "model":
+			out.Values[i] = ec._OFLFixtureUpdate_model(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "changeType":
+			out.Values[i] = ec._OFLFixtureUpdate_changeType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isInUse":
+			out.Values[i] = ec._OFLFixtureUpdate_isInUse(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "instanceCount":
+			out.Values[i] = ec._OFLFixtureUpdate_instanceCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "currentHash":
+			out.Values[i] = ec._OFLFixtureUpdate_currentHash(ctx, field, obj)
+		case "newHash":
+			out.Values[i] = ec._OFLFixtureUpdate_newHash(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var oFLImportResultImplementors = []string{"OFLImportResult"}
+
+func (ec *executionContext) _OFLImportResult(ctx context.Context, sel ast.SelectionSet, obj *OFLImportResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, oFLImportResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OFLImportResult")
+		case "success":
+			out.Values[i] = ec._OFLImportResult_success(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "stats":
+			out.Values[i] = ec._OFLImportResult_stats(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "errorMessage":
+			out.Values[i] = ec._OFLImportResult_errorMessage(ctx, field, obj)
+		case "oflVersion":
+			out.Values[i] = ec._OFLImportResult_oflVersion(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var oFLImportStatsImplementors = []string{"OFLImportStats"}
+
+func (ec *executionContext) _OFLImportStats(ctx context.Context, sel ast.SelectionSet, obj *OFLImportStats) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, oFLImportStatsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OFLImportStats")
+		case "totalProcessed":
+			out.Values[i] = ec._OFLImportStats_totalProcessed(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "successfulImports":
+			out.Values[i] = ec._OFLImportStats_successfulImports(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "failedImports":
+			out.Values[i] = ec._OFLImportStats_failedImports(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "skippedDuplicates":
+			out.Values[i] = ec._OFLImportStats_skippedDuplicates(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updatedFixtures":
+			out.Values[i] = ec._OFLImportStats_updatedFixtures(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "durationSeconds":
+			out.Values[i] = ec._OFLImportStats_durationSeconds(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var oFLImportStatusImplementors = []string{"OFLImportStatus"}
+
+func (ec *executionContext) _OFLImportStatus(ctx context.Context, sel ast.SelectionSet, obj *OFLImportStatus) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, oFLImportStatusImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OFLImportStatus")
+		case "isImporting":
+			out.Values[i] = ec._OFLImportStatus_isImporting(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "phase":
+			out.Values[i] = ec._OFLImportStatus_phase(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalFixtures":
+			out.Values[i] = ec._OFLImportStatus_totalFixtures(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "importedCount":
+			out.Values[i] = ec._OFLImportStatus_importedCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "failedCount":
+			out.Values[i] = ec._OFLImportStatus_failedCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "skippedCount":
+			out.Values[i] = ec._OFLImportStatus_skippedCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "percentComplete":
+			out.Values[i] = ec._OFLImportStatus_percentComplete(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "currentFixture":
+			out.Values[i] = ec._OFLImportStatus_currentFixture(ctx, field, obj)
+		case "currentManufacturer":
+			out.Values[i] = ec._OFLImportStatus_currentManufacturer(ctx, field, obj)
+		case "estimatedSecondsRemaining":
+			out.Values[i] = ec._OFLImportStatus_estimatedSecondsRemaining(ctx, field, obj)
+		case "errorMessage":
+			out.Values[i] = ec._OFLImportStatus_errorMessage(ctx, field, obj)
+		case "startedAt":
+			out.Values[i] = ec._OFLImportStatus_startedAt(ctx, field, obj)
+		case "completedAt":
+			out.Values[i] = ec._OFLImportStatus_completedAt(ctx, field, obj)
+		case "oflVersion":
+			out.Values[i] = ec._OFLImportStatus_oflVersion(ctx, field, obj)
+		case "usingBundledData":
+			out.Values[i] = ec._OFLImportStatus_usingBundledData(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var oFLUpdateCheckResultImplementors = []string{"OFLUpdateCheckResult"}
+
+func (ec *executionContext) _OFLUpdateCheckResult(ctx context.Context, sel ast.SelectionSet, obj *OFLUpdateCheckResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, oFLUpdateCheckResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OFLUpdateCheckResult")
+		case "currentFixtureCount":
+			out.Values[i] = ec._OFLUpdateCheckResult_currentFixtureCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "oflFixtureCount":
+			out.Values[i] = ec._OFLUpdateCheckResult_oflFixtureCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "newFixtureCount":
+			out.Values[i] = ec._OFLUpdateCheckResult_newFixtureCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "changedFixtureCount":
+			out.Values[i] = ec._OFLUpdateCheckResult_changedFixtureCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "changedInUseCount":
+			out.Values[i] = ec._OFLUpdateCheckResult_changedInUseCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fixtureUpdates":
+			out.Values[i] = ec._OFLUpdateCheckResult_fixtureUpdates(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "oflVersion":
+			out.Values[i] = ec._OFLUpdateCheckResult_oflVersion(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "checkedAt":
+			out.Values[i] = ec._OFLUpdateCheckResult_checkedAt(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -34282,6 +36693,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "oflImportStatus":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_oflImportStatus(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "checkOFLUpdates":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_checkOFLUpdates(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "fixturesByIds":
 			field := field
 
@@ -35580,6 +38035,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_systemInfoUpdated(ctx, fields[0])
 	case "wifiStatusUpdated":
 		return ec._Subscription_wifiStatusUpdated(ctx, fields[0])
+	case "oflImportProgress":
+		return ec._Subscription_oflImportProgress(ctx, fields[0])
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
@@ -38253,6 +40710,126 @@ func (ec *executionContext) marshalNNetworkInterfaceOption2ᚖgithubᚗcomᚋbbe
 	return ec._NetworkInterfaceOption(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNOFLFixtureChangeType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLFixtureChangeType(ctx context.Context, v any) (OFLFixtureChangeType, error) {
+	var res OFLFixtureChangeType
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNOFLFixtureChangeType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLFixtureChangeType(ctx context.Context, sel ast.SelectionSet, v OFLFixtureChangeType) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNOFLFixtureUpdate2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLFixtureUpdateᚄ(ctx context.Context, sel ast.SelectionSet, v []*OFLFixtureUpdate) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNOFLFixtureUpdate2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLFixtureUpdate(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNOFLFixtureUpdate2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLFixtureUpdate(ctx context.Context, sel ast.SelectionSet, v *OFLFixtureUpdate) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OFLFixtureUpdate(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNOFLImportPhase2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLImportPhase(ctx context.Context, v any) (OFLImportPhase, error) {
+	var res OFLImportPhase
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNOFLImportPhase2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLImportPhase(ctx context.Context, sel ast.SelectionSet, v OFLImportPhase) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNOFLImportResult2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLImportResult(ctx context.Context, sel ast.SelectionSet, v OFLImportResult) graphql.Marshaler {
+	return ec._OFLImportResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNOFLImportResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLImportResult(ctx context.Context, sel ast.SelectionSet, v *OFLImportResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OFLImportResult(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNOFLImportStats2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLImportStats(ctx context.Context, sel ast.SelectionSet, v OFLImportStats) graphql.Marshaler {
+	return ec._OFLImportStats(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNOFLImportStatus2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLImportStatus(ctx context.Context, sel ast.SelectionSet, v OFLImportStatus) graphql.Marshaler {
+	return ec._OFLImportStatus(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNOFLImportStatus2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLImportStatus(ctx context.Context, sel ast.SelectionSet, v *OFLImportStatus) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OFLImportStatus(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNOFLUpdateCheckResult2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLUpdateCheckResult(ctx context.Context, sel ast.SelectionSet, v OFLUpdateCheckResult) graphql.Marshaler {
+	return ec._OFLUpdateCheckResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNOFLUpdateCheckResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLUpdateCheckResult(ctx context.Context, sel ast.SelectionSet, v *OFLUpdateCheckResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OFLUpdateCheckResult(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNPaginationInfo2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐPaginationInfo(ctx context.Context, sel ast.SelectionSet, v PaginationInfo) graphql.Marshaler {
 	return ec._PaginationInfo(ctx, sel, &v)
 }
@@ -40124,6 +42701,14 @@ func (ec *executionContext) marshalOInt2ᚖint(ctx context.Context, sel ast.Sele
 	_ = ctx
 	res := graphql.MarshalInt(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOOFLImportOptionsInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOFLImportOptionsInput(ctx context.Context, v any) (*OFLImportOptionsInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputOFLImportOptionsInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalOPreviewSession2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐPreviewSession(ctx context.Context, sel ast.SelectionSet, v *models.PreviewSession) graphql.Marshaler {

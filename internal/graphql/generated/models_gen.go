@@ -423,6 +423,110 @@ type NetworkInterfaceOption struct {
 	InterfaceType string `json:"interfaceType"`
 }
 
+// Information about a fixture that may need updating
+type OFLFixtureUpdate struct {
+	// Unique key (manufacturer/model)
+	FixtureKey string `json:"fixtureKey"`
+	// Manufacturer name
+	Manufacturer string `json:"manufacturer"`
+	// Model name
+	Model string `json:"model"`
+	// Type of change
+	ChangeType OFLFixtureChangeType `json:"changeType"`
+	// Whether this fixture is currently in use by any project
+	IsInUse bool `json:"isInUse"`
+	// Number of instances using this definition
+	InstanceCount int `json:"instanceCount"`
+	// Current hash (null if new)
+	CurrentHash *string `json:"currentHash,omitempty"`
+	// New hash from OFL
+	NewHash string `json:"newHash"`
+}
+
+// Options for triggering an OFL import
+type OFLImportOptionsInput struct {
+	// Force reimport of all fixtures, even if unchanged
+	ForceReimport graphql.Omittable[*bool] `json:"forceReimport,omitempty"`
+	// Update fixtures that are currently in use by projects
+	UpdateInUseFixtures graphql.Omittable[*bool] `json:"updateInUseFixtures,omitempty"`
+	// Only import specific manufacturers (empty = all)
+	Manufacturers graphql.Omittable[[]string] `json:"manufacturers,omitempty"`
+	// Prefer bundled data over fetching from GitHub
+	PreferBundled graphql.Omittable[*bool] `json:"preferBundled,omitempty"`
+}
+
+// Final result of an OFL import operation
+type OFLImportResult struct {
+	Success      bool           `json:"success"`
+	Stats        OFLImportStats `json:"stats"`
+	ErrorMessage *string        `json:"errorMessage,omitempty"`
+	OflVersion   string         `json:"oflVersion"`
+}
+
+// Statistics about an OFL import
+type OFLImportStats struct {
+	TotalProcessed    int     `json:"totalProcessed"`
+	SuccessfulImports int     `json:"successfulImports"`
+	FailedImports     int     `json:"failedImports"`
+	SkippedDuplicates int     `json:"skippedDuplicates"`
+	UpdatedFixtures   int     `json:"updatedFixtures"`
+	DurationSeconds   float64 `json:"durationSeconds"`
+}
+
+// Real-time status of an OFL import operation
+type OFLImportStatus struct {
+	// Whether an import is currently in progress
+	IsImporting bool `json:"isImporting"`
+	// Current phase of the import
+	Phase OFLImportPhase `json:"phase"`
+	// Total number of fixtures to import
+	TotalFixtures int `json:"totalFixtures"`
+	// Number of fixtures successfully imported
+	ImportedCount int `json:"importedCount"`
+	// Number of fixtures that failed to import
+	FailedCount int `json:"failedCount"`
+	// Number of fixtures skipped (already exist)
+	SkippedCount int `json:"skippedCount"`
+	// Percentage complete (0-100)
+	PercentComplete float64 `json:"percentComplete"`
+	// Name of the current fixture being imported
+	CurrentFixture *string `json:"currentFixture,omitempty"`
+	// Current manufacturer being processed
+	CurrentManufacturer *string `json:"currentManufacturer,omitempty"`
+	// Estimated seconds remaining (null if unknown)
+	EstimatedSecondsRemaining *int `json:"estimatedSecondsRemaining,omitempty"`
+	// Error message if phase is FAILED
+	ErrorMessage *string `json:"errorMessage,omitempty"`
+	// When the import started
+	StartedAt *string `json:"startedAt,omitempty"`
+	// When the import completed (if done)
+	CompletedAt *string `json:"completedAt,omitempty"`
+	// OFL version/commit being imported
+	OflVersion *string `json:"oflVersion,omitempty"`
+	// Whether using bundled data (offline) or fetched from GitHub
+	UsingBundledData bool `json:"usingBundledData"`
+}
+
+// Result of checking for OFL updates
+type OFLUpdateCheckResult struct {
+	// Total fixtures in current database
+	CurrentFixtureCount int `json:"currentFixtureCount"`
+	// Total fixtures in OFL source
+	OflFixtureCount int `json:"oflFixtureCount"`
+	// Number of new fixtures available
+	NewFixtureCount int `json:"newFixtureCount"`
+	// Number of changed fixtures
+	ChangedFixtureCount int `json:"changedFixtureCount"`
+	// Number of changed fixtures that are in use
+	ChangedInUseCount int `json:"changedInUseCount"`
+	// Detailed list of fixture changes (limited)
+	FixtureUpdates []*OFLFixtureUpdate `json:"fixtureUpdates"`
+	// OFL version/commit being checked
+	OflVersion string `json:"oflVersion"`
+	// When this check was performed
+	CheckedAt string `json:"checkedAt"`
+}
+
 type PaginationInfo struct {
 	Total      int  `json:"total"`
 	Page       int  `json:"page"`
@@ -1103,6 +1207,132 @@ func (e *ImportMode) UnmarshalJSON(b []byte) error {
 }
 
 func (e ImportMode) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Type of fixture change detected during OFL update check
+type OFLFixtureChangeType string
+
+const (
+	OFLFixtureChangeTypeNew       OFLFixtureChangeType = "NEW"
+	OFLFixtureChangeTypeUpdated   OFLFixtureChangeType = "UPDATED"
+	OFLFixtureChangeTypeUnchanged OFLFixtureChangeType = "UNCHANGED"
+)
+
+var AllOFLFixtureChangeType = []OFLFixtureChangeType{
+	OFLFixtureChangeTypeNew,
+	OFLFixtureChangeTypeUpdated,
+	OFLFixtureChangeTypeUnchanged,
+}
+
+func (e OFLFixtureChangeType) IsValid() bool {
+	switch e {
+	case OFLFixtureChangeTypeNew, OFLFixtureChangeTypeUpdated, OFLFixtureChangeTypeUnchanged:
+		return true
+	}
+	return false
+}
+
+func (e OFLFixtureChangeType) String() string {
+	return string(e)
+}
+
+func (e *OFLFixtureChangeType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = OFLFixtureChangeType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid OFLFixtureChangeType", str)
+	}
+	return nil
+}
+
+func (e OFLFixtureChangeType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *OFLFixtureChangeType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e OFLFixtureChangeType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Phases of the OFL import process
+type OFLImportPhase string
+
+const (
+	OFLImportPhaseIdle        OFLImportPhase = "IDLE"
+	OFLImportPhaseDownloading OFLImportPhase = "DOWNLOADING"
+	OFLImportPhaseExtracting  OFLImportPhase = "EXTRACTING"
+	OFLImportPhaseParsing     OFLImportPhase = "PARSING"
+	OFLImportPhaseImporting   OFLImportPhase = "IMPORTING"
+	OFLImportPhaseComplete    OFLImportPhase = "COMPLETE"
+	OFLImportPhaseFailed      OFLImportPhase = "FAILED"
+	OFLImportPhaseCancelled   OFLImportPhase = "CANCELLED"
+)
+
+var AllOFLImportPhase = []OFLImportPhase{
+	OFLImportPhaseIdle,
+	OFLImportPhaseDownloading,
+	OFLImportPhaseExtracting,
+	OFLImportPhaseParsing,
+	OFLImportPhaseImporting,
+	OFLImportPhaseComplete,
+	OFLImportPhaseFailed,
+	OFLImportPhaseCancelled,
+}
+
+func (e OFLImportPhase) IsValid() bool {
+	switch e {
+	case OFLImportPhaseIdle, OFLImportPhaseDownloading, OFLImportPhaseExtracting, OFLImportPhaseParsing, OFLImportPhaseImporting, OFLImportPhaseComplete, OFLImportPhaseFailed, OFLImportPhaseCancelled:
+		return true
+	}
+	return false
+}
+
+func (e OFLImportPhase) String() string {
+	return string(e)
+}
+
+func (e *OFLImportPhase) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = OFLImportPhase(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid OFLImportPhase", str)
+	}
+	return nil
+}
+
+func (e OFLImportPhase) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *OFLImportPhase) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e OFLImportPhase) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

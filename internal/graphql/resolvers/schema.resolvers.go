@@ -17,6 +17,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/services/fade"
 	importservice "github.com/bbernstein/lacylights-go/internal/services/import"
 	"github.com/bbernstein/lacylights-go/internal/services/network"
+	"github.com/bbernstein/lacylights-go/internal/services/ofl"
 	"github.com/bbernstein/lacylights-go/internal/services/pubsub"
 	"github.com/lucsky/cuid"
 	"gorm.io/gorm"
@@ -1960,7 +1961,8 @@ func (r *mutationResolver) ActivateSceneFromBoard(ctx context.Context, sceneBoar
 
 	var fixtures []models.FixtureInstance
 	if len(fixtureIDs) > 0 {
-		r.db.WithContext(ctx).Where("id IN ?", fixtureIDs).Find(&fixtures)
+		// Load fixtures with their channels to get fadeBehavior
+		r.db.WithContext(ctx).Preload("Channels").Where("id IN ?", fixtureIDs).Find(&fixtures)
 	}
 
 	// Create fixture lookup map
@@ -1983,13 +1985,29 @@ func (r *mutationResolver) ActivateSceneFromBoard(ctx context.Context, sceneBoar
 			continue
 		}
 
-		// Build channel targets
+		// Build channel targets with fade behavior from channel definitions
 		for channelIndex, value := range channelValues {
 			dmxChannel := fixture.StartChannel + channelIndex
+
+			// Get fade behavior from channel definition (if available)
+			fadeBehavior := fade.FadeBehaviorFade // Default to FADE
+			if channelIndex < len(fixture.Channels) {
+				// Find the channel with matching offset
+				for _, ch := range fixture.Channels {
+					if ch.Offset == channelIndex {
+						if ch.FadeBehavior != "" {
+							fadeBehavior = ch.FadeBehavior
+						}
+						break
+					}
+				}
+			}
+
 			sceneChannels = append(sceneChannels, fade.SceneChannel{
-				Universe: fixture.Universe,
-				Channel:  dmxChannel,
-				Value:    value,
+				Universe:     fixture.Universe,
+				Channel:      dmxChannel,
+				Value:        value,
+				FadeBehavior: fadeBehavior,
 			})
 		}
 	}
@@ -2795,6 +2813,64 @@ func (r *mutationResolver) UpdateAllRepositories(ctx context.Context) ([]*genera
 	}
 
 	return gqlResults, nil
+}
+
+// TriggerOFLImport is the resolver for the triggerOFLImport field.
+func (r *mutationResolver) TriggerOFLImport(ctx context.Context, options *generated.OFLImportOptionsInput) (*generated.OFLImportResult, error) {
+	// Convert GraphQL input to service options
+	var opts *ofl.ImportOptions
+	if options != nil {
+		opts = &ofl.ImportOptions{}
+		// Handle Omittable types - get the underlying value if set
+		if v := options.ForceReimport.Value(); v != nil {
+			opts.ForceReimport = *v
+		}
+		if v := options.UpdateInUseFixtures.Value(); v != nil {
+			opts.UpdateInUseFixtures = *v
+		}
+		if v := options.PreferBundled.Value(); v != nil {
+			opts.PreferBundled = *v
+		}
+		if v := options.Manufacturers.Value(); v != nil {
+			opts.Manufacturers = v
+		}
+	}
+
+	// Trigger the import
+	result, err := r.OFLManager.TriggerImport(ctx, opts)
+	if err != nil {
+		return &generated.OFLImportResult{
+			Success:      false,
+			ErrorMessage: stringPtr(err.Error()),
+			OflVersion:   "unknown",
+			Stats: generated.OFLImportStats{
+				TotalProcessed:    0,
+				SuccessfulImports: 0,
+				FailedImports:     0,
+				SkippedDuplicates: 0,
+				UpdatedFixtures:   0,
+				DurationSeconds:   0,
+			},
+		}, nil
+	}
+
+	return &generated.OFLImportResult{
+		Success:    result.Success,
+		OflVersion: result.OFLVersion,
+		Stats: generated.OFLImportStats{
+			TotalProcessed:    result.Stats.TotalProcessed,
+			SuccessfulImports: result.Stats.SuccessfulImports,
+			FailedImports:     result.Stats.FailedImports,
+			SkippedDuplicates: result.Stats.SkippedDuplicates,
+			UpdatedFixtures:   result.Stats.UpdatedFixtures,
+			DurationSeconds:   result.Stats.DurationSeconds,
+		},
+	}, nil
+}
+
+// CancelOFLImport is the resolver for the cancelOFLImport field.
+func (r *mutationResolver) CancelOFLImport(ctx context.Context) (bool, error) {
+	return r.OFLManager.CancelImport(), nil
 }
 
 // Project is the resolver for the project field.
@@ -4010,6 +4086,92 @@ func (r *queryResolver) AvailableVersions(ctx context.Context, repository string
 	return r.VersionService.GetAvailableVersions(repository)
 }
 
+// OflImportStatus is the resolver for the oflImportStatus field.
+func (r *queryResolver) OflImportStatus(ctx context.Context) (*generated.OFLImportStatus, error) {
+	status := r.OFLManager.GetStatus()
+
+	var startedAt, completedAt *string
+	if status.StartedAt != nil {
+		s := status.StartedAt.Format("2006-01-02T15:04:05Z07:00")
+		startedAt = &s
+	}
+	if status.CompletedAt != nil {
+		s := status.CompletedAt.Format("2006-01-02T15:04:05Z07:00")
+		completedAt = &s
+	}
+
+	var errorMessage *string
+	if status.ErrorMessage != "" {
+		errorMessage = &status.ErrorMessage
+	}
+
+	var currentFixture, currentManufacturer *string
+	if status.CurrentFixture != "" {
+		currentFixture = &status.CurrentFixture
+	}
+	if status.CurrentManufacturer != "" {
+		currentManufacturer = &status.CurrentManufacturer
+	}
+
+	var oflVersion *string
+	if status.OFLVersion != "" {
+		oflVersion = &status.OFLVersion
+	}
+
+	return &generated.OFLImportStatus{
+		IsImporting:               status.IsImporting,
+		Phase:                     generated.OFLImportPhase(status.Phase),
+		TotalFixtures:             status.TotalFixtures,
+		ImportedCount:             status.ImportedCount,
+		FailedCount:               status.FailedCount,
+		SkippedCount:              status.SkippedCount,
+		PercentComplete:           status.PercentComplete,
+		CurrentFixture:            currentFixture,
+		CurrentManufacturer:       currentManufacturer,
+		EstimatedSecondsRemaining: status.EstimatedSecondsRemaining,
+		ErrorMessage:              errorMessage,
+		StartedAt:                 startedAt,
+		CompletedAt:               completedAt,
+		OflVersion:                oflVersion,
+		UsingBundledData:          status.UsingBundledData,
+	}, nil
+}
+
+// CheckOFLUpdates is the resolver for the checkOFLUpdates field.
+func (r *queryResolver) CheckOFLUpdates(ctx context.Context) (*generated.OFLUpdateCheckResult, error) {
+	result, err := r.OFLManager.CheckForUpdates(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert fixture updates to GraphQL type
+	var updates []*generated.OFLFixtureUpdate
+	for _, u := range result.FixtureUpdates {
+		update := &generated.OFLFixtureUpdate{
+			FixtureKey:    u.FixtureKey,
+			Manufacturer:  u.Manufacturer,
+			Model:         u.Model,
+			ChangeType:    generated.OFLFixtureChangeType(u.ChangeType),
+			IsInUse:       u.IsInUse,
+			InstanceCount: u.InstanceCount,
+			CurrentHash:   u.CurrentHash,
+			NewHash:       u.NewHash,
+		}
+		updates = append(updates, update)
+	}
+
+	return &generated.OFLUpdateCheckResult{
+		CurrentFixtureCount: result.CurrentFixtureCount,
+		OflFixtureCount:     result.OFLFixtureCount,
+		NewFixtureCount:     result.NewFixtureCount,
+		ChangedFixtureCount: result.ChangedFixtureCount,
+		ChangedInUseCount:   result.ChangedInUseCount,
+		FixtureUpdates:      updates,
+		OflVersion:          result.OFLVersion,
+		CheckedAt:           result.CheckedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}, nil
+}
+
 // FixturesByIds is the resolver for the fixturesByIds field.
 func (r *queryResolver) FixturesByIds(ctx context.Context, ids []string) ([]*models.FixtureInstance, error) {
 	var fixtures []*models.FixtureInstance
@@ -4423,6 +4585,88 @@ func (r *subscriptionResolver) WifiStatusUpdated(ctx context.Context) (<-chan *g
 				if status, valid := msg.(*generated.WiFiStatus); valid {
 					select {
 					case outputChan <- status:
+					case <-ctx.Done():
+						r.PubSub.Unsubscribe(sub)
+						return
+					}
+				}
+			}
+		}
+	}()
+
+	return outputChan, nil
+}
+
+// OflImportProgress is the resolver for the oflImportProgress field.
+func (r *subscriptionResolver) OflImportProgress(ctx context.Context) (<-chan *generated.OFLImportStatus, error) {
+	// Subscribe to OFL import progress updates (no filter, receives all updates)
+	sub := r.PubSub.Subscribe(pubsub.TopicOFLImportProgress, "", 10)
+
+	// Create the output channel
+	outputChan := make(chan *generated.OFLImportStatus, 10)
+
+	// Start a goroutine to forward messages
+	go func() {
+		defer close(outputChan)
+		for {
+			select {
+			case <-ctx.Done():
+				r.PubSub.Unsubscribe(sub)
+				return
+			case msg, ok := <-sub.Channel:
+				if !ok {
+					return
+				}
+				if status, valid := msg.(*ofl.ProgressStatus); valid {
+					// Convert to GraphQL type
+					var startedAt, completedAt *string
+					if status.StartedAt != nil {
+						s := status.StartedAt.Format("2006-01-02T15:04:05Z07:00")
+						startedAt = &s
+					}
+					if status.CompletedAt != nil {
+						s := status.CompletedAt.Format("2006-01-02T15:04:05Z07:00")
+						completedAt = &s
+					}
+
+					var errorMessage *string
+					if status.ErrorMessage != "" {
+						errorMessage = &status.ErrorMessage
+					}
+
+					var currentFixture, currentManufacturer *string
+					if status.CurrentFixture != "" {
+						currentFixture = &status.CurrentFixture
+					}
+					if status.CurrentManufacturer != "" {
+						currentManufacturer = &status.CurrentManufacturer
+					}
+
+					var oflVersion *string
+					if status.OFLVersion != "" {
+						oflVersion = &status.OFLVersion
+					}
+
+					gqlStatus := &generated.OFLImportStatus{
+						IsImporting:               status.IsImporting,
+						Phase:                     generated.OFLImportPhase(status.Phase),
+						TotalFixtures:             status.TotalFixtures,
+						ImportedCount:             status.ImportedCount,
+						FailedCount:               status.FailedCount,
+						SkippedCount:              status.SkippedCount,
+						PercentComplete:           status.PercentComplete,
+						CurrentFixture:            currentFixture,
+						CurrentManufacturer:       currentManufacturer,
+						EstimatedSecondsRemaining: status.EstimatedSecondsRemaining,
+						ErrorMessage:              errorMessage,
+						StartedAt:                 startedAt,
+						CompletedAt:               completedAt,
+						OflVersion:                oflVersion,
+						UsingBundledData:          status.UsingBundledData,
+					}
+
+					select {
+					case outputChan <- gqlStatus:
 					case <-ctx.Done():
 						r.PubSub.Unsubscribe(sub)
 						return

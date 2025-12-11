@@ -412,3 +412,158 @@ func stringPtr(s string) *string {
 	}
 	return &s
 }
+
+// ImportFixtureWithHash imports a fixture from OFL JSON format with hash tracking for change detection
+func (s *Service) ImportFixtureWithHash(ctx context.Context, manufacturer, oflFixtureJSON, hash, version string, update bool) (*models.FixtureDefinition, error) {
+	// Parse the OFL JSON
+	var oflFixture OFLFixture
+	if err := json.Unmarshal([]byte(oflFixtureJSON), &oflFixture); err != nil {
+		return nil, fmt.Errorf("invalid JSON: %w", err)
+	}
+
+	// Validate required fields
+	if err := validateOFLFixture(&oflFixture); err != nil {
+		return nil, err
+	}
+
+	model := oflFixture.Name
+
+	// Check if fixture already exists
+	existing, err := s.fixtureRepo.FindDefinitionByManufacturerModel(ctx, manufacturer, model)
+	if err != nil {
+		return nil, fmt.Errorf("error checking existing fixture: %w", err)
+	}
+
+	if existing != nil && !update {
+		return nil, fmt.Errorf("FIXTURE_EXISTS:%s %s:0", manufacturer, model)
+	}
+
+	// Process in transaction
+	var result *models.FixtureDefinition
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Delete existing fixture if updating
+		if existing != nil && update {
+			// First delete related mode channels
+			var modeIDs []string
+			tx.Table("fixture_modes").Where("definition_id = ?", existing.ID).Pluck("id", &modeIDs)
+			if len(modeIDs) > 0 {
+				tx.Where("mode_id IN ?", modeIDs).Delete(&models.ModeChannel{})
+			}
+			// Delete modes
+			tx.Where("definition_id = ?", existing.ID).Delete(&models.FixtureMode{})
+			// Delete channels
+			tx.Where("definition_id = ?", existing.ID).Delete(&models.ChannelDefinition{})
+			// Delete definition
+			if err := tx.Delete(existing).Error; err != nil {
+				return fmt.Errorf("failed to delete existing fixture: %w", err)
+			}
+		}
+
+		// Map fixture type from categories
+		fixtureType := mapFixtureType(oflFixture.Categories)
+
+		// Process channels with fade behavior auto-detection
+		channelDefs := processChannels(oflFixture.AvailableChannels)
+
+		// Create fixture definition with hash and version
+		fixtureID := cuid.New()
+		definition := &models.FixtureDefinition{
+			ID:            fixtureID,
+			Manufacturer:  manufacturer,
+			Model:         model,
+			Type:          fixtureType,
+			IsBuiltIn:     false,
+			OFLSourceHash: &hash,
+			OFLVersion:    &version,
+		}
+
+		if err := tx.Create(definition).Error; err != nil {
+			return fmt.Errorf("failed to create fixture definition: %w", err)
+		}
+
+		// Create channel definitions
+		var channels []models.ChannelDefinition
+		for _, ch := range channelDefs {
+			channels = append(channels, models.ChannelDefinition{
+				ID:           cuid.New(),
+				Name:         ch.Name,
+				Type:         ch.Type,
+				Offset:       ch.Offset,
+				MinValue:     ch.MinValue,
+				MaxValue:     ch.MaxValue,
+				DefaultValue: ch.DefaultValue,
+				FadeBehavior: ch.FadeBehavior,
+				IsDiscrete:   ch.IsDiscrete,
+				DefinitionID: fixtureID,
+			})
+		}
+
+		if len(channels) > 0 {
+			if err := tx.Create(&channels).Error; err != nil {
+				return fmt.Errorf("failed to create channels: %w", err)
+			}
+		}
+
+		// Build channel name to ID map
+		channelNameToID := make(map[string]string)
+		for _, ch := range channels {
+			channelNameToID[ch.Name] = ch.ID
+		}
+
+		// Create modes
+		for _, oflMode := range oflFixture.Modes {
+			modeID := cuid.New()
+			mode := &models.FixtureMode{
+				ID:           modeID,
+				Name:         oflMode.Name,
+				ShortName:    stringPtr(oflMode.ShortName),
+				ChannelCount: len(oflMode.Channels),
+				DefinitionID: fixtureID,
+			}
+
+			if err := tx.Create(mode).Error; err != nil {
+				return fmt.Errorf("failed to create mode %s: %w", oflMode.Name, err)
+			}
+
+			// Create mode channels
+			for offset, channelName := range oflMode.Channels {
+				// Handle switched channels (e.g., "Dimmer fine / Step Duration")
+				primaryChannelName := channelName
+				if strings.Contains(channelName, " / ") {
+					primaryChannelName = strings.Split(channelName, " / ")[0]
+				}
+
+				channelID, ok := channelNameToID[primaryChannelName]
+				if !ok {
+					return fmt.Errorf("channel %q (primary: %q) in mode %q not found in availableChannels",
+						channelName, primaryChannelName, oflMode.Name)
+				}
+
+				modeChannel := &models.ModeChannel{
+					ID:        cuid.New(),
+					ModeID:    modeID,
+					ChannelID: channelID,
+					Offset:    offset,
+				}
+
+				if err := tx.Create(modeChannel).Error; err != nil {
+					return fmt.Errorf("failed to create mode channel: %w", err)
+				}
+			}
+		}
+
+		// Load the complete result with relations
+		if err := tx.Preload("Channels").Preload("Modes").First(definition, "id = ?", fixtureID).Error; err != nil {
+			return fmt.Errorf("failed to load created fixture: %w", err)
+		}
+
+		result = definition
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}

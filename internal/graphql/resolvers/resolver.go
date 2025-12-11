@@ -39,6 +39,7 @@ type Resolver struct {
 	ExportService   *export.Service
 	ImportService   *importservice.Service
 	OFLService      *ofl.Service
+	OFLManager      *ofl.Manager
 	PreviewService  *preview.Service
 	VersionService  *version.Service
 	PubSub          *pubsub.PubSub
@@ -54,6 +55,9 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *fade.Engine, 
 
 	ps := pubsub.New()
 
+	// Create PubSub first so it can be passed to OFLManager
+	oflManager := ofl.NewManager(db, fixtureRepo, ps, "./.ofl-cache")
+
 	r := &Resolver{
 		db:              db,
 		ProjectRepo:     projectRepo,
@@ -68,6 +72,7 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *fade.Engine, 
 		ExportService:   export.NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo),
 		ImportService:   importservice.NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo),
 		OFLService:      ofl.NewService(db, fixtureRepo),
+		OFLManager:      oflManager,
 		PreviewService:  preview.NewService(fixtureRepo, sceneRepo, dmxService),
 		VersionService:  version.NewService(),
 		PubSub:          ps,

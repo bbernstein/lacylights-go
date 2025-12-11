@@ -1,0 +1,7 @@
+# This directory stores the OFL bundle for embedding in the binary.
+# The ofl-bundle.zip file is downloaded during CI/CD builds.
+#
+# To download manually for local development:
+#   ./scripts/download-ofl.sh
+#
+# The bundle is NOT committed to git (it's ~100MB).

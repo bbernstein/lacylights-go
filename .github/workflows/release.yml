@@ -230,6 +230,17 @@ jobs:
             echo "Detected stable version"
           fi
 
+      - name: Download OFL bundle
+        run: |
+          echo "Downloading Open Fixture Library for embedding..."
+          ./scripts/download-ofl.sh
+          # Verify bundle was downloaded
+          if [ ! -f "internal/services/ofl/data/ofl-bundle.zip" ]; then
+            echo "ERROR: OFL bundle download failed"
+            exit 1
+          fi
+          ls -la internal/services/ofl/data/
+
       - name: Build binaries
         run: |
           set -e
