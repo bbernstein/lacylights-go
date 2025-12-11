@@ -657,9 +657,14 @@ func (r *mutationResolver) CreateFixtureInstance(ctx context.Context, input gene
 			}
 			if channelDef != nil {
 				instanceChannels = append(instanceChannels, models.InstanceChannel{
-					Offset: mc.Offset,
-					Name:   channelDef.Name,
-					Type:   channelDef.Type,
+					Offset:       mc.Offset,
+					Name:         channelDef.Name,
+					Type:         channelDef.Type,
+					FadeBehavior: channelDef.FadeBehavior,
+					IsDiscrete:   channelDef.IsDiscrete,
+					MinValue:     channelDef.MinValue,
+					MaxValue:     channelDef.MaxValue,
+					DefaultValue: channelDef.DefaultValue,
 				})
 			}
 		}
@@ -673,9 +678,14 @@ func (r *mutationResolver) CreateFixtureInstance(ctx context.Context, input gene
 
 		for _, dc := range defChannels {
 			instanceChannels = append(instanceChannels, models.InstanceChannel{
-				Offset: dc.Offset,
-				Name:   dc.Name,
-				Type:   dc.Type,
+				Offset:       dc.Offset,
+				Name:         dc.Name,
+				Type:         dc.Type,
+				FadeBehavior: dc.FadeBehavior,
+				IsDiscrete:   dc.IsDiscrete,
+				MinValue:     dc.MinValue,
+				MaxValue:     dc.MaxValue,
+				DefaultValue: dc.DefaultValue,
 			})
 		}
 	}
