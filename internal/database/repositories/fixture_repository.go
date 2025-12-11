@@ -273,3 +273,12 @@ func (r *FixtureRepository) CountInstancesByDefinitionID(ctx context.Context, de
 		Count(&count)
 	return count, result.Error
 }
+
+// CountDefinitions returns the total count of fixture definitions in the database.
+func (r *FixtureRepository) CountDefinitions(ctx context.Context) (int64, error) {
+	var count int64
+	result := r.db.WithContext(ctx).
+		Model(&models.FixtureDefinition{}).
+		Count(&count)
+	return count, result.Error
+}

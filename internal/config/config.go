@@ -36,6 +36,10 @@ type Config struct {
 
 	// CORS configuration
 	CORSOrigin string
+
+	// OFL (Open Fixture Library) import configuration
+	OFLImportEnabled bool   // Enable automatic OFL import on startup
+	OFLCachePath     string // Path to cache downloaded OFL data
 }
 
 // Load loads configuration from environment variables with sensible defaults.
@@ -68,6 +72,10 @@ func Load() *Config {
 
 		// CORS
 		CORSOrigin: getEnv("CORS_ORIGIN", "http://localhost:3000"),
+
+		// OFL Import
+		OFLImportEnabled: getEnvBool("OFL_IMPORT_ENABLED", true),
+		OFLCachePath:     getEnv("OFL_CACHE_PATH", "./.ofl-cache"),
 	}
 }
 

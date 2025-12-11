@@ -43,7 +43,7 @@ func (s *Service) ImportFixture(ctx context.Context, manufacturer, oflFixtureJSO
 
 	// Check if fixture already exists
 	existing, err := s.fixtureRepo.FindDefinitionByManufacturerModel(ctx, manufacturer, model)
-	if err != nil && err != gorm.ErrRecordNotFound {
+	if err != nil {
 		return nil, fmt.Errorf("error checking existing fixture: %w", err)
 	}
 
