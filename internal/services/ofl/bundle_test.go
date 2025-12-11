@@ -185,6 +185,30 @@ func TestIsSubPath(t *testing.T) {
 			child:    "/etc/passwd",
 			expected: false,
 		},
+		{
+			name:     "same directory",
+			parent:   "/tmp/extract",
+			child:    "/tmp/extract",
+			expected: true,
+		},
+		{
+			name:     "dotdot only",
+			parent:   "/tmp/extract",
+			child:    "/tmp",
+			expected: false,
+		},
+		{
+			name:     "relative subpath",
+			parent:   "extract",
+			child:    "extract/file.txt",
+			expected: true,
+		},
+		{
+			name:     "simple nested directory",
+			parent:   "/tmp/extract",
+			child:    "/tmp/extract/a/b/c/file.txt",
+			expected: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -194,5 +218,13 @@ func TestIsSubPath(t *testing.T) {
 				t.Errorf("isSubPath(%q, %q) = %v, want %v", tt.parent, tt.child, result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestBundleService_GetEmbeddedFS(t *testing.T) {
+	service := NewBundleService()
+	fs := service.GetEmbeddedFS()
+	if fs == nil {
+		t.Fatal("GetEmbeddedFS returned nil")
 	}
 }

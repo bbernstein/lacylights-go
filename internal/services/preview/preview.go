@@ -129,10 +129,12 @@ func (s *Service) UpdateChannelValue(ctx context.Context, sessionID string, fixt
 		value = 255
 	}
 
-	// Update the channel override
+	// Update the channel override in session state
 	session.ChannelOverrides[channelKey] = value
 
-	// Apply to live DMX output via override (preview takes precedence)
+	// Apply to live DMX output immediately via channel override.
+	// Preview overrides take precedence over scene playback, allowing
+	// real-time channel adjustments to be visible on the physical fixtures.
 	if s.dmxService != nil {
 		s.dmxService.SetChannelOverride(fixture.Universe, absoluteChannel, byte(value))
 	}

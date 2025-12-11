@@ -137,7 +137,23 @@ func isSubPath(parent, child string) bool {
 	if err != nil {
 		return false
 	}
-	return rel != ".." && !filepath.IsAbs(rel) && rel[0] != '.'
+	// Handle empty string case
+	if len(rel) == 0 {
+		return false
+	}
+	// "." means same directory (valid)
+	if rel == "." {
+		return true
+	}
+	// Check for path traversal attempts
+	if filepath.IsAbs(rel) {
+		return false
+	}
+	// Check if path starts with ".." which would escape parent
+	if rel == ".." || (len(rel) >= 3 && rel[:3] == "../") || (len(rel) >= 3 && rel[:3] == "..\\") {
+		return false
+	}
+	return true
 }
 
 // extractFile extracts a single file from the zip

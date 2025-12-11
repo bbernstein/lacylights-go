@@ -25,6 +25,7 @@ func TestTableNames(t *testing.T) {
 		{"Setting", Setting{}, "settings"},
 		{"SceneBoard", SceneBoard{}, "scene_boards"},
 		{"SceneBoardButton", SceneBoardButton{}, "scene_board_buttons"},
+		{"OFLImportMeta", OFLImportMeta{}, "ofl_import_meta"},
 	}
 
 	for _, tt := range tests {
