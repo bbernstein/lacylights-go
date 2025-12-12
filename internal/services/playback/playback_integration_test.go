@@ -472,7 +472,7 @@ func TestJumpToCue_Integration(t *testing.T) {
 	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene1, scene2, scene3}, false)
 
 	// Jump to cue index 2
-	err := service.JumpToCue(ctx, cueList.ID, 2)
+	err := service.JumpToCue(ctx, cueList.ID, 2, nil)
 	if err != nil {
 		t.Fatalf("Failed to jump to cue: %v", err)
 	}
@@ -494,12 +494,12 @@ func TestJumpToCue_InvalidIndex(t *testing.T) {
 	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene}, false)
 
 	// Try invalid indices
-	err := service.JumpToCue(ctx, cueList.ID, -1)
+	err := service.JumpToCue(ctx, cueList.ID, -1, nil)
 	if err == nil {
 		t.Error("Expected error for negative index")
 	}
 
-	err = service.JumpToCue(ctx, cueList.ID, 10)
+	err = service.JumpToCue(ctx, cueList.ID, 10, nil)
 	if err == nil {
 		t.Error("Expected error for out of bounds index")
 	}

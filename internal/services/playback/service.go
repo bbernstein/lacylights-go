@@ -427,7 +427,7 @@ func (s *Service) StopAllCueLists() {
 }
 
 // JumpToCue jumps to a specific cue in a cue list.
-func (s *Service) JumpToCue(ctx context.Context, cueListID string, cueIndex int) error {
+func (s *Service) JumpToCue(ctx context.Context, cueListID string, cueIndex int, fadeInTimeOverride *float64) error {
 	// Load cue list with cues
 	var cueList models.CueList
 	result := s.db.WithContext(ctx).
@@ -445,11 +445,23 @@ func (s *Service) JumpToCue(ctx context.Context, cueListID string, cueIndex int)
 	}
 
 	cue := cueList.Cues[cueIndex]
+
+	// Execute DMX output for the cue
+	if err := s.ExecuteCueDmx(ctx, cue.ID, fadeInTimeOverride); err != nil {
+		return err
+	}
+
+	// Determine fade time for state tracking
+	fadeInTime := cue.FadeInTime
+	if fadeInTimeOverride != nil {
+		fadeInTime = *fadeInTimeOverride
+	}
+
 	cueForPlayback := &CueForPlayback{
 		ID:          cue.ID,
 		Name:        cue.Name,
 		CueNumber:   cue.CueNumber,
-		FadeInTime:  cue.FadeInTime,
+		FadeInTime:  fadeInTime,
 		FadeOutTime: cue.FadeOutTime,
 		FollowTime:  cue.FollowTime,
 	}
