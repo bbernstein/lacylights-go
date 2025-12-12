@@ -1267,9 +1267,9 @@ func (r *mutationResolver) DuplicateScene(ctx context.Context, id string) (*mode
 	var newValues []models.FixtureValue
 	for _, v := range originalValues {
 		newValues = append(newValues, models.FixtureValue{
-			FixtureID:     v.FixtureID,
-			ChannelValues: v.ChannelValues,
-			SceneOrder:    v.SceneOrder,
+			FixtureID:  v.FixtureID,
+			Channels:   v.Channels,
+			SceneOrder: v.SceneOrder,
 		})
 	}
 
@@ -1309,9 +1309,9 @@ func (r *mutationResolver) CloneScene(ctx context.Context, sceneID string, newNa
 	var newValues []models.FixtureValue
 	for _, v := range originalValues {
 		newValues = append(newValues, models.FixtureValue{
-			FixtureID:     v.FixtureID,
-			ChannelValues: v.ChannelValues,
-			SceneOrder:    v.SceneOrder,
+			FixtureID:  v.FixtureID,
+			Channels:   v.Channels,
+			SceneOrder: v.SceneOrder,
 		})
 	}
 
@@ -3775,10 +3775,9 @@ func (r *queryResolver) CompareScenes(ctx context.Context, sceneID1 string, scen
 
 		if fv2, ok := fixtures2[fixtureID]; ok {
 			// Fixture in both scenes
-			if fv1.ChannelValues != fv2.ChannelValues {
-				var vals1, vals2 []int
-				_ = json.Unmarshal([]byte(fv1.ChannelValues), &vals1)
-				_ = json.Unmarshal([]byte(fv2.ChannelValues), &vals2)
+			if fv1.Channels != fv2.Channels {
+				vals1 := sparseChannelsToDenseArray(fv1.Channels)
+				vals2 := sparseChannelsToDenseArray(fv2.Channels)
 				differences = append(differences, &generated.SceneDifference{
 					FixtureID:      fixtureID,
 					FixtureName:    fixtureName,
@@ -3792,8 +3791,7 @@ func (r *queryResolver) CompareScenes(ctx context.Context, sceneID1 string, scen
 			}
 		} else {
 			// Fixture only in scene1
-			var vals1 []int
-			_ = json.Unmarshal([]byte(fv1.ChannelValues), &vals1)
+			vals1 := sparseChannelsToDenseArray(fv1.Channels)
 			differences = append(differences, &generated.SceneDifference{
 				FixtureID:      fixtureID,
 				FixtureName:    fixtureName,
@@ -3812,8 +3810,7 @@ func (r *queryResolver) CompareScenes(ctx context.Context, sceneID1 string, scen
 			if fixture != nil {
 				fixtureName = fixture.Name
 			}
-			var vals2 []int
-			_ = json.Unmarshal([]byte(fv2.ChannelValues), &vals2)
+			vals2 := sparseChannelsToDenseArray(fv2.Channels)
 			differences = append(differences, &generated.SceneDifference{
 				FixtureID:      fixtureID,
 				FixtureName:    fixtureName,

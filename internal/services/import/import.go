@@ -286,12 +286,20 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 				continue
 			}
 
-			channelValuesJSON, _ := json.Marshal(fv.ChannelValues)
+			// Convert exported channels to models.ChannelValue
+			channels := make([]models.ChannelValue, len(fv.Channels))
+			for i, ch := range fv.Channels {
+				channels[i] = models.ChannelValue{
+					Offset: ch.Offset,
+					Value:  ch.Value,
+				}
+			}
+			channelsJSON, _ := json.Marshal(channels)
 			fixtureValues = append(fixtureValues, models.FixtureValue{
-				ID:            cuid.New(),
-				FixtureID:     newFixtureID,
-				ChannelValues: string(channelValuesJSON),
-				SceneOrder:    fv.SceneOrder,
+				ID:        cuid.New(),
+				FixtureID: newFixtureID,
+				Channels:  string(channelsJSON),
+				SceneOrder: fv.SceneOrder,
 			})
 		}
 

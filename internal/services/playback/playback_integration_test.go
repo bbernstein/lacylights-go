@@ -111,10 +111,10 @@ func createTestFixtureWithScene(t *testing.T, testDB *testutil.TestDB, project *
 
 	// Create fixture value for scene
 	fixtureValue := &models.FixtureValue{
-		ID:            cuid.New(),
-		SceneID:       scene.ID,
-		FixtureID:     fixture.ID,
-		ChannelValues: "[255, 128, 64, 32]",
+		ID:        cuid.New(),
+		SceneID:   scene.ID,
+		FixtureID: fixture.ID,
+		Channels:  `[{"offset":0,"value":255},{"offset":1,"value":128},{"offset":2,"value":64},{"offset":3,"value":32}]`,
 	}
 	if err := testDB.DB.Create(fixtureValue).Error; err != nil {
 		t.Fatalf("Failed to create fixture value: %v", err)

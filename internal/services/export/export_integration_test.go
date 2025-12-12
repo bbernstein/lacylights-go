@@ -270,16 +270,16 @@ func TestExportProject_WithScenes(t *testing.T) {
 	}
 
 	// Create scene with fixture values
-	channelValues, _ := json.Marshal([]int{255})
+	channelData, _ := json.Marshal([]map[string]int{{"offset": 0, "value": 255}})
 	scene := &models.Scene{
 		Name:      "Full On",
 		ProjectID: project.ID,
 	}
 	fixtureValues := []models.FixtureValue{
 		{
-			ID:            cuid.New(),
-			FixtureID:     fixture.ID,
-			ChannelValues: string(channelValues),
+			ID:       cuid.New(),
+			FixtureID: fixture.ID,
+			Channels:  string(channelData),
 		},
 	}
 	if err := testDB.SceneRepo.CreateWithFixtureValues(ctx, scene, fixtureValues); err != nil {
@@ -361,16 +361,16 @@ func TestExportProject_WithCueLists(t *testing.T) {
 		t.Fatalf("Failed to create fixture: %v", err)
 	}
 
-	channelValues, _ := json.Marshal([]int{255})
+	channelData, _ := json.Marshal([]map[string]int{{"offset": 0, "value": 255}})
 	scene := &models.Scene{
 		Name:      "Full",
 		ProjectID: project.ID,
 	}
 	fixtureValues := []models.FixtureValue{
 		{
-			ID:            cuid.New(),
-			FixtureID:     fixture.ID,
-			ChannelValues: string(channelValues),
+			ID:       cuid.New(),
+			FixtureID: fixture.ID,
+			Channels:  string(channelData),
 		},
 	}
 	if err := testDB.SceneRepo.CreateWithFixtureValues(ctx, scene, fixtureValues); err != nil {
@@ -493,16 +493,16 @@ func TestExportProject_SelectiveExport(t *testing.T) {
 	}
 
 	// Create scene
-	channelValues, _ := json.Marshal([]int{255})
+	channelData, _ := json.Marshal([]map[string]int{{"offset": 0, "value": 255}})
 	scene := &models.Scene{
 		Name:      "Test Scene",
 		ProjectID: project.ID,
 	}
 	fixtureValues := []models.FixtureValue{
 		{
-			ID:            cuid.New(),
-			FixtureID:     fixture.ID,
-			ChannelValues: string(channelValues),
+			ID:       cuid.New(),
+			FixtureID: fixture.ID,
+			Channels:  string(channelData),
 		},
 	}
 	if err := testDB.SceneRepo.CreateWithFixtureValues(ctx, scene, fixtureValues); err != nil {
@@ -591,12 +591,12 @@ func TestExportProject_ToJSON_RoundTrip(t *testing.T) {
 		Type:         "LED",
 		IsBuiltIn:    false,
 	}
-	channels := []models.ChannelDefinition{
+	defChannels := []models.ChannelDefinition{
 		{Name: "Red", Type: "COLOR", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
 		{Name: "Green", Type: "COLOR", Offset: 1, MinValue: 0, MaxValue: 255, DefaultValue: 0},
 		{Name: "Blue", Type: "COLOR", Offset: 2, MinValue: 0, MaxValue: 255, DefaultValue: 0},
 	}
-	if err := testDB.FixtureRepo.CreateDefinitionWithChannels(ctx, def, channels); err != nil {
+	if err := testDB.FixtureRepo.CreateDefinitionWithChannels(ctx, def, defChannels); err != nil {
 		t.Fatalf("Failed to create fixture definition: %v", err)
 	}
 

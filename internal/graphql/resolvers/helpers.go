@@ -29,16 +29,44 @@ func stringToPointer(s string) *string {
 // serializeSparseChannels converts sparse channel values to JSON for storage
 func serializeSparseChannels(channels []*generated.ChannelValueInput) (string, error) {
 	// Convert to models.ChannelValue for proper JSON serialization
-	channelValues := make([]models.ChannelValue, len(channels))
+	sparseChannels := make([]models.ChannelValue, len(channels))
 	for i, ch := range channels {
-		channelValues[i] = models.ChannelValue{
+		sparseChannels[i] = models.ChannelValue{
 			Offset: ch.Offset,
 			Value:  ch.Value,
 		}
 	}
-	jsonData, err := json.Marshal(channelValues)
+	jsonData, err := json.Marshal(sparseChannels)
 	if err != nil {
 		return "", fmt.Errorf("failed to serialize channel values: %w", err)
 	}
 	return string(jsonData), nil
+}
+
+// sparseChannelsToDenseArray converts sparse channel JSON to a dense int array
+// Used for backward-compatible output like CompareScenes
+func sparseChannelsToDenseArray(channelsJSON string) []int {
+	var sparse []models.ChannelValue
+	if err := json.Unmarshal([]byte(channelsJSON), &sparse); err != nil {
+		return []int{}
+	}
+
+	if len(sparse) == 0 {
+		return []int{}
+	}
+
+	// Find max offset to determine array size
+	maxOffset := 0
+	for _, ch := range sparse {
+		if ch.Offset > maxOffset {
+			maxOffset = ch.Offset
+		}
+	}
+
+	// Create dense array
+	dense := make([]int, maxOffset+1)
+	for _, ch := range sparse {
+		dense[ch.Offset] = ch.Value
+	}
+	return dense
 }

@@ -286,32 +286,51 @@ func printBanner(cfg *config.Config) {
 
 // migrateChannelValuesToSparse migrates old channelValues arrays to the new sparse Channels format.
 // This is a one-time migration that runs on startup to convert existing data.
+// Uses raw SQL to work even after the ChannelValues field is removed from the Go model.
 func migrateChannelValuesToSparse(db *gorm.DB) error {
-	// Find all fixture_values where Channels is empty but channelValues is not
-	var fixtureValues []models.FixtureValue
-	result := db.Where("(channels IS NULL OR channels = '' OR channels = '[]') AND channelValues IS NOT NULL AND channelValues != '' AND channelValues != '[]'").Find(&fixtureValues)
+	// Check if the old channelValues column exists
+	var columnExists int
+	db.Raw("SELECT COUNT(*) FROM pragma_table_info('fixture_values') WHERE name = 'channelValues'").Scan(&columnExists)
+	if columnExists == 0 {
+		return nil // Column doesn't exist, nothing to migrate
+	}
+
+	// Find all fixture_values where Channels is empty but channelValues is not (using raw SQL)
+	type oldFixtureValue struct {
+		ID            string
+		ChannelValues string
+	}
+	var oldValues []oldFixtureValue
+	result := db.Raw(`
+		SELECT id, channelValues
+		FROM fixture_values
+		WHERE (channels IS NULL OR channels = '' OR channels = '[]')
+		  AND channelValues IS NOT NULL
+		  AND channelValues != ''
+		  AND channelValues != '[]'
+	`).Scan(&oldValues)
 	if result.Error != nil {
 		return fmt.Errorf("failed to query fixture values: %w", result.Error)
 	}
 
-	if len(fixtureValues) == 0 {
+	if len(oldValues) == 0 {
 		return nil // Nothing to migrate
 	}
 
-	log.Printf("🔄 Migrating %d fixture values from channelValues to sparse Channels format...", len(fixtureValues))
+	log.Printf("🔄 Migrating %d fixture values from channelValues to sparse Channels format...", len(oldValues))
 
 	migratedCount := 0
-	for _, fv := range fixtureValues {
+	for _, fv := range oldValues {
 		// Parse old channelValues array
-		var oldValues []int
-		if err := json.Unmarshal([]byte(fv.ChannelValues), &oldValues); err != nil {
+		var values []int
+		if err := json.Unmarshal([]byte(fv.ChannelValues), &values); err != nil {
 			log.Printf("  Warning: failed to parse channelValues for fixture value %s: %v", fv.ID, err)
 			continue
 		}
 
 		// Convert to sparse format
 		var channels []models.ChannelValue
-		for i, v := range oldValues {
+		for i, v := range values {
 			channels = append(channels, models.ChannelValue{
 				Offset: i,
 				Value:  v,
@@ -325,8 +344,8 @@ func migrateChannelValuesToSparse(db *gorm.DB) error {
 			continue
 		}
 
-		// Update the record
-		if err := db.Model(&fv).Update("channels", string(channelsJSON)).Error; err != nil {
+		// Update the record using raw SQL
+		if err := db.Exec("UPDATE fixture_values SET channels = ? WHERE id = ?", string(channelsJSON), fv.ID).Error; err != nil {
 			log.Printf("  Warning: failed to update fixture value %s: %v", fv.ID, err)
 			continue
 		}

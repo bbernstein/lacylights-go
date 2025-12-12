@@ -50,8 +50,10 @@ func TestExportedProject_ToJSON(t *testing.T) {
 				Name:  "Opening",
 				FixtureValues: []ExportedFixtureValue{
 					{
-						FixtureRefID:  "fix-1",
-						ChannelValues: []int{255},
+						FixtureRefID: "fix-1",
+						Channels: []ExportedChannelValue{
+							{Offset: 0, Value: 255},
+						},
 					},
 				},
 			},
@@ -176,7 +178,7 @@ func TestParseExportedProject(t *testing.T) {
 				"fixtureValues": [
 					{
 						"fixtureRefId": "inst-1",
-						"channelValues": [255]
+						"channels": [{"offset": 0, "value": 255}]
 					}
 				]
 			}
@@ -326,7 +328,15 @@ func TestRoundTrip_ToJSON_ParseExportedProject(t *testing.T) {
 				Name:        "Test Scene",
 				Description: &desc,
 				FixtureValues: []ExportedFixtureValue{
-					{FixtureRefID: "inst-1", ChannelValues: []int{255, 128, 64}, SceneOrder: &sceneOrder},
+					{
+						FixtureRefID: "inst-1",
+						Channels: []ExportedChannelValue{
+							{Offset: 0, Value: 255},
+							{Offset: 1, Value: 128},
+							{Offset: 2, Value: 64},
+						},
+						SceneOrder: &sceneOrder,
+					},
 				},
 			},
 		},
@@ -399,8 +409,8 @@ func TestRoundTrip_ToJSON_ParseExportedProject(t *testing.T) {
 	if len(parsed.Scenes[0].FixtureValues) != 1 {
 		t.Fatalf("FixtureValues count mismatch")
 	}
-	if len(parsed.Scenes[0].FixtureValues[0].ChannelValues) != 3 {
-		t.Errorf("Expected 3 channel values, got %d", len(parsed.Scenes[0].FixtureValues[0].ChannelValues))
+	if len(parsed.Scenes[0].FixtureValues[0].Channels) != 3 {
+		t.Errorf("Expected 3 channel values, got %d", len(parsed.Scenes[0].FixtureValues[0].Channels))
 	}
 
 	// Check cue lists
@@ -662,7 +672,16 @@ func TestExportedProject_AllFields(t *testing.T) {
 				Name:        "Test Scene",
 				Description: &desc,
 				FixtureValues: []ExportedFixtureValue{
-					{FixtureRefID: "inst-1", ChannelValues: []int{255, 0, 0, 0}, SceneOrder: &sceneOrder},
+					{
+						FixtureRefID: "inst-1",
+						Channels: []ExportedChannelValue{
+							{Offset: 0, Value: 255},
+							{Offset: 1, Value: 0},
+							{Offset: 2, Value: 0},
+							{Offset: 3, Value: 0},
+						},
+						SceneOrder: &sceneOrder,
+					},
 				},
 				CreatedAt: "2025-01-01T00:00:00Z",
 				UpdatedAt: "2025-01-02T00:00:00Z",
@@ -907,7 +926,15 @@ func TestExportedScene_AllFields(t *testing.T) {
 		Name:        "Opening",
 		Description: &desc,
 		FixtureValues: []ExportedFixtureValue{
-			{FixtureRefID: "inst-1", ChannelValues: []int{255, 128, 64}, SceneOrder: &sceneOrder},
+			{
+				FixtureRefID: "inst-1",
+				Channels: []ExportedChannelValue{
+					{Offset: 0, Value: 255},
+					{Offset: 1, Value: 128},
+					{Offset: 2, Value: 64},
+				},
+				SceneOrder: &sceneOrder,
+			},
 		},
 		CreatedAt: "2025-01-01T00:00:00Z",
 		UpdatedAt: "2025-01-02T00:00:00Z",
@@ -922,8 +949,8 @@ func TestExportedScene_AllFields(t *testing.T) {
 	if len(scene.FixtureValues) != 1 {
 		t.Errorf("Expected 1 fixture value, got %d", len(scene.FixtureValues))
 	}
-	if len(scene.FixtureValues[0].ChannelValues) != 3 {
-		t.Errorf("Expected 3 channel values, got %d", len(scene.FixtureValues[0].ChannelValues))
+	if len(scene.FixtureValues[0].Channels) != 3 {
+		t.Errorf("Expected 3 channel values, got %d", len(scene.FixtureValues[0].Channels))
 	}
 }
 
@@ -1006,16 +1033,21 @@ func TestExportedChannelDefinition_Fields(t *testing.T) {
 func TestExportedFixtureValue_Fields(t *testing.T) {
 	sceneOrder := 2
 	fv := ExportedFixtureValue{
-		FixtureRefID:  "inst-1",
-		ChannelValues: []int{255, 128, 64, 32},
-		SceneOrder:    &sceneOrder,
+		FixtureRefID: "inst-1",
+		Channels: []ExportedChannelValue{
+			{Offset: 0, Value: 255},
+			{Offset: 1, Value: 128},
+			{Offset: 2, Value: 64},
+			{Offset: 3, Value: 32},
+		},
+		SceneOrder: &sceneOrder,
 	}
 
 	if fv.FixtureRefID != "inst-1" {
 		t.Errorf("Expected 'inst-1', got '%s'", fv.FixtureRefID)
 	}
-	if len(fv.ChannelValues) != 4 {
-		t.Errorf("Expected 4 channel values, got %d", len(fv.ChannelValues))
+	if len(fv.Channels) != 4 {
+		t.Errorf("Expected 4 channel values, got %d", len(fv.Channels))
 	}
 	if fv.SceneOrder == nil || *fv.SceneOrder != 2 {
 		t.Error("Expected SceneOrder 2")
@@ -1278,9 +1310,33 @@ func TestExportedScene_WithMultipleFixtureValues(t *testing.T) {
 		Name:        "Multi-Fixture Scene",
 		Description: &desc,
 		FixtureValues: []ExportedFixtureValue{
-			{FixtureRefID: "inst-1", ChannelValues: []int{255, 0, 0}, SceneOrder: &sceneOrder1},
-			{FixtureRefID: "inst-2", ChannelValues: []int{0, 255, 0}, SceneOrder: &sceneOrder2},
-			{FixtureRefID: "inst-3", ChannelValues: []int{0, 0, 255}, SceneOrder: &sceneOrder3},
+			{
+				FixtureRefID: "inst-1",
+				Channels: []ExportedChannelValue{
+					{Offset: 0, Value: 255},
+					{Offset: 1, Value: 0},
+					{Offset: 2, Value: 0},
+				},
+				SceneOrder: &sceneOrder1,
+			},
+			{
+				FixtureRefID: "inst-2",
+				Channels: []ExportedChannelValue{
+					{Offset: 0, Value: 0},
+					{Offset: 1, Value: 255},
+					{Offset: 2, Value: 0},
+				},
+				SceneOrder: &sceneOrder2,
+			},
+			{
+				FixtureRefID: "inst-3",
+				Channels: []ExportedChannelValue{
+					{Offset: 0, Value: 0},
+					{Offset: 1, Value: 0},
+					{Offset: 2, Value: 255},
+				},
+				SceneOrder: &sceneOrder3,
+			},
 		},
 		CreatedAt: "2025-01-01T00:00:00Z",
 		UpdatedAt: "2025-01-02T00:00:00Z",
