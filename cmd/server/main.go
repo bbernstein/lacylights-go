@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -33,6 +34,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/services/fade"
 	"github.com/bbernstein/lacylights-go/internal/services/ofl"
 	"github.com/bbernstein/lacylights-go/internal/services/playback"
+	"gorm.io/gorm"
 )
 
 // Version information (set at build time)
@@ -91,6 +93,11 @@ func main() {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 	log.Println("Database migrations complete")
+
+	// Migrate old channelValues to sparse Channels format
+	if err := migrateChannelValuesToSparse(db); err != nil {
+		log.Printf("Warning: sparse channel migration failed: %v", err)
+	}
 
 	// Load Open Fixture Library if enabled and database is empty
 	if cfg.OFLImportEnabled {
@@ -275,4 +282,57 @@ func printBanner(cfg *config.Config) {
 	fmt.Printf("  Art-Net:     %v\n", cfg.ArtNetEnabled)
 	fmt.Printf("  OFL Import:  %v\n", cfg.OFLImportEnabled)
 	fmt.Println("============================================")
+}
+
+// migrateChannelValuesToSparse migrates old channelValues arrays to the new sparse Channels format.
+// This is a one-time migration that runs on startup to convert existing data.
+func migrateChannelValuesToSparse(db *gorm.DB) error {
+	// Find all fixture_values where Channels is empty but channelValues is not
+	var fixtureValues []models.FixtureValue
+	result := db.Where("(channels IS NULL OR channels = '' OR channels = '[]') AND channelValues IS NOT NULL AND channelValues != '' AND channelValues != '[]'").Find(&fixtureValues)
+	if result.Error != nil {
+		return fmt.Errorf("failed to query fixture values: %w", result.Error)
+	}
+
+	if len(fixtureValues) == 0 {
+		return nil // Nothing to migrate
+	}
+
+	log.Printf("🔄 Migrating %d fixture values from channelValues to sparse Channels format...", len(fixtureValues))
+
+	migratedCount := 0
+	for _, fv := range fixtureValues {
+		// Parse old channelValues array
+		var oldValues []int
+		if err := json.Unmarshal([]byte(fv.ChannelValues), &oldValues); err != nil {
+			log.Printf("  Warning: failed to parse channelValues for fixture value %s: %v", fv.ID, err)
+			continue
+		}
+
+		// Convert to sparse format
+		var channels []models.ChannelValue
+		for i, v := range oldValues {
+			channels = append(channels, models.ChannelValue{
+				Offset: i,
+				Value:  v,
+			})
+		}
+
+		// Serialize to JSON
+		channelsJSON, err := json.Marshal(channels)
+		if err != nil {
+			log.Printf("  Warning: failed to serialize channels for fixture value %s: %v", fv.ID, err)
+			continue
+		}
+
+		// Update the record
+		if err := db.Model(&fv).Update("channels", string(channelsJSON)).Error; err != nil {
+			log.Printf("  Warning: failed to update fixture value %s: %v", fv.ID, err)
+			continue
+		}
+		migratedCount++
+	}
+
+	log.Printf("✅ Migrated %d fixture values to sparse Channels format", migratedCount)
+	return nil
 }
