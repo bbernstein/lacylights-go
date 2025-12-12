@@ -494,14 +494,17 @@ func (r *mutationResolver) UpdateFixtureDefinition(ctx context.Context, id strin
 			IsDiscrete:   false,  // Default to non-discrete
 		}
 
-		// Apply FadeBehavior if provided
-		if ch.FadeBehavior.IsSet() && ch.FadeBehavior.Value() != nil {
-			channelDef.FadeBehavior = string(*ch.FadeBehavior.Value())
-		}
-
 		// Apply IsDiscrete if provided
 		if ch.IsDiscrete.IsSet() && ch.IsDiscrete.Value() != nil {
 			channelDef.IsDiscrete = *ch.IsDiscrete.Value()
+		}
+
+		// Apply FadeBehavior if provided, otherwise auto-detect based on IsDiscrete
+		if ch.FadeBehavior.IsSet() && ch.FadeBehavior.Value() != nil {
+			channelDef.FadeBehavior = string(*ch.FadeBehavior.Value())
+		} else if channelDef.IsDiscrete {
+			// Auto-detect: discrete channels should SNAP
+			channelDef.FadeBehavior = "SNAP"
 		}
 
 		channels = append(channels, channelDef)
