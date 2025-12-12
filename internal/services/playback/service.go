@@ -260,34 +260,33 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 			continue
 		}
 
-		// Parse channel values from JSON
-		var channelValues []int
-		if err := json.Unmarshal([]byte(fixtureValue.ChannelValues), &channelValues); err != nil {
+		// Parse sparse channel values from JSON (Channels field)
+		var channels []models.ChannelValue
+		if err := json.Unmarshal([]byte(fixtureValue.Channels), &channels); err != nil {
 			continue
 		}
 
 		// Build channel targets with fade behavior from channel definitions
-		for channelIndex, value := range channelValues {
-			dmxChannel := fixture.StartChannel + channelIndex
+		// Only process channels that exist in the sparse array
+		for _, ch := range channels {
+			dmxChannel := fixture.StartChannel + ch.Offset
 
 			// Get fade behavior from channel definition (if available)
 			fadeBehavior := fade.FadeBehaviorFade // Default to FADE
-			if channelIndex < len(fixture.Channels) {
-				// Find the channel with matching offset
-				for _, ch := range fixture.Channels {
-					if ch.Offset == channelIndex {
-						if ch.FadeBehavior != "" {
-							fadeBehavior = ch.FadeBehavior
-						}
-						break
+			// Find the channel definition with matching offset
+			for _, chanDef := range fixture.Channels {
+				if chanDef.Offset == ch.Offset {
+					if chanDef.FadeBehavior != "" {
+						fadeBehavior = chanDef.FadeBehavior
 					}
+					break
 				}
 			}
 
 			sceneChannels = append(sceneChannels, fade.SceneChannel{
 				Universe:     fixture.Universe,
 				Channel:      dmxChannel,
-				Value:        value,
+				Value:        ch.Value,
 				FadeBehavior: fadeBehavior,
 			})
 		}

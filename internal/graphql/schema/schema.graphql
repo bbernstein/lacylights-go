@@ -232,10 +232,15 @@ type Scene {
   updatedAt: String!
 }
 
+type ChannelValue {
+  offset: Int!
+  value: Int!
+}
+
 type FixtureValue {
   id: ID!
   fixture: FixtureInstance!
-  channelValues: [Int!]!
+  channels: [ChannelValue!]!
   sceneOrder: Int
 }
 
@@ -846,9 +851,14 @@ input UpdateSceneInput {
   fixtureValues: [FixtureValueInput!]
 }
 
+input ChannelValueInput {
+  offset: Int!
+  value: Int!
+}
+
 input FixtureValueInput {
   fixtureId: ID!
-  channelValues: [Int!]!
+  channels: [ChannelValueInput!]!
   sceneOrder: Int
 }
 

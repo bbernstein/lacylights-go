@@ -108,6 +108,11 @@ type ComplexityRoot struct {
 		FixtureName func(childComplexity int) int
 	}
 
+	ChannelValue struct {
+		Offset func(childComplexity int) int
+		Value  func(childComplexity int) int
+	}
+
 	Cue struct {
 		CueList     func(childComplexity int) int
 		CueNumber   func(childComplexity int) int
@@ -261,10 +266,10 @@ type ComplexityRoot struct {
 	}
 
 	FixtureValue struct {
-		ChannelValues func(childComplexity int) int
-		Fixture       func(childComplexity int) int
-		ID            func(childComplexity int) int
-		SceneOrder    func(childComplexity int) int
+		Channels   func(childComplexity int) int
+		Fixture    func(childComplexity int) int
+		ID         func(childComplexity int) int
+		SceneOrder func(childComplexity int) int
 	}
 
 	ImportResult struct {
@@ -804,7 +809,7 @@ type FixtureModeResolver interface {
 }
 type FixtureValueResolver interface {
 	Fixture(ctx context.Context, obj *models.FixtureValue) (*models.FixtureInstance, error)
-	ChannelValues(ctx context.Context, obj *models.FixtureValue) ([]int, error)
+	Channels(ctx context.Context, obj *models.FixtureValue) ([]*models.ChannelValue, error)
 }
 type InstanceChannelResolver interface {
 	Type(ctx context.Context, obj *models.InstanceChannel) (ChannelType, error)
@@ -1197,6 +1202,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ChannelUsage.FixtureName(childComplexity), true
+
+	case "ChannelValue.offset":
+		if e.complexity.ChannelValue.Offset == nil {
+			break
+		}
+
+		return e.complexity.ChannelValue.Offset(childComplexity), true
+	case "ChannelValue.value":
+		if e.complexity.ChannelValue.Value == nil {
+			break
+		}
+
+		return e.complexity.ChannelValue.Value(childComplexity), true
 
 	case "Cue.cueList":
 		if e.complexity.Cue.CueList == nil {
@@ -1838,12 +1856,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.FixtureUsage.Scenes(childComplexity), true
 
-	case "FixtureValue.channelValues":
-		if e.complexity.FixtureValue.ChannelValues == nil {
+	case "FixtureValue.channels":
+		if e.complexity.FixtureValue.Channels == nil {
 			break
 		}
 
-		return e.complexity.FixtureValue.ChannelValues(childComplexity), true
+		return e.complexity.FixtureValue.Channels(childComplexity), true
 	case "FixtureValue.fixture":
 		if e.complexity.FixtureValue.Fixture == nil {
 			break
@@ -4740,6 +4758,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputBulkSceneUpdateInput,
 		ec.unmarshalInputChannelAssignmentInput,
 		ec.unmarshalInputChannelFadeBehaviorInput,
+		ec.unmarshalInputChannelValueInput,
 		ec.unmarshalInputCreateChannelDefinitionInput,
 		ec.unmarshalInputCreateCueInput,
 		ec.unmarshalInputCreateCueListInput,
@@ -5123,10 +5142,15 @@ type Scene {
   updatedAt: String!
 }
 
+type ChannelValue {
+  offset: Int!
+  value: Int!
+}
+
 type FixtureValue {
   id: ID!
   fixture: FixtureInstance!
-  channelValues: [Int!]!
+  channels: [ChannelValue!]!
   sceneOrder: Int
 }
 
@@ -5737,9 +5761,14 @@ input UpdateSceneInput {
   fixtureValues: [FixtureValueInput!]
 }
 
+input ChannelValueInput {
+  offset: Int!
+  value: Int!
+}
+
 input FixtureValueInput {
   fixtureId: ID!
-  channelValues: [Int!]!
+  channels: [ChannelValueInput!]!
   sceneOrder: Int
 }
 
@@ -8920,6 +8949,64 @@ func (ec *executionContext) fieldContext_ChannelUsage_channelType(_ context.Cont
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ChannelType does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelValue_offset(ctx context.Context, field graphql.CollectedField, obj *models.ChannelValue) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelValue_offset,
+		func(ctx context.Context) (any, error) {
+			return obj.Offset, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelValue_offset(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelValue",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ChannelValue_value(ctx context.Context, field graphql.CollectedField, obj *models.ChannelValue) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ChannelValue_value,
+		func(ctx context.Context) (any, error) {
+			return obj.Value, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ChannelValue_value(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ChannelValue",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -12421,30 +12508,36 @@ func (ec *executionContext) fieldContext_FixtureValue_fixture(_ context.Context,
 	return fc, nil
 }
 
-func (ec *executionContext) _FixtureValue_channelValues(ctx context.Context, field graphql.CollectedField, obj *models.FixtureValue) (ret graphql.Marshaler) {
+func (ec *executionContext) _FixtureValue_channels(ctx context.Context, field graphql.CollectedField, obj *models.FixtureValue) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_FixtureValue_channelValues,
+		ec.fieldContext_FixtureValue_channels,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.FixtureValue().ChannelValues(ctx, obj)
+			return ec.resolvers.FixtureValue().Channels(ctx, obj)
 		},
 		nil,
-		ec.marshalNInt2ᚕintᚄ,
+		ec.marshalNChannelValue2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐChannelValueᚄ,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_FixtureValue_channelValues(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_FixtureValue_channels(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "FixtureValue",
 		Field:      field,
 		IsMethod:   true,
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
+			switch field.Name {
+			case "offset":
+				return ec.fieldContext_ChannelValue_offset(ctx, field)
+			case "value":
+				return ec.fieldContext_ChannelValue_value(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ChannelValue", field.Name)
 		},
 	}
 	return fc, nil
@@ -23875,8 +23968,8 @@ func (ec *executionContext) fieldContext_Scene_fixtureValues(_ context.Context, 
 				return ec.fieldContext_FixtureValue_id(ctx, field)
 			case "fixture":
 				return ec.fieldContext_FixtureValue_fixture(ctx, field)
-			case "channelValues":
-				return ec.fieldContext_FixtureValue_channelValues(ctx, field)
+			case "channels":
+				return ec.fieldContext_FixtureValue_channels(ctx, field)
 			case "sceneOrder":
 				return ec.fieldContext_FixtureValue_sceneOrder(ctx, field)
 			}
@@ -29155,6 +29248,40 @@ func (ec *executionContext) unmarshalInputChannelFadeBehaviorInput(ctx context.C
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputChannelValueInput(ctx context.Context, obj any) (ChannelValueInput, error) {
+	var it ChannelValueInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"offset", "value"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "offset":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("offset"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Offset = data
+		case "value":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("value"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Value = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCreateChannelDefinitionInput(ctx context.Context, obj any) (CreateChannelDefinitionInput, error) {
 	var it CreateChannelDefinitionInput
 	asMap := map[string]any{}
@@ -30296,7 +30423,7 @@ func (ec *executionContext) unmarshalInputFixtureValueInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"fixtureId", "channelValues", "sceneOrder"}
+	fieldsInOrder := [...]string{"fixtureId", "channels", "sceneOrder"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -30310,13 +30437,13 @@ func (ec *executionContext) unmarshalInputFixtureValueInput(ctx context.Context,
 				return it, err
 			}
 			it.FixtureID = data
-		case "channelValues":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channelValues"))
-			data, err := ec.unmarshalNInt2ᚕintᚄ(ctx, v)
+		case "channels":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channels"))
+			data, err := ec.unmarshalNChannelValueInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐChannelValueInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.ChannelValues = data
+			it.Channels = data
 		case "sceneOrder":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sceneOrder"))
 			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
@@ -31453,6 +31580,50 @@ func (ec *executionContext) _ChannelUsage(ctx context.Context, sel ast.Selection
 			}
 		case "channelType":
 			out.Values[i] = ec._ChannelUsage_channelType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var channelValueImplementors = []string{"ChannelValue"}
+
+func (ec *executionContext) _ChannelValue(ctx context.Context, sel ast.SelectionSet, obj *models.ChannelValue) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, channelValueImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ChannelValue")
+		case "offset":
+			out.Values[i] = ec._ChannelValue_offset(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "value":
+			out.Values[i] = ec._ChannelValue_value(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -33257,7 +33428,7 @@ func (ec *executionContext) _FixtureValue(ctx context.Context, sel ast.Selection
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-		case "channelValues":
+		case "channels":
 			field := field
 
 			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
@@ -33266,7 +33437,7 @@ func (ec *executionContext) _FixtureValue(ctx context.Context, sel ast.Selection
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
-				res = ec._FixtureValue_channelValues(ctx, field, obj)
+				res = ec._FixtureValue_channels(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -39239,6 +39410,80 @@ func (ec *executionContext) marshalNChannelUsage2ᚕᚖgithubᚗcomᚋbbernstein
 	wg.Wait()
 
 	return ret
+}
+
+func (ec *executionContext) marshalNChannelValue2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐChannelValueᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.ChannelValue) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNChannelValue2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐChannelValue(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNChannelValue2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐChannelValue(ctx context.Context, sel ast.SelectionSet, v *models.ChannelValue) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ChannelValue(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNChannelValueInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐChannelValueInputᚄ(ctx context.Context, v any) ([]*ChannelValueInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*ChannelValueInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNChannelValueInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐChannelValueInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNChannelValueInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐChannelValueInput(ctx context.Context, v any) (*ChannelValueInput, error) {
+	res, err := ec.unmarshalInputChannelValueInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalNCreateChannelDefinitionInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateChannelDefinitionInputᚄ(ctx context.Context, v any) ([]*CreateChannelDefinitionInput, error) {

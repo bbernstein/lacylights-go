@@ -708,7 +708,14 @@ func TestScene_Create(t *testing.T) {
 			description: "All fixtures red"
 			projectId: $projectId
 			fixtureValues: [
-				{ fixtureId: $fixtureId, channelValues: [255, 0, 0] }
+				{
+					fixtureId: $fixtureId,
+					channels: [
+						{ offset: 0, value: 255 },
+						{ offset: 1, value: 0 },
+						{ offset: 2, value: 0 }
+					]
+				}
 			]
 		}) {
 			id

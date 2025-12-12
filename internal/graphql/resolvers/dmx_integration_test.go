@@ -341,9 +341,9 @@ func TestSetSceneLive_WithFixture(t *testing.T) {
 	}
 	resolver.db.Create(scene)
 
-	// Create fixture values for the scene
+	// Create fixture values for the scene using sparse format
 	fixtureValues := []models.FixtureValue{
-		{ID: "fv-1", SceneID: scene.ID, FixtureID: fixture.ID, ChannelValues: "[255, 128, 64, 32]"},
+		{ID: "fv-1", SceneID: scene.ID, FixtureID: fixture.ID, Channels: `[{"offset":0,"value":255},{"offset":1,"value":128},{"offset":2,"value":64},{"offset":3,"value":32}]`},
 	}
 	for _, fv := range fixtureValues {
 		resolver.db.Create(&fv)
@@ -616,11 +616,12 @@ func TestSceneBoardFadeBehavior(t *testing.T) {
 	resolver.db.Create(scene)
 
 	// Create fixture values: [Dimmer=200, R=150, G=100, B=50, ColorMacro=180, Strobe=255]
+	// Using sparse format (all channels are specified in this case)
 	fixtureValue := &models.FixtureValue{
-		ID:            "fv-fade-test",
-		SceneID:       scene.ID,
-		FixtureID:     fixture.ID,
-		ChannelValues: "[200, 150, 100, 50, 180, 255]",
+		ID:        "fv-fade-test",
+		SceneID:   scene.ID,
+		FixtureID: fixture.ID,
+		Channels:  `[{"offset":0,"value":200},{"offset":1,"value":150},{"offset":2,"value":100},{"offset":3,"value":50},{"offset":4,"value":180},{"offset":5,"value":255}]`,
 	}
 	resolver.db.Create(fixtureValue)
 
