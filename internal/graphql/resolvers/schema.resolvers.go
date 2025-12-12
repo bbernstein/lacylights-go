@@ -401,14 +401,31 @@ func (r *mutationResolver) CreateFixtureDefinition(ctx context.Context, input ge
 	// Build channel definitions
 	var channels []models.ChannelDefinition
 	for _, ch := range input.Channels {
-		channels = append(channels, models.ChannelDefinition{
+		channelDef := models.ChannelDefinition{
 			Name:         ch.Name,
 			Type:         string(ch.Type),
 			Offset:       ch.Offset,
 			MinValue:     ch.MinValue,
 			MaxValue:     ch.MaxValue,
 			DefaultValue: ch.DefaultValue,
-		})
+			FadeBehavior: "FADE", // Default to FADE
+			IsDiscrete:   false,  // Default to non-discrete
+		}
+
+		// Apply IsDiscrete if provided
+		if ch.IsDiscrete.IsSet() && ch.IsDiscrete.Value() != nil {
+			channelDef.IsDiscrete = *ch.IsDiscrete.Value()
+		}
+
+		// Apply FadeBehavior if provided, otherwise auto-detect based on IsDiscrete
+		if ch.FadeBehavior.IsSet() && ch.FadeBehavior.Value() != nil {
+			channelDef.FadeBehavior = string(*ch.FadeBehavior.Value())
+		} else if channelDef.IsDiscrete {
+			// Auto-detect: discrete channels should SNAP
+			channelDef.FadeBehavior = "SNAP"
+		}
+
+		channels = append(channels, channelDef)
 	}
 
 	// Create definition with channels
@@ -465,7 +482,7 @@ func (r *mutationResolver) UpdateFixtureDefinition(ctx context.Context, id strin
 
 	var channels []models.ChannelDefinition
 	for _, ch := range input.Channels {
-		channels = append(channels, models.ChannelDefinition{
+		channelDef := models.ChannelDefinition{
 			DefinitionID: id,
 			Name:         ch.Name,
 			Type:         string(ch.Type),
@@ -473,7 +490,24 @@ func (r *mutationResolver) UpdateFixtureDefinition(ctx context.Context, id strin
 			MinValue:     ch.MinValue,
 			MaxValue:     ch.MaxValue,
 			DefaultValue: ch.DefaultValue,
-		})
+			FadeBehavior: "FADE", // Default to FADE
+			IsDiscrete:   false,  // Default to non-discrete
+		}
+
+		// Apply IsDiscrete if provided
+		if ch.IsDiscrete.IsSet() && ch.IsDiscrete.Value() != nil {
+			channelDef.IsDiscrete = *ch.IsDiscrete.Value()
+		}
+
+		// Apply FadeBehavior if provided, otherwise auto-detect based on IsDiscrete
+		if ch.FadeBehavior.IsSet() && ch.FadeBehavior.Value() != nil {
+			channelDef.FadeBehavior = string(*ch.FadeBehavior.Value())
+		} else if channelDef.IsDiscrete {
+			// Auto-detect: discrete channels should SNAP
+			channelDef.FadeBehavior = "SNAP"
+		}
+
+		channels = append(channels, channelDef)
 	}
 
 	if err := r.FixtureRepo.CreateChannelDefinitions(ctx, channels); err != nil {
@@ -2596,7 +2630,7 @@ func (r *mutationResolver) PreviousCue(ctx context.Context, cueListID string, fa
 
 // GoToCue is the resolver for the goToCue field.
 func (r *mutationResolver) GoToCue(ctx context.Context, cueListID string, cueIndex int, fadeInTime *float64) (bool, error) {
-	if err := r.PlaybackService.JumpToCue(ctx, cueListID, cueIndex); err != nil {
+	if err := r.PlaybackService.JumpToCue(ctx, cueListID, cueIndex, fadeInTime); err != nil {
 		return false, err
 	}
 	return true, nil
