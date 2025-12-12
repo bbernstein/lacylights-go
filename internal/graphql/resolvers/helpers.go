@@ -3,6 +3,7 @@ package resolvers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
@@ -28,14 +29,34 @@ func stringToPointer(s string) *string {
 
 // serializeSparseChannels converts sparse channel values to JSON for storage
 func serializeSparseChannels(channels []*generated.ChannelValueInput) (string, error) {
-	// Convert to models.ChannelValue for proper JSON serialization
-	sparseChannels := make([]models.ChannelValue, len(channels))
-	for i, ch := range channels {
-		sparseChannels[i] = models.ChannelValue{
+	// Validate input and check for duplicates
+	offsetMap := make(map[int]bool)
+	sparseChannels := make([]models.ChannelValue, 0, len(channels))
+
+	for _, ch := range channels {
+		// Validate offset is non-negative
+		if ch.Offset < 0 {
+			return "", fmt.Errorf("invalid channel offset %d: must be non-negative", ch.Offset)
+		}
+
+		// Validate DMX value is in valid range (0-255)
+		if ch.Value < 0 || ch.Value > 255 {
+			return "", fmt.Errorf("invalid DMX value %d at offset %d: must be 0-255", ch.Value, ch.Offset)
+		}
+
+		// Check for duplicate offsets (last value wins)
+		if offsetMap[ch.Offset] {
+			// Log warning but allow it - last value will be used
+			fmt.Printf("Warning: duplicate offset %d found, using latest value\n", ch.Offset)
+		}
+		offsetMap[ch.Offset] = true
+
+		sparseChannels = append(sparseChannels, models.ChannelValue{
 			Offset: ch.Offset,
 			Value:  ch.Value,
-		}
+		})
 	}
+
 	jsonData, err := json.Marshal(sparseChannels)
 	if err != nil {
 		return "", fmt.Errorf("failed to serialize channel values: %w", err)
@@ -69,4 +90,15 @@ func sparseChannelsToDenseArray(channelsJSON string) []int {
 		dense[ch.Offset] = ch.Value
 	}
 	return dense
+}
+
+// validateDMXChannel validates that a calculated DMX channel is within valid bounds
+// DMX channels are 1-512 per universe
+func validateDMXChannel(dmxChannel, universe int, fixtureID string, offset int) bool {
+	if dmxChannel < 1 || dmxChannel > 512 {
+		log.Printf("Warning: DMX channel %d out of bounds for fixture %s (universe %d, offset %d). Skipping.",
+			dmxChannel, fixtureID, universe, offset)
+		return false
+	}
+	return true
 }

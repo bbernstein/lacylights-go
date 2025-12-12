@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -263,6 +264,7 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 		// Parse sparse channel values from JSON (Channels field)
 		var channels []models.ChannelValue
 		if err := json.Unmarshal([]byte(fixtureValue.Channels), &channels); err != nil {
+			log.Printf("Warning: failed to unmarshal channels for fixtureID %s in cueID %s: %v (raw: %v)", fixtureValue.FixtureID, cue.ID, err, fixtureValue.Channels)
 			continue
 		}
 
@@ -270,6 +272,13 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 		// Only process channels that exist in the sparse array
 		for _, ch := range channels {
 			dmxChannel := fixture.StartChannel + ch.Offset
+
+			// Validate DMX channel is within bounds (1-512 per universe)
+			if dmxChannel < 1 || dmxChannel > 512 {
+				log.Printf("Warning: DMX channel %d out of bounds for fixture %s (universe %d, StartChannel: %d, Offset: %d). Skipping.",
+					dmxChannel, fixture.ID, fixture.Universe, fixture.StartChannel, ch.Offset)
+				continue
+			}
 
 			// Get fade behavior from channel definition (if available)
 			fadeBehavior := fade.FadeBehaviorFade // Default to FADE

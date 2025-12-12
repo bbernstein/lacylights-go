@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -2031,6 +2032,7 @@ func (r *mutationResolver) ActivateSceneFromBoard(ctx context.Context, sceneBoar
 		// Parse sparse channel values from JSON (Channels field)
 		var channels []models.ChannelValue
 		if err := json.Unmarshal([]byte(fixtureValue.Channels), &channels); err != nil {
+			log.Printf("Warning: failed to unmarshal channels for fixtureID %s in sceneID %s: %v", fixtureValue.FixtureID, sceneID, err)
 			continue
 		}
 
@@ -2038,6 +2040,11 @@ func (r *mutationResolver) ActivateSceneFromBoard(ctx context.Context, sceneBoar
 		// Only process channels that exist in the sparse array
 		for _, ch := range channels {
 			dmxChannel := fixture.StartChannel + ch.Offset
+
+			// Validate DMX channel is within bounds
+			if !validateDMXChannel(dmxChannel, fixture.Universe, fixture.ID, ch.Offset) {
+				continue
+			}
 
 			// Get fade behavior from channel definition (if available)
 			fadeBehavior := fade.FadeBehaviorFade // Default to FADE
@@ -2546,12 +2553,19 @@ func (r *mutationResolver) SetSceneLive(ctx context.Context, sceneID string) (bo
 		// Parse sparse channel values from JSON (Channels field)
 		var channels []models.ChannelValue
 		if err := json.Unmarshal([]byte(fixtureValue.Channels), &channels); err != nil {
+			log.Printf("Warning: failed to unmarshal channels for fixtureID %s in sceneID %s: %v", fixtureValue.FixtureID, sceneID, err)
 			continue
 		}
 
 		// Set channel values - only channels that exist in the sparse array
 		for _, ch := range channels {
 			dmxChannel := fixture.StartChannel + ch.Offset
+
+			// Validate DMX channel is within bounds
+			if !validateDMXChannel(dmxChannel, fixture.Universe, fixture.ID, ch.Offset) {
+				continue
+			}
+
 			r.DMXService.SetChannelValue(fixture.Universe, dmxChannel, byte(ch.Value))
 		}
 	}
