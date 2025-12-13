@@ -34,9 +34,12 @@ func serializeSparseChannels(channels []*generated.ChannelValueInput) (string, e
 	sparseChannels := make([]models.ChannelValue, 0, len(channels))
 
 	for _, ch := range channels {
-		// Validate offset is non-negative
+		// Validate offset is non-negative and within DMX channel range
 		if ch.Offset < 0 {
 			return "", fmt.Errorf("invalid channel offset %d: must be non-negative", ch.Offset)
+		}
+		if ch.Offset >= 512 {
+			return "", fmt.Errorf("invalid channel offset %d: must be less than 512", ch.Offset)
 		}
 
 		// Validate DMX value is in valid range (0-255)

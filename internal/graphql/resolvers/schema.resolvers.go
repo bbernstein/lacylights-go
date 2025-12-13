@@ -2036,6 +2036,14 @@ func (r *mutationResolver) ActivateSceneFromBoard(ctx context.Context, sceneBoar
 			continue
 		}
 
+		// Build a map of channel offset -> fade behavior for efficient lookup
+		fadeBehaviorMap := make(map[int]string)
+		for _, chanDef := range fixture.Channels {
+			if chanDef.FadeBehavior != "" {
+				fadeBehaviorMap[chanDef.Offset] = chanDef.FadeBehavior
+			}
+		}
+
 		// Build channel targets with fade behavior from channel definitions
 		// Only process channels that exist in the sparse array
 		for _, ch := range channels {
@@ -2048,14 +2056,8 @@ func (r *mutationResolver) ActivateSceneFromBoard(ctx context.Context, sceneBoar
 
 			// Get fade behavior from channel definition (if available)
 			fadeBehavior := fade.FadeBehaviorFade // Default to FADE
-			// Find the channel definition with matching offset
-			for _, chanDef := range fixture.Channels {
-				if chanDef.Offset == ch.Offset {
-					if chanDef.FadeBehavior != "" {
-						fadeBehavior = chanDef.FadeBehavior
-					}
-					break
-				}
+			if fb, ok := fadeBehaviorMap[ch.Offset]; ok {
+				fadeBehavior = fb
 			}
 
 			sceneChannels = append(sceneChannels, fade.SceneChannel{

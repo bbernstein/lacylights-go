@@ -294,7 +294,11 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 					Value:  ch.Value,
 				}
 			}
-			channelsJSON, _ := json.Marshal(channels)
+			channelsJSON, err := json.Marshal(channels)
+			if err != nil {
+				warnings = append(warnings, "Skipping fixture value due to JSON marshaling error in scene '"+scene.Name+"': "+err.Error())
+				continue
+			}
 			fixtureValues = append(fixtureValues, models.FixtureValue{
 				ID:        cuid.New(),
 				FixtureID: newFixtureID,

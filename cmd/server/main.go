@@ -334,16 +334,13 @@ func migrateChannelValuesToSparse(db *gorm.DB) error {
 			continue
 		}
 
-		// Convert to sparse format, filtering out zero values for efficiency
+		// Convert to sparse format, preserving all values including zeros for data fidelity
 		var channels []models.ChannelValue
 		for i, v := range values {
-			// Only store non-zero values for space efficiency
-			if v != 0 {
-				channels = append(channels, models.ChannelValue{
-					Offset: i,
-					Value:  v,
-				})
-			}
+			channels = append(channels, models.ChannelValue{
+				Offset: i,
+				Value:  v,
+			})
 		}
 
 		// Serialize to JSON
