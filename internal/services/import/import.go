@@ -282,7 +282,7 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 		for _, fv := range scene.FixtureValues {
 			newFixtureID, ok := fixtureIDMap[fv.FixtureRefID]
 			if !ok {
-				warnings = append(warnings, "Skipping fixture value with unknown fixture in scene: "+scene.Name)
+				warnings = append(warnings, "Skipping fixture value with unknown fixture '"+fv.FixtureRefID+"' in scene '"+scene.Name+"'")
 				continue
 			}
 
@@ -296,7 +296,7 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 			}
 			channelsJSON, err := json.Marshal(channels)
 			if err != nil {
-				warnings = append(warnings, "Skipping fixture value due to JSON marshaling error in scene '"+scene.Name+"': "+err.Error())
+				warnings = append(warnings, "Skipping fixture value for fixture '"+fv.FixtureRefID+"' in scene '"+scene.Name+"' due to JSON marshaling error: "+err.Error())
 				continue
 			}
 			fixtureValues = append(fixtureValues, models.FixtureValue{

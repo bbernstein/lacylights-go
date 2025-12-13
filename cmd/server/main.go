@@ -286,21 +286,12 @@ func printBanner(cfg *config.Config) {
 
 // migrateChannelValuesToSparse migrates old channelValues arrays to the new sparse Channels format.
 // This is a one-time migration that runs on startup to convert existing data.
-// Uses raw SQL to work even after the ChannelValues field is removed from the Go model.
-// Note: This migration is SQLite-specific.
+// Uses GORM's migrator to check column existence (database-agnostic), then raw SQL for the
+// actual migration since the ChannelValues field has been removed from the Go model.
 func migrateChannelValuesToSparse(db *gorm.DB) error {
-	// Only run this migration for SQLite databases
-	if db.Name() != "sqlite" {
-		return nil
-	}
-
-	// Check if the old channelValues column exists
-	var columnExists int
-	checkResult := db.Raw("SELECT COUNT(*) FROM pragma_table_info('fixture_values') WHERE name = 'channelValues'").Scan(&columnExists)
-	if checkResult.Error != nil {
-		return fmt.Errorf("failed to check for channelValues column: %w", checkResult.Error)
-	}
-	if columnExists == 0 {
+	// Check if the old channelValues column exists using GORM's migrator (database-agnostic)
+	// We use the table name directly since the field was removed from the Go model
+	if !db.Migrator().HasColumn("fixture_values", "channelValues") {
 		return nil // Column doesn't exist, nothing to migrate
 	}
 
