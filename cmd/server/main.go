@@ -329,8 +329,10 @@ func migrateChannelValuesToSparse(db *gorm.DB) error {
 		}
 
 		// Convert to sparse format
-		// Note: Preserving all values including zeros for data fidelity.
+		// Note: Preserving all values including zeros for data fidelity during migration.
 		// This ensures exact migration of existing data without loss.
+		// New scenes created via API will only store explicitly set channels.
+		// The sparse format allows storing any subset of channels, including zeros when intended.
 		var channels []models.ChannelValue
 		for i, v := range values {
 			channels = append(channels, models.ChannelValue{

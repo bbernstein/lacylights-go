@@ -66,8 +66,11 @@ func serializeSparseChannels(channels []*generated.ChannelValueInput) (string, e
 	return string(jsonData), nil
 }
 
-// sparseChannelsToDenseArray converts sparse channel JSON to a dense int array
-// Used for backward-compatible output like CompareScenes
+// sparseChannelsToDenseArray converts sparse channel JSON to a dense int array.
+// Used for backward-compatible output like CompareScenes.
+// The resulting array is sized to (maxOffset + 1), which is bounded by DMX constraints
+// (max 512 channels per fixture). For sparse data with high offsets, this may create
+// arrays with many zero-value elements.
 func sparseChannelsToDenseArray(channelsJSON string) []int {
 	var sparse []models.ChannelValue
 	if err := json.Unmarshal([]byte(channelsJSON), &sparse); err != nil {

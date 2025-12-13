@@ -270,7 +270,7 @@ func TestExportProject_WithScenes(t *testing.T) {
 	}
 
 	// Create scene with fixture values
-	channelData, _ := json.Marshal([]map[string]int{{"offset": 0, "value": 255}})
+	channelData, _ := json.Marshal([]models.ChannelValue{{Offset: 0, Value: 255}})
 	scene := &models.Scene{
 		Name:      "Full On",
 		ProjectID: project.ID,
@@ -361,7 +361,7 @@ func TestExportProject_WithCueLists(t *testing.T) {
 		t.Fatalf("Failed to create fixture: %v", err)
 	}
 
-	channelData, _ := json.Marshal([]map[string]int{{"offset": 0, "value": 255}})
+	channelData, _ := json.Marshal([]models.ChannelValue{{Offset: 0, Value: 255}})
 	scene := &models.Scene{
 		Name:      "Full",
 		ProjectID: project.ID,
@@ -493,7 +493,7 @@ func TestExportProject_SelectiveExport(t *testing.T) {
 	}
 
 	// Create scene
-	channelData, _ := json.Marshal([]map[string]int{{"offset": 0, "value": 255}})
+	channelData, _ := json.Marshal([]models.ChannelValue{{Offset: 0, Value: 255}})
 	scene := &models.Scene{
 		Name:      "Test Scene",
 		ProjectID: project.ID,
@@ -591,12 +591,12 @@ func TestExportProject_ToJSON_RoundTrip(t *testing.T) {
 		Type:         "LED",
 		IsBuiltIn:    false,
 	}
-	defChannels := []models.ChannelDefinition{
+	channelDefinitions := []models.ChannelDefinition{
 		{Name: "Red", Type: "COLOR", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
 		{Name: "Green", Type: "COLOR", Offset: 1, MinValue: 0, MaxValue: 255, DefaultValue: 0},
 		{Name: "Blue", Type: "COLOR", Offset: 2, MinValue: 0, MaxValue: 255, DefaultValue: 0},
 	}
-	if err := testDB.FixtureRepo.CreateDefinitionWithChannels(ctx, def, defChannels); err != nil {
+	if err := testDB.FixtureRepo.CreateDefinitionWithChannels(ctx, def, channelDefinitions); err != nil {
 		t.Fatalf("Failed to create fixture definition: %v", err)
 	}
 
