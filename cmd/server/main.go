@@ -296,7 +296,10 @@ func migrateChannelValuesToSparse(db *gorm.DB) error {
 
 	// Check if the old channelValues column exists
 	var columnExists int
-	db.Raw("SELECT COUNT(*) FROM pragma_table_info('fixture_values') WHERE name = 'channelValues'").Scan(&columnExists)
+	checkResult := db.Raw("SELECT COUNT(*) FROM pragma_table_info('fixture_values') WHERE name = 'channelValues'").Scan(&columnExists)
+	if checkResult.Error != nil {
+		return fmt.Errorf("failed to check for channelValues column: %w", checkResult.Error)
+	}
 	if columnExists == 0 {
 		return nil // Column doesn't exist, nothing to migrate
 	}
