@@ -61,7 +61,7 @@ func serializeSparseChannels(channels []*generated.ChannelValueInput) (string, e
 
 	jsonData, err := json.Marshal(sparseChannels)
 	if err != nil {
-		return "", fmt.Errorf("failed to serialize channel values: %w", err)
+		return "", fmt.Errorf("failed to serialize channels: %w", err)
 	}
 	return string(jsonData), nil
 }
@@ -102,5 +102,43 @@ func validateDMXChannel(dmxChannel, universe int, fixtureID string, offset int) 
 			dmxChannel, fixtureID, universe, offset)
 		return false
 	}
+	return true
+}
+
+// sparseChannelsEqual compares two sparse channel JSON strings semantically.
+// Returns true if they represent the same channel values, regardless of JSON encoding order.
+func sparseChannelsEqual(channelsJSON1, channelsJSON2 string) bool {
+	var sparse1, sparse2 []models.ChannelValue
+
+	if err := json.Unmarshal([]byte(channelsJSON1), &sparse1); err != nil {
+		sparse1 = []models.ChannelValue{}
+	}
+	if err := json.Unmarshal([]byte(channelsJSON2), &sparse2); err != nil {
+		sparse2 = []models.ChannelValue{}
+	}
+
+	// Build maps for O(1) lookup
+	map1 := make(map[int]int, len(sparse1))
+	for _, ch := range sparse1 {
+		map1[ch.Offset] = ch.Value
+	}
+
+	map2 := make(map[int]int, len(sparse2))
+	for _, ch := range sparse2 {
+		map2[ch.Offset] = ch.Value
+	}
+
+	// Different number of entries means different
+	if len(map1) != len(map2) {
+		return false
+	}
+
+	// Check all entries in map1 exist with same value in map2
+	for offset, value := range map1 {
+		if map2[offset] != value {
+			return false
+		}
+	}
+
 	return true
 }

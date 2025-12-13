@@ -3791,8 +3791,8 @@ func (r *queryResolver) CompareScenes(ctx context.Context, sceneID1 string, scen
 		}
 
 		if fv2, ok := fixtures2[fixtureID]; ok {
-			// Fixture in both scenes
-			if fv1.Channels != fv2.Channels {
+			// Fixture in both scenes - compare semantically, not by JSON string
+			if !sparseChannelsEqual(fv1.Channels, fv2.Channels) {
 				vals1 := sparseChannelsToDenseArray(fv1.Channels)
 				vals2 := sparseChannelsToDenseArray(fv2.Channels)
 				differences = append(differences, &generated.SceneDifference{
