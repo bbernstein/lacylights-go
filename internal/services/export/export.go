@@ -4,6 +4,7 @@ package export
 import (
 	"context"
 	"encoding/json"
+	"log"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
@@ -266,7 +267,10 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 		for _, f := range fixtures {
 			var tags []string
 			if f.Tags != nil {
-				_ = json.Unmarshal([]byte(*f.Tags), &tags)
+				if err := json.Unmarshal([]byte(*f.Tags), &tags); err != nil {
+					log.Printf("Warning: failed to unmarshal tags for fixture %s: %v", f.ID, err)
+					tags = []string{} // Continue with empty tags
+				}
 			}
 
 			exported.FixtureInstances = append(exported.FixtureInstances, ExportedFixtureInstance{
@@ -305,7 +309,10 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 
 			for _, fv := range fixtureValues {
 				var channels []models.ChannelValue
-				_ = json.Unmarshal([]byte(fv.Channels), &channels)
+				if err := json.Unmarshal([]byte(fv.Channels), &channels); err != nil {
+					log.Printf("Warning: failed to unmarshal channels for fixture %s in scene %s: %v", fv.FixtureID, scene.ID, err)
+					continue // Skip this fixture value
+				}
 
 				// Convert to exported format
 				exportedChannels := make([]ExportedChannelValue, len(channels))

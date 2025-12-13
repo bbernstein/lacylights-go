@@ -211,6 +211,7 @@ func (r *fixtureInstanceResolver) Tags(ctx context.Context, obj *models.FixtureI
 	}
 	var tags []string
 	if err := json.Unmarshal([]byte(*obj.Tags), &tags); err != nil {
+		log.Printf("Warning: failed to unmarshal tags for fixture %s: %v", obj.ID, err)
 		return []string{}, nil
 	}
 	return tags, nil

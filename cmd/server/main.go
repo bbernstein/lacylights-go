@@ -334,7 +334,9 @@ func migrateChannelValuesToSparse(db *gorm.DB) error {
 			continue
 		}
 
-		// Convert to sparse format, preserving all values including zeros for data fidelity
+		// Convert to sparse format
+		// Note: Preserving all values including zeros for data fidelity.
+		// This ensures exact migration of existing data without loss.
 		var channels []models.ChannelValue
 		for i, v := range values {
 			channels = append(channels, models.ChannelValue{
