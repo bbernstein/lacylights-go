@@ -726,3 +726,368 @@ func TestExportProject_WithTags(t *testing.T) {
 		t.Errorf("Expected 3 tags, got %d", len(exported.FixtureInstances[0].Tags))
 	}
 }
+
+// TestExportProject_InvalidTags tests that invalid tags JSON is handled gracefully
+func TestExportProject_InvalidTags(t *testing.T) {
+	testDB, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	service := NewService(
+		testDB.ProjectRepo,
+		testDB.FixtureRepo,
+		testDB.SceneRepo,
+		testDB.CueListRepo,
+		testDB.CueRepo,
+	)
+
+	ctx := context.Background()
+
+	// Create a project
+	project := &models.Project{
+		Name: testutil.UniqueProjectName("TestExportInvalidTags"),
+	}
+	if err := testDB.ProjectRepo.Create(ctx, project); err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+
+	// Create fixture definition
+	def := &models.FixtureDefinition{
+		Manufacturer: "Test",
+		Model:        "InvalidTagsTest",
+		Type:         "DIMMER",
+	}
+	if err := testDB.FixtureRepo.CreateDefinitionWithChannels(ctx, def, []models.ChannelDefinition{
+		{Name: "Intensity", Type: "INTENSITY", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+	}); err != nil {
+		t.Fatalf("Failed to create fixture definition: %v", err)
+	}
+
+	// Create fixture with INVALID tags JSON (not a valid JSON array)
+	invalidTagsStr := "not-valid-json"
+	channelCount := 1
+	fixture := &models.FixtureInstance{
+		Name:         "Fixture with invalid tags",
+		DefinitionID: def.ID,
+		ProjectID:    project.ID,
+		Universe:     1,
+		StartChannel: 1,
+		ChannelCount: &channelCount,
+		Tags:         &invalidTagsStr,
+		Manufacturer: &def.Manufacturer,
+		Model:        &def.Model,
+		Type:         &def.Type,
+	}
+	instanceChannels := []models.InstanceChannel{
+		{Name: "Intensity", Type: "INTENSITY", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+	}
+	if err := testDB.FixtureRepo.CreateWithChannels(ctx, fixture, instanceChannels); err != nil {
+		t.Fatalf("Failed to create fixture: %v", err)
+	}
+
+	// Export should succeed but with empty tags (error is logged, not returned)
+	exported, _, err := service.ExportProject(ctx, project.ID, true, false, false)
+	if err != nil {
+		t.Fatalf("ExportProject failed: %v", err)
+	}
+
+	if len(exported.FixtureInstances) != 1 {
+		t.Fatalf("Expected 1 fixture instance, got %d", len(exported.FixtureInstances))
+	}
+	// Tags should be empty due to invalid JSON
+	if len(exported.FixtureInstances[0].Tags) != 0 {
+		t.Errorf("Expected 0 tags (invalid JSON), got %d", len(exported.FixtureInstances[0].Tags))
+	}
+}
+
+// TestExportProject_InvalidChannels tests that invalid channels JSON is handled gracefully
+func TestExportProject_InvalidChannels(t *testing.T) {
+	testDB, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	service := NewService(
+		testDB.ProjectRepo,
+		testDB.FixtureRepo,
+		testDB.SceneRepo,
+		testDB.CueListRepo,
+		testDB.CueRepo,
+	)
+
+	ctx := context.Background()
+
+	// Create a project
+	project := &models.Project{
+		Name: testutil.UniqueProjectName("TestExportInvalidChannels"),
+	}
+	if err := testDB.ProjectRepo.Create(ctx, project); err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+
+	// Create fixture definition
+	def := &models.FixtureDefinition{
+		Manufacturer: "Test",
+		Model:        "InvalidChannelsTest",
+		Type:         "DIMMER",
+	}
+	if err := testDB.FixtureRepo.CreateDefinitionWithChannels(ctx, def, []models.ChannelDefinition{
+		{Name: "Intensity", Type: "INTENSITY", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+	}); err != nil {
+		t.Fatalf("Failed to create fixture definition: %v", err)
+	}
+
+	// Create fixture
+	channelCount := 1
+	fixture := &models.FixtureInstance{
+		Name:         "Fixture",
+		DefinitionID: def.ID,
+		ProjectID:    project.ID,
+		Universe:     1,
+		StartChannel: 1,
+		ChannelCount: &channelCount,
+		Manufacturer: &def.Manufacturer,
+		Model:        &def.Model,
+		Type:         &def.Type,
+	}
+	instanceChannels := []models.InstanceChannel{
+		{Name: "Intensity", Type: "INTENSITY", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+	}
+	if err := testDB.FixtureRepo.CreateWithChannels(ctx, fixture, instanceChannels); err != nil {
+		t.Fatalf("Failed to create fixture: %v", err)
+	}
+
+	// Create scene
+	scene := &models.Scene{
+		Name:      "Test Scene",
+		ProjectID: project.ID,
+	}
+	testDB.DB.Create(scene)
+
+	// Create fixture value with INVALID channels JSON
+	fixtureValue := &models.FixtureValue{
+		ID:        cuid.New(),
+		SceneID:   scene.ID,
+		FixtureID: fixture.ID,
+		Channels:  "not-valid-json",
+	}
+	testDB.DB.Create(fixtureValue)
+
+	// Export should succeed but skip the invalid fixture value
+	exported, stats, err := service.ExportProject(ctx, project.ID, false, true, false)
+	if err != nil {
+		t.Fatalf("ExportProject failed: %v", err)
+	}
+
+	if stats.ScenesCount != 1 {
+		t.Errorf("Expected 1 scene, got %d", stats.ScenesCount)
+	}
+	if len(exported.Scenes) != 1 {
+		t.Fatalf("Expected 1 scene, got %d", len(exported.Scenes))
+	}
+	// Fixture value should be skipped due to invalid JSON
+	if len(exported.Scenes[0].FixtureValues) != 0 {
+		t.Errorf("Expected 0 fixture values (invalid JSON should be skipped), got %d", len(exported.Scenes[0].FixtureValues))
+	}
+}
+
+// TestExportProject_EmptyChannels tests that empty channels array is exported correctly
+func TestExportProject_EmptyChannels(t *testing.T) {
+	testDB, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	service := NewService(
+		testDB.ProjectRepo,
+		testDB.FixtureRepo,
+		testDB.SceneRepo,
+		testDB.CueListRepo,
+		testDB.CueRepo,
+	)
+
+	ctx := context.Background()
+
+	// Create a project
+	project := &models.Project{
+		Name: testutil.UniqueProjectName("TestExportEmptyChannels"),
+	}
+	if err := testDB.ProjectRepo.Create(ctx, project); err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+
+	// Create fixture definition
+	def := &models.FixtureDefinition{
+		Manufacturer: "Test",
+		Model:        "EmptyChannelsTest",
+		Type:         "DIMMER",
+	}
+	if err := testDB.FixtureRepo.CreateDefinitionWithChannels(ctx, def, []models.ChannelDefinition{
+		{Name: "Intensity", Type: "INTENSITY", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+	}); err != nil {
+		t.Fatalf("Failed to create fixture definition: %v", err)
+	}
+
+	// Create fixture
+	channelCount := 1
+	fixture := &models.FixtureInstance{
+		Name:         "Fixture",
+		DefinitionID: def.ID,
+		ProjectID:    project.ID,
+		Universe:     1,
+		StartChannel: 1,
+		ChannelCount: &channelCount,
+		Manufacturer: &def.Manufacturer,
+		Model:        &def.Model,
+		Type:         &def.Type,
+	}
+	instanceChannels := []models.InstanceChannel{
+		{Name: "Intensity", Type: "INTENSITY", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+	}
+	if err := testDB.FixtureRepo.CreateWithChannels(ctx, fixture, instanceChannels); err != nil {
+		t.Fatalf("Failed to create fixture: %v", err)
+	}
+
+	// Create scene
+	scene := &models.Scene{
+		Name:      "Test Scene",
+		ProjectID: project.ID,
+	}
+	testDB.DB.Create(scene)
+
+	// Create fixture value with empty channels array
+	fixtureValue := &models.FixtureValue{
+		ID:        cuid.New(),
+		SceneID:   scene.ID,
+		FixtureID: fixture.ID,
+		Channels:  "[]",
+	}
+	testDB.DB.Create(fixtureValue)
+
+	// Export should succeed with empty channels
+	exported, stats, err := service.ExportProject(ctx, project.ID, false, true, false)
+	if err != nil {
+		t.Fatalf("ExportProject failed: %v", err)
+	}
+
+	if stats.ScenesCount != 1 {
+		t.Errorf("Expected 1 scene, got %d", stats.ScenesCount)
+	}
+	if len(exported.Scenes) != 1 {
+		t.Fatalf("Expected 1 scene, got %d", len(exported.Scenes))
+	}
+	// Fixture value should be present with empty channels
+	if len(exported.Scenes[0].FixtureValues) != 1 {
+		t.Errorf("Expected 1 fixture value, got %d", len(exported.Scenes[0].FixtureValues))
+	}
+	if len(exported.Scenes[0].FixtureValues[0].Channels) != 0 {
+		t.Errorf("Expected 0 channels, got %d", len(exported.Scenes[0].FixtureValues[0].Channels))
+	}
+}
+
+// TestExportProject_SparseChannels tests that sparse channels are exported correctly
+func TestExportProject_SparseChannels(t *testing.T) {
+	testDB, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	service := NewService(
+		testDB.ProjectRepo,
+		testDB.FixtureRepo,
+		testDB.SceneRepo,
+		testDB.CueListRepo,
+		testDB.CueRepo,
+	)
+
+	ctx := context.Background()
+
+	// Create a project
+	project := &models.Project{
+		Name: testutil.UniqueProjectName("TestExportSparseChannels"),
+	}
+	if err := testDB.ProjectRepo.Create(ctx, project); err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+
+	// Create fixture definition
+	def := &models.FixtureDefinition{
+		Manufacturer: "Test",
+		Model:        "SparseChannelsTest",
+		Type:         "LED_PAR",
+	}
+	if err := testDB.FixtureRepo.CreateDefinitionWithChannels(ctx, def, []models.ChannelDefinition{
+		{Name: "Dimmer", Type: "INTENSITY", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+		{Name: "Red", Type: "COLOR", Offset: 1, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+		{Name: "Green", Type: "COLOR", Offset: 2, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+		{Name: "Blue", Type: "COLOR", Offset: 3, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+	}); err != nil {
+		t.Fatalf("Failed to create fixture definition: %v", err)
+	}
+
+	// Create fixture
+	channelCount := 4
+	fixture := &models.FixtureInstance{
+		Name:         "LED PAR",
+		DefinitionID: def.ID,
+		ProjectID:    project.ID,
+		Universe:     1,
+		StartChannel: 1,
+		ChannelCount: &channelCount,
+		Manufacturer: &def.Manufacturer,
+		Model:        &def.Model,
+		Type:         &def.Type,
+	}
+	instanceChannels := []models.InstanceChannel{
+		{Name: "Dimmer", Type: "INTENSITY", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+		{Name: "Red", Type: "COLOR", Offset: 1, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+		{Name: "Green", Type: "COLOR", Offset: 2, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+		{Name: "Blue", Type: "COLOR", Offset: 3, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+	}
+	if err := testDB.FixtureRepo.CreateWithChannels(ctx, fixture, instanceChannels); err != nil {
+		t.Fatalf("Failed to create fixture: %v", err)
+	}
+
+	// Create scene
+	scene := &models.Scene{
+		Name:      "Red Only Scene",
+		ProjectID: project.ID,
+	}
+	testDB.DB.Create(scene)
+
+	// Create fixture value with sparse channels (only dimmer and red)
+	channelData, _ := json.Marshal([]models.ChannelValue{
+		{Offset: 0, Value: 255}, // Dimmer at full
+		{Offset: 1, Value: 255}, // Red at full
+		// Green and Blue intentionally omitted
+	})
+	fixtureValue := &models.FixtureValue{
+		ID:        cuid.New(),
+		SceneID:   scene.ID,
+		FixtureID: fixture.ID,
+		Channels:  string(channelData),
+	}
+	testDB.DB.Create(fixtureValue)
+
+	// Export
+	exported, stats, err := service.ExportProject(ctx, project.ID, false, true, false)
+	if err != nil {
+		t.Fatalf("ExportProject failed: %v", err)
+	}
+
+	if stats.ScenesCount != 1 {
+		t.Errorf("Expected 1 scene, got %d", stats.ScenesCount)
+	}
+	if len(exported.Scenes) != 1 {
+		t.Fatalf("Expected 1 scene, got %d", len(exported.Scenes))
+	}
+	if len(exported.Scenes[0].FixtureValues) != 1 {
+		t.Fatalf("Expected 1 fixture value, got %d", len(exported.Scenes[0].FixtureValues))
+	}
+
+	// Verify sparse channels were exported correctly
+	channels := exported.Scenes[0].FixtureValues[0].Channels
+	if len(channels) != 2 {
+		t.Errorf("Expected 2 channels (sparse), got %d", len(channels))
+	}
+	// Verify channel values
+	if channels[0].Offset != 0 || channels[0].Value != 255 {
+		t.Errorf("Expected channel 0: {0, 255}, got: {%d, %d}", channels[0].Offset, channels[0].Value)
+	}
+	if channels[1].Offset != 1 || channels[1].Value != 255 {
+		t.Errorf("Expected channel 1: {1, 255}, got: {%d, %d}", channels[1].Offset, channels[1].Value)
+	}
+}

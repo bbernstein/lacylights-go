@@ -1001,3 +1001,136 @@ func TestExecuteCueDmx_WithEasingType(t *testing.T) {
 		t.Fatalf("Failed to execute cue DMX with easing: %v", err)
 	}
 }
+
+// TestExecuteCueDmx_InvalidChannelsJSON tests handling of invalid channels JSON.
+func TestExecuteCueDmx_InvalidChannelsJSON(t *testing.T) {
+	testDB, service, cleanup := setupPlaybackTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	project := createTestProject(t, testDB)
+
+	// Create fixture definition
+	fixtureDef := &models.FixtureDefinition{
+		ID:           cuid.New(),
+		Manufacturer: "Test",
+		Model:        testutil.UniqueFixtureName("test-invalid-json"),
+		Type:         "dimmer",
+	}
+	testDB.DB.Create(fixtureDef)
+
+	// Create fixture instance
+	fixture := &models.FixtureInstance{
+		ID:           cuid.New(),
+		ProjectID:    project.ID,
+		DefinitionID: fixtureDef.ID,
+		Name:         testutil.UniqueFixtureName("fixture-invalid"),
+		Universe:     1,
+		StartChannel: 1,
+	}
+	testDB.DB.Create(fixture)
+
+	// Create scene
+	scene := &models.Scene{
+		ID:        cuid.New(),
+		ProjectID: project.ID,
+		Name:      "Scene with invalid JSON",
+	}
+	testDB.DB.Create(scene)
+
+	// Create fixture value with invalid channels JSON
+	fixtureValue := &models.FixtureValue{
+		ID:        cuid.New(),
+		SceneID:   scene.ID,
+		FixtureID: fixture.ID,
+		Channels:  `not-valid-json`,
+	}
+	testDB.DB.Create(fixtureValue)
+
+	// Create cue list and cue
+	cueList := &models.CueList{ID: cuid.New(), ProjectID: project.ID, Name: "Test CL"}
+	testDB.DB.Create(cueList)
+
+	cue := &models.Cue{
+		ID:         cuid.New(),
+		CueListID:  cueList.ID,
+		SceneID:    scene.ID,
+		Name:       "Test Cue",
+		CueNumber:  1.0,
+		FadeInTime: 0.1,
+	}
+	testDB.DB.Create(cue)
+
+	// Execute DMX - should not error, but should skip the invalid fixture value
+	err := service.ExecuteCueDmx(ctx, cue.ID, nil)
+	if err != nil {
+		t.Fatalf("ExecuteCueDmx should not fail for invalid channels JSON: %v", err)
+	}
+}
+
+// TestExecuteCueDmx_DMXChannelOutOfBounds tests handling of out-of-bounds DMX channels.
+func TestExecuteCueDmx_DMXChannelOutOfBounds(t *testing.T) {
+	testDB, service, cleanup := setupPlaybackTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	project := createTestProject(t, testDB)
+
+	// Create fixture definition
+	fixtureDef := &models.FixtureDefinition{
+		ID:           cuid.New(),
+		Manufacturer: "Test",
+		Model:        testutil.UniqueFixtureName("test-oob-channel"),
+		Type:         "dimmer",
+	}
+	testDB.DB.Create(fixtureDef)
+
+	// Create fixture instance with high start channel that will go out of bounds
+	fixture := &models.FixtureInstance{
+		ID:           cuid.New(),
+		ProjectID:    project.ID,
+		DefinitionID: fixtureDef.ID,
+		Name:         testutil.UniqueFixtureName("fixture-oob"),
+		Universe:     1,
+		StartChannel: 510, // This will cause channels with offset > 2 to exceed 512
+	}
+	testDB.DB.Create(fixture)
+
+	// Create scene
+	scene := &models.Scene{
+		ID:        cuid.New(),
+		ProjectID: project.ID,
+		Name:      "Scene with OOB channels",
+	}
+	testDB.DB.Create(scene)
+
+	// Create fixture value with channels that will be out of bounds
+	// StartChannel 510 + offset 5 = 515 > 512 (out of bounds)
+	fixtureValue := &models.FixtureValue{
+		ID:        cuid.New(),
+		SceneID:   scene.ID,
+		FixtureID: fixture.ID,
+		Channels:  `[{"offset":0,"value":255},{"offset":5,"value":128}]`, // offset 5 will be OOB
+	}
+	testDB.DB.Create(fixtureValue)
+
+	// Create cue list and cue
+	cueList := &models.CueList{ID: cuid.New(), ProjectID: project.ID, Name: "Test CL"}
+	testDB.DB.Create(cueList)
+
+	cue := &models.Cue{
+		ID:         cuid.New(),
+		CueListID:  cueList.ID,
+		SceneID:    scene.ID,
+		Name:       "Test Cue",
+		CueNumber:  1.0,
+		FadeInTime: 0.1,
+	}
+	testDB.DB.Create(cue)
+
+	// Execute DMX - should not error, but should skip out-of-bounds channels
+	err := service.ExecuteCueDmx(ctx, cue.ID, nil)
+	if err != nil {
+		t.Fatalf("ExecuteCueDmx should not fail for out-of-bounds channels: %v", err)
+	}
+}
