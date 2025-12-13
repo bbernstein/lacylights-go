@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -237,11 +238,18 @@ func (s *Service) InitializeWithScene(ctx context.Context, sessionID string, sce
 		// Parse sparse channel values from JSON
 		var channels []models.ChannelValue
 		if err := json.Unmarshal([]byte(fv.Channels), &channels); err != nil {
+			log.Printf("Warning: failed to unmarshal channels for fixtureID %s in scene: %v", fv.FixtureID, err)
 			continue
 		}
 
 		for _, ch := range channels {
 			absoluteChannel := fixture.StartChannel + ch.Offset
+
+			// Validate DMX channel bounds (1-512)
+			if absoluteChannel < 1 || absoluteChannel > 512 {
+				continue
+			}
+
 			channelKey := fmt.Sprintf("%d:%d", fixture.Universe, absoluteChannel)
 
 			// Clamp value

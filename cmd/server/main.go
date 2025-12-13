@@ -287,7 +287,13 @@ func printBanner(cfg *config.Config) {
 // migrateChannelValuesToSparse migrates old channelValues arrays to the new sparse Channels format.
 // This is a one-time migration that runs on startup to convert existing data.
 // Uses raw SQL to work even after the ChannelValues field is removed from the Go model.
+// Note: This migration is SQLite-specific.
 func migrateChannelValuesToSparse(db *gorm.DB) error {
+	// Only run this migration for SQLite databases
+	if db.Name() != "sqlite" {
+		return nil
+	}
+
 	// Check if the old channelValues column exists
 	var columnExists int
 	db.Raw("SELECT COUNT(*) FROM pragma_table_info('fixture_values') WHERE name = 'channelValues'").Scan(&columnExists)
@@ -328,13 +334,16 @@ func migrateChannelValuesToSparse(db *gorm.DB) error {
 			continue
 		}
 
-		// Convert to sparse format
+		// Convert to sparse format, filtering out zero values for efficiency
 		var channels []models.ChannelValue
 		for i, v := range values {
-			channels = append(channels, models.ChannelValue{
-				Offset: i,
-				Value:  v,
-			})
+			// Only store non-zero values for space efficiency
+			if v != 0 {
+				channels = append(channels, models.ChannelValue{
+					Offset: i,
+					Value:  v,
+				})
+			}
 		}
 
 		// Serialize to JSON

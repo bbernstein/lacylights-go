@@ -44,10 +44,9 @@ func serializeSparseChannels(channels []*generated.ChannelValueInput) (string, e
 			return "", fmt.Errorf("invalid DMX value %d at offset %d: must be 0-255", ch.Value, ch.Offset)
 		}
 
-		// Check for duplicate offsets (last value wins)
+		// Check for duplicate offsets - reject to ensure data integrity
 		if offsetMap[ch.Offset] {
-			// Log warning but allow it - last value will be used
-			fmt.Printf("Warning: duplicate offset %d found, using latest value\n", ch.Offset)
+			return "", fmt.Errorf("duplicate channel offset %d found in input", ch.Offset)
 		}
 		offsetMap[ch.Offset] = true
 
