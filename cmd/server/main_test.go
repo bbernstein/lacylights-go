@@ -189,7 +189,7 @@ func TestMigrateChannelValuesToSparse_MigratesOldFormat(t *testing.T) {
 	db.Raw("SELECT channels FROM fixture_values WHERE id = 'test-1'").Scan(&channels1)
 	db.Raw("SELECT channels FROM fixture_values WHERE id = 'test-2'").Scan(&channels2)
 
-	// Verify sparse format was applied
+	// Verify sparse format was applied with all offsets
 	expectedContains := []string{`"offset":0`, `"offset":1`, `"offset":2`}
 	for _, expected := range expectedContains {
 		if !strings.Contains(channels1, expected) {
@@ -197,12 +197,26 @@ func TestMigrateChannelValuesToSparse_MigratesOldFormat(t *testing.T) {
 		}
 	}
 
-	// Verify values are correct
+	// Verify all values are correctly migrated for channels1: [255, 128, 64]
 	if !strings.Contains(channels1, `"value":255`) {
 		t.Errorf("Expected channels1 to contain value 255, got: %s", channels1)
 	}
 	if !strings.Contains(channels1, `"value":128`) {
 		t.Errorf("Expected channels1 to contain value 128, got: %s", channels1)
+	}
+	if !strings.Contains(channels1, `"value":64`) {
+		t.Errorf("Expected channels1 to contain value 64, got: %s", channels1)
+	}
+
+	// Verify channels2 was also migrated correctly: [100, 0, 50]
+	if !strings.Contains(channels2, `"value":100`) {
+		t.Errorf("Expected channels2 to contain value 100, got: %s", channels2)
+	}
+	if !strings.Contains(channels2, `"value":0`) {
+		t.Errorf("Expected channels2 to contain value 0, got: %s", channels2)
+	}
+	if !strings.Contains(channels2, `"value":50`) {
+		t.Errorf("Expected channels2 to contain value 50, got: %s", channels2)
 	}
 }
 

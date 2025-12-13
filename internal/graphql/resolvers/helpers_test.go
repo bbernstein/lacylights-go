@@ -228,14 +228,14 @@ func TestSparseChannelsEqual_InvalidJSON(t *testing.T) {
 	validJSON := `[{"offset":0,"value":255}]`
 	invalidJSON := `not valid json`
 
-	// Invalid JSON should be treated as empty array
+	// Invalid JSON should return false (safer behavior)
 	if sparseChannelsEqual(validJSON, invalidJSON) {
 		t.Error("sparseChannelsEqual should return false for valid vs invalid JSON")
 	}
 
-	// Two invalid JSONs should be equal (both treated as empty)
-	if !sparseChannelsEqual(invalidJSON, invalidJSON) {
-		t.Error("sparseChannelsEqual should return true for two invalid JSONs (both empty)")
+	// Two invalid JSONs should return false (invalid data is never "equal")
+	if sparseChannelsEqual(invalidJSON, invalidJSON) {
+		t.Error("sparseChannelsEqual should return false for two invalid JSONs")
 	}
 }
 
