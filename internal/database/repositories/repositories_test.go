@@ -496,9 +496,9 @@ func TestSceneRepository_FixtureValueOperations(t *testing.T) {
 
 	// Test CreateFixtureValue
 	fv := &models.FixtureValue{
-		SceneID:       scene.ID,
-		FixtureID:     fixture.ID,
-		ChannelValues: "[255, 128, 64]",
+		SceneID:   scene.ID,
+		FixtureID: fixture.ID,
+		Channels:  `[{"offset":0,"value":255},{"offset":1,"value":128},{"offset":2,"value":64}]`,
 	}
 	err = repo.CreateFixtureValue(ctx, fv)
 	if err != nil {
@@ -527,19 +527,19 @@ func TestSceneRepository_FixtureValueOperations(t *testing.T) {
 	if found == nil {
 		t.Fatal("Expected to find fixture value")
 	}
-	if found.ChannelValues != "[255, 128, 64]" {
-		t.Errorf("ChannelValues mismatch: got %s", found.ChannelValues)
+	if found.Channels != `[{"offset":0,"value":255},{"offset":1,"value":128},{"offset":2,"value":64}]` {
+		t.Errorf("Channels mismatch: got %s", found.Channels)
 	}
 
 	// Test UpdateFixtureValue
-	found.ChannelValues = "[0, 0, 0]"
+	found.Channels = `[{"offset":0,"value":0},{"offset":1,"value":0},{"offset":2,"value":0}]`
 	err = repo.UpdateFixtureValue(ctx, found)
 	if err != nil {
 		t.Fatalf("UpdateFixtureValue failed: %v", err)
 	}
 	updated, _ := repo.GetFixtureValue(ctx, scene.ID, fixture.ID)
-	if updated.ChannelValues != "[0, 0, 0]" {
-		t.Errorf("Update didn't persist: got %s", updated.ChannelValues)
+	if updated.Channels != `[{"offset":0,"value":0},{"offset":1,"value":0},{"offset":2,"value":0}]` {
+		t.Errorf("Update didn't persist: got %s", updated.Channels)
 	}
 
 	// Test DeleteFixtureValue
@@ -579,7 +579,7 @@ func TestSceneRepository_CreateWithFixtureValues(t *testing.T) {
 	// Create scene with fixture values
 	scene := &models.Scene{Name: "Scene with values", ProjectID: project.ID}
 	values := []models.FixtureValue{
-		{FixtureID: fixture.ID, ChannelValues: "[255]"},
+		{FixtureID: fixture.ID, Channels: `[{"offset":0,"value":255}]`},
 	}
 
 	err := repo.CreateWithFixtureValues(ctx, scene, values)
@@ -629,9 +629,9 @@ func TestSceneRepository_CreateFixtureValues(t *testing.T) {
 
 	// Test CreateFixtureValues
 	values := []models.FixtureValue{
-		{SceneID: scene.ID, FixtureID: fixtures[0].ID, ChannelValues: "[1]"},
-		{SceneID: scene.ID, FixtureID: fixtures[1].ID, ChannelValues: "[2]"},
-		{SceneID: scene.ID, FixtureID: fixtures[2].ID, ChannelValues: "[3]"},
+		{SceneID: scene.ID, FixtureID: fixtures[0].ID, Channels: `[{"offset":0,"value":1}]`},
+		{SceneID: scene.ID, FixtureID: fixtures[1].ID, Channels: `[{"offset":0,"value":2}]`},
+		{SceneID: scene.ID, FixtureID: fixtures[2].ID, Channels: `[{"offset":0,"value":3}]`},
 	}
 	err := repo.CreateFixtureValues(ctx, values)
 	if err != nil {

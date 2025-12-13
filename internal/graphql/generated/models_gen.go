@@ -124,6 +124,11 @@ type ChannelUsage struct {
 	ChannelType ChannelType `json:"channelType"`
 }
 
+type ChannelValueInput struct {
+	Offset int `json:"offset"`
+	Value  int `json:"value"`
+}
+
 type CreateChannelDefinitionInput struct {
 	Name         string                           `json:"name"`
 	Type         ChannelType                      `json:"type"`
@@ -374,9 +379,9 @@ type FixtureUsage struct {
 }
 
 type FixtureValueInput struct {
-	FixtureID     string                  `json:"fixtureId"`
-	ChannelValues []int                   `json:"channelValues"`
-	SceneOrder    graphql.Omittable[*int] `json:"sceneOrder,omitempty"`
+	FixtureID  string                  `json:"fixtureId"`
+	Channels   []*ChannelValueInput    `json:"channels"`
+	SceneOrder graphql.Omittable[*int] `json:"sceneOrder,omitempty"`
 }
 
 type ImportOFLFixtureInput struct {

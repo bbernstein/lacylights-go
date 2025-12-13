@@ -304,7 +304,12 @@ func TestImportProject_CreateMode_WithScene(t *testing.T) {
 				RefID: "scene-1",
 				Name:  "Test Scene",
 				FixtureValues: []export.ExportedFixtureValue{
-					{FixtureRefID: "inst-1", ChannelValues: []int{255}},
+					{
+						FixtureRefID: "inst-1",
+						Channels: []export.ExportedChannelValue{
+							{Offset: 0, Value: 255},
+						},
+					},
 				},
 			},
 		},
@@ -384,7 +389,12 @@ func TestImportProject_CreateMode_WithCueList(t *testing.T) {
 				RefID: "scene-1",
 				Name:  "Test Scene",
 				FixtureValues: []export.ExportedFixtureValue{
-					{FixtureRefID: "inst-1", ChannelValues: []int{255}},
+					{
+						FixtureRefID: "inst-1",
+						Channels: []export.ExportedChannelValue{
+							{Offset: 0, Value: 255},
+						},
+					},
 				},
 			},
 		},
@@ -507,16 +517,44 @@ func TestImportProject_CreateMode_CompleteProject(t *testing.T) {
 				RefID: "scene-1",
 				Name:  "Full Red",
 				FixtureValues: []export.ExportedFixtureValue{
-					{FixtureRefID: "inst-1", ChannelValues: []int{255, 0, 0}},
-					{FixtureRefID: "inst-2", ChannelValues: []int{255, 0, 0}},
+					{
+						FixtureRefID: "inst-1",
+						Channels: []export.ExportedChannelValue{
+							{Offset: 0, Value: 255},
+							{Offset: 1, Value: 0},
+							{Offset: 2, Value: 0},
+						},
+					},
+					{
+						FixtureRefID: "inst-2",
+						Channels: []export.ExportedChannelValue{
+							{Offset: 0, Value: 255},
+							{Offset: 1, Value: 0},
+							{Offset: 2, Value: 0},
+						},
+					},
 				},
 			},
 			{
 				RefID: "scene-2",
 				Name:  "Full Green",
 				FixtureValues: []export.ExportedFixtureValue{
-					{FixtureRefID: "inst-1", ChannelValues: []int{0, 255, 0}},
-					{FixtureRefID: "inst-2", ChannelValues: []int{0, 255, 0}},
+					{
+						FixtureRefID: "inst-1",
+						Channels: []export.ExportedChannelValue{
+							{Offset: 0, Value: 0},
+							{Offset: 1, Value: 255},
+							{Offset: 2, Value: 0},
+						},
+					},
+					{
+						FixtureRefID: "inst-2",
+						Channels: []export.ExportedChannelValue{
+							{Offset: 0, Value: 0},
+							{Offset: 1, Value: 255},
+							{Offset: 2, Value: 0},
+						},
+					},
 				},
 			},
 		},

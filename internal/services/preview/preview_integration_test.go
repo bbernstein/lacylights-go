@@ -317,10 +317,10 @@ func TestInitializeWithScene_Integration(t *testing.T) {
 	testDB.DB.Create(scene)
 
 	fixtureValue := &models.FixtureValue{
-		ID:            cuid.New(),
-		SceneID:       scene.ID,
-		FixtureID:     fixture.ID,
-		ChannelValues: "[255, 128, 64, 32]",
+		ID:        cuid.New(),
+		SceneID:   scene.ID,
+		FixtureID: fixture.ID,
+		Channels:  `[{"offset":0,"value":255},{"offset":1,"value":128},{"offset":2,"value":64},{"offset":3,"value":32}]`,
 	}
 	testDB.DB.Create(fixtureValue)
 
@@ -688,16 +688,16 @@ func TestInitializeWithScene_MultipleFixtures(t *testing.T) {
 	testDB.DB.Create(scene)
 
 	fixtureValue1 := &models.FixtureValue{
-		ID:            cuid.New(),
-		SceneID:       scene.ID,
-		FixtureID:     fixture1.ID,
-		ChannelValues: "[100, 100, 100]",
+		ID:        cuid.New(),
+		SceneID:   scene.ID,
+		FixtureID: fixture1.ID,
+		Channels:  `[{"offset":0,"value":100},{"offset":1,"value":100},{"offset":2,"value":100}]`,
 	}
 	fixtureValue2 := &models.FixtureValue{
-		ID:            cuid.New(),
-		SceneID:       scene.ID,
-		FixtureID:     fixture2.ID,
-		ChannelValues: "[200, 200, 200]",
+		ID:        cuid.New(),
+		SceneID:   scene.ID,
+		FixtureID: fixture2.ID,
+		Channels:  `[{"offset":0,"value":200},{"offset":1,"value":200},{"offset":2,"value":200}]`,
 	}
 	testDB.DB.Create(fixtureValue1)
 	testDB.DB.Create(fixtureValue2)

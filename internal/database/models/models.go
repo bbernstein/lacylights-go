@@ -179,14 +179,20 @@ type Scene struct {
 
 func (Scene) TableName() string { return "scenes" }
 
+// ChannelValue represents a single channel's value in a scene
+type ChannelValue struct {
+	Offset int `json:"offset"`
+	Value  int `json:"value"`
+}
+
 // FixtureValue represents fixture channel values within a scene.
 // Table: fixture_values
 type FixtureValue struct {
-	ID            string `gorm:"column:id;primaryKey"`
-	SceneID       string `gorm:"column:scene_id;index"`
-	FixtureID     string `gorm:"column:fixture_id;index"`
-	ChannelValues string `gorm:"column:channelValues;default:[]"` // JSON array (camelCase to match existing schema)
-	SceneOrder    *int   `gorm:"column:scene_order"`
+	ID         string `gorm:"column:id;primaryKey"`
+	SceneID    string `gorm:"column:scene_id;index"`
+	FixtureID  string `gorm:"column:fixture_id;index"`
+	Channels   string `gorm:"column:channels;default:[]"` // JSON array of ChannelValue
+	SceneOrder *int   `gorm:"column:scene_order"`
 }
 
 func (FixtureValue) TableName() string { return "fixture_values" }

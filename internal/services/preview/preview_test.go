@@ -2,86 +2,8 @@ package preview
 
 import (
 	"testing"
+	"time"
 )
-
-func TestParseChannelValues(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected []int
-	}{
-		{
-			name:     "empty string",
-			input:    "",
-			expected: []int{},
-		},
-		{
-			name:     "empty array",
-			input:    "[]",
-			expected: []int{},
-		},
-		{
-			name:     "single value",
-			input:    "[255]",
-			expected: []int{255},
-		},
-		{
-			name:     "multiple values",
-			input:    "[128, 64, 32]",
-			expected: []int{128, 64, 32},
-		},
-		{
-			name:     "no spaces",
-			input:    "[100,200,50]",
-			expected: []int{100, 200, 50},
-		},
-		{
-			name:     "with extra whitespace",
-			input:    "[  100 , 200 , 50  ]",
-			expected: []int{100, 200, 50},
-		},
-		{
-			name:     "zero values",
-			input:    "[0, 0, 0]",
-			expected: []int{0, 0, 0},
-		},
-		{
-			name:     "max values",
-			input:    "[255, 255, 255, 255]",
-			expected: []int{255, 255, 255, 255},
-		},
-		{
-			name:     "mixed values",
-			input:    "[0, 127, 255]",
-			expected: []int{0, 127, 255},
-		},
-		{
-			name:     "negative value",
-			input:    "[-1, 128]",
-			expected: []int{-1, 128},
-		},
-		{
-			name:     "single bracket",
-			input:    "[",
-			expected: []int{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := parseChannelValues(tt.input)
-			if len(result) != len(tt.expected) {
-				t.Errorf("parseChannelValues(%q) length = %d, want %d", tt.input, len(result), len(tt.expected))
-				return
-			}
-			for i, v := range result {
-				if v != tt.expected[i] {
-					t.Errorf("parseChannelValues(%q)[%d] = %d, want %d", tt.input, i, v, tt.expected[i])
-				}
-			}
-		})
-	}
-}
 
 func TestRandomString(t *testing.T) {
 	// Test that it returns string of correct length
@@ -351,4 +273,121 @@ func TestService_CancelExistingProjectSessionsLocked_NoSessions(t *testing.T) {
 
 	// Should not panic with no sessions
 	service.cancelExistingProjectSessionsLocked("non-existent-project")
+}
+
+func TestService_CancelExistingProjectSessionsLocked_WithSession(t *testing.T) {
+	service := NewService(nil, nil, nil)
+
+	// Create a session
+	session := &Session{
+		ID:               "test-session",
+		ProjectID:        "test-project",
+		IsActive:         true,
+		ChannelOverrides: make(map[string]int),
+	}
+	service.sessions["test-session"] = session
+
+	// Cancel existing sessions for the project
+	service.cancelExistingProjectSessionsLocked("test-project")
+
+	// Verify the session was removed
+	if len(service.sessions) != 0 {
+		t.Errorf("Expected 0 sessions after cancel, got %d", len(service.sessions))
+	}
+}
+
+func TestService_CancelExistingProjectSessionsLocked_WithTimer(t *testing.T) {
+	service := NewService(nil, nil, nil)
+
+	// Create a session with a timer
+	session := &Session{
+		ID:               "test-session",
+		ProjectID:        "test-project",
+		IsActive:         true,
+		ChannelOverrides: make(map[string]int),
+	}
+	service.sessions["test-session"] = session
+
+	// Add a timer for the session
+	service.sessionTimers = make(map[string]*time.Timer)
+	timer := time.NewTimer(time.Hour) // Won't fire during test
+	service.sessionTimers["test-session"] = timer
+
+	// Cancel existing sessions for the project
+	service.cancelExistingProjectSessionsLocked("test-project")
+
+	// Verify the session and timer were removed
+	if len(service.sessions) != 0 {
+		t.Errorf("Expected 0 sessions after cancel, got %d", len(service.sessions))
+	}
+	if len(service.sessionTimers) != 0 {
+		t.Errorf("Expected 0 timers after cancel, got %d", len(service.sessionTimers))
+	}
+}
+
+func TestService_CancelExistingProjectSessionsLocked_DifferentProject(t *testing.T) {
+	service := NewService(nil, nil, nil)
+
+	// Create a session for a different project
+	session := &Session{
+		ID:               "test-session",
+		ProjectID:        "different-project",
+		IsActive:         true,
+		ChannelOverrides: make(map[string]int),
+	}
+	service.sessions["test-session"] = session
+
+	// Cancel sessions for test-project (should not affect different-project)
+	service.cancelExistingProjectSessionsLocked("test-project")
+
+	// Verify the session is still there
+	if len(service.sessions) != 1 {
+		t.Errorf("Expected 1 session (different project), got %d", len(service.sessions))
+	}
+}
+
+func TestService_CancelExistingProjectSessionsLocked_InactiveSession(t *testing.T) {
+	service := NewService(nil, nil, nil)
+
+	// Create an inactive session
+	session := &Session{
+		ID:               "test-session",
+		ProjectID:        "test-project",
+		IsActive:         false, // Already inactive
+		ChannelOverrides: make(map[string]int),
+	}
+	service.sessions["test-session"] = session
+
+	// Cancel sessions - should not affect already inactive sessions
+	service.cancelExistingProjectSessionsLocked("test-project")
+
+	// Session should still be there (it wasn't active)
+	if len(service.sessions) != 1 {
+		t.Errorf("Expected 1 session (inactive), got %d", len(service.sessions))
+	}
+}
+
+func TestService_SessionWithChannelOverridesCleanup(t *testing.T) {
+	service := NewService(nil, nil, nil)
+
+	// Create a session with channel overrides
+	session := &Session{
+		ID:               "test-session",
+		ProjectID:        "test-project",
+		IsActive:         true,
+		ChannelOverrides: map[string]int{
+			"1:10":  255,
+			"1:20":  128,
+			"2:5":   64,
+		},
+	}
+	service.sessions["test-session"] = session
+
+	// Cancel sessions for the project
+	service.cancelExistingProjectSessionsLocked("test-project")
+
+	// Verify the session was removed
+	if len(service.sessions) != 0 {
+		t.Errorf("Expected 0 sessions after cancel, got %d", len(service.sessions))
+	}
 }

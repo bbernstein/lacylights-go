@@ -3,10 +3,13 @@ package preview
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
+	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	"github.com/bbernstein/lacylights-go/internal/services/dmx"
 )
@@ -232,14 +235,25 @@ func (s *Service) InitializeWithScene(ctx context.Context, sessionID string, sce
 			continue
 		}
 
-		// Parse channel values from JSON
-		channelValues := parseChannelValues(fv.ChannelValues)
+		// Parse sparse channel values from JSON
+		var channels []models.ChannelValue
+		if err := json.Unmarshal([]byte(fv.Channels), &channels); err != nil {
+			log.Printf("Warning: failed to unmarshal channels for fixtureID %s in scene: %v", fv.FixtureID, err)
+			continue
+		}
 
-		for channelIndex, value := range channelValues {
-			absoluteChannel := fixture.StartChannel + channelIndex
+		for _, ch := range channels {
+			absoluteChannel := fixture.StartChannel + ch.Offset
+
+			// Validate DMX channel bounds (1-512)
+			if absoluteChannel < 1 || absoluteChannel > 512 {
+				continue
+			}
+
 			channelKey := fmt.Sprintf("%d:%d", fixture.Universe, absoluteChannel)
 
 			// Clamp value
+			value := ch.Value
 			if value < 0 {
 				value = 0
 			}
@@ -386,37 +400,3 @@ func randomString(length int) string {
 	return string(result)
 }
 
-func parseChannelValues(jsonStr string) []int {
-	var values []int
-	// Simple JSON array parsing
-	if len(jsonStr) < 2 {
-		return values
-	}
-	// Remove brackets
-	jsonStr = jsonStr[1 : len(jsonStr)-1]
-	if jsonStr == "" {
-		return values
-	}
-
-	// Split by comma and parse
-	var current string
-	for _, c := range jsonStr {
-		if c == ',' {
-			if current != "" {
-				var v int
-				_, _ = fmt.Sscanf(current, "%d", &v)
-				values = append(values, v)
-				current = ""
-			}
-		} else if c >= '0' && c <= '9' || c == '-' {
-			current += string(c)
-		}
-	}
-	if current != "" {
-		var v int
-		_, _ = fmt.Sscanf(current, "%d", &v)
-		values = append(values, v)
-	}
-
-	return values
-}

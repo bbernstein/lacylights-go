@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -210,6 +211,7 @@ func (r *fixtureInstanceResolver) Tags(ctx context.Context, obj *models.FixtureI
 	}
 	var tags []string
 	if err := json.Unmarshal([]byte(*obj.Tags), &tags); err != nil {
+		log.Printf("Warning: failed to unmarshal tags for fixture %s: %v", obj.ID, err)
 		return []string{}, nil
 	}
 	return tags, nil
@@ -239,16 +241,21 @@ func (r *fixtureValueResolver) Fixture(ctx context.Context, obj *models.FixtureV
 	return r.FixtureRepo.FindByID(ctx, obj.FixtureID)
 }
 
-// ChannelValues is the resolver for the channelValues field.
-func (r *fixtureValueResolver) ChannelValues(ctx context.Context, obj *models.FixtureValue) ([]int, error) {
-	if obj.ChannelValues == "" || obj.ChannelValues == "[]" {
-		return []int{}, nil
+// Channels is the resolver for the channels field.
+func (r *fixtureValueResolver) Channels(ctx context.Context, obj *models.FixtureValue) ([]*models.ChannelValue, error) {
+	// Deserialize the JSON channels data
+	var channels []models.ChannelValue
+	if err := json.Unmarshal([]byte(obj.Channels), &channels); err != nil {
+		return nil, fmt.Errorf("failed to deserialize channels: %w", err)
 	}
-	var values []int
-	if err := json.Unmarshal([]byte(obj.ChannelValues), &values); err != nil {
-		return []int{}, nil
+
+	// Convert to pointers for GraphQL
+	result := make([]*models.ChannelValue, len(channels))
+	for i := range channels {
+		result[i] = &channels[i]
 	}
-	return values, nil
+
+	return result, nil
 }
 
 // Type is the resolver for the type field.
@@ -1155,13 +1162,13 @@ func (r *mutationResolver) CreateScene(ctx context.Context, input generated.Crea
 	// Convert fixture values
 	var fixtureValues []models.FixtureValue
 	for _, fv := range input.FixtureValues {
-		channelValuesJSON, err := json.Marshal(fv.ChannelValues)
+		channelsJSON, err := serializeSparseChannels(fv.Channels)
 		if err != nil {
-			return nil, fmt.Errorf("failed to serialize channel values: %w", err)
+			return nil, err
 		}
 		value := models.FixtureValue{
-			FixtureID:     fv.FixtureID,
-			ChannelValues: string(channelValuesJSON),
+			FixtureID: fv.FixtureID,
+			Channels:  channelsJSON,
 		}
 		if fv.SceneOrder.IsSet() && fv.SceneOrder.Value() != nil {
 			value.SceneOrder = fv.SceneOrder.Value()
@@ -1206,14 +1213,14 @@ func (r *mutationResolver) UpdateScene(ctx context.Context, id string, input gen
 		// Create new fixture values
 		var fixtureValues []models.FixtureValue
 		for _, fv := range input.FixtureValues.Value() {
-			channelValuesJSON, err := json.Marshal(fv.ChannelValues)
+			channelsJSON, err := serializeSparseChannels(fv.Channels)
 			if err != nil {
-				return nil, fmt.Errorf("failed to serialize channel values: %w", err)
+				return nil, err
 			}
 			value := models.FixtureValue{
-				SceneID:       id,
-				FixtureID:     fv.FixtureID,
-				ChannelValues: string(channelValuesJSON),
+				SceneID:   id,
+				FixtureID: fv.FixtureID,
+				Channels:  channelsJSON,
 			}
 			if fv.SceneOrder.IsSet() && fv.SceneOrder.Value() != nil {
 				value.SceneOrder = fv.SceneOrder.Value()
@@ -1262,9 +1269,9 @@ func (r *mutationResolver) DuplicateScene(ctx context.Context, id string) (*mode
 	var newValues []models.FixtureValue
 	for _, v := range originalValues {
 		newValues = append(newValues, models.FixtureValue{
-			FixtureID:     v.FixtureID,
-			ChannelValues: v.ChannelValues,
-			SceneOrder:    v.SceneOrder,
+			FixtureID:  v.FixtureID,
+			Channels:   v.Channels,
+			SceneOrder: v.SceneOrder,
 		})
 	}
 
@@ -1304,9 +1311,9 @@ func (r *mutationResolver) CloneScene(ctx context.Context, sceneID string, newNa
 	var newValues []models.FixtureValue
 	for _, v := range originalValues {
 		newValues = append(newValues, models.FixtureValue{
-			FixtureID:     v.FixtureID,
-			ChannelValues: v.ChannelValues,
-			SceneOrder:    v.SceneOrder,
+			FixtureID:  v.FixtureID,
+			Channels:   v.Channels,
+			SceneOrder: v.SceneOrder,
 		})
 	}
 
@@ -1422,9 +1429,9 @@ func (r *mutationResolver) AddFixturesToScene(ctx context.Context, sceneID strin
 	}
 
 	for _, fv := range fixtureValues {
-		channelValuesJSON, err := json.Marshal(fv.ChannelValues)
+		channelsJSON, err := serializeSparseChannels(fv.Channels)
 		if err != nil {
-			return nil, fmt.Errorf("failed to serialize channel values: %w", err)
+			return nil, err
 		}
 
 		// Check if fixture already exists in scene
@@ -1435,7 +1442,7 @@ func (r *mutationResolver) AddFixturesToScene(ctx context.Context, sceneID strin
 
 		if existing != nil {
 			if overwrite {
-				existing.ChannelValues = string(channelValuesJSON)
+				existing.Channels = channelsJSON
 				if fv.SceneOrder.IsSet() && fv.SceneOrder.Value() != nil {
 					existing.SceneOrder = fv.SceneOrder.Value()
 				}
@@ -1447,9 +1454,9 @@ func (r *mutationResolver) AddFixturesToScene(ctx context.Context, sceneID strin
 		} else {
 			// Create new fixture value
 			value := &models.FixtureValue{
-				SceneID:       sceneID,
-				FixtureID:     fv.FixtureID,
-				ChannelValues: string(channelValuesJSON),
+				SceneID:   sceneID,
+				FixtureID: fv.FixtureID,
+				Channels:  channelsJSON,
 			}
 			if fv.SceneOrder.IsSet() && fv.SceneOrder.Value() != nil {
 				value.SceneOrder = fv.SceneOrder.Value()
@@ -1518,9 +1525,9 @@ func (r *mutationResolver) UpdateScenePartial(ctx context.Context, sceneID strin
 		}
 
 		for _, fv := range fixtureValues {
-			channelValuesJSON, err := json.Marshal(fv.ChannelValues)
+			channelsJSON, err := serializeSparseChannels(fv.Channels)
 			if err != nil {
-				return nil, fmt.Errorf("failed to serialize channel values: %w", err)
+				return nil, err
 			}
 
 			if merge {
@@ -1532,7 +1539,7 @@ func (r *mutationResolver) UpdateScenePartial(ctx context.Context, sceneID strin
 
 				if existing != nil {
 					// Update existing
-					existing.ChannelValues = string(channelValuesJSON)
+					existing.Channels = channelsJSON
 					if fv.SceneOrder.IsSet() && fv.SceneOrder.Value() != nil {
 						existing.SceneOrder = fv.SceneOrder.Value()
 					}
@@ -1542,9 +1549,9 @@ func (r *mutationResolver) UpdateScenePartial(ctx context.Context, sceneID strin
 				} else {
 					// Create new
 					value := &models.FixtureValue{
-						SceneID:       sceneID,
-						FixtureID:     fv.FixtureID,
-						ChannelValues: string(channelValuesJSON),
+						SceneID:   sceneID,
+						FixtureID: fv.FixtureID,
+						Channels:  channelsJSON,
 					}
 					if fv.SceneOrder.IsSet() && fv.SceneOrder.Value() != nil {
 						value.SceneOrder = fv.SceneOrder.Value()
@@ -1556,9 +1563,9 @@ func (r *mutationResolver) UpdateScenePartial(ctx context.Context, sceneID strin
 			} else {
 				// Create new fixture values
 				value := &models.FixtureValue{
-					SceneID:       sceneID,
-					FixtureID:     fv.FixtureID,
-					ChannelValues: string(channelValuesJSON),
+					SceneID:   sceneID,
+					FixtureID: fv.FixtureID,
+					Channels:  channelsJSON,
 				}
 				if fv.SceneOrder.IsSet() && fv.SceneOrder.Value() != nil {
 					value.SceneOrder = fv.SceneOrder.Value()
@@ -2023,34 +2030,41 @@ func (r *mutationResolver) ActivateSceneFromBoard(ctx context.Context, sceneBoar
 			continue
 		}
 
-		// Parse channel values from JSON
-		var channelValues []int
-		if err := json.Unmarshal([]byte(fixtureValue.ChannelValues), &channelValues); err != nil {
+		// Parse sparse channel values from JSON (Channels field)
+		var channels []models.ChannelValue
+		if err := json.Unmarshal([]byte(fixtureValue.Channels), &channels); err != nil {
+			log.Printf("Warning: failed to unmarshal channels for fixtureID %s in sceneID %s: %v", fixtureValue.FixtureID, sceneID, err)
 			continue
 		}
 
+		// Build a map of channel offset -> fade behavior for efficient lookup
+		fadeBehaviorMap := make(map[int]string)
+		for _, chanDef := range fixture.Channels {
+			if chanDef.FadeBehavior != "" {
+				fadeBehaviorMap[chanDef.Offset] = chanDef.FadeBehavior
+			}
+		}
+
 		// Build channel targets with fade behavior from channel definitions
-		for channelIndex, value := range channelValues {
-			dmxChannel := fixture.StartChannel + channelIndex
+		// Only process channels that exist in the sparse array
+		for _, ch := range channels {
+			dmxChannel := fixture.StartChannel + ch.Offset
+
+			// Validate DMX channel is within bounds
+			if !validateDMXChannel(dmxChannel, fixture.Universe, fixture.ID, ch.Offset) {
+				continue
+			}
 
 			// Get fade behavior from channel definition (if available)
 			fadeBehavior := fade.FadeBehaviorFade // Default to FADE
-			if channelIndex < len(fixture.Channels) {
-				// Find the channel with matching offset
-				for _, ch := range fixture.Channels {
-					if ch.Offset == channelIndex {
-						if ch.FadeBehavior != "" {
-							fadeBehavior = ch.FadeBehavior
-						}
-						break
-					}
-				}
+			if fb, ok := fadeBehaviorMap[ch.Offset]; ok {
+				fadeBehavior = fb
 			}
 
 			sceneChannels = append(sceneChannels, fade.SceneChannel{
 				Universe:     fixture.Universe,
 				Channel:      dmxChannel,
-				Value:        value,
+				Value:        ch.Value,
 				FadeBehavior: fadeBehavior,
 			})
 		}
@@ -2539,16 +2553,23 @@ func (r *mutationResolver) SetSceneLive(ctx context.Context, sceneID string) (bo
 			continue
 		}
 
-		// Parse channel values from JSON
-		var channelValues []int
-		if err := json.Unmarshal([]byte(fixtureValue.ChannelValues), &channelValues); err != nil {
+		// Parse sparse channel values from JSON (Channels field)
+		var channels []models.ChannelValue
+		if err := json.Unmarshal([]byte(fixtureValue.Channels), &channels); err != nil {
+			log.Printf("Warning: failed to unmarshal channels for fixtureID %s in sceneID %s: %v", fixtureValue.FixtureID, sceneID, err)
 			continue
 		}
 
-		// Set channel values
-		for channelIndex, value := range channelValues {
-			dmxChannel := fixture.StartChannel + channelIndex
-			r.DMXService.SetChannelValue(fixture.Universe, dmxChannel, byte(value))
+		// Set channel values - only channels that exist in the sparse array
+		for _, ch := range channels {
+			dmxChannel := fixture.StartChannel + ch.Offset
+
+			// Validate DMX channel is within bounds
+			if !validateDMXChannel(dmxChannel, fixture.Universe, fixture.ID, ch.Offset) {
+				continue
+			}
+
+			r.DMXService.SetChannelValue(fixture.Universe, dmxChannel, byte(ch.Value))
 		}
 	}
 
@@ -3770,11 +3791,10 @@ func (r *queryResolver) CompareScenes(ctx context.Context, sceneID1 string, scen
 		}
 
 		if fv2, ok := fixtures2[fixtureID]; ok {
-			// Fixture in both scenes
-			if fv1.ChannelValues != fv2.ChannelValues {
-				var vals1, vals2 []int
-				_ = json.Unmarshal([]byte(fv1.ChannelValues), &vals1)
-				_ = json.Unmarshal([]byte(fv2.ChannelValues), &vals2)
+			// Fixture in both scenes - compare semantically, not by JSON string
+			if !sparseChannelsEqual(fv1.Channels, fv2.Channels) {
+				vals1 := sparseChannelsToDenseArray(fv1.Channels)
+				vals2 := sparseChannelsToDenseArray(fv2.Channels)
 				differences = append(differences, &generated.SceneDifference{
 					FixtureID:      fixtureID,
 					FixtureName:    fixtureName,
@@ -3788,8 +3808,7 @@ func (r *queryResolver) CompareScenes(ctx context.Context, sceneID1 string, scen
 			}
 		} else {
 			// Fixture only in scene1
-			var vals1 []int
-			_ = json.Unmarshal([]byte(fv1.ChannelValues), &vals1)
+			vals1 := sparseChannelsToDenseArray(fv1.Channels)
 			differences = append(differences, &generated.SceneDifference{
 				FixtureID:      fixtureID,
 				FixtureName:    fixtureName,
@@ -3808,8 +3827,7 @@ func (r *queryResolver) CompareScenes(ctx context.Context, sceneID1 string, scen
 			if fixture != nil {
 				fixtureName = fixture.Name
 			}
-			var vals2 []int
-			_ = json.Unmarshal([]byte(fv2.ChannelValues), &vals2)
+			vals2 := sparseChannelsToDenseArray(fv2.Channels)
 			differences = append(differences, &generated.SceneDifference{
 				FixtureID:      fixtureID,
 				FixtureName:    fixtureName,

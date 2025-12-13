@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -33,6 +34,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/services/fade"
 	"github.com/bbernstein/lacylights-go/internal/services/ofl"
 	"github.com/bbernstein/lacylights-go/internal/services/playback"
+	"gorm.io/gorm"
 )
 
 // Version information (set at build time)
@@ -91,6 +93,11 @@ func main() {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 	log.Println("Database migrations complete")
+
+	// Migrate old channelValues to sparse Channels format
+	if err := migrateChannelValuesToSparse(db); err != nil {
+		log.Printf("Warning: sparse channel migration failed: %v", err)
+	}
 
 	// Load Open Fixture Library if enabled and database is empty
 	if cfg.OFLImportEnabled {
@@ -275,4 +282,80 @@ func printBanner(cfg *config.Config) {
 	fmt.Printf("  Art-Net:     %v\n", cfg.ArtNetEnabled)
 	fmt.Printf("  OFL Import:  %v\n", cfg.OFLImportEnabled)
 	fmt.Println("============================================")
+}
+
+// migrateChannelValuesToSparse migrates old channelValues arrays to the new sparse Channels format.
+// This is a one-time migration that runs on startup to convert existing data.
+// Uses GORM's migrator to check column existence (database-agnostic), then raw SQL for the
+// actual migration since the ChannelValues field has been removed from the Go model.
+func migrateChannelValuesToSparse(db *gorm.DB) error {
+	// Check if the old channelValues column exists using GORM's migrator (database-agnostic)
+	// We use the table name directly since the field was removed from the Go model
+	if !db.Migrator().HasColumn("fixture_values", "channelValues") {
+		return nil // Column doesn't exist, nothing to migrate
+	}
+
+	// Find all fixture_values where Channels is empty but channelValues is not (using raw SQL)
+	type oldFixtureValue struct {
+		ID            string
+		ChannelValues string
+	}
+	var oldValues []oldFixtureValue
+	result := db.Raw(`
+		SELECT id, channelValues
+		FROM fixture_values
+		WHERE (channels IS NULL OR channels = '' OR channels = '[]')
+		  AND channelValues IS NOT NULL
+		  AND channelValues != ''
+		  AND channelValues != '[]'
+	`).Scan(&oldValues)
+	if result.Error != nil {
+		return fmt.Errorf("failed to query fixture values: %w", result.Error)
+	}
+
+	if len(oldValues) == 0 {
+		return nil // Nothing to migrate
+	}
+
+	log.Printf("🔄 Migrating %d fixture values from channelValues to sparse Channels format...", len(oldValues))
+
+	migratedCount := 0
+	for _, fv := range oldValues {
+		// Parse old channelValues array
+		var values []int
+		if err := json.Unmarshal([]byte(fv.ChannelValues), &values); err != nil {
+			log.Printf("  Warning: failed to parse channelValues for fixture value %s: %v", fv.ID, err)
+			continue
+		}
+
+		// Convert to sparse format
+		// Note: Preserving all values including zeros for data fidelity during migration.
+		// This ensures exact migration of existing data without loss.
+		// New scenes created via API will only store explicitly set channels.
+		// The sparse format allows storing any subset of channels, including zeros when intended.
+		var channels []models.ChannelValue
+		for i, v := range values {
+			channels = append(channels, models.ChannelValue{
+				Offset: i,
+				Value:  v,
+			})
+		}
+
+		// Serialize to JSON
+		channelsJSON, err := json.Marshal(channels)
+		if err != nil {
+			log.Printf("  Warning: failed to serialize channels for fixture value %s: %v", fv.ID, err)
+			continue
+		}
+
+		// Update the record using raw SQL
+		if err := db.Exec("UPDATE fixture_values SET channels = ? WHERE id = ?", string(channelsJSON), fv.ID).Error; err != nil {
+			log.Printf("  Warning: failed to update fixture value %s: %v", fv.ID, err)
+			continue
+		}
+		migratedCount++
+	}
+
+	log.Printf("✅ Migrated %d fixture values to sparse Channels format", migratedCount)
+	return nil
 }

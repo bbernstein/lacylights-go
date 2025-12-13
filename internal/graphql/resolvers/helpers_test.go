@@ -159,3 +159,123 @@ func TestIntPtr_ChannelOffsets(t *testing.T) {
 		}
 	}
 }
+
+func TestSparseChannelsEqual_IdenticalJSON(t *testing.T) {
+	json1 := `[{"offset":0,"value":255},{"offset":1,"value":128}]`
+	json2 := `[{"offset":0,"value":255},{"offset":1,"value":128}]`
+
+	if !sparseChannelsEqual(json1, json2) {
+		t.Error("sparseChannelsEqual should return true for identical JSON")
+	}
+}
+
+func TestSparseChannelsEqual_DifferentOrder(t *testing.T) {
+	// Same values but different order in the JSON array
+	json1 := `[{"offset":0,"value":255},{"offset":1,"value":128}]`
+	json2 := `[{"offset":1,"value":128},{"offset":0,"value":255}]`
+
+	if !sparseChannelsEqual(json1, json2) {
+		t.Error("sparseChannelsEqual should return true for same values in different order")
+	}
+}
+
+func TestSparseChannelsEqual_DifferentValues(t *testing.T) {
+	json1 := `[{"offset":0,"value":255},{"offset":1,"value":128}]`
+	json2 := `[{"offset":0,"value":255},{"offset":1,"value":64}]`
+
+	if sparseChannelsEqual(json1, json2) {
+		t.Error("sparseChannelsEqual should return false for different values")
+	}
+}
+
+func TestSparseChannelsEqual_DifferentOffsets(t *testing.T) {
+	json1 := `[{"offset":0,"value":255},{"offset":1,"value":128}]`
+	json2 := `[{"offset":0,"value":255},{"offset":2,"value":128}]`
+
+	if sparseChannelsEqual(json1, json2) {
+		t.Error("sparseChannelsEqual should return false for different offsets")
+	}
+}
+
+func TestSparseChannelsEqual_DifferentLength(t *testing.T) {
+	json1 := `[{"offset":0,"value":255},{"offset":1,"value":128}]`
+	json2 := `[{"offset":0,"value":255}]`
+
+	if sparseChannelsEqual(json1, json2) {
+		t.Error("sparseChannelsEqual should return false for different number of channels")
+	}
+}
+
+func TestSparseChannelsEqual_EmptyArrays(t *testing.T) {
+	json1 := `[]`
+	json2 := `[]`
+
+	if !sparseChannelsEqual(json1, json2) {
+		t.Error("sparseChannelsEqual should return true for two empty arrays")
+	}
+}
+
+func TestSparseChannelsEqual_EmptyAndNonEmpty(t *testing.T) {
+	json1 := `[]`
+	json2 := `[{"offset":0,"value":255}]`
+
+	if sparseChannelsEqual(json1, json2) {
+		t.Error("sparseChannelsEqual should return false for empty vs non-empty")
+	}
+}
+
+func TestSparseChannelsEqual_InvalidJSON(t *testing.T) {
+	validJSON := `[{"offset":0,"value":255}]`
+	invalidJSON := `not valid json`
+
+	// Invalid JSON should return false (safer behavior)
+	if sparseChannelsEqual(validJSON, invalidJSON) {
+		t.Error("sparseChannelsEqual should return false for valid vs invalid JSON")
+	}
+
+	// Two invalid JSONs should return false (invalid data is never "equal")
+	if sparseChannelsEqual(invalidJSON, invalidJSON) {
+		t.Error("sparseChannelsEqual should return false for two invalid JSONs")
+	}
+}
+
+func TestSparseChannelsEqual_WhitespaceDifference(t *testing.T) {
+	// Same values with different whitespace
+	json1 := `[{"offset":0,"value":255},{"offset":1,"value":128}]`
+	json2 := `[{"offset": 0, "value": 255}, {"offset": 1, "value": 128}]`
+
+	if !sparseChannelsEqual(json1, json2) {
+		t.Error("sparseChannelsEqual should return true regardless of whitespace")
+	}
+}
+
+func TestSparseChannelsEqual_ManyChannels(t *testing.T) {
+	// Test with more channels, different order
+	json1 := `[{"offset":0,"value":255},{"offset":5,"value":128},{"offset":10,"value":64},{"offset":15,"value":32}]`
+	json2 := `[{"offset":15,"value":32},{"offset":0,"value":255},{"offset":10,"value":64},{"offset":5,"value":128}]`
+
+	if !sparseChannelsEqual(json1, json2) {
+		t.Error("sparseChannelsEqual should return true for same channels in different order")
+	}
+}
+
+func TestSparseChannelsEqual_DuplicateOffsets(t *testing.T) {
+	// JSON with duplicate offsets should return false
+	validJSON := `[{"offset":0,"value":255},{"offset":1,"value":128}]`
+	duplicateJSON := `[{"offset":0,"value":100},{"offset":0,"value":200}]`
+
+	// Duplicate in second arg
+	if sparseChannelsEqual(validJSON, duplicateJSON) {
+		t.Error("sparseChannelsEqual should return false when channels2 has duplicate offsets")
+	}
+
+	// Duplicate in first arg
+	if sparseChannelsEqual(duplicateJSON, validJSON) {
+		t.Error("sparseChannelsEqual should return false when channels1 has duplicate offsets")
+	}
+
+	// Both have same duplicates - should still return false
+	if sparseChannelsEqual(duplicateJSON, duplicateJSON) {
+		t.Error("sparseChannelsEqual should return false when both have duplicate offsets")
+	}
+}

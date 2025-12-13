@@ -4,7 +4,9 @@ package export
 import (
 	"context"
 	"encoding/json"
+	"log"
 
+	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 )
 
@@ -112,11 +114,17 @@ type ExportedScene struct {
 	UpdatedAt     string                 `json:"updatedAt,omitempty"`
 }
 
+// ExportedChannelValue represents a single channel value in sparse format.
+type ExportedChannelValue struct {
+	Offset int `json:"offset"`
+	Value  int `json:"value"`
+}
+
 // ExportedFixtureValue represents exported fixture values in a scene.
 type ExportedFixtureValue struct {
-	FixtureRefID  string `json:"fixtureRefId"`
-	ChannelValues []int  `json:"channelValues"`
-	SceneOrder    *int   `json:"sceneOrder,omitempty"`
+	FixtureRefID string                 `json:"fixtureRefId"`
+	Channels     []ExportedChannelValue `json:"channels"`
+	SceneOrder   *int                   `json:"sceneOrder,omitempty"`
 }
 
 // ExportedCueList represents an exported cue list.
@@ -259,7 +267,10 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 		for _, f := range fixtures {
 			var tags []string
 			if f.Tags != nil {
-				_ = json.Unmarshal([]byte(*f.Tags), &tags)
+				if err := json.Unmarshal([]byte(*f.Tags), &tags); err != nil {
+					log.Printf("Warning: failed to unmarshal tags for fixture %s: %v", f.ID, err)
+					tags = []string{} // Continue with empty tags
+				}
 			}
 
 			exported.FixtureInstances = append(exported.FixtureInstances, ExportedFixtureInstance{
@@ -297,13 +308,25 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 			}
 
 			for _, fv := range fixtureValues {
-				var channelValues []int
-				_ = json.Unmarshal([]byte(fv.ChannelValues), &channelValues)
+				var channels []models.ChannelValue
+				if err := json.Unmarshal([]byte(fv.Channels), &channels); err != nil {
+					log.Printf("Warning: failed to unmarshal channels for fixture %s in scene %s: %v", fv.FixtureID, scene.ID, err)
+					continue // Skip this fixture value
+				}
+
+				// Convert to exported format
+				exportedChannels := make([]ExportedChannelValue, len(channels))
+				for i, ch := range channels {
+					exportedChannels[i] = ExportedChannelValue{
+						Offset: ch.Offset,
+						Value:  ch.Value,
+					}
+				}
 
 				exportedScene.FixtureValues = append(exportedScene.FixtureValues, ExportedFixtureValue{
-					FixtureRefID:  fv.FixtureID,
-					ChannelValues: channelValues,
-					SceneOrder:    fv.SceneOrder,
+					FixtureRefID: fv.FixtureID,
+					Channels:     exportedChannels,
+					SceneOrder:   fv.SceneOrder,
 				})
 			}
 

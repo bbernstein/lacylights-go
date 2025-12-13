@@ -571,7 +571,12 @@ func TestImportProject_ComplexExport(t *testing.T) {
 				RefID: "scene-1",
 				Name:  "Test Scene",
 				FixtureValues: []export.ExportedFixtureValue{
-					{FixtureRefID: "inst-1", ChannelValues: []int{255}},
+					{
+						FixtureRefID: "inst-1",
+						Channels: []export.ExportedChannelValue{
+							{Offset: 0, Value: 255},
+						},
+					},
 				},
 			},
 		},
@@ -810,9 +815,13 @@ func TestImportProject_WithSceneOrder(t *testing.T) {
 				Name:  "Test Scene",
 				FixtureValues: []export.ExportedFixtureValue{
 					{
-						FixtureRefID:  "inst-1",
-						ChannelValues: []int{255, 128, 64},
-						SceneOrder:    &sceneOrder,
+						FixtureRefID: "inst-1",
+						Channels: []export.ExportedChannelValue{
+							{Offset: 0, Value: 255},
+							{Offset: 1, Value: 128},
+							{Offset: 2, Value: 64},
+						},
+						SceneOrder: &sceneOrder,
 					},
 				},
 			},

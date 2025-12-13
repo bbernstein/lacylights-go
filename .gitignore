@@ -53,3 +53,6 @@ temp/
 
 # OFL bundle (downloaded at build time, not committed)
 internal/services/ofl/data/ofl-bundle.zip
+
+# OFL cache directory (runtime data, not committed)
+.ofl-cache/
