@@ -258,3 +258,24 @@ func TestSparseChannelsEqual_ManyChannels(t *testing.T) {
 		t.Error("sparseChannelsEqual should return true for same channels in different order")
 	}
 }
+
+func TestSparseChannelsEqual_DuplicateOffsets(t *testing.T) {
+	// JSON with duplicate offsets should return false
+	validJSON := `[{"offset":0,"value":255},{"offset":1,"value":128}]`
+	duplicateJSON := `[{"offset":0,"value":100},{"offset":0,"value":200}]`
+
+	// Duplicate in second arg
+	if sparseChannelsEqual(validJSON, duplicateJSON) {
+		t.Error("sparseChannelsEqual should return false when channels2 has duplicate offsets")
+	}
+
+	// Duplicate in first arg
+	if sparseChannelsEqual(duplicateJSON, validJSON) {
+		t.Error("sparseChannelsEqual should return false when channels1 has duplicate offsets")
+	}
+
+	// Both have same duplicates - should still return false
+	if sparseChannelsEqual(duplicateJSON, duplicateJSON) {
+		t.Error("sparseChannelsEqual should return false when both have duplicate offsets")
+	}
+}

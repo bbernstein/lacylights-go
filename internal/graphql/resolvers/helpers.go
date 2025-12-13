@@ -110,7 +110,7 @@ func validateDMXChannel(dmxChannel, universe int, fixtureID string, offset int) 
 
 // sparseChannelsEqual compares two sparse channel JSON strings semantically.
 // Returns true if they represent the same channel values, regardless of JSON encoding order.
-// Returns false if either JSON string is invalid (with a warning logged for debugging).
+// Returns false if either JSON string is invalid or contains duplicate offsets.
 func sparseChannelsEqual(channelsJSON1, channelsJSON2 string) bool {
 	var sparse1, sparse2 []models.ChannelValue
 
@@ -123,14 +123,22 @@ func sparseChannelsEqual(channelsJSON1, channelsJSON2 string) bool {
 		return false
 	}
 
-	// Build maps for O(1) lookup
+	// Build maps for O(1) lookup, detecting duplicate offsets
 	map1 := make(map[int]int, len(sparse1))
 	for _, ch := range sparse1 {
+		if _, exists := map1[ch.Offset]; exists {
+			log.Printf("Warning: sparseChannelsEqual detected duplicate offset %d in channels1", ch.Offset)
+			return false
+		}
 		map1[ch.Offset] = ch.Value
 	}
 
 	map2 := make(map[int]int, len(sparse2))
 	for _, ch := range sparse2 {
+		if _, exists := map2[ch.Offset]; exists {
+			log.Printf("Warning: sparseChannelsEqual detected duplicate offset %d in channels2", ch.Offset)
+			return false
+		}
 		map2[ch.Offset] = ch.Value
 	}
 
