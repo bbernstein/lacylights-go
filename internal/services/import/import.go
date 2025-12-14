@@ -271,6 +271,8 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 			Manufacturer: &def.Manufacturer,
 			Model:        &def.Model,
 			Type:         &def.Type,
+			ModeName:     f.ModeName,
+			ChannelCount: f.ChannelCount,
 		}
 
 		// Use instance channels from export if available, otherwise get from definition
@@ -304,8 +306,11 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 				})
 			}
 		}
-		channelCount := len(instanceChannels)
-		newFixture.ChannelCount = &channelCount
+		// Only set channel count from instance channels if not already set from import
+		if newFixture.ChannelCount == nil {
+			channelCount := len(instanceChannels)
+			newFixture.ChannelCount = &channelCount
+		}
 
 		if err := s.fixtureRepo.CreateWithChannels(ctx, newFixture, instanceChannels); err != nil {
 			return "", nil, nil, err

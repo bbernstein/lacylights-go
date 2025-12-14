@@ -310,6 +310,8 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 				Name:            f.Name,
 				Description:     f.Description,
 				DefinitionRefID: f.DefinitionID,
+				ModeName:        f.ModeName,
+				ChannelCount:    f.ChannelCount,
 				Universe:        f.Universe,
 				StartChannel:    f.StartChannel,
 				Tags:            tags,
