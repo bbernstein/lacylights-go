@@ -147,10 +147,10 @@ For comprehensive implementation plans and architecture decisions, see the paren
 
 ## Related Repositories
 
-- [lacylights-node](https://github.com/bbernstein/lacylights-node) - Node.js/TypeScript backend (original)
 - [lacylights-fe](https://github.com/bbernstein/lacylights-fe) - Next.js frontend
 - [lacylights-mcp](https://github.com/bbernstein/lacylights-mcp) - MCP server for AI integration
 - [lacylights-test](https://github.com/bbernstein/lacylights-test) - Contract test suite
+- [lacylights-rpi](https://github.com/bbernstein/lacylights-rpi) - Raspberry Pi deployment
 
 ## License
 

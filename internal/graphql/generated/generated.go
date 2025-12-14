@@ -4909,7 +4909,7 @@ func (ec *executionContext) introspectType(name string) (*introspection.Type, er
 
 var sources = []*ast.Source{
 	{Name: "../schema/schema.graphql", Input: `# LacyLights GraphQL Schema
-# This schema is 100% compatible with lacylights-node
+# This is the primary schema for the LacyLights backend
 
 # =============================================================================
 # ENUMS

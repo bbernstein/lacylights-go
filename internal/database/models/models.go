@@ -1,6 +1,5 @@
 // Package models contains the database model definitions.
-// These models map directly to the SQLite database tables
-// and are compatible with the lacylights-node Prisma schema.
+// These models map directly to the SQLite database tables.
 package models
 
 import (

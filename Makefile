@@ -153,10 +153,10 @@ schema-export:
 	@cp internal/graphql/schema/schema.graphql schema.graphql
 	@echo "Schema exported to schema.graphql"
 
-## schema-diff: Compare schema with Node implementation
+## schema-diff: Compare schema with test contracts
 schema-diff:
-	@echo "Comparing GraphQL schemas..."
-	@diff -u ../lacylights-node/schema.graphql schema.graphql || true
+	@echo "Comparing GraphQL schemas with test contracts..."
+	@diff -u internal/graphql/schema/schema.graphql ../lacylights-test/contracts/schema.graphql 2>/dev/null || echo "No test contract schema found"
 
 # =============================================================================
 # DATABASE TARGETS

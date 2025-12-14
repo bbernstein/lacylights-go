@@ -84,6 +84,6 @@ Key planning documents in the parent directory:
 - **LACYLIGHTS_GO_REWRITE_PLAN.md** - Complete Go rewrite implementation plan with architecture diagrams, technology stack, and verification strategy
 - **RASPBERRY_PI_PRODUCT_PLAN.md** - Turnkey Raspberry Pi hardware product architecture and deployment strategy
 - **GO_DISTRIBUTION_PLAN.md** - Binary distribution, release workflow, and cross-platform build coordination
-- **CONTRACT_TESTING_PLAN.md** - Contract test suite for ensuring API compatibility with lacylights-node
+- **CONTRACT_TESTING_PLAN.md** - Contract test suite for ensuring API compatibility
 
 These documents contain critical context for development decisions and implementation priorities.
