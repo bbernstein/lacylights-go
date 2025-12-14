@@ -2,6 +2,7 @@ package importservice
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/bbernstein/lacylights-go/internal/services/export"
@@ -1300,4 +1301,152 @@ func TestImportProject_FixtureInstance_NoModeName(t *testing.T) {
 	_, _, _, _ = service.ImportProject(context.Background(), jsonStr, ImportOptions{
 		Mode: ImportModeCreate,
 	})
+}
+
+func TestImportProject_LegacyChannelValuesFormat(t *testing.T) {
+	// Test that the legacy channelValues array format is parsed correctly
+	// This format was used before the sparse channels format was introduced
+	legacyJSON := `{
+		"version": "1.0.0",
+		"project": {
+			"originalId": "proj-1",
+			"name": "Legacy Format Project"
+		},
+		"fixtureDefinitions": [],
+		"fixtureInstances": [],
+		"scenes": [
+			{
+				"refId": "scene-1",
+				"name": "Test Scene",
+				"fixtureValues": [
+					{
+						"fixtureRefId": "fixture-1",
+						"channelValues": [255, 128, 64, 0]
+					},
+					{
+						"fixtureRefId": "fixture-2",
+						"channelValues": [100, 200, 150]
+					}
+				]
+			}
+		],
+		"cueLists": []
+	}`
+
+	// Parse the legacy JSON
+	parsed, err := export.ParseExportedProject(legacyJSON)
+	if err != nil {
+		t.Fatalf("Failed to parse legacy JSON: %v", err)
+	}
+
+	// Verify project name
+	if parsed.Project.Name != "Legacy Format Project" {
+		t.Errorf("Expected project name 'Legacy Format Project', got '%s'", parsed.Project.Name)
+	}
+
+	// Verify scene
+	if len(parsed.Scenes) != 1 {
+		t.Fatalf("Expected 1 scene, got %d", len(parsed.Scenes))
+	}
+
+	scene := parsed.Scenes[0]
+	if len(scene.FixtureValues) != 2 {
+		t.Fatalf("Expected 2 fixture values, got %d", len(scene.FixtureValues))
+	}
+
+	// Verify first fixture value has legacy channelValues (not sparse channels)
+	fv1 := scene.FixtureValues[0]
+	if fv1.FixtureRefID != "fixture-1" {
+		t.Errorf("Expected fixture ref 'fixture-1', got '%s'", fv1.FixtureRefID)
+	}
+	// The sparse Channels should be empty
+	if len(fv1.Channels) != 0 {
+		t.Errorf("Expected empty Channels (sparse format), got %d items", len(fv1.Channels))
+	}
+	// The legacy ChannelValues should be populated
+	if len(fv1.ChannelValues) != 4 {
+		t.Fatalf("Expected 4 channel values, got %d", len(fv1.ChannelValues))
+	}
+	expectedValues := []int{255, 128, 64, 0}
+	for i, expected := range expectedValues {
+		if fv1.ChannelValues[i] != expected {
+			t.Errorf("ChannelValues[%d]: expected %d, got %d", i, expected, fv1.ChannelValues[i])
+		}
+	}
+
+	// Verify second fixture value
+	fv2 := scene.FixtureValues[1]
+	if len(fv2.ChannelValues) != 3 {
+		t.Fatalf("Expected 3 channel values for fixture-2, got %d", len(fv2.ChannelValues))
+	}
+}
+
+func TestExportedFixtureValue_ChannelValuesParsing(t *testing.T) {
+	// Test that both formats can coexist and are parsed correctly
+	testCases := []struct {
+		name                  string
+		json                  string
+		expectedChannelsLen   int
+		expectedChannelValues []int
+	}{
+		{
+			name: "sparse_channels_format",
+			json: `{
+				"fixtureRefId": "fix-1",
+				"channels": [
+					{"offset": 0, "value": 255},
+					{"offset": 2, "value": 128}
+				]
+			}`,
+			expectedChannelsLen:   2,
+			expectedChannelValues: nil,
+		},
+		{
+			name: "legacy_channelValues_format",
+			json: `{
+				"fixtureRefId": "fix-1",
+				"channelValues": [255, 128, 64]
+			}`,
+			expectedChannelsLen:   0,
+			expectedChannelValues: []int{255, 128, 64},
+		},
+		{
+			name: "both_formats_sparse_takes_precedence",
+			json: `{
+				"fixtureRefId": "fix-1",
+				"channels": [{"offset": 0, "value": 100}],
+				"channelValues": [255, 128]
+			}`,
+			expectedChannelsLen:   1,
+			expectedChannelValues: []int{255, 128},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var fv export.ExportedFixtureValue
+			if err := json.Unmarshal([]byte(tc.json), &fv); err != nil {
+				t.Fatalf("Failed to unmarshal: %v", err)
+			}
+
+			if len(fv.Channels) != tc.expectedChannelsLen {
+				t.Errorf("Expected %d channels, got %d", tc.expectedChannelsLen, len(fv.Channels))
+			}
+
+			if tc.expectedChannelValues == nil {
+				if len(fv.ChannelValues) != 0 {
+					t.Errorf("Expected no channel values, got %d", len(fv.ChannelValues))
+				}
+			} else {
+				if len(fv.ChannelValues) != len(tc.expectedChannelValues) {
+					t.Fatalf("Expected %d channel values, got %d", len(tc.expectedChannelValues), len(fv.ChannelValues))
+				}
+				for i, expected := range tc.expectedChannelValues {
+					if fv.ChannelValues[i] != expected {
+						t.Errorf("ChannelValues[%d]: expected %d, got %d", i, expected, fv.ChannelValues[i])
+					}
+				}
+			}
+		})
+	}
 }

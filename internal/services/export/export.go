@@ -122,9 +122,10 @@ type ExportedChannelValue struct {
 
 // ExportedFixtureValue represents exported fixture values in a scene.
 type ExportedFixtureValue struct {
-	FixtureRefID string                 `json:"fixtureRefId"`
-	Channels     []ExportedChannelValue `json:"channels"`
-	SceneOrder   *int                   `json:"sceneOrder,omitempty"`
+	FixtureRefID  string                 `json:"fixtureRefId"`
+	Channels      []ExportedChannelValue `json:"channels"`
+	ChannelValues []int                  `json:"channelValues,omitempty"` // Legacy array format for backward compatibility
+	SceneOrder    *int                   `json:"sceneOrder,omitempty"`
 }
 
 // ExportedCueList represents an exported cue list.
