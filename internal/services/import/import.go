@@ -172,9 +172,13 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 			IsBuiltIn:    false, // Imported definitions are not built-in
 		}
 
+		// Build channels and track RefID -> new ID mapping
 		var channels []models.ChannelDefinition
+		channelRefIDMap := make(map[string]string) // old RefID -> new ID
 		for _, ch := range def.Channels {
+			newChannelID := cuid.New()
 			channels = append(channels, models.ChannelDefinition{
+				ID:           newChannelID,
 				Name:         ch.Name,
 				Type:         ch.Type,
 				Offset:       ch.Offset,
@@ -182,6 +186,13 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 				MaxValue:     ch.MaxValue,
 				DefaultValue: ch.DefaultValue,
 			})
+			// Map the old RefID to the new ID
+			if ch.RefID != "" {
+				channelRefIDMap[ch.RefID] = newChannelID
+			} else {
+				// Fallback: use channel name as key if RefID not available
+				channelRefIDMap[ch.Name] = newChannelID
+			}
 		}
 
 		if err := s.fixtureRepo.CreateDefinitionWithChannels(ctx, newDef, channels); err != nil {
@@ -189,6 +200,39 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 		}
 		definitionIDMap[def.RefID] = newDef.ID
 		stats.FixtureDefinitionsCreated++
+
+		// Import modes for this definition
+		for _, mode := range def.Modes {
+			newMode := &models.FixtureMode{
+				Name:         mode.Name,
+				ShortName:    mode.ShortName,
+				ChannelCount: mode.ChannelCount,
+				DefinitionID: newDef.ID,
+			}
+
+			if err := s.fixtureRepo.CreateMode(ctx, newMode); err != nil {
+				return "", nil, nil, err
+			}
+
+			// Create mode channels
+			var modeChannels []models.ModeChannel
+			for _, mc := range mode.ModeChannels {
+				newChannelID, ok := channelRefIDMap[mc.ChannelRefID]
+				if !ok {
+					warnings = append(warnings, "Mode channel references unknown channel: "+mc.ChannelRefID)
+					continue
+				}
+				modeChannels = append(modeChannels, models.ModeChannel{
+					ModeID:    newMode.ID,
+					ChannelID: newChannelID,
+					Offset:    mc.Offset,
+				})
+			}
+
+			if err := s.fixtureRepo.CreateModeChannels(ctx, modeChannels); err != nil {
+				return "", nil, nil, err
+			}
+		}
 	}
 
 	// Import fixture instances

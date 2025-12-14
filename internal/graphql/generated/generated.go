@@ -4764,6 +4764,8 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCreateCueListInput,
 		ec.unmarshalInputCreateFixtureDefinitionInput,
 		ec.unmarshalInputCreateFixtureInstanceInput,
+		ec.unmarshalInputCreateModeChannelInput,
+		ec.unmarshalInputCreateModeInput,
 		ec.unmarshalInputCreateProjectInput,
 		ec.unmarshalInputCreateSceneBoardButtonInput,
 		ec.unmarshalInputCreateSceneBoardInput,
@@ -5682,6 +5684,7 @@ input CreateFixtureDefinitionInput {
   model: String!
   type: FixtureType!
   channels: [CreateChannelDefinitionInput!]!
+  modes: [CreateModeInput!]
 }
 
 input CreateChannelDefinitionInput {
@@ -5693,6 +5696,17 @@ input CreateChannelDefinitionInput {
   defaultValue: Int!
   fadeBehavior: FadeBehavior
   isDiscrete: Boolean
+}
+
+input CreateModeInput {
+  name: String!
+  shortName: String
+  channels: [String!]!  # Channel names in order for this mode
+}
+
+input CreateModeChannelInput {
+  channelName: String!  # References channel by name
+  offset: Int!
 }
 
 input ChannelFadeBehaviorInput {
@@ -29496,7 +29510,7 @@ func (ec *executionContext) unmarshalInputCreateFixtureDefinitionInput(ctx conte
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"manufacturer", "model", "type", "channels"}
+	fieldsInOrder := [...]string{"manufacturer", "model", "type", "channels", "modes"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -29531,6 +29545,13 @@ func (ec *executionContext) unmarshalInputCreateFixtureDefinitionInput(ctx conte
 				return it, err
 			}
 			it.Channels = data
+		case "modes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("modes"))
+			data, err := ec.unmarshalOCreateModeInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateModeInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Modes = graphql.OmittableOf(data)
 		}
 	}
 
@@ -29607,6 +29628,81 @@ func (ec *executionContext) unmarshalInputCreateFixtureInstanceInput(ctx context
 				return it, err
 			}
 			it.Tags = graphql.OmittableOf(data)
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputCreateModeChannelInput(ctx context.Context, obj any) (CreateModeChannelInput, error) {
+	var it CreateModeChannelInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"channelName", "offset"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "channelName":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channelName"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ChannelName = data
+		case "offset":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("offset"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Offset = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputCreateModeInput(ctx context.Context, obj any) (CreateModeInput, error) {
+	var it CreateModeInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "shortName", "channels"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "shortName":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("shortName"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ShortName = graphql.OmittableOf(data)
+		case "channels":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channels"))
+			data, err := ec.unmarshalNString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Channels = data
 		}
 	}
 
@@ -39606,6 +39702,11 @@ func (ec *executionContext) unmarshalNCreateFixtureInstanceInput2ᚖgithubᚗcom
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNCreateModeInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateModeInput(ctx context.Context, v any) (*CreateModeInput, error) {
+	res, err := ec.unmarshalInputCreateModeInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateProjectInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateProjectInput(ctx context.Context, v any) (CreateProjectInput, error) {
 	res, err := ec.unmarshalInputCreateProjectInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -42697,6 +42798,24 @@ func (ec *executionContext) marshalOChannelUsage2ᚖgithubᚗcomᚋbbernsteinᚋ
 		return graphql.Null
 	}
 	return ec._ChannelUsage(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOCreateModeInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateModeInputᚄ(ctx context.Context, v any) ([]*CreateModeInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*CreateModeInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNCreateModeInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateModeInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 func (ec *executionContext) marshalOCue2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐCue(ctx context.Context, sel ast.SelectionSet, v *models.Cue) graphql.Marshaler {

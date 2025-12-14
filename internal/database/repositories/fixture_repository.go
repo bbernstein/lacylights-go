@@ -282,3 +282,57 @@ func (r *FixtureRepository) CountDefinitions(ctx context.Context) (int64, error)
 		Count(&count)
 	return count, result.Error
 }
+
+// GetDefinitionModes returns all modes for a fixture definition.
+func (r *FixtureRepository) GetDefinitionModes(ctx context.Context, definitionID string) ([]models.FixtureMode, error) {
+	var modes []models.FixtureMode
+	result := r.db.WithContext(ctx).
+		Where("definition_id = ?", definitionID).
+		Order("name ASC").
+		Find(&modes)
+	return modes, result.Error
+}
+
+// CreateMode creates a new fixture mode.
+func (r *FixtureRepository) CreateMode(ctx context.Context, mode *models.FixtureMode) error {
+	if mode.ID == "" {
+		mode.ID = cuid.New()
+	}
+	return r.db.WithContext(ctx).Create(mode).Error
+}
+
+// CreateModeChannels creates multiple mode channels.
+func (r *FixtureRepository) CreateModeChannels(ctx context.Context, modeChannels []models.ModeChannel) error {
+	if len(modeChannels) == 0 {
+		return nil
+	}
+	for i := range modeChannels {
+		if modeChannels[i].ID == "" {
+			modeChannels[i].ID = cuid.New()
+		}
+	}
+	return r.db.WithContext(ctx).Create(&modeChannels).Error
+}
+
+// DeleteDefinitionModes deletes all modes for a fixture definition.
+func (r *FixtureRepository) DeleteDefinitionModes(ctx context.Context, definitionID string) error {
+	// First get all mode IDs
+	var modeIDs []string
+	if err := r.db.WithContext(ctx).
+		Model(&models.FixtureMode{}).
+		Where("definition_id = ?", definitionID).
+		Pluck("id", &modeIDs).Error; err != nil {
+		return err
+	}
+
+	// Delete mode channels for these modes
+	if len(modeIDs) > 0 {
+		if err := r.db.WithContext(ctx).
+			Delete(&models.ModeChannel{}, "mode_id IN ?", modeIDs).Error; err != nil {
+			return err
+		}
+	}
+
+	// Delete the modes
+	return r.db.WithContext(ctx).Delete(&models.FixtureMode{}, "definition_id = ?", definitionID).Error
+}

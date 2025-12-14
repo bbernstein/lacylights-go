@@ -910,3 +910,189 @@ func TestImportProject_WithNotes(t *testing.T) {
 		Mode: ImportModeCreate,
 	})
 }
+
+func TestImportProject_WithModes(t *testing.T) {
+	service := NewService(nil, nil, nil, nil, nil)
+
+	shortName := "4CH"
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Modes Test Project",
+		},
+		FixtureDefinitions: []export.ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "Chauvet DJ",
+				Model:        "SlimPar Pro RGBA",
+				Type:         "LED_PAR",
+				IsBuiltIn:    false,
+				Channels: []export.ExportedChannelDefinition{
+					{RefID: "ch-r", Name: "Red", Type: "COLOR", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-g", Name: "Green", Type: "COLOR", Offset: 1, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-b", Name: "Blue", Type: "COLOR", Offset: 2, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-a", Name: "Amber", Type: "COLOR", Offset: 3, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-i", Name: "Intensity", Type: "INTENSITY", Offset: 4, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+				},
+				Modes: []export.ExportedFixtureMode{
+					{
+						RefID:        "mode-4ch",
+						Name:         "4-channel",
+						ShortName:    &shortName,
+						ChannelCount: 4,
+						ModeChannels: []export.ExportedModeChannel{
+							{ChannelRefID: "ch-r", Offset: 0},
+							{ChannelRefID: "ch-g", Offset: 1},
+							{ChannelRefID: "ch-b", Offset: 2},
+							{ChannelRefID: "ch-a", Offset: 3},
+						},
+					},
+					{
+						RefID:        "mode-5ch",
+						Name:         "5-channel",
+						ChannelCount: 5,
+						ModeChannels: []export.ExportedModeChannel{
+							{ChannelRefID: "ch-i", Offset: 0},
+							{ChannelRefID: "ch-r", Offset: 1},
+							{ChannelRefID: "ch-g", Offset: 2},
+							{ChannelRefID: "ch-b", Offset: 3},
+							{ChannelRefID: "ch-a", Offset: 4},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	jsonStr, err := exported.ToJSON()
+	if err != nil {
+		t.Fatalf("Failed to create JSON: %v", err)
+	}
+
+	// Verify JSON structure has modes
+	parsed, err := export.ParseExportedProject(jsonStr)
+	if err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
+
+	// Verify fixture definition has modes
+	if len(parsed.FixtureDefinitions) != 1 {
+		t.Fatalf("Expected 1 fixture definition, got %d", len(parsed.FixtureDefinitions))
+	}
+
+	def := parsed.FixtureDefinitions[0]
+	if len(def.Modes) != 2 {
+		t.Fatalf("Expected 2 modes, got %d", len(def.Modes))
+	}
+
+	// Verify mode channel references
+	mode4ch := def.Modes[0]
+	if mode4ch.Name != "4-channel" {
+		t.Errorf("Expected mode name '4-channel', got '%s'", mode4ch.Name)
+	}
+	if len(mode4ch.ModeChannels) != 4 {
+		t.Fatalf("Expected 4 mode channels, got %d", len(mode4ch.ModeChannels))
+	}
+
+	// Verify channel RefID references are preserved
+	expectedRefs := []string{"ch-r", "ch-g", "ch-b", "ch-a"}
+	for i, mc := range mode4ch.ModeChannels {
+		if mc.ChannelRefID != expectedRefs[i] {
+			t.Errorf("Mode channel %d: expected RefID '%s', got '%s'", i, expectedRefs[i], mc.ChannelRefID)
+		}
+	}
+
+	// Verify 5-channel mode starts with intensity
+	mode5ch := def.Modes[1]
+	if mode5ch.ModeChannels[0].ChannelRefID != "ch-i" {
+		t.Errorf("Expected 5-channel mode first channel to be 'ch-i', got '%s'", mode5ch.ModeChannels[0].ChannelRefID)
+	}
+
+	// Will panic due to nil repo when trying to import
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Expected panic due to nil repository")
+		}
+	}()
+
+	_, _, _, _ = service.ImportProject(context.Background(), jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+}
+
+func TestImportProject_WithModes_ChannelNameFallback(t *testing.T) {
+	// Test that import works when channels have no RefID (uses name as fallback)
+	service := NewService(nil, nil, nil, nil, nil)
+
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Fallback Test Project",
+		},
+		FixtureDefinitions: []export.ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "Generic",
+				Model:        "RGB LED",
+				Type:         "LED",
+				IsBuiltIn:    false,
+				// Channels without RefID - should use name as fallback
+				Channels: []export.ExportedChannelDefinition{
+					{Name: "Red", Type: "COLOR", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{Name: "Green", Type: "COLOR", Offset: 1, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{Name: "Blue", Type: "COLOR", Offset: 2, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+				},
+				Modes: []export.ExportedFixtureMode{
+					{
+						RefID:        "mode-rgb",
+						Name:         "RGB",
+						ChannelCount: 3,
+						// Mode channels reference channel by name (fallback case)
+						ModeChannels: []export.ExportedModeChannel{
+							{ChannelRefID: "Red", Offset: 0},
+							{ChannelRefID: "Green", Offset: 1},
+							{ChannelRefID: "Blue", Offset: 2},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	jsonStr, err := exported.ToJSON()
+	if err != nil {
+		t.Fatalf("Failed to create JSON: %v", err)
+	}
+
+	// Verify JSON parses correctly
+	parsed, err := export.ParseExportedProject(jsonStr)
+	if err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
+
+	// Verify channels have no RefID
+	def := parsed.FixtureDefinitions[0]
+	for _, ch := range def.Channels {
+		if ch.RefID != "" {
+			t.Errorf("Expected empty RefID for channel '%s', got '%s'", ch.Name, ch.RefID)
+		}
+	}
+
+	// Verify mode channel references use channel names
+	if def.Modes[0].ModeChannels[0].ChannelRefID != "Red" {
+		t.Errorf("Expected mode channel RefID 'Red', got '%s'", def.Modes[0].ModeChannels[0].ChannelRefID)
+	}
+
+	// Will panic due to nil repo
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Expected panic due to nil repository")
+		}
+	}()
+
+	_, _, _, _ = service.ImportProject(context.Background(), jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+}

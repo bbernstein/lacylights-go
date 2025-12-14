@@ -772,6 +772,7 @@ input CreateFixtureDefinitionInput {
   model: String!
   type: FixtureType!
   channels: [CreateChannelDefinitionInput!]!
+  modes: [CreateModeInput!]
 }
 
 input CreateChannelDefinitionInput {
@@ -783,6 +784,17 @@ input CreateChannelDefinitionInput {
   defaultValue: Int!
   fadeBehavior: FadeBehavior
   isDiscrete: Boolean
+}
+
+input CreateModeInput {
+  name: String!
+  shortName: String
+  channels: [String!]!  # Channel names in order for this mode
+}
+
+input CreateModeChannelInput {
+  channelName: String!  # References channel by name
+  offset: Int!
 }
 
 input ChannelFadeBehaviorInput {

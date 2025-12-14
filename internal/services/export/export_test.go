@@ -1262,6 +1262,145 @@ func TestExportedFixtureDefinition_WithModes(t *testing.T) {
 	}
 }
 
+func TestExportedFixtureDefinition_ModesRoundTrip(t *testing.T) {
+	// Test that modes with channel references survive JSON round-trip
+	shortName := "4CH"
+	desc := "Test project"
+
+	project := &ExportedProject{
+		Version: "1.0",
+		Project: &ExportProjectInfo{
+			OriginalID:  "proj-1",
+			Name:        "Mode Test Project",
+			Description: &desc,
+		},
+		FixtureDefinitions: []ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "Chauvet DJ",
+				Model:        "SlimPar Pro RGBA",
+				Type:         "LED_PAR",
+				IsBuiltIn:    false,
+				Channels: []ExportedChannelDefinition{
+					{RefID: "ch-r", Name: "Red", Type: "COLOR", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-g", Name: "Green", Type: "COLOR", Offset: 1, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-b", Name: "Blue", Type: "COLOR", Offset: 2, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-a", Name: "Amber", Type: "COLOR", Offset: 3, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-i", Name: "Intensity", Type: "INTENSITY", Offset: 4, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-s", Name: "Strobe", Type: "STROBE", Offset: 5, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-m", Name: "Mode", Type: "CONTROL", Offset: 6, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+				},
+				Modes: []ExportedFixtureMode{
+					{
+						RefID:        "mode-4ch",
+						Name:         "4-channel",
+						ShortName:    &shortName,
+						ChannelCount: 4,
+						ModeChannels: []ExportedModeChannel{
+							{ChannelRefID: "ch-r", Offset: 0},
+							{ChannelRefID: "ch-g", Offset: 1},
+							{ChannelRefID: "ch-b", Offset: 2},
+							{ChannelRefID: "ch-a", Offset: 3},
+						},
+					},
+					{
+						RefID:        "mode-5ch",
+						Name:         "5-channel",
+						ChannelCount: 5,
+						ModeChannels: []ExportedModeChannel{
+							{ChannelRefID: "ch-i", Offset: 0},
+							{ChannelRefID: "ch-r", Offset: 1},
+							{ChannelRefID: "ch-g", Offset: 2},
+							{ChannelRefID: "ch-b", Offset: 3},
+							{ChannelRefID: "ch-a", Offset: 4},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Convert to JSON
+	jsonStr, err := project.ToJSON()
+	if err != nil {
+		t.Fatalf("ToJSON() error: %v", err)
+	}
+
+	// Parse back
+	parsed, err := ParseExportedProject(jsonStr)
+	if err != nil {
+		t.Fatalf("ParseExportedProject() error: %v", err)
+	}
+
+	// Verify fixture definition
+	if len(parsed.FixtureDefinitions) != 1 {
+		t.Fatalf("Expected 1 fixture definition, got %d", len(parsed.FixtureDefinitions))
+	}
+
+	def := parsed.FixtureDefinitions[0]
+	if def.Manufacturer != "Chauvet DJ" {
+		t.Errorf("Expected manufacturer 'Chauvet DJ', got '%s'", def.Manufacturer)
+	}
+	if def.Model != "SlimPar Pro RGBA" {
+		t.Errorf("Expected model 'SlimPar Pro RGBA', got '%s'", def.Model)
+	}
+
+	// Verify channels have RefID preserved
+	if len(def.Channels) != 7 {
+		t.Fatalf("Expected 7 channels, got %d", len(def.Channels))
+	}
+	for _, ch := range def.Channels {
+		if ch.RefID == "" {
+			t.Errorf("Channel '%s' missing RefID", ch.Name)
+		}
+	}
+
+	// Verify modes
+	if len(def.Modes) != 2 {
+		t.Fatalf("Expected 2 modes, got %d", len(def.Modes))
+	}
+
+	// Check 4-channel mode
+	mode4ch := def.Modes[0]
+	if mode4ch.Name != "4-channel" {
+		t.Errorf("Expected mode name '4-channel', got '%s'", mode4ch.Name)
+	}
+	if mode4ch.ChannelCount != 4 {
+		t.Errorf("Expected channel count 4, got %d", mode4ch.ChannelCount)
+	}
+	if len(mode4ch.ModeChannels) != 4 {
+		t.Fatalf("Expected 4 mode channels, got %d", len(mode4ch.ModeChannels))
+	}
+
+	// Verify mode channels reference correct channel RefIDs
+	expectedRefs := []string{"ch-r", "ch-g", "ch-b", "ch-a"}
+	for i, mc := range mode4ch.ModeChannels {
+		if mc.ChannelRefID != expectedRefs[i] {
+			t.Errorf("Mode channel %d: expected RefID '%s', got '%s'", i, expectedRefs[i], mc.ChannelRefID)
+		}
+		if mc.Offset != i {
+			t.Errorf("Mode channel %d: expected offset %d, got %d", i, i, mc.Offset)
+		}
+	}
+
+	// Check 5-channel mode
+	mode5ch := def.Modes[1]
+	if mode5ch.Name != "5-channel" {
+		t.Errorf("Expected mode name '5-channel', got '%s'", mode5ch.Name)
+	}
+	if mode5ch.ChannelCount != 5 {
+		t.Errorf("Expected channel count 5, got %d", mode5ch.ChannelCount)
+	}
+	if len(mode5ch.ModeChannels) != 5 {
+		t.Fatalf("Expected 5 mode channels, got %d", len(mode5ch.ModeChannels))
+	}
+
+	// Verify first channel of 5-channel mode is Intensity (ch-i)
+	if mode5ch.ModeChannels[0].ChannelRefID != "ch-i" {
+		t.Errorf("Expected first channel of 5-channel mode to be 'ch-i', got '%s'", mode5ch.ModeChannels[0].ChannelRefID)
+	}
+}
+
 func TestExportedFixtureInstance_WithDescription(t *testing.T) {
 	desc := "Front wash fixture"
 	modeName := "RGB"

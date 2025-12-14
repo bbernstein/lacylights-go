@@ -160,10 +160,11 @@ type CreateCueListInput struct {
 }
 
 type CreateFixtureDefinitionInput struct {
-	Manufacturer string                          `json:"manufacturer"`
-	Model        string                          `json:"model"`
-	Type         FixtureType                     `json:"type"`
-	Channels     []*CreateChannelDefinitionInput `json:"channels"`
+	Manufacturer string                                `json:"manufacturer"`
+	Model        string                                `json:"model"`
+	Type         FixtureType                           `json:"type"`
+	Channels     []*CreateChannelDefinitionInput       `json:"channels"`
+	Modes        graphql.Omittable[[]*CreateModeInput] `json:"modes,omitempty"`
 }
 
 type CreateFixtureInstanceInput struct {
@@ -175,6 +176,17 @@ type CreateFixtureInstanceInput struct {
 	Universe     int                         `json:"universe"`
 	StartChannel int                         `json:"startChannel"`
 	Tags         graphql.Omittable[[]string] `json:"tags,omitempty"`
+}
+
+type CreateModeChannelInput struct {
+	ChannelName string `json:"channelName"`
+	Offset      int    `json:"offset"`
+}
+
+type CreateModeInput struct {
+	Name      string                     `json:"name"`
+	ShortName graphql.Omittable[*string] `json:"shortName,omitempty"`
+	Channels  []string                   `json:"channels"`
 }
 
 type CreateProjectInput struct {

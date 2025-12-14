@@ -405,10 +405,13 @@ func (r *mutationResolver) CreateFixtureDefinition(ctx context.Context, input ge
 		IsBuiltIn:    false,
 	}
 
-	// Build channel definitions
+	// Build channel definitions and track name -> ID mapping
 	var channels []models.ChannelDefinition
+	channelNameToID := make(map[string]string)
 	for _, ch := range input.Channels {
+		channelID := cuid.New()
 		channelDef := models.ChannelDefinition{
+			ID:           channelID,
 			Name:         ch.Name,
 			Type:         string(ch.Type),
 			Offset:       ch.Offset,
@@ -433,11 +436,48 @@ func (r *mutationResolver) CreateFixtureDefinition(ctx context.Context, input ge
 		}
 
 		channels = append(channels, channelDef)
+		channelNameToID[ch.Name] = channelID
 	}
 
 	// Create definition with channels
 	if err := r.FixtureRepo.CreateDefinitionWithChannels(ctx, definition, channels); err != nil {
 		return nil, err
+	}
+
+	// Create modes if provided
+	if input.Modes.IsSet() {
+		for _, modeInput := range input.Modes.Value() {
+			mode := &models.FixtureMode{
+				Name:         modeInput.Name,
+				ChannelCount: len(modeInput.Channels),
+				DefinitionID: definition.ID,
+			}
+			if modeInput.ShortName.IsSet() {
+				mode.ShortName = modeInput.ShortName.Value()
+			}
+
+			if err := r.FixtureRepo.CreateMode(ctx, mode); err != nil {
+				return nil, err
+			}
+
+			// Create mode channels
+			var modeChannels []models.ModeChannel
+			for offset, channelName := range modeInput.Channels {
+				channelID, ok := channelNameToID[channelName]
+				if !ok {
+					return nil, fmt.Errorf("mode %q references unknown channel %q", modeInput.Name, channelName)
+				}
+				modeChannels = append(modeChannels, models.ModeChannel{
+					ModeID:    mode.ID,
+					ChannelID: channelID,
+					Offset:    offset,
+				})
+			}
+
+			if err := r.FixtureRepo.CreateModeChannels(ctx, modeChannels); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	return definition, nil
