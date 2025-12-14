@@ -196,17 +196,29 @@ jobs:
 
             if [ -n "$BETA_BASE" ]; then
               # Check if this beta should be finalized
-              # Only finalize if no stable >= beta base exists
-              COMPARE_RESULT=$(printf '%s\n%s' "$HIGHEST_STABLE" "$BETA_BASE" | sort -V | tail -n 1)
+              # Only finalize if stable version is strictly less than beta base
+              # (not equal to - if equal, beta was already finalized)
 
-              if [ "$HIGHEST_STABLE" = "0.0.0" ] || [ "$COMPARE_RESULT" = "$BETA_BASE" ]; then
-                # No stable release for beta base yet -> finalize beta
+              if [ "$HIGHEST_STABLE" = "0.0.0" ]; then
+                # No stable release yet -> finalize beta
                 NEW_VERSION="$BETA_BASE"
-                echo "Scenario: Finalize beta -> $BETA_BASE"
-              else
-                # Stable already >= beta base -> normal bump from stable
+                echo "Scenario: No stable exists -> Finalize beta to $BETA_BASE"
+              elif [ "$HIGHEST_STABLE" = "$BETA_BASE" ]; then
+                # Stable version equals beta base -> beta already finalized, do normal bump
                 NEW_VERSION=$(bump_version "$HIGHEST_STABLE" "$VERSION_BUMP")
-                echo "Scenario: Stable bump (beta already finalized) -> $NEW_VERSION"
+                echo "Scenario: Stable equals beta base ($HIGHEST_STABLE) -> Normal bump to $NEW_VERSION"
+              else
+                # Compare versions
+                COMPARE_RESULT=$(printf '%s\n%s' "$HIGHEST_STABLE" "$BETA_BASE" | sort -V | tail -n 1)
+                if [ "$COMPARE_RESULT" = "$BETA_BASE" ]; then
+                  # Beta base is higher than stable -> finalize beta
+                  NEW_VERSION="$BETA_BASE"
+                  echo "Scenario: Beta base higher than stable -> Finalize beta to $BETA_BASE"
+                else
+                  # Stable is higher than beta base -> normal bump from stable
+                  NEW_VERSION=$(bump_version "$HIGHEST_STABLE" "$VERSION_BUMP")
+                  echo "Scenario: Stable higher than beta base -> Normal bump to $NEW_VERSION"
+                fi
               fi
             else
               # No beta, normal stable bump
