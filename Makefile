@@ -156,7 +156,7 @@ schema-export:
 ## schema-diff: Compare schema with test contracts
 schema-diff:
 	@echo "Comparing GraphQL schemas with test contracts..."
-	@diff -u ../lacylights-test/contracts/schema.graphql internal/graphql/schema/schema.graphql 2>/dev/null || echo "No test contract schema found"
+	@diff -u internal/graphql/schema/schema.graphql ../lacylights-test/contracts/schema.graphql 2>/dev/null || echo "No test contract schema found"
 
 # =============================================================================
 # DATABASE TARGETS
