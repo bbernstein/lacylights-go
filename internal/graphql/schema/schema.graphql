@@ -353,6 +353,7 @@ type Setting {
 type SystemInfo {
   artnetBroadcastAddress: String!
   artnetEnabled: Boolean!
+  fadeUpdateRateHz: Int!
 }
 
 # =============================================================================
@@ -1448,6 +1449,7 @@ type Mutation {
 
   # Settings
   updateSetting(input: UpdateSettingInput!): Setting!
+  updateFadeUpdateRate(rateHz: Int!): Boolean!
 
   # WiFi Configuration
   connectWiFi(ssid: String!, password: String): WiFiConnectionResult!

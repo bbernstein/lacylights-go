@@ -94,6 +94,7 @@ func (e *Engine) Start() {
 		return
 	}
 	e.running = true
+	e.stopChan = make(chan struct{}) // Create new channel for this run
 	e.mu.Unlock()
 
 	go e.updateLoop()
@@ -402,6 +403,40 @@ func (e *Engine) ActiveFadeCount() int {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return len(e.activeFades)
+}
+
+// SetUpdateRate updates the fade engine's update rate at runtime.
+// The engine must be restarted for the change to take effect.
+func (e *Engine) SetUpdateRate(hz int) {
+	if hz <= 0 {
+		hz = 60 // Default to 60Hz
+	}
+
+	e.mu.Lock()
+	wasRunning := e.running
+	e.mu.Unlock()
+
+	// Stop the engine if it's running
+	if wasRunning {
+		e.Stop()
+	}
+
+	// Update the rate
+	e.mu.Lock()
+	e.updateRate = time.Second / time.Duration(hz)
+	e.mu.Unlock()
+
+	// Restart the engine if it was running
+	if wasRunning {
+		e.Start()
+	}
+}
+
+// GetUpdateRateHz returns the current update rate in Hz.
+func (e *Engine) GetUpdateRateHz() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return int(time.Second / e.updateRate)
 }
 
 // clamp clamps an integer to a range.

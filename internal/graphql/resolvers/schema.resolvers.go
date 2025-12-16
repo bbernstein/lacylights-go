@@ -2834,6 +2834,25 @@ func (r *mutationResolver) UpdateSetting(ctx context.Context, input generated.Up
 	return setting, nil
 }
 
+// UpdateFadeUpdateRate is the resolver for the updateFadeUpdateRate field.
+func (r *mutationResolver) UpdateFadeUpdateRate(ctx context.Context, rateHz int) (bool, error) {
+	// Validate the rate
+	if rateHz < 1 || rateHz > 240 {
+		return false, fmt.Errorf("fade update rate must be between 1 and 240 Hz")
+	}
+
+	// Update the fade engine
+	r.FadeEngine.SetUpdateRate(rateHz)
+
+	// Save the setting to the database
+	_, err := r.SettingRepo.Upsert(ctx, "fade_update_rate_hz", fmt.Sprintf("%d", rateHz))
+	if err != nil {
+		return false, fmt.Errorf("failed to save fade update rate setting: %w", err)
+	}
+
+	return true, nil
+}
+
 // ConnectWiFi is the resolver for the connectWiFi field.
 // Returns failure - WiFi not available on this platform
 func (r *mutationResolver) ConnectWiFi(ctx context.Context, ssid string, password *string) (*generated.WiFiConnectionResult, error) {
@@ -4098,6 +4117,7 @@ func (r *queryResolver) SystemInfo(ctx context.Context) (*generated.SystemInfo, 
 	return &generated.SystemInfo{
 		ArtnetEnabled:          r.DMXService.IsEnabled(),
 		ArtnetBroadcastAddress: r.DMXService.GetBroadcastAddress(),
+		FadeUpdateRateHz:       r.FadeEngine.GetUpdateRateHz(),
 	}, nil
 }
 

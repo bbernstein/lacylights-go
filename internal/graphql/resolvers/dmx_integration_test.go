@@ -2,6 +2,7 @@ package resolvers
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -717,4 +718,116 @@ func TestSceneBoardFadeBehavior(t *testing.T) {
 	}
 
 	t.Logf("Test passed - SNAP channels (Color Macro, Strobe) jumped immediately, FADE channels (Dimmer, RGB) interpolated smoothly")
+}
+
+func TestFadeUpdateRate_QueryAndMutation(t *testing.T) {
+	c, resolver, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Test initial rate via SystemInfo query
+	var resp1 struct {
+		SystemInfo struct {
+			FadeUpdateRateHz int `json:"fadeUpdateRateHz"`
+		} `json:"systemInfo"`
+	}
+
+	err := c.Post(`query {
+		systemInfo {
+			fadeUpdateRateHz
+		}
+	}`, &resp1)
+
+	if err != nil {
+		t.Fatalf("SystemInfo query failed: %v", err)
+	}
+
+	// Should match the initial rate set in testSetup (60Hz)
+	if resp1.SystemInfo.FadeUpdateRateHz != 60 {
+		t.Errorf("Initial fade update rate = %d, want 60", resp1.SystemInfo.FadeUpdateRateHz)
+	}
+
+	// Test updating the rate
+	var resp2 struct {
+		UpdateFadeUpdateRate bool `json:"updateFadeUpdateRate"`
+	}
+
+	err = c.Post(`mutation {
+		updateFadeUpdateRate(rateHz: 120)
+	}`, &resp2)
+
+	if err != nil {
+		t.Fatalf("updateFadeUpdateRate mutation failed: %v", err)
+	}
+
+	if !resp2.UpdateFadeUpdateRate {
+		t.Error("updateFadeUpdateRate should return true")
+	}
+
+	// Verify the rate was updated in the engine
+	if rate := resolver.FadeEngine.GetUpdateRateHz(); rate != 120 {
+		t.Errorf("Fade engine rate after mutation = %d, want 120", rate)
+	}
+
+	// Verify the rate was saved to database
+	setting, err := resolver.SettingRepo.FindByKey(context.Background(), "fade_update_rate_hz")
+	if err != nil {
+		t.Fatalf("Failed to query setting from database: %v", err)
+	}
+	if setting == nil || setting.Value != "120" {
+		t.Errorf("Setting not saved to database, got %v", setting)
+	}
+
+	// Query again to verify the change persists
+	var resp3 struct {
+		SystemInfo struct {
+			FadeUpdateRateHz int `json:"fadeUpdateRateHz"`
+		} `json:"systemInfo"`
+	}
+
+	err = c.Post(`query {
+		systemInfo {
+			fadeUpdateRateHz
+		}
+	}`, &resp3)
+
+	if err != nil {
+		t.Fatalf("SystemInfo query after update failed: %v", err)
+	}
+
+	if resp3.SystemInfo.FadeUpdateRateHz != 120 {
+		t.Errorf("Fade update rate after mutation = %d, want 120", resp3.SystemInfo.FadeUpdateRateHz)
+	}
+}
+
+func TestFadeUpdateRate_ValidationErrors(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	tests := []struct {
+		name   string
+		rateHz int
+	}{
+		{"too low", 0},
+		{"negative", -10},
+		{"too high", 300},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var resp struct {
+				UpdateFadeUpdateRate bool `json:"updateFadeUpdateRate"`
+			}
+
+			query := fmt.Sprintf(`mutation {
+				updateFadeUpdateRate(rateHz: %d)
+			}`, tt.rateHz)
+
+			err := c.Post(query, &resp)
+
+			// Should return an error for invalid rates
+			if err == nil {
+				t.Errorf("Expected error for rateHz=%d, got none", tt.rateHz)
+			}
+		})
+	}
 }

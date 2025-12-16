@@ -684,6 +684,7 @@ type Subscription struct {
 type SystemInfo struct {
 	ArtnetBroadcastAddress string `json:"artnetBroadcastAddress"`
 	ArtnetEnabled          bool   `json:"artnetEnabled"`
+	FadeUpdateRateHz       int    `json:"fadeUpdateRateHz"`
 }
 
 type SystemVersionInfo struct {

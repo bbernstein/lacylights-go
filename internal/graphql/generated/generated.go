@@ -386,6 +386,7 @@ type ComplexityRoot struct {
 		UpdateAllRepositories                  func(childComplexity int) int
 		UpdateCue                              func(childComplexity int, id string, input CreateCueInput) int
 		UpdateCueList                          func(childComplexity int, id string, input CreateCueListInput) int
+		UpdateFadeUpdateRate                   func(childComplexity int, rateHz int) int
 		UpdateFixtureDefinition                func(childComplexity int, id string, input CreateFixtureDefinitionInput) int
 		UpdateFixtureInstance                  func(childComplexity int, id string, input UpdateFixtureInstanceInput) int
 		UpdateFixturePositions                 func(childComplexity int, positions []*FixturePositionInput) int
@@ -700,6 +701,7 @@ type ComplexityRoot struct {
 	SystemInfo struct {
 		ArtnetBroadcastAddress func(childComplexity int) int
 		ArtnetEnabled          func(childComplexity int) int
+		FadeUpdateRateHz       func(childComplexity int) int
 	}
 
 	SystemVersionInfo struct {
@@ -901,6 +903,7 @@ type MutationResolver interface {
 	ImportProjectFromQlc(ctx context.Context, xmlContent string, originalFileName string) (*QLCImportResult, error)
 	ExportProjectToQlc(ctx context.Context, projectID string, fixtureMappings []*FixtureMappingInput) (*QLCExportResult, error)
 	UpdateSetting(ctx context.Context, input UpdateSettingInput) (*models.Setting, error)
+	UpdateFadeUpdateRate(ctx context.Context, rateHz int) (bool, error)
 	ConnectWiFi(ctx context.Context, ssid string, password *string) (*WiFiConnectionResult, error)
 	DisconnectWiFi(ctx context.Context) (*WiFiConnectionResult, error)
 	SetWiFiEnabled(ctx context.Context, enabled bool) (*WiFiStatus, error)
@@ -2839,6 +2842,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.UpdateCueList(childComplexity, args["id"].(string), args["input"].(CreateCueListInput)), true
+	case "Mutation.updateFadeUpdateRate":
+		if e.complexity.Mutation.UpdateFadeUpdateRate == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateFadeUpdateRate_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UpdateFadeUpdateRate(childComplexity, args["rateHz"].(int)), true
 	case "Mutation.updateFixtureDefinition":
 		if e.complexity.Mutation.UpdateFixtureDefinition == nil {
 			break
@@ -4495,6 +4509,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.SystemInfo.ArtnetEnabled(childComplexity), true
+	case "SystemInfo.fadeUpdateRateHz":
+		if e.complexity.SystemInfo.FadeUpdateRateHz == nil {
+			break
+		}
+
+		return e.complexity.SystemInfo.FadeUpdateRateHz(childComplexity), true
 
 	case "SystemVersionInfo.lastChecked":
 		if e.complexity.SystemVersionInfo.LastChecked == nil {
@@ -5264,6 +5284,7 @@ type Setting {
 type SystemInfo {
   artnetBroadcastAddress: String!
   artnetEnabled: Boolean!
+  fadeUpdateRateHz: Int!
 }
 
 # =============================================================================
@@ -6359,6 +6380,7 @@ type Mutation {
 
   # Settings
   updateSetting(input: UpdateSettingInput!): Setting!
+  updateFadeUpdateRate(rateHz: Int!): Boolean!
 
   # WiFi Configuration
   connectWiFi(ssid: String!, password: String): WiFiConnectionResult!
@@ -7329,6 +7351,17 @@ func (ec *executionContext) field_Mutation_updateCue_args(ctx context.Context, r
 		return nil, err
 	}
 	args["input"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateFadeUpdateRate_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "rateHz", ec.unmarshalNInt2int)
+	if err != nil {
+		return nil, err
+	}
+	args["rateHz"] = arg0
 	return args, nil
 }
 
@@ -17603,6 +17636,47 @@ func (ec *executionContext) fieldContext_Mutation_updateSetting(ctx context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_updateFadeUpdateRate(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateFadeUpdateRate,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UpdateFadeUpdateRate(ctx, fc.Args["rateHz"].(int))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateFadeUpdateRate(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateFadeUpdateRate_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_connectWiFi(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -22693,6 +22767,8 @@ func (ec *executionContext) fieldContext_Query_systemInfo(_ context.Context, fie
 				return ec.fieldContext_SystemInfo_artnetBroadcastAddress(ctx, field)
 			case "artnetEnabled":
 				return ec.fieldContext_SystemInfo_artnetEnabled(ctx, field)
+			case "fadeUpdateRateHz":
+				return ec.fieldContext_SystemInfo_fadeUpdateRateHz(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SystemInfo", field.Name)
 		},
@@ -25954,6 +26030,8 @@ func (ec *executionContext) fieldContext_Subscription_systemInfoUpdated(_ contex
 				return ec.fieldContext_SystemInfo_artnetBroadcastAddress(ctx, field)
 			case "artnetEnabled":
 				return ec.fieldContext_SystemInfo_artnetEnabled(ctx, field)
+			case "fadeUpdateRateHz":
+				return ec.fieldContext_SystemInfo_fadeUpdateRateHz(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SystemInfo", field.Name)
 		},
@@ -26122,6 +26200,35 @@ func (ec *executionContext) fieldContext_SystemInfo_artnetEnabled(_ context.Cont
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SystemInfo_fadeUpdateRateHz(ctx context.Context, field graphql.CollectedField, obj *SystemInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SystemInfo_fadeUpdateRateHz,
+		func(ctx context.Context) (any, error) {
+			return obj.FadeUpdateRateHz, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SystemInfo_fadeUpdateRateHz(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SystemInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -34504,6 +34611,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "updateFadeUpdateRate":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateFadeUpdateRate(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "connectWiFi":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_connectWiFi(ctx, field)
@@ -38287,6 +38401,11 @@ func (ec *executionContext) _SystemInfo(ctx context.Context, sel ast.SelectionSe
 			}
 		case "artnetEnabled":
 			out.Values[i] = ec._SystemInfo_artnetEnabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fadeUpdateRateHz":
+			out.Values[i] = ec._SystemInfo_fadeUpdateRateHz(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
