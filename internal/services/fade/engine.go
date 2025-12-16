@@ -63,6 +63,7 @@ type Engine struct {
 
 	// Control
 	stopChan chan struct{}
+	doneChan chan struct{} // Signals when updateLoop has exited
 	running  bool
 
 	// Configuration
@@ -94,7 +95,8 @@ func (e *Engine) Start() {
 		return
 	}
 	e.running = true
-	e.stopChan = make(chan struct{}) // Create new channel for this run
+	e.stopChan = make(chan struct{})  // Create new channel for this run
+	e.doneChan = make(chan struct{})  // Create new done channel
 	e.mu.Unlock()
 
 	go e.updateLoop()
@@ -109,12 +111,29 @@ func (e *Engine) Stop() {
 	}
 	e.running = false
 	close(e.stopChan)
+	doneChan := e.doneChan // Capture the done channel
 	e.mu.Unlock()
+
+	// Wait for the update loop to exit
+	if doneChan != nil {
+		<-doneChan
+	}
 }
 
 // updateLoop runs the fade update loop.
 func (e *Engine) updateLoop() {
-	ticker := time.NewTicker(e.updateRate)
+	e.mu.RLock()
+	updateRate := e.updateRate
+	doneChan := e.doneChan
+	e.mu.RUnlock()
+
+	defer func() {
+		if doneChan != nil {
+			close(doneChan)
+		}
+	}()
+
+	ticker := time.NewTicker(updateRate)
 	defer ticker.Stop()
 
 	for {
