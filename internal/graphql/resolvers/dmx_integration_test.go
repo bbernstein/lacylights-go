@@ -68,8 +68,8 @@ func testSetup(t *testing.T) (*client.Client, *Resolver, func()) {
 	// Create playback service
 	playbackService := playback.NewService(db, dmxService, fadeEngine)
 
-	// Create resolver
-	resolver := NewResolver(db, dmxService, fadeEngine, playbackService)
+	// Create resolver with test OFL cache path
+	resolver := NewResolver(db, dmxService, fadeEngine, playbackService, t.TempDir())
 
 	// Create GraphQL server
 	srv := handler.NewDefaultServer(generated.NewExecutableSchema(generated.Config{

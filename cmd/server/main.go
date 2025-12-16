@@ -173,7 +173,7 @@ func main() {
 	router.Use(corsMiddleware.Handler)
 
 	// Create resolver with dependencies
-	resolver := resolvers.NewResolver(db, dmxService, fadeEngine, playbackService)
+	resolver := resolvers.NewResolver(db, dmxService, fadeEngine, playbackService, cfg.OFLCachePath)
 
 	// Create GraphQL server
 	srv := handler.New(generated.NewExecutableSchema(generated.Config{
