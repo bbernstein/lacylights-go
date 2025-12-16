@@ -6367,7 +6367,7 @@ type Mutation {
   forgetWiFiNetwork(ssid: String!): Boolean!
 
   # Version Management
-  updateRepository(repository: String!, version: String = "latest"): UpdateResult!
+  updateRepository(repository: String!, version: String): UpdateResult!
   updateAllRepositories: [UpdateResult!]!
 
   # Open Fixture Library
