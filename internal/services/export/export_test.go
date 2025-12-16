@@ -1,9 +1,17 @@
 package export
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/bbernstein/lacylights-go/internal/database/models"
+	"github.com/bbernstein/lacylights-go/internal/database/repositories"
+	"github.com/glebarez/sqlite"
+	"github.com/lucsky/cuid"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func TestExportedProject_ToJSON(t *testing.T) {
@@ -1262,6 +1270,145 @@ func TestExportedFixtureDefinition_WithModes(t *testing.T) {
 	}
 }
 
+func TestExportedFixtureDefinition_ModesRoundTrip(t *testing.T) {
+	// Test that modes with channel references survive JSON round-trip
+	shortName := "4CH"
+	desc := "Test project"
+
+	project := &ExportedProject{
+		Version: "1.0",
+		Project: &ExportProjectInfo{
+			OriginalID:  "proj-1",
+			Name:        "Mode Test Project",
+			Description: &desc,
+		},
+		FixtureDefinitions: []ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "Chauvet DJ",
+				Model:        "SlimPar Pro RGBA",
+				Type:         "LED_PAR",
+				IsBuiltIn:    false,
+				Channels: []ExportedChannelDefinition{
+					{RefID: "ch-r", Name: "Red", Type: "COLOR", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-g", Name: "Green", Type: "COLOR", Offset: 1, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-b", Name: "Blue", Type: "COLOR", Offset: 2, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-a", Name: "Amber", Type: "COLOR", Offset: 3, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-i", Name: "Intensity", Type: "INTENSITY", Offset: 4, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-s", Name: "Strobe", Type: "STROBE", Offset: 5, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-m", Name: "Mode", Type: "CONTROL", Offset: 6, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+				},
+				Modes: []ExportedFixtureMode{
+					{
+						RefID:        "mode-4ch",
+						Name:         "4-channel",
+						ShortName:    &shortName,
+						ChannelCount: 4,
+						ModeChannels: []ExportedModeChannel{
+							{ChannelRefID: "ch-r", Offset: 0},
+							{ChannelRefID: "ch-g", Offset: 1},
+							{ChannelRefID: "ch-b", Offset: 2},
+							{ChannelRefID: "ch-a", Offset: 3},
+						},
+					},
+					{
+						RefID:        "mode-5ch",
+						Name:         "5-channel",
+						ChannelCount: 5,
+						ModeChannels: []ExportedModeChannel{
+							{ChannelRefID: "ch-i", Offset: 0},
+							{ChannelRefID: "ch-r", Offset: 1},
+							{ChannelRefID: "ch-g", Offset: 2},
+							{ChannelRefID: "ch-b", Offset: 3},
+							{ChannelRefID: "ch-a", Offset: 4},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Convert to JSON
+	jsonStr, err := project.ToJSON()
+	if err != nil {
+		t.Fatalf("ToJSON() error: %v", err)
+	}
+
+	// Parse back
+	parsed, err := ParseExportedProject(jsonStr)
+	if err != nil {
+		t.Fatalf("ParseExportedProject() error: %v", err)
+	}
+
+	// Verify fixture definition
+	if len(parsed.FixtureDefinitions) != 1 {
+		t.Fatalf("Expected 1 fixture definition, got %d", len(parsed.FixtureDefinitions))
+	}
+
+	def := parsed.FixtureDefinitions[0]
+	if def.Manufacturer != "Chauvet DJ" {
+		t.Errorf("Expected manufacturer 'Chauvet DJ', got '%s'", def.Manufacturer)
+	}
+	if def.Model != "SlimPar Pro RGBA" {
+		t.Errorf("Expected model 'SlimPar Pro RGBA', got '%s'", def.Model)
+	}
+
+	// Verify channels have RefID preserved
+	if len(def.Channels) != 7 {
+		t.Fatalf("Expected 7 channels, got %d", len(def.Channels))
+	}
+	for _, ch := range def.Channels {
+		if ch.RefID == "" {
+			t.Errorf("Channel '%s' missing RefID", ch.Name)
+		}
+	}
+
+	// Verify modes
+	if len(def.Modes) != 2 {
+		t.Fatalf("Expected 2 modes, got %d", len(def.Modes))
+	}
+
+	// Check 4-channel mode
+	mode4ch := def.Modes[0]
+	if mode4ch.Name != "4-channel" {
+		t.Errorf("Expected mode name '4-channel', got '%s'", mode4ch.Name)
+	}
+	if mode4ch.ChannelCount != 4 {
+		t.Errorf("Expected channel count 4, got %d", mode4ch.ChannelCount)
+	}
+	if len(mode4ch.ModeChannels) != 4 {
+		t.Fatalf("Expected 4 mode channels, got %d", len(mode4ch.ModeChannels))
+	}
+
+	// Verify mode channels reference correct channel RefIDs
+	expectedRefs := []string{"ch-r", "ch-g", "ch-b", "ch-a"}
+	for i, mc := range mode4ch.ModeChannels {
+		if mc.ChannelRefID != expectedRefs[i] {
+			t.Errorf("Mode channel %d: expected RefID '%s', got '%s'", i, expectedRefs[i], mc.ChannelRefID)
+		}
+		if mc.Offset != i {
+			t.Errorf("Mode channel %d: expected offset %d, got %d", i, i, mc.Offset)
+		}
+	}
+
+	// Check 5-channel mode
+	mode5ch := def.Modes[1]
+	if mode5ch.Name != "5-channel" {
+		t.Errorf("Expected mode name '5-channel', got '%s'", mode5ch.Name)
+	}
+	if mode5ch.ChannelCount != 5 {
+		t.Errorf("Expected channel count 5, got %d", mode5ch.ChannelCount)
+	}
+	if len(mode5ch.ModeChannels) != 5 {
+		t.Fatalf("Expected 5 mode channels, got %d", len(mode5ch.ModeChannels))
+	}
+
+	// Verify first channel of 5-channel mode is Intensity (ch-i)
+	if mode5ch.ModeChannels[0].ChannelRefID != "ch-i" {
+		t.Errorf("Expected first channel of 5-channel mode to be 'ch-i', got '%s'", mode5ch.ModeChannels[0].ChannelRefID)
+	}
+}
+
 func TestExportedFixtureInstance_WithDescription(t *testing.T) {
 	desc := "Front wash fixture"
 	modeName := "RGB"
@@ -1569,5 +1716,440 @@ func TestExportedFixtureInstance_WithNilOptionals(t *testing.T) {
 	}
 	if len(inst.InstanceChannels) != 0 {
 		t.Error("Expected empty InstanceChannels")
+	}
+}
+
+// Integration tests with in-memory database
+// These tests require database setup and test actual export functionality
+
+func setupTestDB(t *testing.T) (*gorm.DB, func()) {
+	t.Helper()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("Failed to open in-memory database: %v", err)
+	}
+
+	err = db.AutoMigrate(
+		&models.Project{},
+		&models.FixtureDefinition{},
+		&models.ChannelDefinition{},
+		&models.FixtureMode{},
+		&models.ModeChannel{},
+		&models.FixtureInstance{},
+		&models.InstanceChannel{},
+		&models.Scene{},
+		&models.FixtureValue{},
+		&models.CueList{},
+		&models.Cue{},
+	)
+	if err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	cleanup := func() {
+		sqlDB, err := db.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+	}
+
+	return db, cleanup
+}
+
+func TestExportProject_Integration_EmptyProject(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Create project
+	project := &models.Project{ID: cuid.New(), Name: "Test Export Project"}
+	_ = projectRepo.Create(ctx, project)
+
+	// Export with all flags
+	exported, stats, err := service.ExportProject(ctx, project.ID, true, true, true)
+	if err != nil {
+		t.Fatalf("ExportProject failed: %v", err)
+	}
+	if exported == nil {
+		t.Fatal("Expected exported project")
+	}
+	if stats == nil {
+		t.Fatal("Expected export stats")
+	}
+
+	if exported.GetProjectName() != "Test Export Project" {
+		t.Errorf("Expected project name 'Test Export Project', got '%s'", exported.GetProjectName())
+	}
+	if stats.FixtureDefinitionsCount != 0 {
+		t.Errorf("Expected 0 fixture definitions, got %d", stats.FixtureDefinitionsCount)
+	}
+}
+
+func TestExportProject_Integration_NotFound(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Export non-existent project
+	exported, stats, err := service.ExportProject(ctx, "non-existent-id", true, true, true)
+	if err != nil {
+		t.Fatalf("ExportProject should not error for non-existent project: %v", err)
+	}
+	if exported != nil {
+		t.Error("Expected nil exported for non-existent project")
+	}
+	if stats != nil {
+		t.Error("Expected nil stats for non-existent project")
+	}
+}
+
+func TestExportProject_Integration_WithFixtures(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Create project
+	project := &models.Project{ID: cuid.New(), Name: "Fixture Export Test"}
+	_ = projectRepo.Create(ctx, project)
+
+	// Create fixture definition with channels
+	def := &models.FixtureDefinition{
+		ID:           cuid.New(),
+		Manufacturer: "TestMfg",
+		Model:        "TestModel",
+		Type:         "LED_PAR",
+	}
+	_ = fixtureRepo.CreateDefinition(ctx, def)
+
+	ch1 := &models.ChannelDefinition{ID: cuid.New(), Name: "Red", Type: "COLOR", Offset: 0, DefinitionID: def.ID}
+	ch2 := &models.ChannelDefinition{ID: cuid.New(), Name: "Green", Type: "COLOR", Offset: 1, DefinitionID: def.ID}
+	ch3 := &models.ChannelDefinition{ID: cuid.New(), Name: "Blue", Type: "COLOR", Offset: 2, DefinitionID: def.ID}
+	db.Create(ch1)
+	db.Create(ch2)
+	db.Create(ch3)
+
+	// Create mode for definition
+	mode := &models.FixtureMode{ID: cuid.New(), Name: "3 Channel", ChannelCount: 3, DefinitionID: def.ID}
+	_ = fixtureRepo.CreateMode(ctx, mode)
+
+	modeChannels := []models.ModeChannel{
+		{ModeID: mode.ID, ChannelID: ch1.ID, Offset: 0},
+		{ModeID: mode.ID, ChannelID: ch2.ID, Offset: 1},
+		{ModeID: mode.ID, ChannelID: ch3.ID, Offset: 2},
+	}
+	_ = fixtureRepo.CreateModeChannels(ctx, modeChannels)
+
+	// Create fixture instance
+	modeName := "3 Channel"
+	channelCount := 3
+	tags := "front,wash"
+	fixture := &models.FixtureInstance{
+		ID:           cuid.New(),
+		Name:         "LED 1",
+		ProjectID:    project.ID,
+		DefinitionID: def.ID,
+		ModeName:     &modeName,
+		ChannelCount: &channelCount,
+		Universe:     1,
+		StartChannel: 1,
+		Tags:         &tags,
+	}
+	_ = fixtureRepo.Create(ctx, fixture)
+
+	// Create instance channels
+	ic1 := &models.InstanceChannel{FixtureID: fixture.ID, Name: "Red", Type: "COLOR", Offset: 0}
+	ic2 := &models.InstanceChannel{FixtureID: fixture.ID, Name: "Green", Type: "COLOR", Offset: 1}
+	ic3 := &models.InstanceChannel{FixtureID: fixture.ID, Name: "Blue", Type: "COLOR", Offset: 2}
+	db.Create(ic1)
+	db.Create(ic2)
+	db.Create(ic3)
+
+	// Export with fixtures
+	exported, stats, err := service.ExportProject(ctx, project.ID, true, false, false)
+	if err != nil {
+		t.Fatalf("ExportProject failed: %v", err)
+	}
+
+	if stats.FixtureDefinitionsCount != 1 {
+		t.Errorf("Expected 1 fixture definition, got %d", stats.FixtureDefinitionsCount)
+	}
+	if stats.FixtureInstancesCount != 1 {
+		t.Errorf("Expected 1 fixture instance, got %d", stats.FixtureInstancesCount)
+	}
+
+	// Verify definition export
+	if len(exported.FixtureDefinitions) != 1 {
+		t.Fatalf("Expected 1 fixture definition in export, got %d", len(exported.FixtureDefinitions))
+	}
+	expDef := exported.FixtureDefinitions[0]
+	if expDef.Manufacturer != "TestMfg" {
+		t.Errorf("Expected manufacturer 'TestMfg', got '%s'", expDef.Manufacturer)
+	}
+	if len(expDef.Channels) != 3 {
+		t.Errorf("Expected 3 channels, got %d", len(expDef.Channels))
+	}
+	if len(expDef.Modes) != 1 {
+		t.Errorf("Expected 1 mode, got %d", len(expDef.Modes))
+	}
+
+	// Verify mode export
+	expMode := expDef.Modes[0]
+	if expMode.Name != "3 Channel" {
+		t.Errorf("Expected mode name '3 Channel', got '%s'", expMode.Name)
+	}
+	if len(expMode.ModeChannels) != 3 {
+		t.Errorf("Expected 3 mode channels, got %d", len(expMode.ModeChannels))
+	}
+
+	// Verify fixture instance export
+	if len(exported.FixtureInstances) != 1 {
+		t.Fatalf("Expected 1 fixture instance, got %d", len(exported.FixtureInstances))
+	}
+	expInst := exported.FixtureInstances[0]
+	if expInst.Name != "LED 1" {
+		t.Errorf("Expected instance name 'LED 1', got '%s'", expInst.Name)
+	}
+	if expInst.ModeName == nil || *expInst.ModeName != "3 Channel" {
+		t.Error("Expected ModeName '3 Channel'")
+	}
+}
+
+func TestExportProject_Integration_WithScenes(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Create project
+	project := &models.Project{ID: cuid.New(), Name: "Scene Export Test"}
+	_ = projectRepo.Create(ctx, project)
+
+	// Create definition and fixture
+	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	_ = fixtureRepo.CreateDefinition(ctx, def)
+	fixture := &models.FixtureInstance{
+		ID:           cuid.New(),
+		Name:         "F1",
+		ProjectID:    project.ID,
+		DefinitionID: def.ID,
+		Universe:     1,
+		StartChannel: 1,
+	}
+	_ = fixtureRepo.Create(ctx, fixture)
+
+	// Create scene with fixture values
+	sceneDesc := "Test scene description"
+	scene := &models.Scene{
+		ID:          cuid.New(),
+		Name:        "Test Scene",
+		Description: &sceneDesc,
+		ProjectID:   project.ID,
+	}
+	_ = sceneRepo.Create(ctx, scene)
+
+	sceneOrder := 0
+	fv := &models.FixtureValue{
+		SceneID:    scene.ID,
+		FixtureID:  fixture.ID,
+		Channels:   `[{"offset":0,"value":255},{"offset":1,"value":128}]`,
+		SceneOrder: &sceneOrder,
+	}
+	_ = sceneRepo.CreateFixtureValue(ctx, fv)
+
+	// Export with scenes
+	exported, stats, err := service.ExportProject(ctx, project.ID, true, true, false)
+	if err != nil {
+		t.Fatalf("ExportProject failed: %v", err)
+	}
+
+	if stats.ScenesCount != 1 {
+		t.Errorf("Expected 1 scene, got %d", stats.ScenesCount)
+	}
+
+	if len(exported.Scenes) != 1 {
+		t.Fatalf("Expected 1 scene in export, got %d", len(exported.Scenes))
+	}
+	expScene := exported.Scenes[0]
+	if expScene.Name != "Test Scene" {
+		t.Errorf("Expected scene name 'Test Scene', got '%s'", expScene.Name)
+	}
+	if len(expScene.FixtureValues) != 1 {
+		t.Errorf("Expected 1 fixture value, got %d", len(expScene.FixtureValues))
+	}
+}
+
+func TestExportProject_Integration_WithCueLists(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Create project
+	project := &models.Project{ID: cuid.New(), Name: "CueList Export Test"}
+	_ = projectRepo.Create(ctx, project)
+
+	// Create scene
+	scene := &models.Scene{ID: cuid.New(), Name: "Scene 1", ProjectID: project.ID}
+	_ = sceneRepo.Create(ctx, scene)
+
+	// Create cue list
+	cueListDesc := "Main show"
+	cueList := &models.CueList{
+		ID:          cuid.New(),
+		Name:        "Main CueList",
+		Description: &cueListDesc,
+		ProjectID:   project.ID,
+		Loop:        true,
+	}
+	_ = cueListRepo.Create(ctx, cueList)
+
+	// Create cue
+	followTime := 2.0
+	easingType := "LINEAR"
+	notes := "Opening cue"
+	cue := &models.Cue{
+		ID:          cuid.New(),
+		Name:        "Cue 1",
+		CueNumber:   1.0,
+		CueListID:   cueList.ID,
+		SceneID:     scene.ID,
+		FadeInTime:  2.0,
+		FadeOutTime: 1.0,
+		FollowTime:  &followTime,
+		EasingType:  &easingType,
+		Notes:       &notes,
+	}
+	_ = cueRepo.Create(ctx, cue)
+
+	// Export with cue lists
+	exported, stats, err := service.ExportProject(ctx, project.ID, false, true, true)
+	if err != nil {
+		t.Fatalf("ExportProject failed: %v", err)
+	}
+
+	if stats.CueListsCount != 1 {
+		t.Errorf("Expected 1 cue list, got %d", stats.CueListsCount)
+	}
+	if stats.CuesCount != 1 {
+		t.Errorf("Expected 1 cue, got %d", stats.CuesCount)
+	}
+
+	if len(exported.CueLists) != 1 {
+		t.Fatalf("Expected 1 cue list in export, got %d", len(exported.CueLists))
+	}
+	expCL := exported.CueLists[0]
+	if expCL.Name != "Main CueList" {
+		t.Errorf("Expected cue list name 'Main CueList', got '%s'", expCL.Name)
+	}
+	if !expCL.Loop {
+		t.Error("Expected loop to be true")
+	}
+	if len(expCL.Cues) != 1 {
+		t.Fatalf("Expected 1 cue, got %d", len(expCL.Cues))
+	}
+
+	expCue := expCL.Cues[0]
+	if expCue.Name != "Cue 1" {
+		t.Errorf("Expected cue name 'Cue 1', got '%s'", expCue.Name)
+	}
+	if expCue.FollowTime == nil || *expCue.FollowTime != 2.0 {
+		t.Error("Expected FollowTime 2.0")
+	}
+	if expCue.EasingType == nil || *expCue.EasingType != "LINEAR" {
+		t.Error("Expected EasingType 'LINEAR'")
+	}
+	if expCue.Notes == nil || *expCue.Notes != "Opening cue" {
+		t.Error("Expected Notes 'Opening cue'")
+	}
+}
+
+func TestExportProject_Integration_SelectiveExport(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Create project with fixtures, scenes, cue lists
+	project := &models.Project{ID: cuid.New(), Name: "Selective Export Test"}
+	_ = projectRepo.Create(ctx, project)
+
+	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	_ = fixtureRepo.CreateDefinition(ctx, def)
+	fixture := &models.FixtureInstance{ID: cuid.New(), Name: "F1", ProjectID: project.ID, DefinitionID: def.ID, Universe: 1, StartChannel: 1}
+	_ = fixtureRepo.Create(ctx, fixture)
+
+	scene := &models.Scene{ID: cuid.New(), Name: "S1", ProjectID: project.ID}
+	_ = sceneRepo.Create(ctx, scene)
+
+	cueList := &models.CueList{ID: cuid.New(), Name: "CL1", ProjectID: project.ID}
+	_ = cueListRepo.Create(ctx, cueList)
+
+	// Export fixtures only
+	exported, stats, err := service.ExportProject(ctx, project.ID, true, false, false)
+	if err != nil {
+		t.Fatalf("ExportProject failed: %v", err)
+	}
+	if stats.FixtureInstancesCount != 1 {
+		t.Errorf("Expected 1 fixture, got %d", stats.FixtureInstancesCount)
+	}
+	if stats.ScenesCount != 0 {
+		t.Errorf("Expected 0 scenes, got %d", stats.ScenesCount)
+	}
+	if stats.CueListsCount != 0 {
+		t.Errorf("Expected 0 cue lists, got %d", stats.CueListsCount)
+	}
+	if len(exported.Scenes) != 0 {
+		t.Errorf("Expected no scenes in export, got %d", len(exported.Scenes))
+	}
+	if len(exported.CueLists) != 0 {
+		t.Errorf("Expected no cue lists in export, got %d", len(exported.CueLists))
 	}
 }

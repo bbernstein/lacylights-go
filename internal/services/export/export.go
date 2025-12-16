@@ -122,9 +122,10 @@ type ExportedChannelValue struct {
 
 // ExportedFixtureValue represents exported fixture values in a scene.
 type ExportedFixtureValue struct {
-	FixtureRefID string                 `json:"fixtureRefId"`
-	Channels     []ExportedChannelValue `json:"channels"`
-	SceneOrder   *int                   `json:"sceneOrder,omitempty"`
+	FixtureRefID  string                 `json:"fixtureRefId"`
+	Channels      []ExportedChannelValue `json:"channels"`
+	ChannelValues []int                  `json:"channelValues,omitempty"` // Read-only: used to import legacy dense array format, not populated on export
+	SceneOrder    *int                   `json:"sceneOrder,omitempty"`
 }
 
 // ExportedCueList represents an exported cue list.
@@ -250,6 +251,7 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 
 			for _, ch := range channels {
 				exportedDef.Channels = append(exportedDef.Channels, ExportedChannelDefinition{
+					RefID:        ch.ID,
 					Name:         ch.Name,
 					Type:         ch.Type,
 					Offset:       ch.Offset,
@@ -257,6 +259,36 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 					MaxValue:     ch.MaxValue,
 					DefaultValue: ch.DefaultValue,
 				})
+			}
+
+			// Export modes for this definition
+			modes, err := s.fixtureRepo.GetDefinitionModes(ctx, defID)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			for _, mode := range modes {
+				exportedMode := ExportedFixtureMode{
+					RefID:        mode.ID,
+					Name:         mode.Name,
+					ShortName:    mode.ShortName,
+					ChannelCount: mode.ChannelCount,
+				}
+
+				// Get mode channels
+				modeChannels, err := s.fixtureRepo.GetModeChannels(ctx, mode.ID)
+				if err != nil {
+					return nil, nil, err
+				}
+
+				for _, mc := range modeChannels {
+					exportedMode.ModeChannels = append(exportedMode.ModeChannels, ExportedModeChannel{
+						ChannelRefID: mc.ChannelID,
+						Offset:       mc.Offset,
+					})
+				}
+
+				exportedDef.Modes = append(exportedDef.Modes, exportedMode)
 			}
 
 			exported.FixtureDefinitions = append(exported.FixtureDefinitions, exportedDef)
@@ -279,6 +311,8 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 				Name:            f.Name,
 				Description:     f.Description,
 				DefinitionRefID: f.DefinitionID,
+				ModeName:        f.ModeName,
+				ChannelCount:    f.ChannelCount,
 				Universe:        f.Universe,
 				StartChannel:    f.StartChannel,
 				Tags:            tags,

@@ -73,6 +73,101 @@ func NewService(
 	}
 }
 
+// importModesForExistingDefinition imports modes from export data into an existing definition.
+// It skips modes that already exist (matched by name).
+func (s *Service) importModesForExistingDefinition(ctx context.Context, existingDefID string, exportedModes []export.ExportedFixtureMode, exportedChannels []export.ExportedChannelDefinition) ([]string, error) {
+	var warnings []string
+
+	// Get existing modes for this definition
+	existingModes, err := s.fixtureRepo.GetDefinitionModes(ctx, existingDefID)
+	if err != nil {
+		return warnings, err
+	}
+
+	// Build a set of existing mode names
+	existingModeNames := make(map[string]bool)
+	for _, m := range existingModes {
+		existingModeNames[m.Name] = true
+	}
+
+	// Get existing channels for this definition to build name -> ID mapping
+	existingChannels, err := s.fixtureRepo.GetDefinitionChannels(ctx, existingDefID)
+	if err != nil {
+		return warnings, err
+	}
+
+	// Build channel name -> existing channel ID mapping
+	channelNameToID := make(map[string]string)
+	for _, ch := range existingChannels {
+		channelNameToID[ch.Name] = ch.ID
+	}
+
+	// Build export RefID -> channel name mapping from exported channels
+	exportRefIDToName := make(map[string]string)
+	for _, ch := range exportedChannels {
+		if ch.RefID != "" {
+			exportRefIDToName[ch.RefID] = ch.Name
+		}
+	}
+
+	// Import each mode that doesn't already exist
+	for _, mode := range exportedModes {
+		if existingModeNames[mode.Name] {
+			// Mode already exists, skip
+			continue
+		}
+
+		newMode := &models.FixtureMode{
+			Name:         mode.Name,
+			ShortName:    mode.ShortName,
+			ChannelCount: mode.ChannelCount,
+			DefinitionID: existingDefID,
+		}
+
+		if err := s.fixtureRepo.CreateMode(ctx, newMode); err != nil {
+			return warnings, err
+		}
+
+		// Create mode channels
+		var modeChannels []models.ModeChannel
+		for _, mc := range mode.ModeChannels {
+			// First try to map RefID -> channel name -> existing channel ID
+			var existingChannelID string
+			if channelName, ok := exportRefIDToName[mc.ChannelRefID]; ok {
+				existingChannelID = channelNameToID[channelName]
+			}
+			// Fallback: try using RefID directly as channel name
+			if existingChannelID == "" {
+				existingChannelID = channelNameToID[mc.ChannelRefID]
+			}
+
+			if existingChannelID == "" {
+				// Use channel name when available, otherwise use RefID
+				unknownChannel := mc.ChannelRefID
+				if channelName, ok := exportRefIDToName[mc.ChannelRefID]; ok {
+					unknownChannel = channelName
+				}
+				warnings = append(warnings, "Mode '"+mode.Name+"' references unknown channel '"+unknownChannel+"'")
+				continue
+			}
+
+			modeChannels = append(modeChannels, models.ModeChannel{
+				ModeID:    newMode.ID,
+				ChannelID: existingChannelID,
+				Offset:    mc.Offset,
+			})
+		}
+
+		if len(modeChannels) > 0 {
+			if err := s.fixtureRepo.CreateModeChannels(ctx, modeChannels); err != nil {
+				return warnings, err
+			}
+		}
+	}
+
+	return warnings, nil
+}
+
 // ImportProject imports a project from JSON.
 func (s *Service) ImportProject(ctx context.Context, jsonContent string, options ImportOptions) (string, *ImportStats, []string, error) {
 	// Parse the JSON
@@ -138,6 +233,14 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 			}
 			if existing != nil {
 				definitionIDMap[def.RefID] = existing.ID
+				// Import modes that don't already exist on the existing definition
+				if len(def.Modes) > 0 {
+					modeWarnings, err := s.importModesForExistingDefinition(ctx, existing.ID, def.Modes, def.Channels)
+					if err != nil {
+						return "", nil, nil, err
+					}
+					warnings = append(warnings, modeWarnings...)
+				}
 				continue
 			}
 		}
@@ -152,12 +255,32 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 			switch options.FixtureConflictStrategy {
 			case FixtureConflictSkip:
 				definitionIDMap[def.RefID] = existing.ID
+				// Import modes that don't already exist on the existing definition
+				if len(def.Modes) > 0 {
+					modeWarnings, err := s.importModesForExistingDefinition(ctx, existing.ID, def.Modes, def.Channels)
+					if err != nil {
+						return "", nil, nil, err
+					}
+					warnings = append(warnings, modeWarnings...)
+				}
 				warnings = append(warnings, "Skipped existing fixture definition: "+def.Manufacturer+" "+def.Model)
 				continue
 			case FixtureConflictReplace:
-				// Delete and recreate
+				// For fixture definitions, "Replace" behaves like "Skip" - we reuse the
+				// existing definition and merge new modes. We don't delete the existing
+				// definition because it may be used by other projects. The "Replace"
+				// strategy is more meaningful at the project level (replacing project
+				// data) rather than globally shared fixture definitions.
 				definitionIDMap[def.RefID] = existing.ID
-				// For now, just use existing
+				// Import modes that don't already exist on the existing definition
+				if len(def.Modes) > 0 {
+					modeWarnings, err := s.importModesForExistingDefinition(ctx, existing.ID, def.Modes, def.Channels)
+					if err != nil {
+						return "", nil, nil, err
+					}
+					warnings = append(warnings, modeWarnings...)
+				}
+				warnings = append(warnings, "Reused existing fixture definition (Replace merges modes): "+def.Manufacturer+" "+def.Model)
 				continue
 			case FixtureConflictRename:
 				// Will create with new ID
@@ -172,9 +295,13 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 			IsBuiltIn:    false, // Imported definitions are not built-in
 		}
 
+		// Build channels and track RefID -> new ID mapping
 		var channels []models.ChannelDefinition
+		channelRefIDMap := make(map[string]string) // old RefID -> new ID
 		for _, ch := range def.Channels {
+			newChannelID := cuid.New()
 			channels = append(channels, models.ChannelDefinition{
+				ID:           newChannelID,
 				Name:         ch.Name,
 				Type:         ch.Type,
 				Offset:       ch.Offset,
@@ -182,6 +309,13 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 				MaxValue:     ch.MaxValue,
 				DefaultValue: ch.DefaultValue,
 			})
+			// Map the old RefID to the new ID
+			if ch.RefID != "" {
+				channelRefIDMap[ch.RefID] = newChannelID
+			} else {
+				// Fallback: use channel name as key if RefID not available
+				channelRefIDMap[ch.Name] = newChannelID
+			}
 		}
 
 		if err := s.fixtureRepo.CreateDefinitionWithChannels(ctx, newDef, channels); err != nil {
@@ -189,6 +323,39 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 		}
 		definitionIDMap[def.RefID] = newDef.ID
 		stats.FixtureDefinitionsCreated++
+
+		// Import modes for this definition
+		for _, mode := range def.Modes {
+			newMode := &models.FixtureMode{
+				Name:         mode.Name,
+				ShortName:    mode.ShortName,
+				ChannelCount: mode.ChannelCount,
+				DefinitionID: newDef.ID,
+			}
+
+			if err := s.fixtureRepo.CreateMode(ctx, newMode); err != nil {
+				return "", nil, nil, err
+			}
+
+			// Create mode channels
+			var modeChannels []models.ModeChannel
+			for _, mc := range mode.ModeChannels {
+				newChannelID, ok := channelRefIDMap[mc.ChannelRefID]
+				if !ok {
+					warnings = append(warnings, "Mode channel references unknown channel: "+mc.ChannelRefID)
+					continue
+				}
+				modeChannels = append(modeChannels, models.ModeChannel{
+					ModeID:    newMode.ID,
+					ChannelID: newChannelID,
+					Offset:    mc.Offset,
+				})
+			}
+
+			if err := s.fixtureRepo.CreateModeChannels(ctx, modeChannels); err != nil {
+				return "", nil, nil, err
+			}
+		}
 	}
 
 	// Import fixture instances
@@ -227,6 +394,8 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 			Manufacturer: &def.Manufacturer,
 			Model:        &def.Model,
 			Type:         &def.Type,
+			ModeName:     f.ModeName,
+			ChannelCount: f.ChannelCount,
 		}
 
 		// Use instance channels from export if available, otherwise get from definition
@@ -260,8 +429,11 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 				})
 			}
 		}
-		channelCount := len(instanceChannels)
-		newFixture.ChannelCount = &channelCount
+		// Only set channel count from instance channels if not already set from import
+		if newFixture.ChannelCount == nil {
+			channelCount := len(instanceChannels)
+			newFixture.ChannelCount = &channelCount
+		}
 
 		if err := s.fixtureRepo.CreateWithChannels(ctx, newFixture, instanceChannels); err != nil {
 			return "", nil, nil, err
@@ -287,11 +459,25 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 			}
 
 			// Convert exported channels to models.ChannelValue
-			channels := make([]models.ChannelValue, len(fv.Channels))
-			for i, ch := range fv.Channels {
-				channels[i] = models.ChannelValue{
-					Offset: ch.Offset,
-					Value:  ch.Value,
+			// Support both sparse format (channels) and legacy array format (channelValues)
+			var channels []models.ChannelValue
+			if len(fv.Channels) > 0 {
+				// New sparse format: [{offset: 0, value: 255}, ...]
+				channels = make([]models.ChannelValue, len(fv.Channels))
+				for i, ch := range fv.Channels {
+					channels[i] = models.ChannelValue{
+						Offset: ch.Offset,
+						Value:  ch.Value,
+					}
+				}
+			} else if len(fv.ChannelValues) > 0 {
+				// Legacy array format: [255, 128, 0, 0] - index is the offset
+				channels = make([]models.ChannelValue, len(fv.ChannelValues))
+				for i, val := range fv.ChannelValues {
+					channels[i] = models.ChannelValue{
+						Offset: i,
+						Value:  val,
+					}
 				}
 			}
 			channelsJSON, err := json.Marshal(channels)
