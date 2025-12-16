@@ -66,17 +66,23 @@ type Engine struct {
 	running  bool
 
 	// Configuration
-	updateRate time.Duration // How often to update fades (default 25ms = 40Hz)
+	updateRate time.Duration // How often to update fades (default ~16.67ms = 60Hz)
 }
 
-// NewEngine creates a new fade engine.
-func NewEngine(dmxService *dmx.Service) *Engine {
+// NewEngine creates a new fade engine with the specified update rate.
+// If updateRateHz is <= 0, it defaults to 60Hz.
+func NewEngine(dmxService *dmx.Service, updateRateHz int) *Engine {
+	if updateRateHz <= 0 {
+		updateRateHz = 60 // Default to 60Hz
+	}
+	updateRate := time.Second / time.Duration(updateRateHz)
+
 	return &Engine{
 		dmxService:         dmxService,
 		activeFades:        make(map[string]*activeFade),
 		interpolatedValues: make(map[string]float64),
 		stopChan:           make(chan struct{}),
-		updateRate:         25 * time.Millisecond, // 40Hz
+		updateRate:         updateRate,
 	}
 }
 

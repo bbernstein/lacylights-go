@@ -146,7 +146,7 @@ func main() {
 	}
 
 	// Create and start fade engine
-	fadeEngine := fade.NewEngine(dmxService)
+	fadeEngine := fade.NewEngine(dmxService, cfg.FadeUpdateRateHz)
 	fadeEngine.Start()
 
 	// Create playback service

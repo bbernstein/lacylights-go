@@ -10,7 +10,7 @@ import (
 
 func createTestEngine() (*Engine, *dmx.Service) {
 	dmxService := dmx.NewService(dmx.Config{Enabled: false})
-	engine := NewEngine(dmxService)
+	engine := NewEngine(dmxService, 60) // 60Hz update rate
 	return engine, dmxService
 }
 
@@ -25,12 +25,44 @@ func TestNewEngine(t *testing.T) {
 		t.Error("Engine should reference the provided DMX service")
 	}
 
-	if engine.updateRate != 25*time.Millisecond {
-		t.Errorf("Default update rate = %v, want 25ms", engine.updateRate)
+	expectedRate := time.Second / 60 // 60Hz = ~16.67ms
+	if engine.updateRate != expectedRate {
+		t.Errorf("Update rate = %v, want %v (60Hz)", engine.updateRate, expectedRate)
 	}
 
 	if len(engine.activeFades) != 0 {
 		t.Error("New engine should have no active fades")
+	}
+}
+
+func TestNewEngine_ConfigurableRate(t *testing.T) {
+	dmxService := dmx.NewService(dmx.Config{Enabled: false})
+
+	// Test custom rate (30Hz)
+	engine30Hz := NewEngine(dmxService, 30)
+	expected30Hz := time.Second / 30
+	if engine30Hz.updateRate != expected30Hz {
+		t.Errorf("30Hz engine rate = %v, want %v", engine30Hz.updateRate, expected30Hz)
+	}
+
+	// Test custom rate (120Hz)
+	engine120Hz := NewEngine(dmxService, 120)
+	expected120Hz := time.Second / 120
+	if engine120Hz.updateRate != expected120Hz {
+		t.Errorf("120Hz engine rate = %v, want %v", engine120Hz.updateRate, expected120Hz)
+	}
+
+	// Test zero defaults to 60Hz
+	engineZero := NewEngine(dmxService, 0)
+	expected60Hz := time.Second / 60
+	if engineZero.updateRate != expected60Hz {
+		t.Errorf("Zero rate should default to 60Hz, got %v, want %v", engineZero.updateRate, expected60Hz)
+	}
+
+	// Test negative defaults to 60Hz
+	engineNeg := NewEngine(dmxService, -1)
+	if engineNeg.updateRate != expected60Hz {
+		t.Errorf("Negative rate should default to 60Hz, got %v, want %v", engineNeg.updateRate, expected60Hz)
 	}
 }
 

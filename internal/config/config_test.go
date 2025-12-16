@@ -56,6 +56,7 @@ func TestLoad_CustomEnvironment(t *testing.T) {
 	t.Setenv("DMX_DRIFT_THROTTLE", "10000")
 	t.Setenv("NON_INTERACTIVE", "true")
 	t.Setenv("CORS_ORIGIN", "http://example.com")
+	t.Setenv("FADE_UPDATE_RATE", "120")
 
 	cfg := Load()
 
@@ -100,6 +101,9 @@ func TestLoad_CustomEnvironment(t *testing.T) {
 	}
 	if cfg.CORSOrigin != "http://example.com" {
 		t.Errorf("Expected CORSOrigin to be 'http://example.com', got '%s'", cfg.CORSOrigin)
+	}
+	if cfg.FadeUpdateRateHz != 120 {
+		t.Errorf("Expected FadeUpdateRateHz to be 120, got %d", cfg.FadeUpdateRateHz)
 	}
 }
 
@@ -265,6 +269,7 @@ func TestConfig_StructFields(t *testing.T) {
 		DMXRefreshRate:      44,
 		DMXIdleRate:         1,
 		DMXHighRateDuration: time.Second,
+		FadeUpdateRateHz:    60,
 		ArtNetEnabled:       true,
 		ArtNetPort:          6454,
 		ArtNetBroadcast:     "255.255.255.255",
@@ -282,5 +287,18 @@ func TestConfig_StructFields(t *testing.T) {
 	}
 	if cfg.ArtNetEnabled != true {
 		t.Error("ArtNetEnabled field access failed")
+	}
+	if cfg.FadeUpdateRateHz != 60 {
+		t.Error("FadeUpdateRateHz field access failed")
+	}
+}
+
+func TestLoad_FadeUpdateRateHz_DefaultValue(t *testing.T) {
+	// Test that FadeUpdateRateHz defaults to 60 when not set
+	// Use a fresh config with no FADE_UPDATE_RATE env var
+	cfg := Load()
+
+	if cfg.FadeUpdateRateHz != 60 {
+		t.Errorf("Expected default FadeUpdateRateHz to be 60, got %d", cfg.FadeUpdateRateHz)
 	}
 }

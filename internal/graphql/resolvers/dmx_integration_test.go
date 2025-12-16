@@ -61,8 +61,8 @@ func testSetup(t *testing.T) (*client.Client, *Resolver, func()) {
 		HighRateDuration: 2 * time.Second,
 	})
 
-	// Create and start fade engine
-	fadeEngine := fade.NewEngine(dmxService)
+	// Create and start fade engine (60Hz for testing)
+	fadeEngine := fade.NewEngine(dmxService, 60)
 	fadeEngine.Start()
 
 	// Create playback service
