@@ -63,20 +63,27 @@ type Engine struct {
 
 	// Control
 	stopChan chan struct{}
+	doneChan chan struct{} // Signals when updateLoop has exited
 	running  bool
 
 	// Configuration
-	updateRate time.Duration // How often to update fades (default 25ms = 40Hz)
+	updateRate time.Duration // How often to update fades (default ~16.67ms = 60Hz)
 }
 
-// NewEngine creates a new fade engine.
-func NewEngine(dmxService *dmx.Service) *Engine {
+// NewEngine creates a new fade engine with the specified update rate.
+// If updateRateHz is <= 0, it defaults to 60Hz.
+func NewEngine(dmxService *dmx.Service, updateRateHz int) *Engine {
+	if updateRateHz <= 0 {
+		updateRateHz = 60 // Default to 60Hz
+	}
+	updateRate := time.Second / time.Duration(updateRateHz)
+
 	return &Engine{
 		dmxService:         dmxService,
 		activeFades:        make(map[string]*activeFade),
 		interpolatedValues: make(map[string]float64),
 		stopChan:           make(chan struct{}),
-		updateRate:         25 * time.Millisecond, // 40Hz
+		updateRate:         updateRate,
 	}
 }
 
@@ -88,6 +95,8 @@ func (e *Engine) Start() {
 		return
 	}
 	e.running = true
+	e.stopChan = make(chan struct{})  // Create new channel for this run
+	e.doneChan = make(chan struct{})  // Create new done channel
 	e.mu.Unlock()
 
 	go e.updateLoop()
@@ -102,12 +111,29 @@ func (e *Engine) Stop() {
 	}
 	e.running = false
 	close(e.stopChan)
+	doneChan := e.doneChan // Capture the done channel
 	e.mu.Unlock()
+
+	// Wait for the update loop to exit
+	if doneChan != nil {
+		<-doneChan
+	}
 }
 
 // updateLoop runs the fade update loop.
 func (e *Engine) updateLoop() {
-	ticker := time.NewTicker(e.updateRate)
+	e.mu.RLock()
+	updateRate := e.updateRate
+	doneChan := e.doneChan
+	e.mu.RUnlock()
+
+	defer func() {
+		if doneChan != nil {
+			close(doneChan)
+		}
+	}()
+
+	ticker := time.NewTicker(updateRate)
 	defer ticker.Stop()
 
 	for {
@@ -396,6 +422,40 @@ func (e *Engine) ActiveFadeCount() int {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return len(e.activeFades)
+}
+
+// SetUpdateRate updates the fade engine's update rate at runtime.
+// The engine must be restarted for the change to take effect.
+func (e *Engine) SetUpdateRate(hz int) {
+	if hz <= 0 {
+		hz = 60 // Default to 60Hz
+	}
+
+	e.mu.Lock()
+	wasRunning := e.running
+	e.mu.Unlock()
+
+	// Stop the engine if it's running
+	if wasRunning {
+		e.Stop()
+	}
+
+	// Update the rate
+	e.mu.Lock()
+	e.updateRate = time.Second / time.Duration(hz)
+	e.mu.Unlock()
+
+	// Restart the engine if it was running
+	if wasRunning {
+		e.Start()
+	}
+}
+
+// GetUpdateRateHz returns the current update rate in Hz.
+func (e *Engine) GetUpdateRateHz() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return int(time.Second / e.updateRate)
 }
 
 // clamp clamps an integer to a range.

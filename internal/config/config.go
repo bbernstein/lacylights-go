@@ -22,6 +22,9 @@ type Config struct {
 	DMXIdleRate         int           // Hz (idle)
 	DMXHighRateDuration time.Duration // Duration to stay in high rate after changes
 
+	// Fade engine configuration
+	FadeUpdateRateHz int // Hz (default 60, for smooth 60fps fades)
+
 	// Art-Net configuration
 	ArtNetEnabled   bool
 	ArtNetPort      int
@@ -57,6 +60,9 @@ func Load() *Config {
 		DMXRefreshRate:      getEnvInt("DMX_REFRESH_RATE", 44),
 		DMXIdleRate:         getEnvInt("DMX_IDLE_RATE", 1),
 		DMXHighRateDuration: time.Duration(getEnvInt("DMX_HIGH_RATE_DURATION", 2000)) * time.Millisecond,
+
+		// Fade engine
+		FadeUpdateRateHz: getEnvInt("FADE_UPDATE_RATE", 60),
 
 		// Art-Net
 		ArtNetEnabled:   getEnvBool("ARTNET_ENABLED", true),

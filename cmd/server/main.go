@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -145,8 +146,17 @@ func main() {
 		}
 	}
 
-	// Create and start fade engine
-	fadeEngine := fade.NewEngine(dmxService)
+	// Create fade engine with configured update rate (or saved rate from database)
+	fadeUpdateRate := cfg.FadeUpdateRateHz
+	if savedRate, err := settingRepo.FindByKey(context.Background(), "fade_update_rate_hz"); err == nil && savedRate != nil && savedRate.Value != "" {
+		if rateHz, err := strconv.Atoi(savedRate.Value); err == nil && rateHz > 0 {
+			log.Printf("⚡ Loading saved fade update rate: %d Hz", rateHz)
+			fadeUpdateRate = rateHz
+		} else {
+			log.Printf("Warning: invalid saved fade update rate: %s", savedRate.Value)
+		}
+	}
+	fadeEngine := fade.NewEngine(dmxService, fadeUpdateRate)
 	fadeEngine.Start()
 
 	// Create playback service

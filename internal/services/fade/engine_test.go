@@ -10,7 +10,7 @@ import (
 
 func createTestEngine() (*Engine, *dmx.Service) {
 	dmxService := dmx.NewService(dmx.Config{Enabled: false})
-	engine := NewEngine(dmxService)
+	engine := NewEngine(dmxService, 60) // 60Hz update rate
 	return engine, dmxService
 }
 
@@ -25,12 +25,44 @@ func TestNewEngine(t *testing.T) {
 		t.Error("Engine should reference the provided DMX service")
 	}
 
-	if engine.updateRate != 25*time.Millisecond {
-		t.Errorf("Default update rate = %v, want 25ms", engine.updateRate)
+	expectedRate := time.Second / 60 // 60Hz = ~16.67ms
+	if engine.updateRate != expectedRate {
+		t.Errorf("Update rate = %v, want %v (60Hz)", engine.updateRate, expectedRate)
 	}
 
 	if len(engine.activeFades) != 0 {
 		t.Error("New engine should have no active fades")
+	}
+}
+
+func TestNewEngine_ConfigurableRate(t *testing.T) {
+	dmxService := dmx.NewService(dmx.Config{Enabled: false})
+
+	// Test custom rate (30Hz)
+	engine30Hz := NewEngine(dmxService, 30)
+	expected30Hz := time.Second / 30
+	if engine30Hz.updateRate != expected30Hz {
+		t.Errorf("30Hz engine rate = %v, want %v", engine30Hz.updateRate, expected30Hz)
+	}
+
+	// Test custom rate (120Hz)
+	engine120Hz := NewEngine(dmxService, 120)
+	expected120Hz := time.Second / 120
+	if engine120Hz.updateRate != expected120Hz {
+		t.Errorf("120Hz engine rate = %v, want %v", engine120Hz.updateRate, expected120Hz)
+	}
+
+	// Test zero defaults to 60Hz
+	engineZero := NewEngine(dmxService, 0)
+	expected60Hz := time.Second / 60
+	if engineZero.updateRate != expected60Hz {
+		t.Errorf("Zero rate should default to 60Hz, got %v, want %v", engineZero.updateRate, expected60Hz)
+	}
+
+	// Test negative defaults to 60Hz
+	engineNeg := NewEngine(dmxService, -1)
+	if engineNeg.updateRate != expected60Hz {
+		t.Errorf("Negative rate should default to 60Hz, got %v, want %v", engineNeg.updateRate, expected60Hz)
 	}
 }
 
@@ -756,5 +788,98 @@ func TestFadeToScene_WithBehavior(t *testing.T) {
 	// SNAP should be at target
 	if snapValue != 100 {
 		t.Errorf("SNAP channel via FadeToScene should be at 100, got %d", snapValue)
+	}
+}
+
+func TestSetUpdateRate(t *testing.T) {
+	dmxService := dmx.NewService(dmx.Config{Enabled: false})
+	engine := NewEngine(dmxService, 60)
+
+	// Test getting initial rate
+	if rate := engine.GetUpdateRateHz(); rate != 60 {
+		t.Errorf("Initial rate = %d, want 60", rate)
+	}
+
+	// Test setting a new rate (without starting engine)
+	engine.SetUpdateRate(120)
+	if rate := engine.GetUpdateRateHz(); rate != 120 {
+		t.Errorf("After SetUpdateRate(120), rate = %d, want 120", rate)
+	}
+
+	expectedRate := time.Second / 120
+	if engine.updateRate != expectedRate {
+		t.Errorf("After SetUpdateRate(120), updateRate = %v, want %v", engine.updateRate, expectedRate)
+	}
+
+	// Test setting invalid rate (should default to 60)
+	engine.SetUpdateRate(0)
+	if rate := engine.GetUpdateRateHz(); rate != 60 {
+		t.Errorf("After SetUpdateRate(0), rate = %d, want 60 (default)", rate)
+	}
+
+	engine.SetUpdateRate(-10)
+	if rate := engine.GetUpdateRateHz(); rate != 60 {
+		t.Errorf("After SetUpdateRate(-10), rate = %d, want 60 (default)", rate)
+	}
+}
+
+func TestSetUpdateRate_WhileRunning(t *testing.T) {
+	dmxService := dmx.NewService(dmx.Config{Enabled: false})
+	engine := NewEngine(dmxService, 60)
+
+	// Start the engine
+	engine.Start()
+	defer engine.Stop()
+
+	// Verify it's running
+	if !engine.IsRunning() {
+		t.Fatal("Engine should be running")
+	}
+
+	// Change the rate while running
+	engine.SetUpdateRate(30)
+
+	// Give it a moment to restart
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify new rate is set
+	if rate := engine.GetUpdateRateHz(); rate != 30 {
+		t.Errorf("After SetUpdateRate(30) while running, rate = %d, want 30", rate)
+	}
+
+	// Verify engine is still running
+	if !engine.IsRunning() {
+		t.Error("Engine should still be running after rate change")
+	}
+}
+
+func TestGetUpdateRateHz(t *testing.T) {
+	dmxService := dmx.NewService(dmx.Config{Enabled: false})
+
+	tests := []struct {
+		name     string
+		inputHz  int
+		wantHz   int
+		wantRate time.Duration
+	}{
+		{"60Hz", 60, 60, time.Second / 60},
+		{"30Hz", 30, 30, time.Second / 30},
+		{"120Hz", 120, 120, time.Second / 120},
+		{"240Hz", 240, 240, time.Second / 240},
+		{"1Hz", 1, 1, time.Second},
+		{"Invalid 0", 0, 60, time.Second / 60}, // Defaults to 60
+		{"Invalid -1", -1, 60, time.Second / 60}, // Defaults to 60
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine := NewEngine(dmxService, tt.inputHz)
+			if got := engine.GetUpdateRateHz(); got != tt.wantHz {
+				t.Errorf("GetUpdateRateHz() = %d, want %d", got, tt.wantHz)
+			}
+			if engine.updateRate != tt.wantRate {
+				t.Errorf("updateRate = %v, want %v", engine.updateRate, tt.wantRate)
+			}
+		})
 	}
 }

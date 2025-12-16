@@ -29,8 +29,8 @@ func setupPlaybackTest(t *testing.T) (*testutil.TestDB, *Service, func()) {
 		HighRateDuration: 2 * time.Second,
 	})
 
-	// Create fade engine
-	fadeEngine := fade.NewEngine(dmxService)
+	// Create fade engine (60Hz for testing)
+	fadeEngine := fade.NewEngine(dmxService, 60)
 	fadeEngine.Start()
 
 	// Create playback service
