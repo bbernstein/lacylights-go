@@ -316,21 +316,12 @@ func (r *FixtureRepository) CreateModeChannels(ctx context.Context, modeChannels
 
 // DeleteDefinitionModes deletes all modes for a fixture definition.
 func (r *FixtureRepository) DeleteDefinitionModes(ctx context.Context, definitionID string) error {
-	// First get all mode IDs
-	var modeIDs []string
+	// Delete mode channels using a subquery (more efficient than fetching IDs first)
+	subQuery := r.db.Model(&models.FixtureMode{}).Select("id").Where("definition_id = ?", definitionID)
 	if err := r.db.WithContext(ctx).
-		Model(&models.FixtureMode{}).
-		Where("definition_id = ?", definitionID).
-		Pluck("id", &modeIDs).Error; err != nil {
+		Where("mode_id IN (?)", subQuery).
+		Delete(&models.ModeChannel{}).Error; err != nil {
 		return err
-	}
-
-	// Delete mode channels for these modes
-	if len(modeIDs) > 0 {
-		if err := r.db.WithContext(ctx).
-			Delete(&models.ModeChannel{}, "mode_id IN ?", modeIDs).Error; err != nil {
-			return err
-		}
 	}
 
 	// Delete the modes

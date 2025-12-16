@@ -142,13 +142,12 @@ func (s *Service) importModesForExistingDefinition(ctx context.Context, existing
 			}
 
 			if existingChannelID == "" {
-				// Include RefID and channel name (if available) for better debugging
-				// Always show RefID, append channel name when available for consistency
-				channelDesc := "RefID: " + mc.ChannelRefID
+				// Use channel name when available, otherwise use RefID
+				unknownChannel := mc.ChannelRefID
 				if channelName, ok := exportRefIDToName[mc.ChannelRefID]; ok {
-					channelDesc += ", name: " + channelName
+					unknownChannel = channelName
 				}
-				warnings = append(warnings, "Mode '"+mode.Name+"' references unknown channel ("+channelDesc+")")
+				warnings = append(warnings, "Mode '"+mode.Name+"' references unknown channel '"+unknownChannel+"'")
 				continue
 			}
 
