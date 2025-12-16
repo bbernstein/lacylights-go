@@ -1335,6 +1335,92 @@ func TestFixtureRepository_CreateWithChannels(t *testing.T) {
 	}
 }
 
+// TestFixtureRepository_CreateWithChannels_PresetIDs tests creating fixture with preset IDs.
+func TestFixtureRepository_CreateWithChannels_PresetIDs(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewFixtureRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create project, definition
+	project := &models.Project{ID: cuid.New(), Name: "P"}
+	testDB.DB.Create(project)
+	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	testDB.DB.Create(def)
+
+	// Create fixture with preset IDs
+	fixtureID := cuid.New()
+	channel1ID := cuid.New()
+	channel2ID := cuid.New()
+	fixture := &models.FixtureInstance{
+		ID:           fixtureID, // Pre-set ID
+		Name:         "Fixture with preset IDs",
+		ProjectID:    project.ID,
+		DefinitionID: def.ID,
+		Universe:     1,
+		StartChannel: 1,
+	}
+	channels := []models.InstanceChannel{
+		{ID: channel1ID, Offset: 0, Name: "Dimmer", Type: "intensity"}, // Pre-set ID
+		{ID: channel2ID, Offset: 1, Name: "Red", Type: "color"},        // Pre-set ID
+	}
+
+	err := repo.CreateWithChannels(ctx, fixture, channels)
+	if err != nil {
+		t.Fatalf("CreateWithChannels failed: %v", err)
+	}
+
+	// Verify preset IDs were used
+	if fixture.ID != fixtureID {
+		t.Errorf("Expected fixture ID %s, got %s", fixtureID, fixture.ID)
+	}
+
+	instanceChannels, _ := repo.GetInstanceChannels(ctx, fixture.ID)
+	if len(instanceChannels) != 2 {
+		t.Errorf("Expected 2 channels, got %d", len(instanceChannels))
+	}
+}
+
+// TestFixtureRepository_CreateWithChannels_NoChannels tests creating fixture with no channels.
+func TestFixtureRepository_CreateWithChannels_NoChannels(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewFixtureRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create project, definition
+	project := &models.Project{ID: cuid.New(), Name: "P"}
+	testDB.DB.Create(project)
+	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	testDB.DB.Create(def)
+
+	// Create fixture with empty channels
+	fixture := &models.FixtureInstance{
+		Name:         "Fixture with no channels",
+		ProjectID:    project.ID,
+		DefinitionID: def.ID,
+		Universe:     1,
+		StartChannel: 1,
+	}
+
+	err := repo.CreateWithChannels(ctx, fixture, nil)
+	if err != nil {
+		t.Fatalf("CreateWithChannels with no channels failed: %v", err)
+	}
+
+	if fixture.ID == "" {
+		t.Error("Expected fixture ID to be set")
+	}
+
+	// Verify no channels were created
+	instanceChannels, _ := repo.GetInstanceChannels(ctx, fixture.ID)
+	if len(instanceChannels) != 0 {
+		t.Errorf("Expected 0 channels, got %d", len(instanceChannels))
+	}
+}
+
 // TestFixtureRepository_CreateDefinitionWithChannels tests transactional definition creation.
 func TestFixtureRepository_CreateDefinitionWithChannels(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
@@ -1368,6 +1454,37 @@ func TestFixtureRepository_CreateDefinitionWithChannels(t *testing.T) {
 	defChannels, _ := repo.GetDefinitionChannels(ctx, def.ID)
 	if len(defChannels) != 3 {
 		t.Errorf("Expected 3 channels, got %d", len(defChannels))
+	}
+}
+
+// TestFixtureRepository_CreateDefinitionWithChannels_NoChannels tests creating definition with no channels.
+func TestFixtureRepository_CreateDefinitionWithChannels_NoChannels(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewFixtureRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create definition with no channels
+	def := &models.FixtureDefinition{
+		Manufacturer: "Test",
+		Model:        "NoChannels",
+		Type:         "dimmer",
+	}
+
+	err := repo.CreateDefinitionWithChannels(ctx, def, nil)
+	if err != nil {
+		t.Fatalf("CreateDefinitionWithChannels with no channels failed: %v", err)
+	}
+
+	if def.ID == "" {
+		t.Error("Expected definition ID to be set")
+	}
+
+	// Verify no channels were created
+	defChannels, _ := repo.GetDefinitionChannels(ctx, def.ID)
+	if len(defChannels) != 0 {
+		t.Errorf("Expected 0 channels, got %d", len(defChannels))
 	}
 }
 
@@ -1488,6 +1605,229 @@ func TestNewFixtureRepository(t *testing.T) {
 	repo := NewFixtureRepository(testDB.DB)
 	if repo == nil {
 		t.Error("Expected non-nil repository")
+	}
+}
+
+// TestFixtureRepository_GetDefinitionModes tests getting modes for a definition.
+func TestFixtureRepository_GetDefinitionModes(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewFixtureRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create definition
+	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	testDB.DB.Create(def)
+
+	// Test GetDefinitionModes with no modes (should return empty)
+	modes, err := repo.GetDefinitionModes(ctx, def.ID)
+	if err != nil {
+		t.Fatalf("GetDefinitionModes failed: %v", err)
+	}
+	if len(modes) != 0 {
+		t.Errorf("Expected 0 modes, got %d", len(modes))
+	}
+
+	// Create modes
+	mode1 := &models.FixtureMode{ID: cuid.New(), Name: "3 Channel", ChannelCount: 3, DefinitionID: def.ID}
+	mode2 := &models.FixtureMode{ID: cuid.New(), Name: "5 Channel", ChannelCount: 5, DefinitionID: def.ID}
+	testDB.DB.Create(mode1)
+	testDB.DB.Create(mode2)
+
+	// Test GetDefinitionModes with modes
+	modes, err = repo.GetDefinitionModes(ctx, def.ID)
+	if err != nil {
+		t.Fatalf("GetDefinitionModes failed: %v", err)
+	}
+	if len(modes) != 2 {
+		t.Errorf("Expected 2 modes, got %d", len(modes))
+	}
+
+	// Verify modes are sorted by name
+	if modes[0].Name != "3 Channel" {
+		t.Errorf("Expected first mode name '3 Channel', got '%s'", modes[0].Name)
+	}
+	if modes[1].Name != "5 Channel" {
+		t.Errorf("Expected second mode name '5 Channel', got '%s'", modes[1].Name)
+	}
+}
+
+// TestFixtureRepository_CreateMode tests creating a mode.
+func TestFixtureRepository_CreateMode(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewFixtureRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create definition
+	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	testDB.DB.Create(def)
+
+	// Test CreateMode without ID (should auto-generate)
+	mode := &models.FixtureMode{
+		Name:         "Standard",
+		ChannelCount: 4,
+		DefinitionID: def.ID,
+	}
+	err := repo.CreateMode(ctx, mode)
+	if err != nil {
+		t.Fatalf("CreateMode failed: %v", err)
+	}
+	if mode.ID == "" {
+		t.Error("Expected mode ID to be auto-generated")
+	}
+
+	// Test CreateMode with ID
+	customID := cuid.New()
+	mode2 := &models.FixtureMode{
+		ID:           customID,
+		Name:         "Extended",
+		ChannelCount: 8,
+		DefinitionID: def.ID,
+	}
+	err = repo.CreateMode(ctx, mode2)
+	if err != nil {
+		t.Fatalf("CreateMode with ID failed: %v", err)
+	}
+	if mode2.ID != customID {
+		t.Errorf("Expected mode ID '%s', got '%s'", customID, mode2.ID)
+	}
+
+	// Verify modes were created
+	modes, _ := repo.GetDefinitionModes(ctx, def.ID)
+	if len(modes) != 2 {
+		t.Errorf("Expected 2 modes, got %d", len(modes))
+	}
+}
+
+// TestFixtureRepository_CreateModeChannels tests creating mode channels.
+func TestFixtureRepository_CreateModeChannels(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewFixtureRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create definition, channels, and mode
+	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	testDB.DB.Create(def)
+
+	ch1 := &models.ChannelDefinition{ID: cuid.New(), Name: "Red", Type: "color", Offset: 0, DefinitionID: def.ID}
+	ch2 := &models.ChannelDefinition{ID: cuid.New(), Name: "Green", Type: "color", Offset: 1, DefinitionID: def.ID}
+	ch3 := &models.ChannelDefinition{ID: cuid.New(), Name: "Blue", Type: "color", Offset: 2, DefinitionID: def.ID}
+	testDB.DB.Create(ch1)
+	testDB.DB.Create(ch2)
+	testDB.DB.Create(ch3)
+
+	mode := &models.FixtureMode{ID: cuid.New(), Name: "RGB", ChannelCount: 3, DefinitionID: def.ID}
+	testDB.DB.Create(mode)
+
+	// Test CreateModeChannels with empty slice (should be no-op)
+	err := repo.CreateModeChannels(ctx, []models.ModeChannel{})
+	if err != nil {
+		t.Errorf("CreateModeChannels with empty slice failed: %v", err)
+	}
+
+	// Test CreateModeChannels without IDs (should auto-generate)
+	modeChannels := []models.ModeChannel{
+		{ModeID: mode.ID, ChannelID: ch1.ID, Offset: 0},
+		{ModeID: mode.ID, ChannelID: ch2.ID, Offset: 1},
+		{ModeID: mode.ID, ChannelID: ch3.ID, Offset: 2},
+	}
+	err = repo.CreateModeChannels(ctx, modeChannels)
+	if err != nil {
+		t.Fatalf("CreateModeChannels failed: %v", err)
+	}
+
+	// Verify mode channels were created with IDs
+	for i, mc := range modeChannels {
+		if mc.ID == "" {
+			t.Errorf("Mode channel %d: expected ID to be auto-generated", i)
+		}
+	}
+
+	// Verify via GetModeChannels
+	retrieved, err := repo.GetModeChannels(ctx, mode.ID)
+	if err != nil {
+		t.Fatalf("GetModeChannels failed: %v", err)
+	}
+	if len(retrieved) != 3 {
+		t.Errorf("Expected 3 mode channels, got %d", len(retrieved))
+	}
+}
+
+// TestFixtureRepository_DeleteDefinitionModes tests deleting modes for a definition.
+func TestFixtureRepository_DeleteDefinitionModes(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewFixtureRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create definition
+	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	testDB.DB.Create(def)
+
+	// Create channels
+	ch1 := &models.ChannelDefinition{ID: cuid.New(), Name: "Red", Type: "color", Offset: 0, DefinitionID: def.ID}
+	testDB.DB.Create(ch1)
+
+	// Create modes
+	mode1 := &models.FixtureMode{ID: cuid.New(), Name: "Mode 1", ChannelCount: 1, DefinitionID: def.ID}
+	mode2 := &models.FixtureMode{ID: cuid.New(), Name: "Mode 2", ChannelCount: 1, DefinitionID: def.ID}
+	testDB.DB.Create(mode1)
+	testDB.DB.Create(mode2)
+
+	// Create mode channels
+	mc1 := &models.ModeChannel{ID: cuid.New(), ModeID: mode1.ID, ChannelID: ch1.ID, Offset: 0}
+	mc2 := &models.ModeChannel{ID: cuid.New(), ModeID: mode2.ID, ChannelID: ch1.ID, Offset: 0}
+	testDB.DB.Create(mc1)
+	testDB.DB.Create(mc2)
+
+	// Verify modes exist
+	modes, _ := repo.GetDefinitionModes(ctx, def.ID)
+	if len(modes) != 2 {
+		t.Fatalf("Expected 2 modes before delete, got %d", len(modes))
+	}
+
+	// Delete modes
+	err := repo.DeleteDefinitionModes(ctx, def.ID)
+	if err != nil {
+		t.Fatalf("DeleteDefinitionModes failed: %v", err)
+	}
+
+	// Verify modes are deleted
+	modes, _ = repo.GetDefinitionModes(ctx, def.ID)
+	if len(modes) != 0 {
+		t.Errorf("Expected 0 modes after delete, got %d", len(modes))
+	}
+
+	// Verify mode channels are also deleted
+	var modeChannelCount int64
+	testDB.DB.Model(&models.ModeChannel{}).Count(&modeChannelCount)
+	if modeChannelCount != 0 {
+		t.Errorf("Expected 0 mode channels after delete, got %d", modeChannelCount)
+	}
+}
+
+// TestFixtureRepository_DeleteDefinitionModes_NoModes tests delete with no modes.
+func TestFixtureRepository_DeleteDefinitionModes_NoModes(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewFixtureRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create definition without modes
+	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	testDB.DB.Create(def)
+
+	// Delete modes (should not error even with no modes)
+	err := repo.DeleteDefinitionModes(ctx, def.ID)
+	if err != nil {
+		t.Fatalf("DeleteDefinitionModes failed: %v", err)
 	}
 }
 

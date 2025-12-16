@@ -5,7 +5,13 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/bbernstein/lacylights-go/internal/database/models"
+	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	"github.com/bbernstein/lacylights-go/internal/services/export"
+	"github.com/glebarez/sqlite"
+	"github.com/lucsky/cuid"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func TestImportModeConstants(t *testing.T) {
@@ -1448,5 +1454,1386 @@ func TestExportedFixtureValue_ChannelValuesParsing(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Integration tests with in-memory database
+// These tests require database setup and test actual import functionality
+
+func setupTestDB(t *testing.T) (*gorm.DB, func()) {
+	t.Helper()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("Failed to open in-memory database: %v", err)
+	}
+
+	err = db.AutoMigrate(
+		&models.Project{},
+		&models.FixtureDefinition{},
+		&models.ChannelDefinition{},
+		&models.FixtureMode{},
+		&models.ModeChannel{},
+		&models.FixtureInstance{},
+		&models.InstanceChannel{},
+		&models.Scene{},
+		&models.FixtureValue{},
+		&models.CueList{},
+		&models.Cue{},
+	)
+	if err != nil {
+		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	cleanup := func() {
+		sqlDB, err := db.DB()
+		if err == nil {
+			_ = sqlDB.Close()
+		}
+	}
+
+	return db, cleanup
+}
+
+func TestImportProject_Integration_EmptyProject(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Empty Project",
+		},
+	}
+
+	jsonStr, err := exported.ToJSON()
+	if err != nil {
+		t.Fatalf("Failed to create JSON: %v", err)
+	}
+
+	projectID, stats, warnings, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	if projectID == "" {
+		t.Error("Expected project ID")
+	}
+	if stats == nil {
+		t.Fatal("Expected stats")
+	}
+	if stats.FixtureDefinitionsCreated != 0 {
+		t.Errorf("Expected 0 fixture definitions, got %d", stats.FixtureDefinitionsCreated)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("Expected no warnings, got %d", len(warnings))
+	}
+
+	// Verify project was created
+	project, _ := projectRepo.FindByID(ctx, projectID)
+	if project == nil {
+		t.Fatal("Expected project to be created")
+	}
+	if project.Name != "Empty Project" {
+		t.Errorf("Expected name 'Empty Project', got '%s'", project.Name)
+	}
+}
+
+func TestImportProject_Integration_WithCustomName(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Original Name",
+		},
+	}
+
+	jsonStr, _ := exported.ToJSON()
+
+	customName := "Custom Import Name"
+	projectID, _, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode:        ImportModeCreate,
+		ProjectName: &customName,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	project, _ := projectRepo.FindByID(ctx, projectID)
+	if project.Name != "Custom Import Name" {
+		t.Errorf("Expected name 'Custom Import Name', got '%s'", project.Name)
+	}
+}
+
+func TestImportProject_Integration_WithFixtureDefinition(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	shortName := "3CH"
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Fixture Definition Test",
+		},
+		FixtureDefinitions: []export.ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "TestMfg",
+				Model:        "TestModel",
+				Type:         "LED_PAR",
+				IsBuiltIn:    false,
+				Channels: []export.ExportedChannelDefinition{
+					{RefID: "ch-r", Name: "Red", Type: "COLOR", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-g", Name: "Green", Type: "COLOR", Offset: 1, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-b", Name: "Blue", Type: "COLOR", Offset: 2, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+				},
+				Modes: []export.ExportedFixtureMode{
+					{
+						RefID:        "mode-3ch",
+						Name:         "3-channel",
+						ShortName:    &shortName,
+						ChannelCount: 3,
+						ModeChannels: []export.ExportedModeChannel{
+							{ChannelRefID: "ch-r", Offset: 0},
+							{ChannelRefID: "ch-g", Offset: 1},
+							{ChannelRefID: "ch-b", Offset: 2},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	jsonStr, _ := exported.ToJSON()
+
+	projectID, stats, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	if stats.FixtureDefinitionsCreated != 1 {
+		t.Errorf("Expected 1 fixture definition, got %d", stats.FixtureDefinitionsCreated)
+	}
+
+	// Verify definition was created with channels
+	def, _ := fixtureRepo.FindDefinitionByManufacturerModel(ctx, "TestMfg", "TestModel")
+	if def == nil {
+		t.Fatal("Expected definition to be created")
+	}
+
+	channels, _ := fixtureRepo.GetDefinitionChannels(ctx, def.ID)
+	if len(channels) != 3 {
+		t.Errorf("Expected 3 channels, got %d", len(channels))
+	}
+
+	// Verify modes were created
+	modes, _ := fixtureRepo.GetDefinitionModes(ctx, def.ID)
+	if len(modes) != 1 {
+		t.Errorf("Expected 1 mode, got %d", len(modes))
+	}
+	if len(modes) > 0 && modes[0].Name != "3-channel" {
+		t.Errorf("Expected mode name '3-channel', got '%s'", modes[0].Name)
+	}
+
+	// Verify mode channels
+	if len(modes) > 0 {
+		modeChannels, _ := fixtureRepo.GetModeChannels(ctx, modes[0].ID)
+		if len(modeChannels) != 3 {
+			t.Errorf("Expected 3 mode channels, got %d", len(modeChannels))
+		}
+	}
+
+	// Verify project ID is returned
+	if projectID == "" {
+		t.Error("Expected project ID")
+	}
+}
+
+func TestImportProject_Integration_WithFixtureInstances(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	modeName := "3-channel"
+	channelCount := 3
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Fixture Instance Test",
+		},
+		FixtureDefinitions: []export.ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "TestMfg",
+				Model:        "TestModel",
+				Type:         "LED_PAR",
+				Channels: []export.ExportedChannelDefinition{
+					{RefID: "ch-r", Name: "Red", Type: "COLOR", Offset: 0},
+					{RefID: "ch-g", Name: "Green", Type: "COLOR", Offset: 1},
+					{RefID: "ch-b", Name: "Blue", Type: "COLOR", Offset: 2},
+				},
+				Modes: []export.ExportedFixtureMode{
+					{
+						RefID:        "mode-3ch",
+						Name:         "3-channel",
+						ChannelCount: 3,
+						ModeChannels: []export.ExportedModeChannel{
+							{ChannelRefID: "ch-r", Offset: 0},
+							{ChannelRefID: "ch-g", Offset: 1},
+							{ChannelRefID: "ch-b", Offset: 2},
+						},
+					},
+				},
+			},
+		},
+		FixtureInstances: []export.ExportedFixtureInstance{
+			{
+				RefID:           "inst-1",
+				Name:            "LED 1",
+				DefinitionRefID: "def-1",
+				ModeName:        &modeName,
+				ChannelCount:    &channelCount,
+				Universe:        1,
+				StartChannel:    1,
+				Tags:            []string{"front", "wash"},
+			},
+			{
+				RefID:           "inst-2",
+				Name:            "LED 2",
+				DefinitionRefID: "def-1",
+				ModeName:        &modeName,
+				ChannelCount:    &channelCount,
+				Universe:        1,
+				StartChannel:    4,
+				Tags:            []string{"back"},
+			},
+		},
+	}
+
+	jsonStr, _ := exported.ToJSON()
+
+	projectID, stats, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	if stats.FixtureInstancesCreated != 2 {
+		t.Errorf("Expected 2 fixture instances, got %d", stats.FixtureInstancesCreated)
+	}
+
+	// Verify instances were created
+	fixtures, _ := fixtureRepo.FindByProjectID(ctx, projectID)
+	if len(fixtures) != 2 {
+		t.Errorf("Expected 2 fixtures, got %d", len(fixtures))
+	}
+
+	// Verify ModeName was preserved
+	for _, f := range fixtures {
+		if f.ModeName == nil || *f.ModeName != "3-channel" {
+			t.Errorf("Expected ModeName '3-channel', got %v", f.ModeName)
+		}
+	}
+}
+
+func TestImportProject_Integration_WithScenes(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	sceneOrder := 0
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Scene Test",
+		},
+		FixtureDefinitions: []export.ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "T",
+				Model:        "M",
+				Type:         "LED",
+				Channels: []export.ExportedChannelDefinition{
+					{Name: "Dimmer", Type: "INTENSITY", Offset: 0},
+				},
+			},
+		},
+		FixtureInstances: []export.ExportedFixtureInstance{
+			{
+				RefID:           "inst-1",
+				Name:            "F1",
+				DefinitionRefID: "def-1",
+				Universe:        1,
+				StartChannel:    1,
+			},
+		},
+		Scenes: []export.ExportedScene{
+			{
+				RefID: "scene-1",
+				Name:  "Test Scene",
+				FixtureValues: []export.ExportedFixtureValue{
+					{
+						FixtureRefID: "inst-1",
+						Channels: []export.ExportedChannelValue{
+							{Offset: 0, Value: 255},
+						},
+						SceneOrder: &sceneOrder,
+					},
+				},
+			},
+		},
+	}
+
+	jsonStr, _ := exported.ToJSON()
+
+	projectID, stats, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	if stats.ScenesCreated != 1 {
+		t.Errorf("Expected 1 scene, got %d", stats.ScenesCreated)
+	}
+
+	// Verify scene was created
+	scenes, _ := sceneRepo.FindByProjectID(ctx, projectID)
+	if len(scenes) != 1 {
+		t.Errorf("Expected 1 scene, got %d", len(scenes))
+	}
+	if len(scenes) > 0 && scenes[0].Name != "Test Scene" {
+		t.Errorf("Expected scene name 'Test Scene', got '%s'", scenes[0].Name)
+	}
+
+	// Verify fixture values
+	if len(scenes) > 0 {
+		fvs, _ := sceneRepo.GetFixtureValues(ctx, scenes[0].ID)
+		if len(fvs) != 1 {
+			t.Errorf("Expected 1 fixture value, got %d", len(fvs))
+		}
+	}
+}
+
+func TestImportProject_Integration_WithCueLists(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	followTime := 2.0
+	easingType := "LINEAR"
+	notes := "Opening"
+
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "CueList Test",
+		},
+		Scenes: []export.ExportedScene{
+			{
+				RefID: "scene-1",
+				Name:  "Scene 1",
+			},
+		},
+		CueLists: []export.ExportedCueList{
+			{
+				RefID: "cl-1",
+				Name:  "Main CueList",
+				Loop:  true,
+				Cues: []export.ExportedCue{
+					{
+						Name:        "Cue 1",
+						CueNumber:   1.0,
+						SceneRefID:  "scene-1",
+						FadeInTime:  2.0,
+						FadeOutTime: 1.0,
+						FollowTime:  &followTime,
+						EasingType:  &easingType,
+						Notes:       &notes,
+					},
+				},
+			},
+		},
+	}
+
+	jsonStr, _ := exported.ToJSON()
+
+	projectID, stats, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	if stats.CueListsCreated != 1 {
+		t.Errorf("Expected 1 cue list, got %d", stats.CueListsCreated)
+	}
+	if stats.CuesCreated != 1 {
+		t.Errorf("Expected 1 cue, got %d", stats.CuesCreated)
+	}
+
+	// Verify cue list was created
+	cueLists, _ := cueListRepo.FindByProjectID(ctx, projectID)
+	if len(cueLists) != 1 {
+		t.Errorf("Expected 1 cue list, got %d", len(cueLists))
+	}
+	if len(cueLists) > 0 && !cueLists[0].Loop {
+		t.Error("Expected loop to be true")
+	}
+
+	// Verify cue was created
+	if len(cueLists) > 0 {
+		cues, _ := cueRepo.FindByCueListID(ctx, cueLists[0].ID)
+		if len(cues) != 1 {
+			t.Errorf("Expected 1 cue, got %d", len(cues))
+		}
+	}
+}
+
+func TestImportProject_Integration_ExistingDefinitionModeImport(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Pre-create a fixture definition WITHOUT modes
+	def := &models.FixtureDefinition{
+		ID:           cuid.New(),
+		Manufacturer: "TestMfg",
+		Model:        "TestModel",
+		Type:         "LED_PAR",
+	}
+	_ = fixtureRepo.CreateDefinition(ctx, def)
+
+	// Create channels for it
+	ch1 := &models.ChannelDefinition{ID: cuid.New(), Name: "Red", Type: "COLOR", Offset: 0, DefinitionID: def.ID}
+	ch2 := &models.ChannelDefinition{ID: cuid.New(), Name: "Green", Type: "COLOR", Offset: 1, DefinitionID: def.ID}
+	ch3 := &models.ChannelDefinition{ID: cuid.New(), Name: "Blue", Type: "COLOR", Offset: 2, DefinitionID: def.ID}
+	db.Create(ch1)
+	db.Create(ch2)
+	db.Create(ch3)
+
+	// Now import a project that references this definition with modes
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Mode Merge Test",
+		},
+		FixtureDefinitions: []export.ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "TestMfg",
+				Model:        "TestModel",
+				Type:         "LED_PAR",
+				IsBuiltIn:    false,
+				Channels: []export.ExportedChannelDefinition{
+					{RefID: "ch-r", Name: "Red", Type: "COLOR", Offset: 0},
+					{RefID: "ch-g", Name: "Green", Type: "COLOR", Offset: 1},
+					{RefID: "ch-b", Name: "Blue", Type: "COLOR", Offset: 2},
+				},
+				Modes: []export.ExportedFixtureMode{
+					{
+						RefID:        "mode-3ch",
+						Name:         "3-channel",
+						ChannelCount: 3,
+						ModeChannels: []export.ExportedModeChannel{
+							{ChannelRefID: "ch-r", Offset: 0},
+							{ChannelRefID: "ch-g", Offset: 1},
+							{ChannelRefID: "ch-b", Offset: 2},
+						},
+					},
+				},
+			},
+		},
+		FixtureInstances: []export.ExportedFixtureInstance{
+			{
+				RefID:           "inst-1",
+				Name:            "LED 1",
+				DefinitionRefID: "def-1",
+				Universe:        1,
+				StartChannel:    1,
+			},
+		},
+	}
+
+	jsonStr, _ := exported.ToJSON()
+
+	// Use SKIP strategy to use the existing definition
+	_, stats, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode:                    ImportModeCreate,
+		FixtureConflictStrategy: FixtureConflictSkip,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	// Definition should have been skipped (0 created) but modes should have been merged
+	if stats.FixtureDefinitionsCreated != 0 {
+		t.Errorf("Expected 0 fixture definitions created (skipped), got %d", stats.FixtureDefinitionsCreated)
+	}
+
+	// Verify modes were merged into existing definition
+	modes, _ := fixtureRepo.GetDefinitionModes(ctx, def.ID)
+	if len(modes) != 1 {
+		t.Errorf("Expected 1 mode to be merged, got %d", len(modes))
+	}
+	if len(modes) > 0 && modes[0].Name != "3-channel" {
+		t.Errorf("Expected mode name '3-channel', got '%s'", modes[0].Name)
+	}
+}
+
+func TestImportProject_Integration_LegacyChannelValues(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Use raw JSON with legacy channelValues format
+	jsonStr := `{
+		"version": "1.0",
+		"project": {
+			"originalId": "proj-1",
+			"name": "Legacy Format Test"
+		},
+		"fixtureDefinitions": [
+			{
+				"refId": "def-1",
+				"manufacturer": "TestMfg",
+				"model": "TestModel",
+				"type": "LED_PAR",
+				"channels": [
+					{"name": "Red", "type": "COLOR", "offset": 0},
+					{"name": "Green", "type": "COLOR", "offset": 1},
+					{"name": "Blue", "type": "COLOR", "offset": 2}
+				]
+			}
+		],
+		"fixtureInstances": [
+			{
+				"refId": "inst-1",
+				"name": "LED 1",
+				"definitionRefId": "def-1",
+				"universe": 1,
+				"startChannel": 1
+			}
+		],
+		"scenes": [
+			{
+				"refId": "scene-1",
+				"name": "Legacy Scene",
+				"fixtureValues": [
+					{
+						"fixtureRefId": "inst-1",
+						"channelValues": [255, 128, 64]
+					}
+				]
+			}
+		]
+	}`
+
+	projectID, stats, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	if stats.ScenesCreated != 1 {
+		t.Errorf("Expected 1 scene, got %d", stats.ScenesCreated)
+	}
+
+	// Verify scene fixture values were converted from legacy format
+	scenes, _ := sceneRepo.FindByProjectID(ctx, projectID)
+	if len(scenes) != 1 {
+		t.Fatalf("Expected 1 scene, got %d", len(scenes))
+	}
+
+	fvs, _ := sceneRepo.GetFixtureValues(ctx, scenes[0].ID)
+	if len(fvs) != 1 {
+		t.Fatalf("Expected 1 fixture value, got %d", len(fvs))
+	}
+
+	// Verify the channels were converted from array to sparse format
+	// The Channels field in the database should contain the sparse JSON format
+	if fvs[0].Channels == "" {
+		t.Error("Expected Channels to be populated")
+	}
+}
+
+func TestImportProject_Integration_ReplaceStrategy(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Pre-create a fixture definition
+	def := &models.FixtureDefinition{
+		ID:           cuid.New(),
+		Manufacturer: "ExistingMfg",
+		Model:        "ExistingModel",
+		Type:         "LED_PAR",
+	}
+	_ = fixtureRepo.CreateDefinition(ctx, def)
+
+	// Create channels for existing definition
+	ch1 := &models.ChannelDefinition{ID: cuid.New(), Name: "Dimmer", Type: "INTENSITY", Offset: 0, DefinitionID: def.ID}
+	db.Create(ch1)
+
+	// Now import with REPLACE strategy
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Replace Strategy Test",
+		},
+		FixtureDefinitions: []export.ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "ExistingMfg",
+				Model:        "ExistingModel",
+				Type:         "LED_PAR",
+				Channels: []export.ExportedChannelDefinition{
+					{RefID: "ch-d", Name: "Dimmer", Type: "INTENSITY", Offset: 0},
+				},
+				Modes: []export.ExportedFixtureMode{
+					{
+						RefID:        "mode-1ch",
+						Name:         "1-channel",
+						ChannelCount: 1,
+						ModeChannels: []export.ExportedModeChannel{
+							{ChannelRefID: "ch-d", Offset: 0},
+						},
+					},
+				},
+			},
+		},
+		FixtureInstances: []export.ExportedFixtureInstance{
+			{
+				RefID:           "inst-1",
+				Name:            "Fixture 1",
+				DefinitionRefID: "def-1",
+				Universe:        1,
+				StartChannel:    1,
+			},
+		},
+	}
+
+	jsonStr, _ := exported.ToJSON()
+
+	_, stats, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode:                    ImportModeCreate,
+		FixtureConflictStrategy: FixtureConflictReplace,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	// Definition should not be created (replaced with existing)
+	if stats.FixtureDefinitionsCreated != 0 {
+		t.Errorf("Expected 0 fixture definitions (replace uses existing), got %d", stats.FixtureDefinitionsCreated)
+	}
+
+	// Modes should have been merged into existing definition
+	modes, _ := fixtureRepo.GetDefinitionModes(ctx, def.ID)
+	if len(modes) != 1 {
+		t.Errorf("Expected 1 mode to be merged, got %d", len(modes))
+	}
+}
+
+func TestImportProject_Integration_RenameStrategy(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Pre-create a fixture definition
+	def := &models.FixtureDefinition{
+		ID:           cuid.New(),
+		Manufacturer: "RenameMfg",
+		Model:        "RenameModel",
+		Type:         "LED_PAR",
+	}
+	_ = fixtureRepo.CreateDefinition(ctx, def)
+
+	// Now import with RENAME strategy - should create new definition
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Rename Strategy Test",
+		},
+		FixtureDefinitions: []export.ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "RenameMfg",
+				Model:        "RenameModel",
+				Type:         "LED_PAR",
+				Channels: []export.ExportedChannelDefinition{
+					{RefID: "ch-d", Name: "Dimmer", Type: "INTENSITY", Offset: 0},
+				},
+			},
+		},
+		FixtureInstances: []export.ExportedFixtureInstance{
+			{
+				RefID:           "inst-1",
+				Name:            "Fixture 1",
+				DefinitionRefID: "def-1",
+				Universe:        1,
+				StartChannel:    1,
+			},
+		},
+	}
+
+	jsonStr, _ := exported.ToJSON()
+
+	_, stats, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode:                    ImportModeCreate,
+		FixtureConflictStrategy: FixtureConflictRename,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	// With RENAME, a new definition should be created
+	if stats.FixtureDefinitionsCreated != 1 {
+		t.Errorf("Expected 1 fixture definition (rename creates new), got %d", stats.FixtureDefinitionsCreated)
+	}
+}
+
+func TestImportProject_Integration_UnknownSceneInCue(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Import project with cue referencing non-existent scene
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Unknown Scene Test",
+		},
+		CueLists: []export.ExportedCueList{
+			{
+				RefID: "cl-1",
+				Name:  "Test CueList",
+				Cues: []export.ExportedCue{
+					{
+						Name:        "Cue with unknown scene",
+						CueNumber:   1.0,
+						SceneRefID:  "nonexistent-scene",
+						FadeInTime:  2.0,
+						FadeOutTime: 1.0,
+					},
+				},
+			},
+		},
+	}
+
+	jsonStr, _ := exported.ToJSON()
+
+	_, stats, warnings, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	// Cue list should be created but cue should be skipped with warning
+	if stats.CueListsCreated != 1 {
+		t.Errorf("Expected 1 cue list, got %d", stats.CueListsCreated)
+	}
+	if stats.CuesCreated != 0 {
+		t.Errorf("Expected 0 cues (skipped due to unknown scene), got %d", stats.CuesCreated)
+	}
+
+	// Should have a warning about unknown scene
+	found := false
+	for _, w := range warnings {
+		if w == "Skipping cue with unknown scene in cue list: Test CueList" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected warning about unknown scene, got: %v", warnings)
+	}
+}
+
+func TestImportProject_Integration_UnknownFixtureDefinition(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Import fixture instance referencing unknown definition
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Unknown Definition Test",
+		},
+		FixtureInstances: []export.ExportedFixtureInstance{
+			{
+				RefID:           "inst-1",
+				Name:            "Orphan Fixture",
+				DefinitionRefID: "nonexistent-def",
+				Universe:        1,
+				StartChannel:    1,
+			},
+		},
+	}
+
+	jsonStr, _ := exported.ToJSON()
+
+	_, stats, warnings, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	// Fixture should be skipped with warning
+	if stats.FixtureInstancesCreated != 0 {
+		t.Errorf("Expected 0 fixtures (unknown definition), got %d", stats.FixtureInstancesCreated)
+	}
+
+	// Should have a warning
+	found := false
+	for _, w := range warnings {
+		if w == "Skipping fixture instance with unknown definition: Orphan Fixture" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected warning about unknown definition, got: %v", warnings)
+	}
+}
+
+func TestImportProject_Integration_UnknownFixtureInScene(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Import scene with fixture value referencing unknown fixture
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Unknown Fixture in Scene Test",
+		},
+		Scenes: []export.ExportedScene{
+			{
+				RefID: "scene-1",
+				Name:  "Scene with unknown fixture",
+				FixtureValues: []export.ExportedFixtureValue{
+					{
+						FixtureRefID: "nonexistent-fixture",
+						Channels: []export.ExportedChannelValue{
+							{Offset: 0, Value: 255},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	jsonStr, _ := exported.ToJSON()
+
+	_, stats, warnings, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	// Scene should be created but fixture value should be skipped
+	if stats.ScenesCreated != 1 {
+		t.Errorf("Expected 1 scene, got %d", stats.ScenesCreated)
+	}
+
+	// Should have a warning about unknown fixture
+	found := false
+	for _, w := range warnings {
+		if w == "Skipping fixture value with unknown fixture 'nonexistent-fixture' in scene 'Scene with unknown fixture'" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected warning about unknown fixture, got: %v", warnings)
+	}
+}
+
+func TestImportProject_Integration_BuiltInDefinitionWithModes(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Pre-create a "built-in" fixture definition
+	def := &models.FixtureDefinition{
+		ID:           cuid.New(),
+		Manufacturer: "BuiltInMfg",
+		Model:        "BuiltInModel",
+		Type:         "LED_PAR",
+		IsBuiltIn:    true,
+	}
+	_ = fixtureRepo.CreateDefinition(ctx, def)
+
+	// Create channels for it
+	ch1 := &models.ChannelDefinition{ID: cuid.New(), Name: "Red", Type: "COLOR", Offset: 0, DefinitionID: def.ID}
+	ch2 := &models.ChannelDefinition{ID: cuid.New(), Name: "Green", Type: "COLOR", Offset: 1, DefinitionID: def.ID}
+	db.Create(ch1)
+	db.Create(ch2)
+
+	// Import project with built-in definition and modes
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "BuiltIn Mode Test",
+		},
+		FixtureDefinitions: []export.ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "BuiltInMfg",
+				Model:        "BuiltInModel",
+				Type:         "LED_PAR",
+				IsBuiltIn:    true,
+				Channels: []export.ExportedChannelDefinition{
+					{RefID: "ch-r", Name: "Red", Type: "COLOR", Offset: 0},
+					{RefID: "ch-g", Name: "Green", Type: "COLOR", Offset: 1},
+				},
+				Modes: []export.ExportedFixtureMode{
+					{
+						RefID:        "mode-2ch",
+						Name:         "2-channel",
+						ChannelCount: 2,
+						ModeChannels: []export.ExportedModeChannel{
+							{ChannelRefID: "ch-r", Offset: 0},
+							{ChannelRefID: "ch-g", Offset: 1},
+						},
+					},
+				},
+			},
+		},
+		FixtureInstances: []export.ExportedFixtureInstance{
+			{
+				RefID:           "inst-1",
+				Name:            "BuiltIn Fixture",
+				DefinitionRefID: "def-1",
+				Universe:        1,
+				StartChannel:    1,
+			},
+		},
+	}
+
+	jsonStr, _ := exported.ToJSON()
+
+	// Import with ImportBuiltInFixtures=false - should use existing built-in definition
+	_, stats, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode:                  ImportModeCreate,
+		ImportBuiltInFixtures: false,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	// No new definition should be created
+	if stats.FixtureDefinitionsCreated != 0 {
+		t.Errorf("Expected 0 definitions (using built-in), got %d", stats.FixtureDefinitionsCreated)
+	}
+
+	// Modes should have been merged into existing built-in definition
+	modes, _ := fixtureRepo.GetDefinitionModes(ctx, def.ID)
+	if len(modes) != 1 {
+		t.Errorf("Expected 1 mode merged, got %d", len(modes))
+	}
+}
+
+func TestImportProject_Integration_FixtureInstanceWithoutChannels(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Import fixture instance without explicit instance channels
+	// This should copy channels from definition
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "No Instance Channels Test",
+		},
+		FixtureDefinitions: []export.ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "TestMfg",
+				Model:        "TestModel",
+				Type:         "LED_PAR",
+				Channels: []export.ExportedChannelDefinition{
+					{Name: "Red", Type: "COLOR", Offset: 0},
+					{Name: "Green", Type: "COLOR", Offset: 1},
+					{Name: "Blue", Type: "COLOR", Offset: 2},
+				},
+			},
+		},
+		FixtureInstances: []export.ExportedFixtureInstance{
+			{
+				RefID:           "inst-1",
+				Name:            "Fixture without channels",
+				DefinitionRefID: "def-1",
+				Universe:        1,
+				StartChannel:    1,
+				// No InstanceChannels specified
+				// No ChannelCount specified
+			},
+		},
+	}
+
+	jsonStr, _ := exported.ToJSON()
+
+	projectID, stats, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	if stats.FixtureInstancesCreated != 1 {
+		t.Errorf("Expected 1 fixture instance, got %d", stats.FixtureInstancesCreated)
+	}
+
+	// Verify instance was created with channels from definition
+	fixtures, _ := fixtureRepo.FindByProjectID(ctx, projectID)
+	if len(fixtures) != 1 {
+		t.Fatalf("Expected 1 fixture, got %d", len(fixtures))
+	}
+
+	// Channel count should be set from definition channels
+	if fixtures[0].ChannelCount == nil || *fixtures[0].ChannelCount != 3 {
+		t.Errorf("Expected ChannelCount 3, got %v", fixtures[0].ChannelCount)
+	}
+
+	// Verify instance channels were created
+	instanceChannels, _ := fixtureRepo.GetInstanceChannels(ctx, fixtures[0].ID)
+	if len(instanceChannels) != 3 {
+		t.Errorf("Expected 3 instance channels (from definition), got %d", len(instanceChannels))
+	}
+}
+
+func TestImportProject_Integration_MergeWithExistingProject(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Create existing project
+	existingProject := &models.Project{
+		ID:   cuid.New(),
+		Name: "Existing Project",
+	}
+	_ = projectRepo.Create(ctx, existingProject)
+
+	// Import into existing project with MERGE mode
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Imported Project",
+		},
+		FixtureDefinitions: []export.ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "MergeMfg",
+				Model:        "MergeModel",
+				Type:         "LED",
+				Channels: []export.ExportedChannelDefinition{
+					{Name: "Dimmer", Type: "INTENSITY", Offset: 0},
+				},
+			},
+		},
+		FixtureInstances: []export.ExportedFixtureInstance{
+			{
+				RefID:           "inst-1",
+				Name:            "Merged Fixture",
+				DefinitionRefID: "def-1",
+				Universe:        1,
+				StartChannel:    1,
+			},
+		},
+	}
+
+	jsonStr, _ := exported.ToJSON()
+
+	projectID, stats, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode:            ImportModeMerge,
+		TargetProjectID: &existingProject.ID,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	// Should use the existing project ID
+	if projectID != existingProject.ID {
+		t.Errorf("Expected project ID %s, got %s", existingProject.ID, projectID)
+	}
+
+	if stats.FixtureDefinitionsCreated != 1 {
+		t.Errorf("Expected 1 definition created, got %d", stats.FixtureDefinitionsCreated)
+	}
+	if stats.FixtureInstancesCreated != 1 {
+		t.Errorf("Expected 1 instance created, got %d", stats.FixtureInstancesCreated)
+	}
+}
+
+func TestImportProject_Integration_MergeProjectNotFound(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Test Project",
+		},
+	}
+
+	jsonStr, _ := exported.ToJSON()
+
+	nonexistentID := "nonexistent-project-id"
+	projectID, stats, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode:            ImportModeMerge,
+		TargetProjectID: &nonexistentID,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject should not error on project not found: %v", err)
+	}
+
+	// Should return empty since project not found
+	if projectID != "" {
+		t.Errorf("Expected empty project ID when target not found, got %s", projectID)
+	}
+	if stats != nil {
+		t.Error("Expected nil stats when target not found")
+	}
+}
+
+func TestImportProject_Integration_ModeChannelUnknownReference(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Import definition with mode channel referencing non-existent channel
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Bad Mode Channel Test",
+		},
+		FixtureDefinitions: []export.ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "TestMfg",
+				Model:        "TestModel",
+				Type:         "LED_PAR",
+				Channels: []export.ExportedChannelDefinition{
+					{RefID: "ch-r", Name: "Red", Type: "COLOR", Offset: 0},
+				},
+				Modes: []export.ExportedFixtureMode{
+					{
+						RefID:        "mode-bad",
+						Name:         "Bad Mode",
+						ChannelCount: 2,
+						ModeChannels: []export.ExportedModeChannel{
+							{ChannelRefID: "ch-r", Offset: 0},
+							{ChannelRefID: "ch-nonexistent", Offset: 1}, // Unknown channel
+						},
+					},
+				},
+			},
+		},
+	}
+
+	jsonStr, _ := exported.ToJSON()
+
+	_, stats, warnings, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	if stats.FixtureDefinitionsCreated != 1 {
+		t.Errorf("Expected 1 definition, got %d", stats.FixtureDefinitionsCreated)
+	}
+
+	// Should have a warning about unknown channel reference
+	found := false
+	for _, w := range warnings {
+		if w == "Mode channel references unknown channel: ch-nonexistent" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected warning about unknown channel, got: %v", warnings)
 	}
 }
