@@ -46,7 +46,7 @@ type Resolver struct {
 }
 
 // NewResolver creates a new Resolver instance with all dependencies.
-func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *fade.Engine, playbackService *playback.Service) *Resolver {
+func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *fade.Engine, playbackService *playback.Service, oflCachePath string) *Resolver {
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
 	sceneRepo := repositories.NewSceneRepository(db)
@@ -56,7 +56,7 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *fade.Engine, 
 	ps := pubsub.New()
 
 	// Create PubSub first so it can be passed to OFLManager
-	oflManager := ofl.NewManager(db, fixtureRepo, ps, "./.ofl-cache")
+	oflManager := ofl.NewManager(db, fixtureRepo, ps, oflCachePath)
 
 	r := &Resolver{
 		db:              db,
