@@ -792,11 +792,6 @@ input CreateModeInput {
   channels: [String!]!  # Channel names in order for this mode
 }
 
-input CreateModeChannelInput {
-  channelName: String!  # References channel by name
-  offset: Int!
-}
-
 input ChannelFadeBehaviorInput {
   channelId: ID!
   fadeBehavior: FadeBehavior!

@@ -97,7 +97,6 @@ func (s *Service) importModesForExistingDefinition(ctx context.Context, existing
 	}
 
 	// Build channel name -> existing channel ID mapping
-	// Also build export RefID -> existing channel ID mapping
 	channelNameToID := make(map[string]string)
 	for _, ch := range existingChannels {
 		channelNameToID[ch.Name] = ch.ID
@@ -143,7 +142,12 @@ func (s *Service) importModesForExistingDefinition(ctx context.Context, existing
 			}
 
 			if existingChannelID == "" {
-				warnings = append(warnings, "Mode '"+mode.Name+"' channel references unknown channel: "+mc.ChannelRefID)
+				// Include both RefID and channel name (if available) for better debugging
+				channelDesc := mc.ChannelRefID
+				if channelName, ok := exportRefIDToName[mc.ChannelRefID]; ok {
+					channelDesc = channelName + " (RefID: " + mc.ChannelRefID + ")"
+				}
+				warnings = append(warnings, "Mode '"+mode.Name+"' channel references unknown channel: "+channelDesc)
 				continue
 			}
 
@@ -262,6 +266,11 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 				warnings = append(warnings, "Skipped existing fixture definition: "+def.Manufacturer+" "+def.Model)
 				continue
 			case FixtureConflictReplace:
+				// For fixture definitions, "Replace" behaves like "Skip" - we reuse the
+				// existing definition and merge new modes. We don't delete the existing
+				// definition because it may be used by other projects. The "Replace"
+				// strategy is more meaningful at the project level (replacing project
+				// data) rather than globally shared fixture definitions.
 				definitionIDMap[def.RefID] = existing.ID
 				// Import modes that don't already exist on the existing definition
 				if len(def.Modes) > 0 {

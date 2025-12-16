@@ -178,11 +178,6 @@ type CreateFixtureInstanceInput struct {
 	Tags         graphql.Omittable[[]string] `json:"tags,omitempty"`
 }
 
-type CreateModeChannelInput struct {
-	ChannelName string `json:"channelName"`
-	Offset      int    `json:"offset"`
-}
-
 type CreateModeInput struct {
 	Name      string                     `json:"name"`
 	ShortName graphql.Omittable[*string] `json:"shortName,omitempty"`

@@ -4764,7 +4764,6 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCreateCueListInput,
 		ec.unmarshalInputCreateFixtureDefinitionInput,
 		ec.unmarshalInputCreateFixtureInstanceInput,
-		ec.unmarshalInputCreateModeChannelInput,
 		ec.unmarshalInputCreateModeInput,
 		ec.unmarshalInputCreateProjectInput,
 		ec.unmarshalInputCreateSceneBoardButtonInput,
@@ -5702,11 +5701,6 @@ input CreateModeInput {
   name: String!
   shortName: String
   channels: [String!]!  # Channel names in order for this mode
-}
-
-input CreateModeChannelInput {
-  channelName: String!  # References channel by name
-  offset: Int!
 }
 
 input ChannelFadeBehaviorInput {
@@ -29628,40 +29622,6 @@ func (ec *executionContext) unmarshalInputCreateFixtureInstanceInput(ctx context
 				return it, err
 			}
 			it.Tags = graphql.OmittableOf(data)
-		}
-	}
-
-	return it, nil
-}
-
-func (ec *executionContext) unmarshalInputCreateModeChannelInput(ctx context.Context, obj any) (CreateModeChannelInput, error) {
-	var it CreateModeChannelInput
-	asMap := map[string]any{}
-	for k, v := range obj.(map[string]any) {
-		asMap[k] = v
-	}
-
-	fieldsInOrder := [...]string{"channelName", "offset"}
-	for _, k := range fieldsInOrder {
-		v, ok := asMap[k]
-		if !ok {
-			continue
-		}
-		switch k {
-		case "channelName":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channelName"))
-			data, err := ec.unmarshalNString2string(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.ChannelName = data
-		case "offset":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("offset"))
-			data, err := ec.unmarshalNInt2int(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.Offset = data
 		}
 	}
 

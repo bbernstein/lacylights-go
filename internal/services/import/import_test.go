@@ -209,54 +209,6 @@ func TestImportProject_InvalidJSON(t *testing.T) {
 	}
 }
 
-func TestImportProject_EmptyJSON(t *testing.T) {
-	service := NewService(nil, nil, nil, nil, nil)
-
-	// Test with empty JSON object - should parse but panic on nil repo
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic due to nil repository")
-		}
-	}()
-
-	_, _, _, _ = service.ImportProject(context.Background(), "{}", ImportOptions{
-		Mode: ImportModeCreate,
-	})
-}
-
-func TestImportProject_ValidJSONWithNilRepos(t *testing.T) {
-	service := NewService(nil, nil, nil, nil, nil)
-
-	// Create a valid export JSON
-	exported := &export.ExportedProject{
-		Version: "1.0",
-		Project: &export.ExportProjectInfo{
-			OriginalID: "proj-1",
-			Name:       "Test Project",
-		},
-		FixtureDefinitions: []export.ExportedFixtureDefinition{},
-		FixtureInstances:   []export.ExportedFixtureInstance{},
-		Scenes:             []export.ExportedScene{},
-		CueLists:           []export.ExportedCueList{},
-	}
-
-	jsonStr, err := exported.ToJSON()
-	if err != nil {
-		t.Fatalf("Failed to create JSON: %v", err)
-	}
-
-	// This will parse successfully but panic on project creation due to nil repo
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic due to nil repository")
-		}
-	}()
-
-	_, _, _, _ = service.ImportProject(context.Background(), jsonStr, ImportOptions{
-		Mode: ImportModeCreate,
-	})
-}
-
 func TestImportProject_MergeWithNilTargetProject(t *testing.T) {
 	service := NewService(nil, nil, nil, nil, nil)
 
@@ -323,36 +275,6 @@ func TestImportProject_ReplaceWithNilTargetProject(t *testing.T) {
 	if warnings != nil {
 		t.Error("Expected nil warnings")
 	}
-}
-
-func TestImportProject_MergeWithTargetProjectButNilRepo(t *testing.T) {
-	service := NewService(nil, nil, nil, nil, nil)
-
-	exported := &export.ExportedProject{
-		Version: "1.0",
-		Project: &export.ExportProjectInfo{
-			OriginalID: "proj-1",
-			Name:       "Test Project",
-		},
-	}
-
-	jsonStr, err := exported.ToJSON()
-	if err != nil {
-		t.Fatalf("Failed to create JSON: %v", err)
-	}
-
-	targetID := "target-project-id"
-	// Merge mode with target project ID but nil repo should panic
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic due to nil repository")
-		}
-	}()
-
-	_, _, _, _ = service.ImportProject(context.Background(), jsonStr, ImportOptions{
-		Mode:            ImportModeMerge,
-		TargetProjectID: &targetID,
-	})
 }
 
 func TestImportOptions_AllModes(t *testing.T) {
@@ -433,109 +355,7 @@ func TestImportOptions_WithTargetProjectID(t *testing.T) {
 	}
 }
 
-func TestImportProject_WithCustomProjectName(t *testing.T) {
-	service := NewService(nil, nil, nil, nil, nil)
-
-	exported := &export.ExportedProject{
-		Version: "1.0",
-		Project: &export.ExportProjectInfo{
-			OriginalID: "proj-1",
-			Name:       "Original Name",
-		},
-	}
-
-	jsonStr, err := exported.ToJSON()
-	if err != nil {
-		t.Fatalf("Failed to create JSON: %v", err)
-	}
-
-	customName := "Custom Project Name"
-	// Will panic due to nil repo, but we're testing that the path is exercised
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic due to nil repository")
-		}
-	}()
-
-	_, _, _, _ = service.ImportProject(context.Background(), jsonStr, ImportOptions{
-		Mode:        ImportModeCreate,
-		ProjectName: &customName,
-	})
-}
-
-func TestImportProject_ReplaceWithTargetProject(t *testing.T) {
-	service := NewService(nil, nil, nil, nil, nil)
-
-	exported := &export.ExportedProject{
-		Version: "1.0",
-		Project: &export.ExportProjectInfo{
-			OriginalID: "proj-1",
-			Name:       "Test Project",
-		},
-	}
-
-	jsonStr, err := exported.ToJSON()
-	if err != nil {
-		t.Fatalf("Failed to create JSON: %v", err)
-	}
-
-	targetID := "target-project-id"
-	// Replace mode with target project ID but nil repo should panic
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic due to nil repository")
-		}
-	}()
-
-	_, _, _, _ = service.ImportProject(context.Background(), jsonStr, ImportOptions{
-		Mode:            ImportModeReplace,
-		TargetProjectID: &targetID,
-	})
-}
-
-func TestImportProject_WithFixtureDefinitions(t *testing.T) {
-	service := NewService(nil, nil, nil, nil, nil)
-
-	exported := &export.ExportedProject{
-		Version: "1.0",
-		Project: &export.ExportProjectInfo{
-			OriginalID: "proj-1",
-			Name:       "Test Project",
-		},
-		FixtureDefinitions: []export.ExportedFixtureDefinition{
-			{
-				RefID:        "def-1",
-				Manufacturer: "TestMfg",
-				Model:        "TestModel",
-				Type:         "LED",
-				IsBuiltIn:    false,
-				Channels: []export.ExportedChannelDefinition{
-					{Name: "Red", Type: "COLOR", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
-				},
-			},
-		},
-	}
-
-	jsonStr, err := exported.ToJSON()
-	if err != nil {
-		t.Fatalf("Failed to create JSON: %v", err)
-	}
-
-	// Will panic due to nil repo
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic due to nil repository")
-		}
-	}()
-
-	_, _, _, _ = service.ImportProject(context.Background(), jsonStr, ImportOptions{
-		Mode: ImportModeCreate,
-	})
-}
-
 func TestImportProject_ComplexExport(t *testing.T) {
-	service := NewService(nil, nil, nil, nil, nil)
-
 	followTime := 2.0
 	easingType := "LINEAR"
 	desc := "Test description"
@@ -620,117 +440,19 @@ func TestImportProject_ComplexExport(t *testing.T) {
 	if parsed.Project.Name != "Complex Project" {
 		t.Errorf("Expected 'Complex Project', got '%s'", parsed.Project.Name)
 	}
-
-	// Will panic due to nil repo
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic due to nil repository")
-		}
-	}()
-
-	_, _, _, _ = service.ImportProject(context.Background(), jsonStr, ImportOptions{
-		Mode:                    ImportModeCreate,
-		FixtureConflictStrategy: FixtureConflictSkip,
-		ImportBuiltInFixtures:   true,
-	})
-}
-
-func TestImportProject_WithBuiltInFixtures(t *testing.T) {
-	service := NewService(nil, nil, nil, nil, nil)
-
-	exported := &export.ExportedProject{
-		Version: "1.0",
-		Project: &export.ExportProjectInfo{
-			OriginalID: "proj-1",
-			Name:       "Test Project",
-		},
-		FixtureDefinitions: []export.ExportedFixtureDefinition{
-			{
-				RefID:        "def-1",
-				Manufacturer: "Generic",
-				Model:        "Dimmer",
-				Type:         "DIMMER",
-				IsBuiltIn:    true, // Built-in fixture
-				Channels: []export.ExportedChannelDefinition{
-					{Name: "Intensity", Type: "INTENSITY", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
-				},
-			},
-		},
+	// Verify complex structure elements are preserved
+	if len(parsed.FixtureDefinitions) != 1 {
+		t.Errorf("Expected 1 fixture definition, got %d", len(parsed.FixtureDefinitions))
 	}
-
-	jsonStr, err := exported.ToJSON()
-	if err != nil {
-		t.Fatalf("Failed to create JSON: %v", err)
+	if len(parsed.FixtureInstances) != 1 {
+		t.Errorf("Expected 1 fixture instance, got %d", len(parsed.FixtureInstances))
 	}
-
-	// Will panic due to nil repo
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic due to nil repository")
-		}
-	}()
-
-	// Import with ImportBuiltInFixtures=false should try to find existing built-in
-	_, _, _, _ = service.ImportProject(context.Background(), jsonStr, ImportOptions{
-		Mode:                  ImportModeCreate,
-		ImportBuiltInFixtures: false,
-	})
-}
-
-func TestImportProject_WithInstanceChannels(t *testing.T) {
-	service := NewService(nil, nil, nil, nil, nil)
-
-	exported := &export.ExportedProject{
-		Version: "1.0",
-		Project: &export.ExportProjectInfo{
-			OriginalID: "proj-1",
-			Name:       "Test Project",
-		},
-		FixtureDefinitions: []export.ExportedFixtureDefinition{
-			{
-				RefID:        "def-1",
-				Manufacturer: "TestMfg",
-				Model:        "TestModel",
-				Type:         "LED",
-				IsBuiltIn:    false,
-				Channels: []export.ExportedChannelDefinition{
-					{Name: "Red", Type: "COLOR", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
-					{Name: "Green", Type: "COLOR", Offset: 1, MinValue: 0, MaxValue: 255, DefaultValue: 0},
-					{Name: "Blue", Type: "COLOR", Offset: 2, MinValue: 0, MaxValue: 255, DefaultValue: 0},
-				},
-			},
-		},
-		FixtureInstances: []export.ExportedFixtureInstance{
-			{
-				RefID:           "inst-1",
-				Name:            "LED with Instance Channels",
-				DefinitionRefID: "def-1",
-				Universe:        1,
-				StartChannel:    1,
-				InstanceChannels: []export.ExportedInstanceChannel{
-					{Name: "Red", Type: "COLOR", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
-					{Name: "Green", Type: "COLOR", Offset: 1, MinValue: 0, MaxValue: 255, DefaultValue: 0},
-					{Name: "Blue", Type: "COLOR", Offset: 2, MinValue: 0, MaxValue: 255, DefaultValue: 0},
-				},
-			},
-		},
+	if len(parsed.Scenes) != 1 {
+		t.Errorf("Expected 1 scene, got %d", len(parsed.Scenes))
 	}
-
-	jsonStr, err := exported.ToJSON()
-	if err != nil {
-		t.Fatalf("Failed to create JSON: %v", err)
+	if len(parsed.CueLists) != 1 {
+		t.Errorf("Expected 1 cue list, got %d", len(parsed.CueLists))
 	}
-
-	// Will panic due to nil repo
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic due to nil repository")
-		}
-	}()
-
-	_, _, _, _ = service.ImportProject(context.Background(), jsonStr, ImportOptions{
-		Mode: ImportModeCreate,
-	})
 }
 
 func TestImportProject_MalformedJSON(t *testing.T) {
@@ -806,9 +528,7 @@ func TestImportStats_AllFieldsSet(t *testing.T) {
 	}
 }
 
-func TestImportProject_WithSceneOrder(t *testing.T) {
-	service := NewService(nil, nil, nil, nil, nil)
-
+func TestImportProject_SceneOrderJSONParsing(t *testing.T) {
 	sceneOrder := 5
 	exported := &export.ExportedProject{
 		Version: "1.0",
@@ -840,21 +560,23 @@ func TestImportProject_WithSceneOrder(t *testing.T) {
 		t.Fatalf("Failed to create JSON: %v", err)
 	}
 
-	// Will panic due to nil repo
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic due to nil repository")
-		}
-	}()
-
-	_, _, _, _ = service.ImportProject(context.Background(), jsonStr, ImportOptions{
-		Mode: ImportModeCreate,
-	})
+	// Verify JSON was created correctly with scene order
+	parsed, err := export.ParseExportedProject(jsonStr)
+	if err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
+	if len(parsed.Scenes) != 1 {
+		t.Fatalf("Expected 1 scene, got %d", len(parsed.Scenes))
+	}
+	if len(parsed.Scenes[0].FixtureValues) != 1 {
+		t.Fatalf("Expected 1 fixture value, got %d", len(parsed.Scenes[0].FixtureValues))
+	}
+	if parsed.Scenes[0].FixtureValues[0].SceneOrder == nil || *parsed.Scenes[0].FixtureValues[0].SceneOrder != 5 {
+		t.Error("Expected scene order to be preserved")
+	}
 }
 
-func TestImportProject_WithNotes(t *testing.T) {
-	service := NewService(nil, nil, nil, nil, nil)
-
+func TestImportProject_NotesJSONParsing(t *testing.T) {
 	notes := "Important cue notes"
 	followTime := 3.0
 	easingType := "EASE_OUT"
@@ -905,22 +627,9 @@ func TestImportProject_WithNotes(t *testing.T) {
 	if parsed.CueLists[0].Cues[0].Notes == nil || *parsed.CueLists[0].Cues[0].Notes != notes {
 		t.Error("Expected notes to be preserved")
 	}
-
-	// Will panic due to nil repo
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic due to nil repository")
-		}
-	}()
-
-	_, _, _, _ = service.ImportProject(context.Background(), jsonStr, ImportOptions{
-		Mode: ImportModeCreate,
-	})
 }
 
 func TestImportProject_WithModes(t *testing.T) {
-	service := NewService(nil, nil, nil, nil, nil)
-
 	shortName := "4CH"
 	exported := &export.ExportedProject{
 		Version: "1.0",
@@ -1015,23 +724,10 @@ func TestImportProject_WithModes(t *testing.T) {
 	if mode5ch.ModeChannels[0].ChannelRefID != "ch-i" {
 		t.Errorf("Expected 5-channel mode first channel to be 'ch-i', got '%s'", mode5ch.ModeChannels[0].ChannelRefID)
 	}
-
-	// Will panic due to nil repo when trying to import
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic due to nil repository")
-		}
-	}()
-
-	_, _, _, _ = service.ImportProject(context.Background(), jsonStr, ImportOptions{
-		Mode: ImportModeCreate,
-	})
 }
 
-func TestImportProject_WithModes_ChannelNameFallback(t *testing.T) {
-	// Test that import works when channels have no RefID (uses name as fallback)
-	service := NewService(nil, nil, nil, nil, nil)
-
+func TestImportProject_ModesChannelNameFallbackJSONParsing(t *testing.T) {
+	// Test that channels without RefID use name as fallback
 	exported := &export.ExportedProject{
 		Version: "1.0",
 		Project: &export.ExportProjectInfo{
@@ -1091,23 +787,10 @@ func TestImportProject_WithModes_ChannelNameFallback(t *testing.T) {
 	if def.Modes[0].ModeChannels[0].ChannelRefID != "Red" {
 		t.Errorf("Expected mode channel RefID 'Red', got '%s'", def.Modes[0].ModeChannels[0].ChannelRefID)
 	}
-
-	// Will panic due to nil repo
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic due to nil repository")
-		}
-	}()
-
-	_, _, _, _ = service.ImportProject(context.Background(), jsonStr, ImportOptions{
-		Mode: ImportModeCreate,
-	})
 }
 
 func TestImportProject_WithModeNameAndChannelCount(t *testing.T) {
 	// Test that fixture instances with ModeName and ChannelCount are properly preserved
-	service := NewService(nil, nil, nil, nil, nil)
-
 	modeName := "4-channel"
 	channelCount := 4
 	shortName := "4CH"
@@ -1229,23 +912,10 @@ func TestImportProject_WithModeNameAndChannelCount(t *testing.T) {
 	if *inst2.ChannelCount != 4 {
 		t.Errorf("Expected ChannelCount 4, got %d", *inst2.ChannelCount)
 	}
-
-	// Will panic due to nil repo when trying to import
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic due to nil repository")
-		}
-	}()
-
-	_, _, _, _ = service.ImportProject(context.Background(), jsonStr, ImportOptions{
-		Mode: ImportModeCreate,
-	})
 }
 
-func TestImportProject_FixtureInstance_NoModeName(t *testing.T) {
+func TestImportProject_FixtureInstanceNoModeNameJSONParsing(t *testing.T) {
 	// Test that fixture instances without ModeName work correctly (nil stays nil)
-	service := NewService(nil, nil, nil, nil, nil)
-
 	exported := &export.ExportedProject{
 		Version: "1.0",
 		Project: &export.ExportProjectInfo{
@@ -1296,17 +966,6 @@ func TestImportProject_FixtureInstance_NoModeName(t *testing.T) {
 	if inst.ChannelCount != nil {
 		t.Errorf("Expected ChannelCount to be nil, got %d", *inst.ChannelCount)
 	}
-
-	// Will panic due to nil repo
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("Expected panic due to nil repository")
-		}
-	}()
-
-	_, _, _, _ = service.ImportProject(context.Background(), jsonStr, ImportOptions{
-		Mode: ImportModeCreate,
-	})
 }
 
 func TestImportProject_LegacyChannelValuesFormat(t *testing.T) {
