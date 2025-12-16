@@ -142,12 +142,13 @@ func (s *Service) importModesForExistingDefinition(ctx context.Context, existing
 			}
 
 			if existingChannelID == "" {
-				// Include both RefID and channel name (if available) for better debugging
-				channelDesc := mc.ChannelRefID
+				// Include RefID and channel name (if available) for better debugging
+				// Always show RefID, append channel name when available for consistency
+				channelDesc := "RefID: " + mc.ChannelRefID
 				if channelName, ok := exportRefIDToName[mc.ChannelRefID]; ok {
-					channelDesc = channelName + " (RefID: " + mc.ChannelRefID + ")"
+					channelDesc += ", name: " + channelName
 				}
-				warnings = append(warnings, "Mode '"+mode.Name+"' channel references unknown channel: "+channelDesc)
+				warnings = append(warnings, "Mode '"+mode.Name+"' references unknown channel ("+channelDesc+")")
 				continue
 			}
 
@@ -280,6 +281,7 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 					}
 					warnings = append(warnings, modeWarnings...)
 				}
+				warnings = append(warnings, "Reused existing fixture definition (Replace merges modes): "+def.Manufacturer+" "+def.Model)
 				continue
 			case FixtureConflictRename:
 				// Will create with new ID

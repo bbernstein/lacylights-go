@@ -124,7 +124,7 @@ type ExportedChannelValue struct {
 type ExportedFixtureValue struct {
 	FixtureRefID  string                 `json:"fixtureRefId"`
 	Channels      []ExportedChannelValue `json:"channels"`
-	ChannelValues []int                  `json:"channelValues,omitempty"` // Legacy array format for backward compatibility
+	ChannelValues []int                  `json:"channelValues,omitempty"` // Read-only: used to import legacy dense array format, not populated on export
 	SceneOrder    *int                   `json:"sceneOrder,omitempty"`
 }
 
