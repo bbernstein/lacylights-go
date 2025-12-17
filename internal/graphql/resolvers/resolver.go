@@ -25,12 +25,13 @@ type Resolver struct {
 	db *gorm.DB
 
 	// Repositories
-	ProjectRepo *repositories.ProjectRepository
-	SettingRepo *repositories.SettingRepository
-	FixtureRepo *repositories.FixtureRepository
-	SceneRepo   *repositories.SceneRepository
-	CueListRepo *repositories.CueListRepository
-	CueRepo     *repositories.CueRepository
+	ProjectRepo    *repositories.ProjectRepository
+	SettingRepo    *repositories.SettingRepository
+	FixtureRepo    *repositories.FixtureRepository
+	SceneRepo      *repositories.SceneRepository
+	CueListRepo    *repositories.CueListRepository
+	CueRepo        *repositories.CueRepository
+	SceneBoardRepo *repositories.SceneBoardRepository
 
 	// Services
 	DMXService      *dmx.Service
@@ -52,6 +53,7 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *fade.Engine, 
 	sceneRepo := repositories.NewSceneRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
+	sceneBoardRepo := repositories.NewSceneBoardRepository(db)
 
 	ps := pubsub.New()
 
@@ -66,11 +68,12 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *fade.Engine, 
 		SceneRepo:       sceneRepo,
 		CueListRepo:     cueListRepo,
 		CueRepo:         cueRepo,
+		SceneBoardRepo:  sceneBoardRepo,
 		DMXService:      dmxService,
 		FadeEngine:      fadeEngine,
 		PlaybackService: playbackService,
-		ExportService:   export.NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo),
-		ImportService:   importservice.NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo),
+		ExportService:   export.NewServiceWithSceneBoards(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo, sceneBoardRepo),
+		ImportService:   importservice.NewServiceWithSceneBoards(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo, sceneBoardRepo),
 		OFLService:      ofl.NewService(db, fixtureRepo),
 		OFLManager:      oflManager,
 		PreviewService:  preview.NewService(fixtureRepo, sceneRepo, dmxService),

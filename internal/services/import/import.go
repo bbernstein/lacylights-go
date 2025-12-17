@@ -36,6 +36,7 @@ type ImportStats struct {
 	ScenesCreated             int
 	CueListsCreated           int
 	CuesCreated               int
+	SceneBoardsCreated        int
 }
 
 // ImportOptions configures the import behavior.
@@ -49,11 +50,12 @@ type ImportOptions struct {
 
 // Service handles project import operations.
 type Service struct {
-	projectRepo  *repositories.ProjectRepository
-	fixtureRepo  *repositories.FixtureRepository
-	sceneRepo    *repositories.SceneRepository
-	cueListRepo  *repositories.CueListRepository
-	cueRepo      *repositories.CueRepository
+	projectRepo    *repositories.ProjectRepository
+	fixtureRepo    *repositories.FixtureRepository
+	sceneRepo      *repositories.SceneRepository
+	cueListRepo    *repositories.CueListRepository
+	cueRepo        *repositories.CueRepository
+	sceneBoardRepo *repositories.SceneBoardRepository
 }
 
 // NewService creates a new import service.
@@ -70,6 +72,25 @@ func NewService(
 		sceneRepo:    sceneRepo,
 		cueListRepo:  cueListRepo,
 		cueRepo:      cueRepo,
+	}
+}
+
+// NewServiceWithSceneBoards creates a new import service with scene board support.
+func NewServiceWithSceneBoards(
+	projectRepo *repositories.ProjectRepository,
+	fixtureRepo *repositories.FixtureRepository,
+	sceneRepo *repositories.SceneRepository,
+	cueListRepo *repositories.CueListRepository,
+	cueRepo *repositories.CueRepository,
+	sceneBoardRepo *repositories.SceneBoardRepository,
+) *Service {
+	return &Service{
+		projectRepo:    projectRepo,
+		fixtureRepo:    fixtureRepo,
+		sceneRepo:      sceneRepo,
+		cueListRepo:    cueListRepo,
+		cueRepo:        cueRepo,
+		sceneBoardRepo: sceneBoardRepo,
 	}
 }
 
@@ -300,6 +321,11 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 		channelRefIDMap := make(map[string]string) // old RefID -> new ID
 		for _, ch := range def.Channels {
 			newChannelID := cuid.New()
+			// Default fade behavior to FADE if not specified
+			fadeBehavior := ch.FadeBehavior
+			if fadeBehavior == "" {
+				fadeBehavior = "FADE"
+			}
 			channels = append(channels, models.ChannelDefinition{
 				ID:           newChannelID,
 				Name:         ch.Name,
@@ -308,6 +334,8 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 				MinValue:     ch.MinValue,
 				MaxValue:     ch.MaxValue,
 				DefaultValue: ch.DefaultValue,
+				FadeBehavior: fadeBehavior,
+				IsDiscrete:   ch.IsDiscrete,
 			})
 			// Map the old RefID to the new ID
 			if ch.RefID != "" {
@@ -384,24 +412,33 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 		}
 
 		newFixture := &models.FixtureInstance{
-			Name:         f.Name,
-			Description:  f.Description,
-			DefinitionID: newDefID,
-			ProjectID:    projectID,
-			Universe:     f.Universe,
-			StartChannel: f.StartChannel,
-			Tags:         tagsJSON,
-			Manufacturer: &def.Manufacturer,
-			Model:        &def.Model,
-			Type:         &def.Type,
-			ModeName:     f.ModeName,
-			ChannelCount: f.ChannelCount,
+			Name:           f.Name,
+			Description:    f.Description,
+			DefinitionID:   newDefID,
+			ProjectID:      projectID,
+			Universe:       f.Universe,
+			StartChannel:   f.StartChannel,
+			Tags:           tagsJSON,
+			Manufacturer:   &def.Manufacturer,
+			Model:          &def.Model,
+			Type:           &def.Type,
+			ModeName:       f.ModeName,
+			ChannelCount:   f.ChannelCount,
+			ProjectOrder:   f.ProjectOrder,
+			LayoutX:        f.LayoutX,
+			LayoutY:        f.LayoutY,
+			LayoutRotation: f.LayoutRotation,
 		}
 
 		// Use instance channels from export if available, otherwise get from definition
 		var instanceChannels []models.InstanceChannel
 		if len(f.InstanceChannels) > 0 {
 			for _, ch := range f.InstanceChannels {
+				// Default fade behavior to FADE if not specified
+				fadeBehavior := ch.FadeBehavior
+				if fadeBehavior == "" {
+					fadeBehavior = "FADE"
+				}
 				instanceChannels = append(instanceChannels, models.InstanceChannel{
 					Offset:       ch.Offset,
 					Name:         ch.Name,
@@ -409,6 +446,8 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 					MinValue:     ch.MinValue,
 					MaxValue:     ch.MaxValue,
 					DefaultValue: ch.DefaultValue,
+					FadeBehavior: fadeBehavior,
+					IsDiscrete:   ch.IsDiscrete,
 				})
 			}
 		} else {
@@ -426,6 +465,8 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 					MinValue:     ch.MinValue,
 					MaxValue:     ch.MaxValue,
 					DefaultValue: ch.DefaultValue,
+					FadeBehavior: ch.FadeBehavior,
+					IsDiscrete:   ch.IsDiscrete,
 				})
 			}
 		}
@@ -538,6 +579,49 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 				return "", nil, nil, err
 			}
 			stats.CuesCreated++
+		}
+	}
+
+	// Import scene boards
+	// Note: Scene boards are imported regardless of includeScenes flag. If scenes were not
+	// included in the import (or failed to import), scene board buttons referencing those
+	// scenes will be skipped with a warning. This allows partial imports while maintaining
+	// data integrity.
+	if s.sceneBoardRepo != nil && len(exported.SceneBoards) > 0 {
+		for _, board := range exported.SceneBoards {
+			newBoard := &models.SceneBoard{
+				Name:            board.Name,
+				Description:     board.Description,
+				DefaultFadeTime: board.DefaultFadeTime,
+				GridSize:        board.GridSize,
+				CanvasWidth:     board.CanvasWidth,
+				CanvasHeight:    board.CanvasHeight,
+				ProjectID:       projectID,
+			}
+
+			var buttons []models.SceneBoardButton
+			for _, btn := range board.Buttons {
+				newSceneID, ok := sceneIDMap[btn.SceneRefID]
+				if !ok {
+					warnings = append(warnings, "Skipping scene board button with unknown scene in board: "+board.Name)
+					continue
+				}
+
+				buttons = append(buttons, models.SceneBoardButton{
+					SceneID: newSceneID,
+					LayoutX: btn.LayoutX,
+					LayoutY: btn.LayoutY,
+					Width:   btn.Width,
+					Height:  btn.Height,
+					Color:   btn.Color,
+					Label:   btn.Label,
+				})
+			}
+
+			if err := s.sceneBoardRepo.CreateWithButtons(ctx, newBoard, buttons); err != nil {
+				return "", nil, nil, err
+			}
+			stats.SceneBoardsCreated++
 		}
 	}
 

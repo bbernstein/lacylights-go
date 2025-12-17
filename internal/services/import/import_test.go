@@ -1141,6 +1141,8 @@ func setupTestDB(t *testing.T) (*gorm.DB, func()) {
 		&models.FixtureValue{},
 		&models.CueList{},
 		&models.Cue{},
+		&models.SceneBoard{},
+		&models.SceneBoardButton{},
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)
@@ -2494,5 +2496,623 @@ func TestImportProject_Integration_ModeChannelUnknownReference(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("Expected warning about unknown channel, got: %v", warnings)
+	}
+}
+
+func TestNewServiceWithSceneBoards(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+	sceneBoardRepo := repositories.NewSceneBoardRepository(db)
+
+	// Test with scene board repo
+	service := NewServiceWithSceneBoards(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo, sceneBoardRepo)
+	if service == nil {
+		t.Fatal("Expected service to be created")
+	}
+	if service.sceneBoardRepo == nil {
+		t.Error("Expected sceneBoardRepo to be set")
+	}
+
+	// Test without scene board repo (original constructor)
+	serviceOrig := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	if serviceOrig == nil {
+		t.Fatal("Expected original service to be created")
+	}
+	if serviceOrig.sceneBoardRepo != nil {
+		t.Error("Expected sceneBoardRepo to be nil for original constructor")
+	}
+}
+
+func TestImportProject_Integration_WithSceneBoards(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+	sceneBoardRepo := repositories.NewSceneBoardRepository(db)
+
+	service := NewServiceWithSceneBoards(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo, sceneBoardRepo)
+	ctx := context.Background()
+
+	description := "Main board for lighting control"
+	gridSize := 8
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Scene Board Test",
+		},
+		Scenes: []export.ExportedScene{
+			{
+				RefID: "scene-1",
+				Name:  "Scene One",
+			},
+			{
+				RefID: "scene-2",
+				Name:  "Scene Two",
+			},
+		},
+		SceneBoards: []export.ExportedSceneBoard{
+			{
+				RefID:           "board-1",
+				Name:            "Main Board",
+				Description:     &description,
+				DefaultFadeTime: 2.5,
+				GridSize:        &gridSize,
+				CanvasWidth:     2000,
+				CanvasHeight:    2000,
+				Buttons: []export.ExportedSceneBoardButton{
+					{
+						SceneRefID: "scene-1",
+						LayoutX:    100,
+						LayoutY:    200,
+						Width:      intPtr(150),
+						Height:     intPtr(100),
+						Color:      strPtr("#FF0000"),
+						Label:      strPtr("Scene 1"),
+					},
+					{
+						SceneRefID: "scene-2",
+						LayoutX:    300,
+						LayoutY:    200,
+						Width:      intPtr(150),
+						Height:     intPtr(100),
+						Color:      strPtr("#00FF00"),
+						Label:      strPtr("Scene 2"),
+					},
+				},
+			},
+		},
+	}
+
+	jsonStr, err := exported.ToJSON()
+	if err != nil {
+		t.Fatalf("Failed to create JSON: %v", err)
+	}
+
+	projectID, stats, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	// Verify stats
+	if stats.SceneBoardsCreated != 1 {
+		t.Errorf("Expected 1 scene board created, got %d", stats.SceneBoardsCreated)
+	}
+
+	// Verify scene boards were created
+	boards, err := sceneBoardRepo.FindByProjectID(ctx, projectID)
+	if err != nil {
+		t.Fatalf("Failed to find scene boards: %v", err)
+	}
+	if len(boards) != 1 {
+		t.Fatalf("Expected 1 scene board, got %d", len(boards))
+	}
+
+	board := boards[0]
+	if board.Name != "Main Board" {
+		t.Errorf("Expected board name 'Main Board', got '%s'", board.Name)
+	}
+	if board.Description == nil || *board.Description != description {
+		t.Errorf("Expected description '%s', got %v", description, board.Description)
+	}
+	if board.DefaultFadeTime != 2.5 {
+		t.Errorf("Expected defaultFadeTime 2.5, got %f", board.DefaultFadeTime)
+	}
+	if board.GridSize == nil || *board.GridSize != 8 {
+		t.Errorf("Expected gridSize 8, got %v", board.GridSize)
+	}
+	if board.CanvasWidth != 2000 {
+		t.Errorf("Expected canvasWidth 2000, got %d", board.CanvasWidth)
+	}
+	if board.CanvasHeight != 2000 {
+		t.Errorf("Expected canvasHeight 2000, got %d", board.CanvasHeight)
+	}
+
+	// Verify buttons were created
+	buttons, err := sceneBoardRepo.GetButtons(ctx, board.ID)
+	if err != nil {
+		t.Fatalf("Failed to get buttons: %v", err)
+	}
+	if len(buttons) != 2 {
+		t.Fatalf("Expected 2 buttons, got %d", len(buttons))
+	}
+
+	// Check first button
+	btn1 := buttons[0]
+	if btn1.LayoutX != 100 || btn1.LayoutY != 200 {
+		t.Errorf("Button 1 position: expected (100, 200), got (%d, %d)", btn1.LayoutX, btn1.LayoutY)
+	}
+	if btn1.Width == nil || *btn1.Width != 150 {
+		t.Errorf("Button 1 width: expected 150, got %v", btn1.Width)
+	}
+	if btn1.Height == nil || *btn1.Height != 100 {
+		t.Errorf("Button 1 height: expected 100, got %v", btn1.Height)
+	}
+	if btn1.Color == nil || *btn1.Color != "#FF0000" {
+		t.Errorf("Button 1 color: expected #FF0000, got %v", btn1.Color)
+	}
+}
+
+func TestImportProject_Integration_WithLayoutFields(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	layoutX := 0.25
+	layoutY := 0.75
+	layoutRotation := 45.0
+	projectOrder := 2
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Layout Fields Test",
+		},
+		FixtureDefinitions: []export.ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "TestMfg",
+				Model:        "TestModel",
+				Type:         "LED_PAR",
+				Channels: []export.ExportedChannelDefinition{
+					{RefID: "ch-d", Name: "Dimmer", Type: "INTENSITY", Offset: 0},
+				},
+			},
+		},
+		FixtureInstances: []export.ExportedFixtureInstance{
+			{
+				RefID:           "inst-1",
+				Name:            "Fixture With Layout",
+				DefinitionRefID: "def-1",
+				Universe:        1,
+				StartChannel:    1,
+				LayoutX:         &layoutX,
+				LayoutY:         &layoutY,
+				LayoutRotation:  &layoutRotation,
+				ProjectOrder:    &projectOrder,
+			},
+		},
+	}
+
+	jsonStr, err := exported.ToJSON()
+	if err != nil {
+		t.Fatalf("Failed to create JSON: %v", err)
+	}
+
+	projectID, stats, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	if stats.FixtureInstancesCreated != 1 {
+		t.Errorf("Expected 1 fixture instance, got %d", stats.FixtureInstancesCreated)
+	}
+
+	// Verify fixture was created with layout fields
+	fixtures, _ := fixtureRepo.FindByProjectID(ctx, projectID)
+	if len(fixtures) != 1 {
+		t.Fatalf("Expected 1 fixture, got %d", len(fixtures))
+	}
+
+	f := fixtures[0]
+	if f.LayoutX == nil || *f.LayoutX != 0.25 {
+		t.Errorf("Expected LayoutX 0.25, got %v", f.LayoutX)
+	}
+	if f.LayoutY == nil || *f.LayoutY != 0.75 {
+		t.Errorf("Expected LayoutY 0.75, got %v", f.LayoutY)
+	}
+	if f.LayoutRotation == nil || *f.LayoutRotation != 45.0 {
+		t.Errorf("Expected LayoutRotation 45.0, got %v", f.LayoutRotation)
+	}
+	if f.ProjectOrder == nil || *f.ProjectOrder != 2 {
+		t.Errorf("Expected ProjectOrder 2, got %v", f.ProjectOrder)
+	}
+}
+
+func TestImportProject_Integration_WithFadeBehavior(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Fade Behavior Test",
+		},
+		FixtureDefinitions: []export.ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "TestMfg",
+				Model:        "TestModel",
+				Type:         "LED_PAR",
+				Channels: []export.ExportedChannelDefinition{
+					{RefID: "ch-d", Name: "Dimmer", Type: "INTENSITY", Offset: 0, FadeBehavior: "FADE", IsDiscrete: false},
+					{RefID: "ch-g", Name: "Gobo", Type: "GOBO", Offset: 1, FadeBehavior: "SNAP", IsDiscrete: true},
+					{RefID: "ch-s", Name: "Strobe", Type: "STROBE", Offset: 2, FadeBehavior: "SNAP_END", IsDiscrete: false},
+				},
+			},
+		},
+		FixtureInstances: []export.ExportedFixtureInstance{
+			{
+				RefID:           "inst-1",
+				Name:            "Fixture With Fade Behavior",
+				DefinitionRefID: "def-1",
+				Universe:        1,
+				StartChannel:    1,
+				InstanceChannels: []export.ExportedInstanceChannel{
+					{Name: "Dimmer", Type: "INTENSITY", Offset: 0, FadeBehavior: "FADE", IsDiscrete: false},
+					{Name: "Gobo", Type: "GOBO", Offset: 1, FadeBehavior: "SNAP", IsDiscrete: true},
+					{Name: "Strobe", Type: "STROBE", Offset: 2, FadeBehavior: "SNAP_END", IsDiscrete: false},
+				},
+			},
+		},
+	}
+
+	jsonStr, err := exported.ToJSON()
+	if err != nil {
+		t.Fatalf("Failed to create JSON: %v", err)
+	}
+
+	projectID, stats, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	if stats.FixtureDefinitionsCreated != 1 {
+		t.Errorf("Expected 1 fixture definition, got %d", stats.FixtureDefinitionsCreated)
+	}
+
+	// Verify definition channels have fade behavior
+	def, _ := fixtureRepo.FindDefinitionByManufacturerModel(ctx, "TestMfg", "TestModel")
+	if def == nil {
+		t.Fatal("Expected definition to be created")
+	}
+
+	channels, _ := fixtureRepo.GetDefinitionChannels(ctx, def.ID)
+	if len(channels) != 3 {
+		t.Fatalf("Expected 3 channels, got %d", len(channels))
+	}
+
+	// Check dimmer channel (FADE)
+	dimmer := findChannelByName(channels, "Dimmer")
+	if dimmer == nil {
+		t.Fatal("Expected Dimmer channel")
+	}
+	if dimmer.FadeBehavior != "FADE" {
+		t.Errorf("Expected Dimmer FadeBehavior 'FADE', got '%s'", dimmer.FadeBehavior)
+	}
+	if dimmer.IsDiscrete {
+		t.Error("Expected Dimmer IsDiscrete to be false")
+	}
+
+	// Check gobo channel (SNAP)
+	gobo := findChannelByName(channels, "Gobo")
+	if gobo == nil {
+		t.Fatal("Expected Gobo channel")
+	}
+	if gobo.FadeBehavior != "SNAP" {
+		t.Errorf("Expected Gobo FadeBehavior 'SNAP', got '%s'", gobo.FadeBehavior)
+	}
+	if !gobo.IsDiscrete {
+		t.Error("Expected Gobo IsDiscrete to be true")
+	}
+
+	// Check strobe channel (SNAP_END)
+	strobe := findChannelByName(channels, "Strobe")
+	if strobe == nil {
+		t.Fatal("Expected Strobe channel")
+	}
+	if strobe.FadeBehavior != "SNAP_END" {
+		t.Errorf("Expected Strobe FadeBehavior 'SNAP_END', got '%s'", strobe.FadeBehavior)
+	}
+
+	// Verify instance channels have fade behavior
+	fixtures, _ := fixtureRepo.FindByProjectID(ctx, projectID)
+	if len(fixtures) != 1 {
+		t.Fatalf("Expected 1 fixture, got %d", len(fixtures))
+	}
+
+	instanceChannels, _ := fixtureRepo.GetInstanceChannels(ctx, fixtures[0].ID)
+	if len(instanceChannels) != 3 {
+		t.Fatalf("Expected 3 instance channels, got %d", len(instanceChannels))
+	}
+
+	// Check instance dimmer
+	instDimmer := findInstanceChannelByName(instanceChannels, "Dimmer")
+	if instDimmer == nil {
+		t.Fatal("Expected instance Dimmer channel")
+	}
+	if instDimmer.FadeBehavior != "FADE" {
+		t.Errorf("Expected instance Dimmer FadeBehavior 'FADE', got '%s'", instDimmer.FadeBehavior)
+	}
+
+	// Check instance gobo
+	instGobo := findInstanceChannelByName(instanceChannels, "Gobo")
+	if instGobo == nil {
+		t.Fatal("Expected instance Gobo channel")
+	}
+	if instGobo.FadeBehavior != "SNAP" {
+		t.Errorf("Expected instance Gobo FadeBehavior 'SNAP', got '%s'", instGobo.FadeBehavior)
+	}
+}
+
+func findChannelByName(channels []models.ChannelDefinition, name string) *models.ChannelDefinition {
+	for i := range channels {
+		if channels[i].Name == name {
+			return &channels[i]
+		}
+	}
+	return nil
+}
+
+func findInstanceChannelByName(channels []models.InstanceChannel, name string) *models.InstanceChannel {
+	for i := range channels {
+		if channels[i].Name == name {
+			return &channels[i]
+		}
+	}
+	return nil
+}
+
+// Helper functions for creating pointers
+func intPtr(i int) *int {
+	return &i
+}
+
+func strPtr(s string) *string {
+	return &s
+}
+
+func TestImportProject_Integration_FadeBehaviorDefaultsToFade(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Import definition without fade behavior specified (legacy data)
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Legacy No Fade Behavior Test",
+		},
+		FixtureDefinitions: []export.ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "TestMfg",
+				Model:        "TestModel",
+				Type:         "LED_PAR",
+				Channels: []export.ExportedChannelDefinition{
+					{RefID: "ch-d", Name: "Dimmer", Type: "INTENSITY", Offset: 0},
+					// No FadeBehavior or IsDiscrete specified
+				},
+			},
+		},
+	}
+
+	jsonStr, err := exported.ToJSON()
+	if err != nil {
+		t.Fatalf("Failed to create JSON: %v", err)
+	}
+
+	_, _, _, err = service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	// Verify definition channels default to FADE
+	def, _ := fixtureRepo.FindDefinitionByManufacturerModel(ctx, "TestMfg", "TestModel")
+	if def == nil {
+		t.Fatal("Expected definition to be created")
+	}
+
+	channels, _ := fixtureRepo.GetDefinitionChannels(ctx, def.ID)
+	if len(channels) != 1 {
+		t.Fatalf("Expected 1 channel, got %d", len(channels))
+	}
+
+	// Should default to FADE
+	if channels[0].FadeBehavior != "FADE" {
+		t.Errorf("Expected default FadeBehavior 'FADE', got '%s'", channels[0].FadeBehavior)
+	}
+	if channels[0].IsDiscrete {
+		t.Error("Expected default IsDiscrete to be false")
+	}
+}
+
+func TestImportProject_Integration_SceneBoardsWithoutRepo(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	// Use service WITHOUT scene board repo
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Import data with scene boards, but service doesn't have scene board repo
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Scene Board Test Without Repo",
+		},
+		SceneBoards: []export.ExportedSceneBoard{
+			{
+				RefID:           "board-1",
+				Name:            "Test Board",
+				DefaultFadeTime: 2.0,
+				CanvasWidth:     2000,
+				CanvasHeight:    2000,
+			},
+		},
+	}
+
+	jsonStr, err := exported.ToJSON()
+	if err != nil {
+		t.Fatalf("Failed to create JSON: %v", err)
+	}
+
+	_, stats, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	// Should not have created any scene boards since repo is nil
+	if stats.SceneBoardsCreated != 0 {
+		t.Errorf("Expected 0 scene boards created (no repo), got %d", stats.SceneBoardsCreated)
+	}
+}
+
+func TestImportProject_Integration_SceneBoardButtonWithUnknownScene(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+	sceneBoardRepo := repositories.NewSceneBoardRepository(db)
+
+	service := NewServiceWithSceneBoards(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo, sceneBoardRepo)
+	ctx := context.Background()
+
+	// Import scene board with button referencing unknown scene
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "proj-1",
+			Name:       "Unknown Scene Button Test",
+		},
+		Scenes: []export.ExportedScene{
+			{
+				RefID: "scene-1",
+				Name:  "Known Scene",
+			},
+		},
+		SceneBoards: []export.ExportedSceneBoard{
+			{
+				RefID:           "board-1",
+				Name:            "Test Board",
+				DefaultFadeTime: 2.0,
+				CanvasWidth:     2000,
+				CanvasHeight:    2000,
+				Buttons: []export.ExportedSceneBoardButton{
+					{
+						SceneRefID: "scene-1", // Known scene
+						LayoutX:    100,
+						LayoutY:    100,
+						Width:      intPtr(100),
+						Height:     intPtr(100),
+						Color:      strPtr("#FF0000"),
+					},
+					{
+						SceneRefID: "unknown-scene", // Unknown scene
+						LayoutX:    200,
+						LayoutY:    100,
+						Width:      intPtr(100),
+						Height:     intPtr(100),
+						Color:      strPtr("#00FF00"),
+					},
+				},
+			},
+		},
+	}
+
+	jsonStr, err := exported.ToJSON()
+	if err != nil {
+		t.Fatalf("Failed to create JSON: %v", err)
+	}
+
+	projectID, stats, _, err := service.ImportProject(ctx, jsonStr, ImportOptions{
+		Mode: ImportModeCreate,
+	})
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	if stats.SceneBoardsCreated != 1 {
+		t.Errorf("Expected 1 scene board created, got %d", stats.SceneBoardsCreated)
+	}
+
+	// Board should be created with only the button referencing known scene
+	boards, _ := sceneBoardRepo.FindByProjectID(ctx, projectID)
+	if len(boards) != 1 {
+		t.Fatalf("Expected 1 board, got %d", len(boards))
+	}
+
+	buttons, _ := sceneBoardRepo.GetButtons(ctx, boards[0].ID)
+	// Only the button with known scene should be created
+	if len(buttons) != 1 {
+		t.Errorf("Expected 1 button (unknown scene button skipped), got %d", len(buttons))
 	}
 }
