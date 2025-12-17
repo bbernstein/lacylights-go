@@ -53,14 +53,9 @@ func testSetup(t *testing.T) (*client.Client, *Resolver, func()) {
 	}
 
 	// Create DMX service (disabled for testing)
-	dmxService := dmx.NewService(dmx.Config{
-		Enabled:          false,
-		BroadcastAddr:    "255.255.255.255",
-		Port:             6454,
-		RefreshRateHz:    44,
-		IdleRateHz:       1,
-		HighRateDuration: 2 * time.Second,
-	})
+	dmxCfg := dmx.DefaultConfig()
+	dmxCfg.Enabled = false
+	dmxService := dmx.NewService(dmxCfg)
 
 	// Create and start fade engine (60Hz for testing)
 	fadeEngine := fade.NewEngine(dmxService, 60)

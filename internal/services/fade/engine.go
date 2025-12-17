@@ -154,6 +154,7 @@ func (e *Engine) processFades() {
 	now := time.Now()
 	var completedFades []string
 	var callbacks []func()
+	hasChanges := false
 
 	for id, fade := range e.activeFades {
 		elapsed := now.Sub(fade.startTime)
@@ -165,6 +166,7 @@ func (e *Engine) processFades() {
 				channelKey := fmt.Sprintf("%d-%d", ch.universe, ch.channel)
 				e.interpolatedValues[channelKey] = ch.endValue
 				e.dmxService.SetChannelValue(ch.universe, ch.channel, byte(ch.endValue))
+				hasChanges = true
 			}
 
 			completedFades = append(completedFades, id)
@@ -196,8 +198,14 @@ func (e *Engine) processFades() {
 				channelKey := fmt.Sprintf("%d-%d", ch.universe, ch.channel)
 				e.interpolatedValues[channelKey] = currentValue
 				e.dmxService.SetChannelValue(ch.universe, ch.channel, byte(clampedValue))
+				hasChanges = true
 			}
 		}
+	}
+
+	// Force immediate transmission if we updated any channels
+	if hasChanges {
+		e.dmxService.TriggerChangeDetection()
 	}
 
 	// Remove completed fades
@@ -283,6 +291,8 @@ func (e *Engine) FadeChannels(targets []ChannelTarget, duration time.Duration, f
 			// Update interpolated value to match
 			e.interpolatedValues[channelKey] = float64(target.TargetValue)
 		}
+		// Force immediate transmission for instant changes
+		e.dmxService.TriggerChangeDetection()
 		// Execute callback if provided
 		if onComplete != nil {
 			go onComplete()

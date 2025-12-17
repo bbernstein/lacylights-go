@@ -57,7 +57,7 @@ func Load() *Config {
 
 		// DMX
 		DMXUniverseCount:    getEnvInt("DMX_UNIVERSE_COUNT", 4),
-		DMXRefreshRate:      getEnvInt("DMX_REFRESH_RATE", 44),
+		DMXRefreshRate:      getEnvInt("DMX_REFRESH_RATE", 60), // Match fade engine default
 		DMXIdleRate:         getEnvInt("DMX_IDLE_RATE", 1),
 		DMXHighRateDuration: time.Duration(getEnvInt("DMX_HIGH_RATE_DURATION", 2000)) * time.Millisecond,
 

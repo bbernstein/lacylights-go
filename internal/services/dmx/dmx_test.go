@@ -9,14 +9,8 @@ import (
 )
 
 func TestNewService(t *testing.T) {
-	cfg := Config{
-		Enabled:          false, // Disable UDP for testing
-		BroadcastAddr:    "255.255.255.255",
-		Port:             6454,
-		RefreshRateHz:    44,
-		IdleRateHz:       1,
-		HighRateDuration: 2 * time.Second,
-	}
+	cfg := DefaultConfig()
+	cfg.Enabled = false // Disable UDP for testing
 
 	service := NewService(cfg)
 	if service == nil {
@@ -51,8 +45,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Port != 6454 {
 		t.Errorf("DefaultConfig Port = %d, want 6454", cfg.Port)
 	}
-	if cfg.RefreshRateHz != 44 {
-		t.Errorf("DefaultConfig RefreshRateHz = %d, want 44", cfg.RefreshRateHz)
+	if cfg.RefreshRateHz != 60 {
+		t.Errorf("DefaultConfig RefreshRateHz = %d, want 60", cfg.RefreshRateHz)
 	}
 	if cfg.IdleRateHz != 1 {
 		t.Errorf("DefaultConfig IdleRateHz = %d, want 1", cfg.IdleRateHz)
@@ -328,10 +322,13 @@ func TestDirtyFlagBehavior(t *testing.T) {
 }
 
 func TestAdaptiveRateMode(t *testing.T) {
+	testRefreshRate := 50
+	testIdleRate := 1
+
 	service := NewService(Config{
 		Enabled:          false,
-		RefreshRateHz:    44,
-		IdleRateHz:       1,
+		RefreshRateHz:    testRefreshRate,
+		IdleRateHz:       testIdleRate,
 		HighRateDuration: 100 * time.Millisecond, // Short for testing
 	})
 
@@ -340,9 +337,9 @@ func TestAdaptiveRateMode(t *testing.T) {
 		t.Error("Service should not be in high rate mode initially")
 	}
 
-	// Initial rate should be refresh rate
-	if service.currentRate != 44 {
-		t.Errorf("Initial rate = %d, want 44", service.currentRate)
+	// Initial rate should be idle rate
+	if service.currentRate != testIdleRate {
+		t.Errorf("Initial rate = %d, want %d (idle rate)", service.currentRate, testIdleRate)
 	}
 
 	// Setting a channel should trigger high rate
@@ -356,21 +353,24 @@ func TestAdaptiveRateMode(t *testing.T) {
 	if !isHighRate {
 		t.Error("Service should be in high rate mode after change")
 	}
-	if currentRate != 44 {
-		t.Errorf("High rate should be %d, got %d", 44, currentRate)
+	if currentRate != testRefreshRate {
+		t.Errorf("High rate should be %d, got %d", testRefreshRate, currentRate)
 	}
 }
 
 func TestGetCurrentRate(t *testing.T) {
+	testIdleRate := 1
+
 	service := NewService(Config{
 		Enabled:       false,
-		RefreshRateHz: 44,
-		IdleRateHz:    1,
+		RefreshRateHz: 50,
+		IdleRateHz:    testIdleRate,
 	})
 
+	// Should start at idle rate
 	rate := service.GetCurrentRate()
-	if rate != 44 {
-		t.Errorf("GetCurrentRate() = %d, want 44", rate)
+	if rate != testIdleRate {
+		t.Errorf("GetCurrentRate() = %d, want %d (idle rate at startup)", rate, testIdleRate)
 	}
 }
 
