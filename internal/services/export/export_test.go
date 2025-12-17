@@ -1744,6 +1744,8 @@ func setupTestDB(t *testing.T) (*gorm.DB, func()) {
 		&models.FixtureValue{},
 		&models.CueList{},
 		&models.Cue{},
+		&models.SceneBoard{},
+		&models.SceneBoardButton{},
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)
@@ -2151,5 +2153,513 @@ func TestExportProject_Integration_SelectiveExport(t *testing.T) {
 	}
 	if len(exported.CueLists) != 0 {
 		t.Errorf("Expected no cue lists in export, got %d", len(exported.CueLists))
+	}
+}
+
+// New tests for Scene Boards, Layout Fields, and Fade Behavior
+
+func TestExportedSceneBoard_AllFields(t *testing.T) {
+	desc := "Test scene board"
+	gridSize := 50
+
+	board := ExportedSceneBoard{
+		RefID:           "board-1",
+		OriginalID:      "orig-board-1",
+		Name:            "Main Board",
+		Description:     &desc,
+		DefaultFadeTime: 3.0,
+		GridSize:        &gridSize,
+		CanvasWidth:     2000,
+		CanvasHeight:    2000,
+		Buttons: []ExportedSceneBoardButton{
+			{
+				OriginalID: "btn-1",
+				SceneRefID: "scene-1",
+				LayoutX:    100,
+				LayoutY:    200,
+			},
+		},
+		CreatedAt: "2025-01-01T00:00:00Z",
+		UpdatedAt: "2025-01-02T00:00:00Z",
+	}
+
+	if board.RefID != "board-1" {
+		t.Errorf("Expected 'board-1', got '%s'", board.RefID)
+	}
+	if board.Name != "Main Board" {
+		t.Errorf("Expected 'Main Board', got '%s'", board.Name)
+	}
+	if board.Description == nil || *board.Description != "Test scene board" {
+		t.Error("Expected description")
+	}
+	if board.DefaultFadeTime != 3.0 {
+		t.Errorf("Expected 3.0, got %f", board.DefaultFadeTime)
+	}
+	if board.GridSize == nil || *board.GridSize != 50 {
+		t.Error("Expected GridSize 50")
+	}
+	if board.CanvasWidth != 2000 {
+		t.Errorf("Expected 2000, got %d", board.CanvasWidth)
+	}
+	if len(board.Buttons) != 1 {
+		t.Errorf("Expected 1 button, got %d", len(board.Buttons))
+	}
+}
+
+func TestExportedSceneBoardButton_AllFields(t *testing.T) {
+	width := 200
+	height := 120
+	color := "#FF0000"
+	label := "Test Button"
+
+	btn := ExportedSceneBoardButton{
+		OriginalID: "btn-1",
+		SceneRefID: "scene-1",
+		LayoutX:    100,
+		LayoutY:    200,
+		Width:      &width,
+		Height:     &height,
+		Color:      &color,
+		Label:      &label,
+		CreatedAt:  "2025-01-01T00:00:00Z",
+		UpdatedAt:  "2025-01-02T00:00:00Z",
+	}
+
+	if btn.OriginalID != "btn-1" {
+		t.Errorf("Expected 'btn-1', got '%s'", btn.OriginalID)
+	}
+	if btn.SceneRefID != "scene-1" {
+		t.Errorf("Expected 'scene-1', got '%s'", btn.SceneRefID)
+	}
+	if btn.LayoutX != 100 {
+		t.Errorf("Expected 100, got %d", btn.LayoutX)
+	}
+	if btn.LayoutY != 200 {
+		t.Errorf("Expected 200, got %d", btn.LayoutY)
+	}
+	if btn.Width == nil || *btn.Width != 200 {
+		t.Error("Expected Width 200")
+	}
+	if btn.Height == nil || *btn.Height != 120 {
+		t.Error("Expected Height 120")
+	}
+	if btn.Color == nil || *btn.Color != "#FF0000" {
+		t.Error("Expected Color '#FF0000'")
+	}
+	if btn.Label == nil || *btn.Label != "Test Button" {
+		t.Error("Expected Label 'Test Button'")
+	}
+}
+
+func TestExportedFixtureInstance_LayoutFields(t *testing.T) {
+	layoutX := 0.5
+	layoutY := 0.3
+	layoutRotation := 45.0
+	projectOrder := 2
+
+	inst := ExportedFixtureInstance{
+		RefID:           "inst-1",
+		Name:            "LED 1",
+		DefinitionRefID: "def-1",
+		Universe:        1,
+		StartChannel:    1,
+		LayoutX:         &layoutX,
+		LayoutY:         &layoutY,
+		LayoutRotation:  &layoutRotation,
+		ProjectOrder:    &projectOrder,
+	}
+
+	if inst.LayoutX == nil || *inst.LayoutX != 0.5 {
+		t.Error("Expected LayoutX 0.5")
+	}
+	if inst.LayoutY == nil || *inst.LayoutY != 0.3 {
+		t.Error("Expected LayoutY 0.3")
+	}
+	if inst.LayoutRotation == nil || *inst.LayoutRotation != 45.0 {
+		t.Error("Expected LayoutRotation 45.0")
+	}
+	if inst.ProjectOrder == nil || *inst.ProjectOrder != 2 {
+		t.Error("Expected ProjectOrder 2")
+	}
+}
+
+func TestExportedChannelDefinition_FadeBehaviorFields(t *testing.T) {
+	ch := ExportedChannelDefinition{
+		Name:         "Gobo",
+		Type:         "GOBO",
+		Offset:       5,
+		MinValue:     0,
+		MaxValue:     255,
+		DefaultValue: 0,
+		FadeBehavior: "SNAP",
+		IsDiscrete:   true,
+	}
+
+	if ch.FadeBehavior != "SNAP" {
+		t.Errorf("Expected 'SNAP', got '%s'", ch.FadeBehavior)
+	}
+	if !ch.IsDiscrete {
+		t.Error("Expected IsDiscrete to be true")
+	}
+}
+
+func TestExportedInstanceChannel_FadeBehaviorFields(t *testing.T) {
+	ch := ExportedInstanceChannel{
+		Name:         "Color Macro",
+		Type:         "COLOR_MACRO",
+		Offset:       6,
+		MinValue:     0,
+		MaxValue:     255,
+		DefaultValue: 0,
+		FadeBehavior: "SNAP_END",
+		IsDiscrete:   true,
+	}
+
+	if ch.FadeBehavior != "SNAP_END" {
+		t.Errorf("Expected 'SNAP_END', got '%s'", ch.FadeBehavior)
+	}
+	if !ch.IsDiscrete {
+		t.Error("Expected IsDiscrete to be true")
+	}
+}
+
+func TestExportStats_SceneBoardsCount(t *testing.T) {
+	stats := &ExportStats{
+		FixtureDefinitionsCount: 5,
+		FixtureInstancesCount:   10,
+		ScenesCount:             8,
+		CueListsCount:           2,
+		CuesCount:               15,
+		SceneBoardsCount:        3,
+	}
+
+	if stats.SceneBoardsCount != 3 {
+		t.Errorf("Expected 3, got %d", stats.SceneBoardsCount)
+	}
+}
+
+func TestExportedProject_WithSceneBoards_ToJSON(t *testing.T) {
+	gridSize := 50
+	width := 200
+	height := 120
+
+	project := &ExportedProject{
+		Version: "1.0",
+		Project: &ExportProjectInfo{
+			OriginalID: "proj-123",
+			Name:       "Test Project",
+		},
+		SceneBoards: []ExportedSceneBoard{
+			{
+				RefID:           "board-1",
+				Name:            "Main Board",
+				DefaultFadeTime: 3.0,
+				GridSize:        &gridSize,
+				CanvasWidth:     2000,
+				CanvasHeight:    2000,
+				Buttons: []ExportedSceneBoardButton{
+					{
+						SceneRefID: "scene-1",
+						LayoutX:    100,
+						LayoutY:    200,
+						Width:      &width,
+						Height:     &height,
+					},
+				},
+			},
+		},
+	}
+
+	jsonStr, err := project.ToJSON()
+	if err != nil {
+		t.Fatalf("ToJSON() error: %v", err)
+	}
+
+	// Verify scene boards are in JSON
+	if !strings.Contains(jsonStr, "sceneBoards") {
+		t.Error("Expected sceneBoards in JSON")
+	}
+	if !strings.Contains(jsonStr, "Main Board") {
+		t.Error("Expected 'Main Board' in JSON")
+	}
+	if !strings.Contains(jsonStr, "buttons") {
+		t.Error("Expected buttons in JSON")
+	}
+
+	// Round trip
+	parsed, err := ParseExportedProject(jsonStr)
+	if err != nil {
+		t.Fatalf("ParseExportedProject() error: %v", err)
+	}
+
+	if len(parsed.SceneBoards) != 1 {
+		t.Errorf("Expected 1 scene board, got %d", len(parsed.SceneBoards))
+	}
+	if parsed.SceneBoards[0].Name != "Main Board" {
+		t.Errorf("Expected 'Main Board', got '%s'", parsed.SceneBoards[0].Name)
+	}
+	if len(parsed.SceneBoards[0].Buttons) != 1 {
+		t.Errorf("Expected 1 button, got %d", len(parsed.SceneBoards[0].Buttons))
+	}
+}
+
+func TestExportProject_WithFadeBehavior_Integration(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Create project
+	project := &models.Project{ID: cuid.New(), Name: "Fade Behavior Test"}
+	_ = projectRepo.Create(ctx, project)
+
+	// Create definition with fade behavior
+	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "Test", Model: "FadeBehavior", Type: "LED"}
+	channels := []models.ChannelDefinition{
+		{ID: cuid.New(), Name: "Dimmer", Type: "INTENSITY", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0, FadeBehavior: "FADE", IsDiscrete: false},
+		{ID: cuid.New(), Name: "Gobo", Type: "GOBO", Offset: 1, MinValue: 0, MaxValue: 255, DefaultValue: 0, FadeBehavior: "SNAP", IsDiscrete: true},
+		{ID: cuid.New(), Name: "ColorMacro", Type: "COLOR_MACRO", Offset: 2, MinValue: 0, MaxValue: 255, DefaultValue: 0, FadeBehavior: "SNAP_END", IsDiscrete: true},
+	}
+	_ = fixtureRepo.CreateDefinitionWithChannels(ctx, def, channels)
+
+	// Create fixture instance
+	fixture := &models.FixtureInstance{ID: cuid.New(), Name: "F1", ProjectID: project.ID, DefinitionID: def.ID, Universe: 1, StartChannel: 1}
+	_ = fixtureRepo.Create(ctx, fixture)
+
+	// Export
+	exported, _, err := service.ExportProject(ctx, project.ID, true, false, false)
+	if err != nil {
+		t.Fatalf("ExportProject failed: %v", err)
+	}
+
+	// Verify fade behavior is exported
+	if len(exported.FixtureDefinitions) != 1 {
+		t.Fatalf("Expected 1 definition, got %d", len(exported.FixtureDefinitions))
+	}
+
+	expDef := exported.FixtureDefinitions[0]
+	if len(expDef.Channels) != 3 {
+		t.Fatalf("Expected 3 channels, got %d", len(expDef.Channels))
+	}
+
+	// Check each channel's fade behavior
+	for _, ch := range expDef.Channels {
+		switch ch.Name {
+		case "Dimmer":
+			if ch.FadeBehavior != "FADE" {
+				t.Errorf("Expected Dimmer FadeBehavior 'FADE', got '%s'", ch.FadeBehavior)
+			}
+			if ch.IsDiscrete {
+				t.Error("Expected Dimmer IsDiscrete to be false")
+			}
+		case "Gobo":
+			if ch.FadeBehavior != "SNAP" {
+				t.Errorf("Expected Gobo FadeBehavior 'SNAP', got '%s'", ch.FadeBehavior)
+			}
+			if !ch.IsDiscrete {
+				t.Error("Expected Gobo IsDiscrete to be true")
+			}
+		case "ColorMacro":
+			if ch.FadeBehavior != "SNAP_END" {
+				t.Errorf("Expected ColorMacro FadeBehavior 'SNAP_END', got '%s'", ch.FadeBehavior)
+			}
+			if !ch.IsDiscrete {
+				t.Error("Expected ColorMacro IsDiscrete to be true")
+			}
+		}
+	}
+}
+
+func TestExportProject_WithLayoutFields_Integration(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Create project
+	project := &models.Project{ID: cuid.New(), Name: "Layout Fields Test"}
+	_ = projectRepo.Create(ctx, project)
+
+	// Create definition
+	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "Test", Model: "Layout", Type: "LED"}
+	_ = fixtureRepo.CreateDefinition(ctx, def)
+
+	// Create fixture instance with layout fields
+	layoutX := 0.5
+	layoutY := 0.3
+	layoutRotation := 45.0
+	projectOrder := 2
+
+	fixture := &models.FixtureInstance{
+		ID:             cuid.New(),
+		Name:           "F1",
+		ProjectID:      project.ID,
+		DefinitionID:   def.ID,
+		Universe:       1,
+		StartChannel:   1,
+		LayoutX:        &layoutX,
+		LayoutY:        &layoutY,
+		LayoutRotation: &layoutRotation,
+		ProjectOrder:   &projectOrder,
+	}
+	_ = fixtureRepo.Create(ctx, fixture)
+
+	// Export
+	exported, _, err := service.ExportProject(ctx, project.ID, true, false, false)
+	if err != nil {
+		t.Fatalf("ExportProject failed: %v", err)
+	}
+
+	// Verify layout fields are exported
+	if len(exported.FixtureInstances) != 1 {
+		t.Fatalf("Expected 1 fixture instance, got %d", len(exported.FixtureInstances))
+	}
+
+	expFixture := exported.FixtureInstances[0]
+	if expFixture.LayoutX == nil || *expFixture.LayoutX != 0.5 {
+		t.Error("Expected LayoutX 0.5")
+	}
+	if expFixture.LayoutY == nil || *expFixture.LayoutY != 0.3 {
+		t.Error("Expected LayoutY 0.3")
+	}
+	if expFixture.LayoutRotation == nil || *expFixture.LayoutRotation != 45.0 {
+		t.Error("Expected LayoutRotation 45.0")
+	}
+	if expFixture.ProjectOrder == nil || *expFixture.ProjectOrder != 2 {
+		t.Error("Expected ProjectOrder 2")
+	}
+}
+
+func TestNewServiceWithSceneBoards(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+	sceneBoardRepo := repositories.NewSceneBoardRepository(db)
+
+	service := NewServiceWithSceneBoards(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo, sceneBoardRepo)
+
+	if service == nil {
+		t.Fatal("Expected NewServiceWithSceneBoards to return non-nil service")
+	}
+	if service.sceneBoardRepo == nil {
+		t.Error("Expected sceneBoardRepo to be set")
+	}
+}
+
+func TestExportProject_WithSceneBoards_Integration(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+	sceneBoardRepo := repositories.NewSceneBoardRepository(db)
+
+	service := NewServiceWithSceneBoards(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo, sceneBoardRepo)
+	ctx := context.Background()
+
+	// Create project
+	project := &models.Project{ID: cuid.New(), Name: "Scene Board Test"}
+	_ = projectRepo.Create(ctx, project)
+
+	// Create a scene
+	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
+	_ = sceneRepo.Create(ctx, scene)
+
+	// Create scene board with buttons
+	gridSize := 50
+	width := 200
+	height := 120
+	color := "#FF0000"
+	label := "Test"
+
+	board := &models.SceneBoard{
+		ID:              cuid.New(),
+		Name:            "Main Board",
+		ProjectID:       project.ID,
+		DefaultFadeTime: 3.0,
+		GridSize:        &gridSize,
+		CanvasWidth:     2000,
+		CanvasHeight:    2000,
+	}
+	buttons := []models.SceneBoardButton{
+		{
+			ID:      cuid.New(),
+			SceneID: scene.ID,
+			LayoutX: 100,
+			LayoutY: 200,
+			Width:   &width,
+			Height:  &height,
+			Color:   &color,
+			Label:   &label,
+		},
+	}
+	_ = sceneBoardRepo.CreateWithButtons(ctx, board, buttons)
+
+	// Export with scene boards (default: true)
+	exported, stats, err := service.ExportProject(ctx, project.ID, true, true, true)
+	if err != nil {
+		t.Fatalf("ExportProject failed: %v", err)
+	}
+
+	// Verify scene boards are exported
+	if stats.SceneBoardsCount != 1 {
+		t.Errorf("Expected 1 scene board, got %d", stats.SceneBoardsCount)
+	}
+	if len(exported.SceneBoards) != 1 {
+		t.Fatalf("Expected 1 scene board in export, got %d", len(exported.SceneBoards))
+	}
+
+	expBoard := exported.SceneBoards[0]
+	if expBoard.Name != "Main Board" {
+		t.Errorf("Expected 'Main Board', got '%s'", expBoard.Name)
+	}
+	if expBoard.DefaultFadeTime != 3.0 {
+		t.Errorf("Expected DefaultFadeTime 3.0, got %f", expBoard.DefaultFadeTime)
+	}
+	if expBoard.CanvasWidth != 2000 {
+		t.Errorf("Expected CanvasWidth 2000, got %d", expBoard.CanvasWidth)
+	}
+
+	if len(expBoard.Buttons) != 1 {
+		t.Fatalf("Expected 1 button, got %d", len(expBoard.Buttons))
+	}
+
+	expBtn := expBoard.Buttons[0]
+	if expBtn.SceneRefID != scene.ID {
+		t.Errorf("Expected SceneRefID '%s', got '%s'", scene.ID, expBtn.SceneRefID)
+	}
+	if expBtn.LayoutX != 100 {
+		t.Errorf("Expected LayoutX 100, got %d", expBtn.LayoutX)
+	}
+	if expBtn.LayoutY != 200 {
+		t.Errorf("Expected LayoutY 200, got %d", expBtn.LayoutY)
+	}
+	if expBtn.Width == nil || *expBtn.Width != 200 {
+		t.Error("Expected Width 200")
+	}
+	if expBtn.Color == nil || *expBtn.Color != "#FF0000" {
+		t.Error("Expected Color '#FF0000'")
 	}
 }

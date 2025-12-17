@@ -686,6 +686,7 @@ type ExportStats {
   scenesCount: Int!
   cueListsCount: Int!
   cuesCount: Int!
+  sceneBoardsCount: Int!
 }
 
 type ImportResult {
@@ -700,6 +701,7 @@ type ImportStats {
   scenesCreated: Int!
   cueListsCreated: Int!
   cuesCreated: Int!
+  sceneBoardsCreated: Int!
 }
 
 # =============================================================================

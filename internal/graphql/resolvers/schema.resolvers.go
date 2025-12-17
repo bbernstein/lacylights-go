@@ -2756,6 +2756,7 @@ func (r *mutationResolver) ExportProject(ctx context.Context, projectID string, 
 			ScenesCount:             stats.ScenesCount,
 			CueListsCount:           stats.CueListsCount,
 			CuesCount:               stats.CuesCount,
+			SceneBoardsCount:        stats.SceneBoardsCount,
 		},
 	}, nil
 }
@@ -2799,6 +2800,7 @@ func (r *mutationResolver) ImportProject(ctx context.Context, jsonContent string
 			ScenesCreated:             stats.ScenesCreated,
 			CueListsCreated:           stats.CueListsCreated,
 			CuesCreated:               stats.CuesCreated,
+			SceneBoardsCreated:        stats.SceneBoardsCreated,
 		},
 		Warnings: warnings,
 	}, nil

@@ -186,6 +186,7 @@ type ComplexityRoot struct {
 		CuesCount               func(childComplexity int) int
 		FixtureDefinitionsCount func(childComplexity int) int
 		FixtureInstancesCount   func(childComplexity int) int
+		SceneBoardsCount        func(childComplexity int) int
 		ScenesCount             func(childComplexity int) int
 	}
 
@@ -283,6 +284,7 @@ type ComplexityRoot struct {
 		CuesCreated               func(childComplexity int) int
 		FixtureDefinitionsCreated func(childComplexity int) int
 		FixtureInstancesCreated   func(childComplexity int) int
+		SceneBoardsCreated        func(childComplexity int) int
 		ScenesCreated             func(childComplexity int) int
 	}
 
@@ -1532,6 +1534,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ExportStats.FixtureInstancesCount(childComplexity), true
+	case "ExportStats.sceneBoardsCount":
+		if e.complexity.ExportStats.SceneBoardsCount == nil {
+			break
+		}
+
+		return e.complexity.ExportStats.SceneBoardsCount(childComplexity), true
 	case "ExportStats.scenesCount":
 		if e.complexity.ExportStats.ScenesCount == nil {
 			break
@@ -1927,6 +1935,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.ImportStats.FixtureInstancesCreated(childComplexity), true
+	case "ImportStats.sceneBoardsCreated":
+		if e.complexity.ImportStats.SceneBoardsCreated == nil {
+			break
+		}
+
+		return e.complexity.ImportStats.SceneBoardsCreated(childComplexity), true
 	case "ImportStats.scenesCreated":
 		if e.complexity.ImportStats.ScenesCreated == nil {
 			break
@@ -5617,6 +5631,7 @@ type ExportStats {
   scenesCount: Int!
   cueListsCount: Int!
   cuesCount: Int!
+  sceneBoardsCount: Int!
 }
 
 type ImportResult {
@@ -5631,6 +5646,7 @@ type ImportStats {
   scenesCreated: Int!
   cueListsCreated: Int!
   cuesCreated: Int!
+  sceneBoardsCreated: Int!
 }
 
 # =============================================================================
@@ -10609,6 +10625,8 @@ func (ec *executionContext) fieldContext_ExportResult_stats(_ context.Context, f
 				return ec.fieldContext_ExportStats_cueListsCount(ctx, field)
 			case "cuesCount":
 				return ec.fieldContext_ExportStats_cuesCount(ctx, field)
+			case "sceneBoardsCount":
+				return ec.fieldContext_ExportStats_sceneBoardsCount(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ExportStats", field.Name)
 		},
@@ -10749,6 +10767,35 @@ func (ec *executionContext) _ExportStats_cuesCount(ctx context.Context, field gr
 }
 
 func (ec *executionContext) fieldContext_ExportStats_cuesCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ExportStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ExportStats_sceneBoardsCount(ctx context.Context, field graphql.CollectedField, obj *ExportStats) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ExportStats_sceneBoardsCount,
+		func(ctx context.Context) (any, error) {
+			return obj.SceneBoardsCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ExportStats_sceneBoardsCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "ExportStats",
 		Field:      field,
@@ -12676,6 +12723,8 @@ func (ec *executionContext) fieldContext_ImportResult_stats(_ context.Context, f
 				return ec.fieldContext_ImportStats_cueListsCreated(ctx, field)
 			case "cuesCreated":
 				return ec.fieldContext_ImportStats_cuesCreated(ctx, field)
+			case "sceneBoardsCreated":
+				return ec.fieldContext_ImportStats_sceneBoardsCreated(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ImportStats", field.Name)
 		},
@@ -12845,6 +12894,35 @@ func (ec *executionContext) _ImportStats_cuesCreated(ctx context.Context, field 
 }
 
 func (ec *executionContext) fieldContext_ImportStats_cuesCreated(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ImportStats",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ImportStats_sceneBoardsCreated(ctx context.Context, field graphql.CollectedField, obj *ImportStats) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ImportStats_sceneBoardsCreated,
+		func(ctx context.Context) (any, error) {
+			return obj.SceneBoardsCreated, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ImportStats_sceneBoardsCreated(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "ImportStats",
 		Field:      field,
@@ -32571,6 +32649,11 @@ func (ec *executionContext) _ExportStats(ctx context.Context, sel ast.SelectionS
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "sceneBoardsCount":
+			out.Values[i] = ec._ExportStats_sceneBoardsCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -33734,6 +33817,11 @@ func (ec *executionContext) _ImportStats(ctx context.Context, sel ast.SelectionS
 			}
 		case "cuesCreated":
 			out.Values[i] = ec._ImportStats_cuesCreated(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sceneBoardsCreated":
+			out.Values[i] = ec._ImportStats_sceneBoardsCreated(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

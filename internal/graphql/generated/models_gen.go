@@ -286,6 +286,7 @@ type ExportStats struct {
 	ScenesCount             int `json:"scenesCount"`
 	CueListsCount           int `json:"cueListsCount"`
 	CuesCount               int `json:"cuesCount"`
+	SceneBoardsCount        int `json:"sceneBoardsCount"`
 }
 
 type FixtureChannelAssignment struct {
@@ -417,6 +418,7 @@ type ImportStats struct {
 	ScenesCreated             int `json:"scenesCreated"`
 	CueListsCreated           int `json:"cueListsCreated"`
 	CuesCreated               int `json:"cuesCreated"`
+	SceneBoardsCreated        int `json:"sceneBoardsCreated"`
 }
 
 type LacyLightsFixture struct {
