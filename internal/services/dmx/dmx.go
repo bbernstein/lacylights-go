@@ -77,7 +77,7 @@ func DefaultConfig() Config {
 		Enabled:          true,
 		BroadcastAddr:    "255.255.255.255",
 		Port:             artnet.DefaultPort,
-		RefreshRateHz:    44,
+		RefreshRateHz:    60, // Match fade engine default (60Hz)
 		IdleRateHz:       1,
 		HighRateDuration: 2 * time.Second,
 	}
@@ -127,7 +127,7 @@ func NewService(cfg Config) *Service {
 	// Apply defaults for zero values
 	refreshRate := cfg.RefreshRateHz
 	if refreshRate <= 0 {
-		refreshRate = 44 // Default refresh rate
+		refreshRate = 60 // Default refresh rate (matches fade engine)
 	}
 	idleRate := cfg.IdleRateHz
 	if idleRate <= 0 {
@@ -152,7 +152,7 @@ func NewService(cfg Config) *Service {
 		refreshRateHz:    refreshRate,
 		idleRateHz:       idleRate,
 		highRateDuration: highRateDuration,
-		currentRate:      refreshRate,
+		currentRate:      idleRate, // Start at idle rate until first change
 		isInHighRateMode: false,
 		stopChan:         make(chan struct{}),
 	}

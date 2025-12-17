@@ -20,14 +20,9 @@ func setupPlaybackTest(t *testing.T) (*testutil.TestDB, *Service, func()) {
 	testDB, cleanupDB := testutil.SetupTestDB(t)
 
 	// Create DMX service with Art-Net disabled for testing
-	dmxService := dmx.NewService(dmx.Config{
-		Enabled:          false,
-		BroadcastAddr:    "255.255.255.255",
-		Port:             6454,
-		RefreshRateHz:    44,
-		IdleRateHz:       1,
-		HighRateDuration: 2 * time.Second,
-	})
+	dmxCfg := dmx.DefaultConfig()
+	dmxCfg.Enabled = false
+	dmxService := dmx.NewService(dmxCfg)
 
 	// Create fade engine (60Hz for testing)
 	fadeEngine := fade.NewEngine(dmxService, 60)

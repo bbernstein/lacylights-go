@@ -2613,6 +2613,9 @@ func (r *mutationResolver) SetSceneLive(ctx context.Context, sceneID string) (bo
 		}
 	}
 
+	// Force immediate transmission
+	r.DMXService.TriggerChangeDetection()
+
 	// Track the active scene
 	r.DMXService.SetActiveScene(sceneID)
 

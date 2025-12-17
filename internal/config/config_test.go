@@ -266,7 +266,7 @@ func TestConfig_StructFields(t *testing.T) {
 		Env:                 "test",
 		DatabaseURL:         "test.db",
 		DMXUniverseCount:    4,
-		DMXRefreshRate:      44,
+		DMXRefreshRate:      60,
 		DMXIdleRate:         1,
 		DMXHighRateDuration: time.Second,
 		FadeUpdateRateHz:    60,
