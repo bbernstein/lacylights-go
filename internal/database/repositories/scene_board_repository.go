@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"errors"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/lucsky/cuid"
@@ -33,7 +34,7 @@ func (r *SceneBoardRepository) FindByID(ctx context.Context, id string) (*models
 	var board models.SceneBoard
 	result := r.db.WithContext(ctx).First(&board, "id = ?", id)
 	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, result.Error
@@ -54,9 +55,17 @@ func (r *SceneBoardRepository) Update(ctx context.Context, board *models.SceneBo
 	return r.db.WithContext(ctx).Save(board).Error
 }
 
-// Delete deletes a scene board by ID.
+// Delete deletes a scene board by ID, including all associated buttons.
+// Uses a transaction to ensure atomicity.
 func (r *SceneBoardRepository) Delete(ctx context.Context, id string) error {
-	return r.db.WithContext(ctx).Delete(&models.SceneBoard{}, "id = ?", id).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Delete associated buttons first
+		if err := tx.Delete(&models.SceneBoardButton{}, "scene_board_id = ?", id).Error; err != nil {
+			return err
+		}
+		// Then delete the scene board
+		return tx.Delete(&models.SceneBoard{}, "id = ?", id).Error
+	})
 }
 
 // GetButtons returns all buttons for a scene board.

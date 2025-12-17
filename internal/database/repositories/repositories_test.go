@@ -2396,3 +2396,62 @@ func TestSceneBoardRepository_GetButtons_Ordering(t *testing.T) {
 		}
 	}
 }
+
+// TestSceneBoardRepository_Delete_CascadesButtons tests that Delete removes associated buttons.
+func TestSceneBoardRepository_Delete_CascadesButtons(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewSceneBoardRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create project and scene
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
+	testDB.DB.Create(scene)
+
+	// Create board with buttons
+	board := &models.SceneBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	buttons := []models.SceneBoardButton{
+		{SceneID: scene.ID, LayoutX: 0, LayoutY: 0},
+		{SceneID: scene.ID, LayoutX: 100, LayoutY: 0},
+		{SceneID: scene.ID, LayoutX: 0, LayoutY: 100},
+	}
+	err := repo.CreateWithButtons(ctx, board, buttons)
+	if err != nil {
+		t.Fatalf("CreateWithButtons failed: %v", err)
+	}
+
+	// Verify buttons exist
+	retrievedButtons, _ := repo.GetButtons(ctx, board.ID)
+	if len(retrievedButtons) != 3 {
+		t.Fatalf("Expected 3 buttons before delete, got %d", len(retrievedButtons))
+	}
+
+	// Count all buttons in DB before delete
+	var buttonCountBefore int64
+	testDB.DB.Model(&models.SceneBoardButton{}).Count(&buttonCountBefore)
+	if buttonCountBefore != 3 {
+		t.Fatalf("Expected 3 buttons in DB before delete, got %d", buttonCountBefore)
+	}
+
+	// Delete the board
+	err = repo.Delete(ctx, board.ID)
+	if err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	// Verify board is deleted
+	found, _ := repo.FindByID(ctx, board.ID)
+	if found != nil {
+		t.Error("Expected board to be deleted")
+	}
+
+	// Verify buttons are also deleted (cascade delete)
+	var buttonCountAfter int64
+	testDB.DB.Model(&models.SceneBoardButton{}).Count(&buttonCountAfter)
+	if buttonCountAfter != 0 {
+		t.Errorf("Expected 0 buttons in DB after cascade delete, got %d", buttonCountAfter)
+	}
+}

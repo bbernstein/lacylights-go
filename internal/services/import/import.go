@@ -583,6 +583,10 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 	}
 
 	// Import scene boards
+	// Note: Scene boards are imported regardless of includeScenes flag. If scenes were not
+	// included in the import (or failed to import), scene board buttons referencing those
+	// scenes will be skipped with a warning. This allows partial imports while maintaining
+	// data integrity.
 	if s.sceneBoardRepo != nil && len(exported.SceneBoards) > 0 {
 		for _, board := range exported.SceneBoards {
 			newBoard := &models.SceneBoard{

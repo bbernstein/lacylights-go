@@ -202,6 +202,24 @@ type ExportStats struct {
 	SceneBoardsCount        int
 }
 
+// ExportOptions contains options for project export.
+type ExportOptions struct {
+	IncludeFixtures    bool // Include fixture definitions and instances
+	IncludeScenes      bool // Include scenes with fixture values
+	IncludeCueLists    bool // Include cue lists with cues
+	IncludeSceneBoards bool // Include scene boards with buttons (defaults to true)
+}
+
+// DefaultExportOptions returns the default export options (all true).
+func DefaultExportOptions() ExportOptions {
+	return ExportOptions{
+		IncludeFixtures:    true,
+		IncludeScenes:      true,
+		IncludeCueLists:    true,
+		IncludeSceneBoards: true,
+	}
+}
+
 // Service handles project export operations.
 type Service struct {
 	projectRepo    *repositories.ProjectRepository
@@ -249,12 +267,25 @@ func NewServiceWithSceneBoards(
 }
 
 // ExportProject exports a project to JSON.
+// Deprecated: Use ExportProjectWithOptions for cleaner API.
 func (s *Service) ExportProject(ctx context.Context, projectID string, includeFixtures, includeScenes, includeCueLists bool, includeSceneBoards ...bool) (*ExportedProject, *ExportStats, error) {
 	// Check if scene boards should be included (defaults to true if not specified)
 	exportSceneBoards := true
 	if len(includeSceneBoards) > 0 {
 		exportSceneBoards = includeSceneBoards[0]
 	}
+
+	opts := ExportOptions{
+		IncludeFixtures:    includeFixtures,
+		IncludeScenes:      includeScenes,
+		IncludeCueLists:    includeCueLists,
+		IncludeSceneBoards: exportSceneBoards,
+	}
+	return s.ExportProjectWithOptions(ctx, projectID, opts)
+}
+
+// ExportProjectWithOptions exports a project to JSON using an options struct.
+func (s *Service) ExportProjectWithOptions(ctx context.Context, projectID string, opts ExportOptions) (*ExportedProject, *ExportStats, error) {
 	// Get project
 	project, err := s.projectRepo.FindByID(ctx, projectID)
 	if err != nil {
@@ -276,7 +307,7 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 	stats := &ExportStats{}
 
 	// Export fixture definitions and instances
-	if includeFixtures {
+	if opts.IncludeFixtures {
 		// Get fixture instances for this project
 		fixtures, err := s.fixtureRepo.FindByProjectID(ctx, projectID)
 		if err != nil {
@@ -391,7 +422,7 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 	}
 
 	// Export scenes
-	if includeScenes {
+	if opts.IncludeScenes {
 		scenes, err := s.sceneRepo.FindByProjectID(ctx, projectID)
 		if err != nil {
 			return nil, nil, err
@@ -439,7 +470,7 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 	}
 
 	// Export cue lists
-	if includeCueLists {
+	if opts.IncludeCueLists {
 		cueLists, err := s.cueListRepo.FindByProjectID(ctx, projectID)
 		if err != nil {
 			return nil, nil, err
@@ -480,7 +511,7 @@ func (s *Service) ExportProject(ctx context.Context, projectID string, includeFi
 	}
 
 	// Export scene boards
-	if exportSceneBoards && s.sceneBoardRepo != nil {
+	if opts.IncludeSceneBoards && s.sceneBoardRepo != nil {
 		boards, err := s.sceneBoardRepo.FindByProjectID(ctx, projectID)
 		if err != nil {
 			return nil, nil, err
