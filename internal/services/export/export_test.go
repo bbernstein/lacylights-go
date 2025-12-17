@@ -2663,3 +2663,56 @@ func TestExportProject_WithSceneBoards_Integration(t *testing.T) {
 		t.Error("Expected Color '#FF0000'")
 	}
 }
+
+func TestExportProject_ExcludeSceneBoards_Integration(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+	sceneBoardRepo := repositories.NewSceneBoardRepository(db)
+
+	service := NewServiceWithSceneBoards(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo, sceneBoardRepo)
+	ctx := context.Background()
+
+	// Create project
+	project := &models.Project{ID: cuid.New(), Name: "Exclude Scene Boards Test"}
+	_ = projectRepo.Create(ctx, project)
+
+	// Create a scene
+	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
+	_ = sceneRepo.Create(ctx, scene)
+
+	// Create scene board with button
+	board := &models.SceneBoard{
+		ID:        cuid.New(),
+		Name:      "Should Be Excluded",
+		ProjectID: project.ID,
+	}
+	buttons := []models.SceneBoardButton{
+		{ID: cuid.New(), SceneID: scene.ID, LayoutX: 100, LayoutY: 200},
+	}
+	_ = sceneBoardRepo.CreateWithButtons(ctx, board, buttons)
+
+	// Export with scene boards explicitly excluded (false)
+	exported, stats, err := service.ExportProject(ctx, project.ID, true, true, true, false)
+	if err != nil {
+		t.Fatalf("ExportProject failed: %v", err)
+	}
+
+	// Verify scene boards are NOT exported
+	if stats.SceneBoardsCount != 0 {
+		t.Errorf("Expected 0 scene boards, got %d", stats.SceneBoardsCount)
+	}
+	if len(exported.SceneBoards) != 0 {
+		t.Errorf("Expected 0 scene boards in export, got %d", len(exported.SceneBoards))
+	}
+
+	// Scenes should still be exported
+	if stats.ScenesCount == 0 {
+		t.Error("Expected scenes to be exported")
+	}
+}

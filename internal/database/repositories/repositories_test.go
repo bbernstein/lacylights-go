@@ -40,6 +40,8 @@ func setupTestDB(t *testing.T) (*testDB, func()) {
 		&models.CueList{},
 		&models.Cue{},
 		&models.Setting{},
+		&models.SceneBoard{},
+		&models.SceneBoardButton{},
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)
@@ -1865,5 +1867,532 @@ func TestFixtureRepository_CountDefinitions(t *testing.T) {
 	}
 	if count != 3 {
 		t.Errorf("Expected 3 definitions, got %d", count)
+	}
+}
+
+// TestNewSceneBoardRepository tests the constructor.
+func TestNewSceneBoardRepository(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewSceneBoardRepository(testDB.DB)
+	if repo == nil {
+		t.Fatal("Expected non-nil repository")
+	}
+	if repo.db != testDB.DB {
+		t.Error("Expected db to be set")
+	}
+}
+
+// TestSceneBoardRepository_CRUD tests basic CRUD operations.
+func TestSceneBoardRepository_CRUD(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewSceneBoardRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create project
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+
+	// Test Create without ID (should auto-generate)
+	board := &models.SceneBoard{
+		Name:      "Test Board " + cuid.Slug(),
+		ProjectID: project.ID,
+	}
+	err := repo.Create(ctx, board)
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	if board.ID == "" {
+		t.Error("Expected board ID to be auto-generated")
+	}
+
+	// Test FindByID
+	found, err := repo.FindByID(ctx, board.ID)
+	if err != nil {
+		t.Fatalf("FindByID failed: %v", err)
+	}
+	if found == nil {
+		t.Fatal("Expected to find board")
+	}
+	if found.Name != board.Name {
+		t.Errorf("Name mismatch: got %s, want %s", found.Name, board.Name)
+	}
+
+	// Test FindByProjectID
+	boards, err := repo.FindByProjectID(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("FindByProjectID failed: %v", err)
+	}
+	if len(boards) == 0 {
+		t.Error("Expected at least one board")
+	}
+
+	// Test Update
+	board.Name = "Updated Board Name"
+	err = repo.Update(ctx, board)
+	if err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+	found, _ = repo.FindByID(ctx, board.ID)
+	if found.Name != "Updated Board Name" {
+		t.Errorf("Update didn't persist: got %s", found.Name)
+	}
+
+	// Test Delete
+	err = repo.Delete(ctx, board.ID)
+	if err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+	found, err = repo.FindByID(ctx, board.ID)
+	if err != nil {
+		t.Fatalf("FindByID after delete failed: %v", err)
+	}
+	if found != nil {
+		t.Error("Expected board to be deleted")
+	}
+}
+
+// TestSceneBoardRepository_Create_WithID tests Create with pre-set ID.
+func TestSceneBoardRepository_Create_WithID(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewSceneBoardRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create project
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+
+	customID := cuid.New()
+	board := &models.SceneBoard{
+		ID:        customID,
+		Name:      "Board with custom ID",
+		ProjectID: project.ID,
+	}
+	err := repo.Create(ctx, board)
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	if board.ID != customID {
+		t.Errorf("ID changed: got %s, want %s", board.ID, customID)
+	}
+}
+
+// TestSceneBoardRepository_FindByID_NotFound tests FindByID with non-existent ID.
+func TestSceneBoardRepository_FindByID_NotFound(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewSceneBoardRepository(testDB.DB)
+	ctx := context.Background()
+
+	found, err := repo.FindByID(ctx, "nonexistent-id")
+	if err != nil {
+		t.Fatalf("FindByID failed: %v", err)
+	}
+	if found != nil {
+		t.Error("Expected nil for non-existent board")
+	}
+}
+
+// TestSceneBoardRepository_FindByProjectID_EmptyResult tests FindByProjectID with no boards.
+func TestSceneBoardRepository_FindByProjectID_EmptyResult(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewSceneBoardRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create project without boards
+	project := &models.Project{ID: cuid.New(), Name: "Empty Project"}
+	testDB.DB.Create(project)
+
+	boards, err := repo.FindByProjectID(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("FindByProjectID failed: %v", err)
+	}
+	if len(boards) != 0 {
+		t.Errorf("Expected 0 boards, got %d", len(boards))
+	}
+}
+
+// TestSceneBoardRepository_ButtonOperations tests button-related operations.
+func TestSceneBoardRepository_ButtonOperations(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewSceneBoardRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create project and scene
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
+	testDB.DB.Create(scene)
+
+	// Create board
+	board := &models.SceneBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	testDB.DB.Create(board)
+
+	// Test GetButtons with no buttons
+	buttons, err := repo.GetButtons(ctx, board.ID)
+	if err != nil {
+		t.Fatalf("GetButtons failed: %v", err)
+	}
+	if len(buttons) != 0 {
+		t.Errorf("Expected 0 buttons, got %d", len(buttons))
+	}
+
+	// Test CreateButton without ID (should auto-generate)
+	button := &models.SceneBoardButton{
+		SceneBoardID: board.ID,
+		SceneID:      scene.ID,
+		LayoutX:      100,
+		LayoutY:      200,
+	}
+	err = repo.CreateButton(ctx, button)
+	if err != nil {
+		t.Fatalf("CreateButton failed: %v", err)
+	}
+	if button.ID == "" {
+		t.Error("Expected button ID to be auto-generated")
+	}
+
+	// Test GetButtons with one button
+	buttons, err = repo.GetButtons(ctx, board.ID)
+	if err != nil {
+		t.Fatalf("GetButtons failed: %v", err)
+	}
+	if len(buttons) != 1 {
+		t.Errorf("Expected 1 button, got %d", len(buttons))
+	}
+	if buttons[0].LayoutX != 100 || buttons[0].LayoutY != 200 {
+		t.Errorf("Button position mismatch: got (%d, %d)", buttons[0].LayoutX, buttons[0].LayoutY)
+	}
+
+	// Test DeleteButtons
+	err = repo.DeleteButtons(ctx, board.ID)
+	if err != nil {
+		t.Fatalf("DeleteButtons failed: %v", err)
+	}
+	buttons, _ = repo.GetButtons(ctx, board.ID)
+	if len(buttons) != 0 {
+		t.Errorf("Expected 0 buttons after delete, got %d", len(buttons))
+	}
+}
+
+// TestSceneBoardRepository_CreateButton_WithID tests CreateButton with pre-set ID.
+func TestSceneBoardRepository_CreateButton_WithID(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewSceneBoardRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create project, scene, and board
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
+	testDB.DB.Create(scene)
+	board := &models.SceneBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	testDB.DB.Create(board)
+
+	customID := cuid.New()
+	button := &models.SceneBoardButton{
+		ID:           customID,
+		SceneBoardID: board.ID,
+		SceneID:      scene.ID,
+		LayoutX:      50,
+		LayoutY:      50,
+	}
+	err := repo.CreateButton(ctx, button)
+	if err != nil {
+		t.Fatalf("CreateButton failed: %v", err)
+	}
+	if button.ID != customID {
+		t.Errorf("ID changed: got %s, want %s", button.ID, customID)
+	}
+}
+
+// TestSceneBoardRepository_CreateButtons tests bulk button creation.
+func TestSceneBoardRepository_CreateButtons(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewSceneBoardRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create project, scenes, and board
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+	scene1 := &models.Scene{ID: cuid.New(), Name: "Scene 1", ProjectID: project.ID}
+	scene2 := &models.Scene{ID: cuid.New(), Name: "Scene 2", ProjectID: project.ID}
+	scene3 := &models.Scene{ID: cuid.New(), Name: "Scene 3", ProjectID: project.ID}
+	testDB.DB.Create(scene1)
+	testDB.DB.Create(scene2)
+	testDB.DB.Create(scene3)
+	board := &models.SceneBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	testDB.DB.Create(board)
+
+	// Test CreateButtons with empty slice (should be no-op)
+	err := repo.CreateButtons(ctx, []models.SceneBoardButton{})
+	if err != nil {
+		t.Errorf("CreateButtons with empty slice failed: %v", err)
+	}
+
+	// Test CreateButtons without IDs (should auto-generate)
+	buttons := []models.SceneBoardButton{
+		{SceneBoardID: board.ID, SceneID: scene1.ID, LayoutX: 0, LayoutY: 0},
+		{SceneBoardID: board.ID, SceneID: scene2.ID, LayoutX: 100, LayoutY: 0},
+		{SceneBoardID: board.ID, SceneID: scene3.ID, LayoutX: 200, LayoutY: 0},
+	}
+	err = repo.CreateButtons(ctx, buttons)
+	if err != nil {
+		t.Fatalf("CreateButtons failed: %v", err)
+	}
+
+	// Verify IDs were auto-generated
+	for i, btn := range buttons {
+		if btn.ID == "" {
+			t.Errorf("Button %d: expected ID to be auto-generated", i)
+		}
+	}
+
+	// Verify buttons were created
+	retrievedButtons, _ := repo.GetButtons(ctx, board.ID)
+	if len(retrievedButtons) != 3 {
+		t.Errorf("Expected 3 buttons, got %d", len(retrievedButtons))
+	}
+}
+
+// TestSceneBoardRepository_CreateButtons_WithIDs tests bulk creation with pre-set IDs.
+func TestSceneBoardRepository_CreateButtons_WithIDs(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewSceneBoardRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create project, scene, and board
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
+	testDB.DB.Create(scene)
+	board := &models.SceneBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	testDB.DB.Create(board)
+
+	// Test CreateButtons with pre-set IDs
+	id1 := cuid.New()
+	id2 := cuid.New()
+	buttons := []models.SceneBoardButton{
+		{ID: id1, SceneBoardID: board.ID, SceneID: scene.ID, LayoutX: 0, LayoutY: 0},
+		{ID: id2, SceneBoardID: board.ID, SceneID: scene.ID, LayoutX: 100, LayoutY: 0},
+	}
+	err := repo.CreateButtons(ctx, buttons)
+	if err != nil {
+		t.Fatalf("CreateButtons failed: %v", err)
+	}
+
+	// Verify pre-set IDs were preserved
+	if buttons[0].ID != id1 {
+		t.Errorf("Button 0: expected ID %s, got %s", id1, buttons[0].ID)
+	}
+	if buttons[1].ID != id2 {
+		t.Errorf("Button 1: expected ID %s, got %s", id2, buttons[1].ID)
+	}
+}
+
+// TestSceneBoardRepository_CreateWithButtons tests transactional board creation with buttons.
+func TestSceneBoardRepository_CreateWithButtons(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewSceneBoardRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create project and scenes
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+	scene1 := &models.Scene{ID: cuid.New(), Name: "Scene 1", ProjectID: project.ID}
+	scene2 := &models.Scene{ID: cuid.New(), Name: "Scene 2", ProjectID: project.ID}
+	testDB.DB.Create(scene1)
+	testDB.DB.Create(scene2)
+
+	// Test CreateWithButtons without IDs (should auto-generate)
+	board := &models.SceneBoard{
+		Name:      "Board with buttons",
+		ProjectID: project.ID,
+	}
+	buttons := []models.SceneBoardButton{
+		{SceneID: scene1.ID, LayoutX: 0, LayoutY: 0},
+		{SceneID: scene2.ID, LayoutX: 100, LayoutY: 0},
+	}
+
+	err := repo.CreateWithButtons(ctx, board, buttons)
+	if err != nil {
+		t.Fatalf("CreateWithButtons failed: %v", err)
+	}
+
+	// Verify board ID was auto-generated
+	if board.ID == "" {
+		t.Error("Expected board ID to be auto-generated")
+	}
+
+	// Verify button IDs were auto-generated and SceneBoardID was set
+	for i, btn := range buttons {
+		if btn.ID == "" {
+			t.Errorf("Button %d: expected ID to be auto-generated", i)
+		}
+		if btn.SceneBoardID != board.ID {
+			t.Errorf("Button %d: expected SceneBoardID %s, got %s", i, board.ID, btn.SceneBoardID)
+		}
+	}
+
+	// Verify board was created
+	found, _ := repo.FindByID(ctx, board.ID)
+	if found == nil {
+		t.Fatal("Expected to find board after CreateWithButtons")
+	}
+
+	// Verify buttons were created
+	retrievedButtons, _ := repo.GetButtons(ctx, board.ID)
+	if len(retrievedButtons) != 2 {
+		t.Errorf("Expected 2 buttons, got %d", len(retrievedButtons))
+	}
+}
+
+// TestSceneBoardRepository_CreateWithButtons_PresetIDs tests transactional creation with preset IDs.
+func TestSceneBoardRepository_CreateWithButtons_PresetIDs(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewSceneBoardRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create project and scene
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
+	testDB.DB.Create(scene)
+
+	// Test CreateWithButtons with pre-set IDs
+	boardID := cuid.New()
+	buttonID := cuid.New()
+	board := &models.SceneBoard{
+		ID:        boardID,
+		Name:      "Board with preset IDs",
+		ProjectID: project.ID,
+	}
+	buttons := []models.SceneBoardButton{
+		{ID: buttonID, SceneID: scene.ID, LayoutX: 50, LayoutY: 50},
+	}
+
+	err := repo.CreateWithButtons(ctx, board, buttons)
+	if err != nil {
+		t.Fatalf("CreateWithButtons failed: %v", err)
+	}
+
+	// Verify preset IDs were preserved
+	if board.ID != boardID {
+		t.Errorf("Board ID changed: got %s, want %s", board.ID, boardID)
+	}
+	if buttons[0].ID != buttonID {
+		t.Errorf("Button ID changed: got %s, want %s", buttons[0].ID, buttonID)
+	}
+}
+
+// TestSceneBoardRepository_CreateWithButtons_NoButtons tests transactional creation with no buttons.
+func TestSceneBoardRepository_CreateWithButtons_NoButtons(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewSceneBoardRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create project
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+
+	// Test CreateWithButtons with empty buttons slice
+	board := &models.SceneBoard{
+		Name:      "Board with no buttons",
+		ProjectID: project.ID,
+	}
+
+	err := repo.CreateWithButtons(ctx, board, nil)
+	if err != nil {
+		t.Fatalf("CreateWithButtons with no buttons failed: %v", err)
+	}
+
+	if board.ID == "" {
+		t.Error("Expected board ID to be auto-generated")
+	}
+
+	// Verify board was created
+	found, _ := repo.FindByID(ctx, board.ID)
+	if found == nil {
+		t.Fatal("Expected to find board after CreateWithButtons")
+	}
+
+	// Verify no buttons were created
+	buttons, _ := repo.GetButtons(ctx, board.ID)
+	if len(buttons) != 0 {
+		t.Errorf("Expected 0 buttons, got %d", len(buttons))
+	}
+}
+
+// TestSceneBoardRepository_GetButtons_Ordering tests that buttons are ordered by position.
+func TestSceneBoardRepository_GetButtons_Ordering(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewSceneBoardRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create project, scene, and board
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
+	testDB.DB.Create(scene)
+	board := &models.SceneBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	testDB.DB.Create(board)
+
+	// Create buttons in non-ordered way
+	// Buttons should be ordered by Y first, then X
+	buttons := []models.SceneBoardButton{
+		{ID: cuid.New(), SceneBoardID: board.ID, SceneID: scene.ID, LayoutX: 200, LayoutY: 100}, // 3rd (row 1, col 2)
+		{ID: cuid.New(), SceneBoardID: board.ID, SceneID: scene.ID, LayoutX: 100, LayoutY: 0},   // 2nd (row 0, col 1)
+		{ID: cuid.New(), SceneBoardID: board.ID, SceneID: scene.ID, LayoutX: 0, LayoutY: 0},     // 1st (row 0, col 0)
+		{ID: cuid.New(), SceneBoardID: board.ID, SceneID: scene.ID, LayoutX: 0, LayoutY: 100},   // 4th (row 1, col 0)
+	}
+	for _, btn := range buttons {
+		testDB.DB.Create(&btn)
+	}
+
+	// Get buttons and verify ordering
+	retrieved, err := repo.GetButtons(ctx, board.ID)
+	if err != nil {
+		t.Fatalf("GetButtons failed: %v", err)
+	}
+	if len(retrieved) != 4 {
+		t.Fatalf("Expected 4 buttons, got %d", len(retrieved))
+	}
+
+	// Expected order: (0,0), (100,0), (0,100), (200,100)
+	expectedOrder := []struct{ x, y int }{
+		{0, 0},
+		{100, 0},
+		{0, 100},
+		{200, 100},
+	}
+	for i, expected := range expectedOrder {
+		if retrieved[i].LayoutX != expected.x || retrieved[i].LayoutY != expected.y {
+			t.Errorf("Button %d: expected position (%d, %d), got (%d, %d)",
+				i, expected.x, expected.y, retrieved[i].LayoutX, retrieved[i].LayoutY)
+		}
 	}
 }
