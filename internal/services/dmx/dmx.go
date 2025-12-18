@@ -212,25 +212,34 @@ func (s *Service) Initialize() error {
 
 // transmitLoop runs the adaptive rate transmission loop.
 func (s *Service) transmitLoop() {
-	// Read initial rate with lock to avoid race condition
+	// Use Ticker instead of Timer to maintain consistent timing without drift
 	s.mu.RLock()
 	interval := time.Second / time.Duration(s.currentRate)
 	s.mu.RUnlock()
-	timer := time.NewTimer(interval)
-	defer timer.Stop()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	lastRate := 0
 
 	for {
 		select {
 		case <-s.stopChan:
 			return
-		case <-timer.C:
+		case <-ticker.C:
 			s.processTransmission()
 
-			// Recalculate interval based on current rate
+			// Check if rate changed and recreate ticker if needed
 			s.mu.RLock()
-			interval = time.Second / time.Duration(s.currentRate)
+			currentRate := s.currentRate
 			s.mu.RUnlock()
-			timer.Reset(interval)
+
+			if currentRate != lastRate {
+				// Rate changed, recreate ticker with new interval
+				ticker.Stop()
+				newInterval := time.Second / time.Duration(currentRate)
+				ticker = time.NewTicker(newInterval)
+				lastRate = currentRate
+			}
 		}
 	}
 }
