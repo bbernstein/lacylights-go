@@ -224,11 +224,12 @@ func main() {
 	}
 
 	// Create HTTP server
+	// Timeouts increased to handle long-running mutations like repository updates
 	httpServer := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      router,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 120 * time.Second, // Allows for long-running update operations (npm install ~25s)
 		IdleTimeout:  60 * time.Second,
 	}
 
