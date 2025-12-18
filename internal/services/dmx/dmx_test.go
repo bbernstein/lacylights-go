@@ -814,7 +814,7 @@ func TestArtNetPacketFormat(t *testing.T) {
 	channels[99] = 128
 	channels[255] = 64
 
-	packet := artnet.BuildDMXPacket(1, channels)
+	packet := artnet.BuildDMXPacket(1, channels, 42) // Test with sequence number 42
 
 	// Verify packet length
 	expectedLen := 18 + 512 // Header + DMX data
@@ -838,6 +838,11 @@ func TestArtNetPacketFormat(t *testing.T) {
 	// Verify Protocol Version (14, big-endian)
 	if packet[10] != 0 || packet[11] != 14 {
 		t.Errorf("Protocol version = %d.%d, want 0.14", packet[10], packet[11])
+	}
+
+	// Verify Sequence number
+	if packet[12] != 42 {
+		t.Errorf("Sequence number = %d, want 42", packet[12])
 	}
 
 	// Verify DMX data starts at byte 18

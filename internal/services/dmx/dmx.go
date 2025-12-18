@@ -52,6 +52,9 @@ type Service struct {
 	// Timing tracking
 	lastTransmissionTime time.Time
 
+	// Art-Net sequence number (increments for each packet, wraps at 255)
+	sequence byte
+
 	// UDP socket
 	conn *net.UDPConn
 	addr *net.UDPAddr
@@ -300,7 +303,10 @@ func (s *Service) outputDMX() {
 	// Send Art-Net packets
 	for _, universe := range universesToTransmit {
 		channels := s.getUniverseOutputChannels(universe)
-		packet := artnet.BuildDMXPacket(universe, channels)
+
+		// Increment sequence number for each packet (wraps at 255)
+		s.sequence++
+		packet := artnet.BuildDMXPacket(universe, channels, s.sequence)
 
 		_, err := s.conn.Write(packet)
 		if err != nil {
@@ -615,7 +621,8 @@ func (s *Service) Stop() {
 	if s.enabled && s.conn != nil {
 		for universe := range s.universes {
 			s.universes[universe] = make([]byte, UniverseSize) // All zeros
-			packet := artnet.BuildDMXPacket(universe, s.universes[universe])
+			s.sequence++
+			packet := artnet.BuildDMXPacket(universe, s.universes[universe], s.sequence)
 			_, _ = s.conn.Write(packet)
 		}
 
