@@ -423,15 +423,16 @@ func (s *Service) triggerHighRate() {
 }
 
 // TriggerChangeDetection manually triggers high-rate mode (useful for fades).
+// This switches to high-rate transmission mode but lets the transmitLoop
+// handle actual packet sending to avoid race conditions and duplicate transmissions.
 func (s *Service) TriggerChangeDetection() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.triggerHighRate()
 
-	// Immediately send current state if dirty
-	if s.isDirty && s.enabled && s.conn != nil {
-		s.outputDMX()
-	}
+	// Note: We do NOT immediately transmit here to avoid race conditions
+	// with the transmitLoop. The transmitLoop will pick up changes on its
+	// next scheduled transmission at the high refresh rate.
 }
 
 // GetChannelValue returns the current value of a channel.
