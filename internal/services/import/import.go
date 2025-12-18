@@ -4,6 +4,7 @@ package importservice
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
@@ -92,6 +93,25 @@ func NewServiceWithSceneBoards(
 		cueRepo:        cueRepo,
 		sceneBoardRepo: sceneBoardRepo,
 	}
+}
+
+// createInstanceChannelsFromDefinitionChannels creates instance channels from definition channels.
+// This is a helper function to reduce code duplication.
+func createInstanceChannelsFromDefinitionChannels(channels []models.ChannelDefinition) []models.InstanceChannel {
+	instanceChannels := make([]models.InstanceChannel, 0, len(channels))
+	for _, ch := range channels {
+		instanceChannels = append(instanceChannels, models.InstanceChannel{
+			Offset:       ch.Offset,
+			Name:         ch.Name,
+			Type:         ch.Type,
+			MinValue:     ch.MinValue,
+			MaxValue:     ch.MaxValue,
+			DefaultValue: ch.DefaultValue,
+			FadeBehavior: ch.FadeBehavior,
+			IsDiscrete:   ch.IsDiscrete,
+		})
+	}
+	return instanceChannels
 }
 
 // importModesForExistingDefinition imports modes from export data into an existing definition.
@@ -545,23 +565,18 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 					}
 				} else {
 					// Mode not found, fall back to all definition channels
+					warnings = append(warnings, fmt.Sprintf("Mode '%s' not found for fixture '%s', using all definition channels", *modeName, f.Name))
+
 					channels, err := s.fixtureRepo.GetDefinitionChannels(ctx, newDefID)
 					if err != nil {
 						return "", nil, nil, err
 					}
 
-					for _, ch := range channels {
-						instanceChannels = append(instanceChannels, models.InstanceChannel{
-							Offset:       ch.Offset,
-							Name:         ch.Name,
-							Type:         ch.Type,
-							MinValue:     ch.MinValue,
-							MaxValue:     ch.MaxValue,
-							DefaultValue: ch.DefaultValue,
-							FadeBehavior: ch.FadeBehavior,
-							IsDiscrete:   ch.IsDiscrete,
-						})
-					}
+					instanceChannels = createInstanceChannelsFromDefinitionChannels(channels)
+
+					// Update channel count to match actual instance channels
+					actualChannelCount := len(instanceChannels)
+					newFixture.ChannelCount = &actualChannelCount
 				}
 			} else {
 				// No mode specified, use all definition channels
@@ -570,18 +585,7 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 					return "", nil, nil, err
 				}
 
-				for _, ch := range channels {
-					instanceChannels = append(instanceChannels, models.InstanceChannel{
-						Offset:       ch.Offset,
-						Name:         ch.Name,
-						Type:         ch.Type,
-						MinValue:     ch.MinValue,
-						MaxValue:     ch.MaxValue,
-						DefaultValue: ch.DefaultValue,
-						FadeBehavior: ch.FadeBehavior,
-						IsDiscrete:   ch.IsDiscrete,
-					})
-				}
+				instanceChannels = createInstanceChannelsFromDefinitionChannels(channels)
 			}
 		}
 		// Only set channel count from instance channels if not already set from import

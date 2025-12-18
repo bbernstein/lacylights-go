@@ -418,6 +418,8 @@ func (s *Service) ExportProjectWithOptions(ctx context.Context, projectID string
 					if modeID, ok := modeMap[*f.ModeName]; ok {
 						modeRefID = &modeID
 					}
+					// Note: If mode not found in map, modeRefID remains nil but we continue
+					// This is acceptable - the export will have modeName but not modeRefId
 				}
 			}
 
