@@ -16,6 +16,8 @@ import (
 const (
 	// UpdateScriptPath is the path to the update-repos.sh script on the Pi
 	UpdateScriptPath = "/opt/lacylights/scripts/update-repos.sh"
+	// SelfUpdateScriptPath is the path to the self-update wrapper for updating lacylights-go itself
+	SelfUpdateScriptPath = "/opt/lacylights/scripts/self-update.sh"
 )
 
 var (
@@ -234,15 +236,58 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 		}
 	}
 
-	// Build command arguments
+	// Use different script for self-updates vs updating other components
+	var cmd *exec.Cmd
+	var output []byte
+
+	if repository == "lacylights-go" {
+		// Self-update: use async wrapper to avoid deadlock where:
+		// 1. Backend waits to send GraphQL response
+		// 2. Update script waits for backend to stop
+		// Solution: wrapper returns immediately, update runs in background via systemd-run
+		args := []string{repository}
+		targetVersion := "latest"
+		if version != nil && *version != "" {
+			targetVersion = *version
+			args = append(args, targetVersion)
+		}
+		cmd = exec.Command(SelfUpdateScriptPath, args...)
+		// Start the command without waiting for it to complete
+		// The wrapper script will schedule the update via systemd-run and exit immediately
+		err = cmd.Start()
+		if err != nil {
+			log.Printf("Failed to start self-update for %s: %v", repository, err)
+			return &UpdateResult{
+				Success:         false,
+				Repository:      repository,
+				PreviousVersion: previousVersion,
+				Error:           fmt.Sprintf("Failed to start update: %v", err),
+			}, nil
+		}
+		// Reap the process in background to prevent zombie processes
+		go func() {
+			_ = cmd.Wait()
+		}()
+		// Don't wait for the command to complete - let it run in the background
+		// For self-updates, return success immediately
+		// The actual update happens in the background via systemd-run
+		log.Printf("Self-update scheduled for %s to %s", repository, targetVersion)
+		return &UpdateResult{
+			Success:         true,
+			Repository:      repository,
+			PreviousVersion: previousVersion,
+			NewVersion:      targetVersion,
+			Message:         "Update scheduled - service will restart automatically",
+		}, nil
+	}
+
+	// Regular update for other components (fe, mcp)
 	args := []string{"update", repository}
 	if version != nil && *version != "" {
 		args = append(args, *version)
 	}
-
-	// Execute update-repos.sh update <repo> [version]
-	cmd := exec.Command(UpdateScriptPath, args...)
-	output, err := cmd.CombinedOutput()
+	cmd = exec.Command(UpdateScriptPath, args...)
+	output, err = cmd.CombinedOutput()
 	if err != nil {
 		// Log full output server-side for debugging, return sanitized error to client
 		log.Printf("Update failed for repository %s: %v\nFull output: %s", repository, err, string(output))
