@@ -235,9 +235,11 @@ func (s *Service) transmitLoop() {
 
 			if currentRate != lastRate {
 				// Rate changed, recreate ticker with new interval
-				ticker.Stop()
+				// Stop old ticker before creating new one to avoid leaks
+				oldTicker := ticker
 				newInterval := time.Second / time.Duration(currentRate)
 				ticker = time.NewTicker(newInterval)
+				oldTicker.Stop()
 				lastRate = currentRate
 			}
 		}

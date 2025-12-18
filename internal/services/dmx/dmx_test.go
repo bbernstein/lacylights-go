@@ -926,9 +926,11 @@ func TestTriggerChangeDetectionNoImmediateTransmission(t *testing.T) {
 	// (60 if only one universe is dirty, 240 if all universes transmitted every tick)
 	// The key test is that we don't get excessive packets which would indicate
 	// the race condition (immediate transmissions) is occurring
-	// Note: When running with -race flag, timing overhead can increase packet count
+	//
+	// Note: maxExpected of 400 allows for race detector overhead while still detecting
+	// the race condition (which would produce 600+ packets from dual transmission paths)
 	minExpected := 50
-	maxExpected := 400 // Increased tolerance for race detector overhead
+	maxExpected := 400
 
 	t.Logf("Received %d packets over %v", packetCount, testDuration)
 
