@@ -2716,3 +2716,193 @@ func TestExportProject_ExcludeSceneBoards_Integration(t *testing.T) {
 		t.Error("Expected scenes to be exported")
 	}
 }
+
+func TestExportProject_ModeRefID_Integration(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	ctx := context.Background()
+
+	// Create project
+	project := &models.Project{ID: cuid.New(), Name: "Mode RefID Test"}
+	_ = projectRepo.Create(ctx, project)
+
+	// Create fixture definition with multiple modes
+	def := &models.FixtureDefinition{
+		ID:           cuid.New(),
+		Manufacturer: "Chauvet DJ",
+		Model:        "SlimPAR Pro RGBA",
+		Type:         "LED_PAR",
+	}
+	_ = fixtureRepo.CreateDefinition(ctx, def)
+
+	// Create channels
+	ch1 := &models.ChannelDefinition{ID: cuid.New(), Name: "Dimmer", Type: "INTENSITY", Offset: 0, DefinitionID: def.ID}
+	ch2 := &models.ChannelDefinition{ID: cuid.New(), Name: "Red", Type: "RED", Offset: 1, DefinitionID: def.ID}
+	ch3 := &models.ChannelDefinition{ID: cuid.New(), Name: "Green", Type: "GREEN", Offset: 2, DefinitionID: def.ID}
+	ch4 := &models.ChannelDefinition{ID: cuid.New(), Name: "Blue", Type: "BLUE", Offset: 3, DefinitionID: def.ID}
+	ch5 := &models.ChannelDefinition{ID: cuid.New(), Name: "Amber", Type: "AMBER", Offset: 4, DefinitionID: def.ID}
+	db.Create(ch1)
+	db.Create(ch2)
+	db.Create(ch3)
+	db.Create(ch4)
+	db.Create(ch5)
+
+	// Create 10-channel mode
+	mode10ch := &models.FixtureMode{ID: cuid.New(), Name: "10-channel", ChannelCount: 10, DefinitionID: def.ID}
+	_ = fixtureRepo.CreateMode(ctx, mode10ch)
+	modeChannels10 := []models.ModeChannel{
+		{ModeID: mode10ch.ID, ChannelID: ch1.ID, Offset: 0},
+		{ModeID: mode10ch.ID, ChannelID: ch2.ID, Offset: 1},
+		{ModeID: mode10ch.ID, ChannelID: ch3.ID, Offset: 2},
+		{ModeID: mode10ch.ID, ChannelID: ch4.ID, Offset: 3},
+		{ModeID: mode10ch.ID, ChannelID: ch5.ID, Offset: 4},
+	}
+	_ = fixtureRepo.CreateModeChannels(ctx, modeChannels10)
+
+	// Create 4-channel mode
+	mode4ch := &models.FixtureMode{ID: cuid.New(), Name: "4-channel", ChannelCount: 4, DefinitionID: def.ID}
+	_ = fixtureRepo.CreateMode(ctx, mode4ch)
+	modeChannels4 := []models.ModeChannel{
+		{ModeID: mode4ch.ID, ChannelID: ch2.ID, Offset: 0},
+		{ModeID: mode4ch.ID, ChannelID: ch3.ID, Offset: 1},
+		{ModeID: mode4ch.ID, ChannelID: ch4.ID, Offset: 2},
+		{ModeID: mode4ch.ID, ChannelID: ch5.ID, Offset: 3},
+	}
+	_ = fixtureRepo.CreateModeChannels(ctx, modeChannels4)
+
+	// Create 5-channel mode
+	mode5ch := &models.FixtureMode{ID: cuid.New(), Name: "5-channel", ChannelCount: 5, DefinitionID: def.ID}
+	_ = fixtureRepo.CreateMode(ctx, mode5ch)
+	modeChannels5 := []models.ModeChannel{
+		{ModeID: mode5ch.ID, ChannelID: ch1.ID, Offset: 0},
+		{ModeID: mode5ch.ID, ChannelID: ch2.ID, Offset: 1},
+		{ModeID: mode5ch.ID, ChannelID: ch3.ID, Offset: 2},
+		{ModeID: mode5ch.ID, ChannelID: ch4.ID, Offset: 3},
+		{ModeID: mode5ch.ID, ChannelID: ch5.ID, Offset: 4},
+	}
+	_ = fixtureRepo.CreateModeChannels(ctx, modeChannels5)
+
+	// Create fixture instances using different modes
+	mode4chName := "4-channel"
+	channelCount4 := 4
+	fixture1 := &models.FixtureInstance{
+		ID:           cuid.New(),
+		Name:         "PAR 1",
+		ProjectID:    project.ID,
+		DefinitionID: def.ID,
+		ModeName:     &mode4chName,
+		ChannelCount: &channelCount4,
+		Universe:     1,
+		StartChannel: 1,
+	}
+	_ = fixtureRepo.Create(ctx, fixture1)
+
+	mode10chName := "10-channel"
+	channelCount10 := 10
+	fixture2 := &models.FixtureInstance{
+		ID:           cuid.New(),
+		Name:         "PAR 2",
+		ProjectID:    project.ID,
+		DefinitionID: def.ID,
+		ModeName:     &mode10chName,
+		ChannelCount: &channelCount10,
+		Universe:     1,
+		StartChannel: 5,
+	}
+	_ = fixtureRepo.Create(ctx, fixture2)
+
+	mode5chName := "5-channel"
+	channelCount5 := 5
+	fixture3 := &models.FixtureInstance{
+		ID:           cuid.New(),
+		Name:         "PAR 3",
+		ProjectID:    project.ID,
+		DefinitionID: def.ID,
+		ModeName:     &mode5chName,
+		ChannelCount: &channelCount5,
+		Universe:     1,
+		StartChannel: 15,
+	}
+	_ = fixtureRepo.Create(ctx, fixture3)
+
+	// Export the project
+	exported, stats, err := service.ExportProject(ctx, project.ID, true, false, false)
+	if err != nil {
+		t.Fatalf("ExportProject failed: %v", err)
+	}
+
+	// Verify export stats
+	if stats.FixtureDefinitionsCount != 1 {
+		t.Errorf("Expected 1 fixture definition, got %d", stats.FixtureDefinitionsCount)
+	}
+	if stats.FixtureInstancesCount != 3 {
+		t.Errorf("Expected 3 fixture instances, got %d", stats.FixtureInstancesCount)
+	}
+
+	// Verify that the definition has all 3 modes exported
+	if len(exported.FixtureDefinitions) != 1 {
+		t.Fatalf("Expected 1 fixture definition, got %d", len(exported.FixtureDefinitions))
+	}
+	expDef := exported.FixtureDefinitions[0]
+	if len(expDef.Modes) != 3 {
+		t.Fatalf("Expected 3 modes in definition, got %d", len(expDef.Modes))
+	}
+
+	// Build a map of mode name to mode refID for verification
+	modeNameToRefID := make(map[string]string)
+	for _, mode := range expDef.Modes {
+		modeNameToRefID[mode.Name] = mode.RefID
+	}
+
+	// Verify that each fixture instance has both modeName and modeRefId set correctly
+	if len(exported.FixtureInstances) != 3 {
+		t.Fatalf("Expected 3 fixture instances, got %d", len(exported.FixtureInstances))
+	}
+
+	// Find each fixture by name and verify
+	fixturesByName := make(map[string]ExportedFixtureInstance)
+	for _, f := range exported.FixtureInstances {
+		fixturesByName[f.Name] = f
+	}
+
+	// Verify PAR 1 (4-channel mode)
+	par1 := fixturesByName["PAR 1"]
+	if par1.ModeName == nil || *par1.ModeName != "4-channel" {
+		t.Errorf("PAR 1: Expected ModeName '4-channel', got %v", par1.ModeName)
+	}
+	if par1.ModeRefID == nil {
+		t.Error("PAR 1: Expected ModeRefID to be set, got nil")
+	} else if *par1.ModeRefID != modeNameToRefID["4-channel"] {
+		t.Errorf("PAR 1: ModeRefID mismatch, expected %s, got %s", modeNameToRefID["4-channel"], *par1.ModeRefID)
+	}
+
+	// Verify PAR 2 (10-channel mode)
+	par2 := fixturesByName["PAR 2"]
+	if par2.ModeName == nil || *par2.ModeName != "10-channel" {
+		t.Errorf("PAR 2: Expected ModeName '10-channel', got %v", par2.ModeName)
+	}
+	if par2.ModeRefID == nil {
+		t.Error("PAR 2: Expected ModeRefID to be set, got nil")
+	} else if *par2.ModeRefID != modeNameToRefID["10-channel"] {
+		t.Errorf("PAR 2: ModeRefID mismatch, expected %s, got %s", modeNameToRefID["10-channel"], *par2.ModeRefID)
+	}
+
+	// Verify PAR 3 (5-channel mode)
+	par3 := fixturesByName["PAR 3"]
+	if par3.ModeName == nil || *par3.ModeName != "5-channel" {
+		t.Errorf("PAR 3: Expected ModeName '5-channel', got %v", par3.ModeName)
+	}
+	if par3.ModeRefID == nil {
+		t.Error("PAR 3: Expected ModeRefID to be set, got nil")
+	} else if *par3.ModeRefID != modeNameToRefID["5-channel"] {
+		t.Errorf("PAR 3: ModeRefID mismatch, expected %s, got %s", modeNameToRefID["5-channel"], *par3.ModeRefID)
+	}
+}

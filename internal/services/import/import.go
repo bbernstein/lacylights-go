@@ -96,16 +96,18 @@ func NewServiceWithSceneBoards(
 
 // importModesForExistingDefinition imports modes from export data into an existing definition.
 // It skips modes that already exist (matched by name).
-func (s *Service) importModesForExistingDefinition(ctx context.Context, existingDefID string, exportedModes []export.ExportedFixtureMode, exportedChannels []export.ExportedChannelDefinition) ([]string, error) {
+// Returns warnings and a map of old mode refID -> mode name for imported modes.
+func (s *Service) importModesForExistingDefinition(ctx context.Context, existingDefID string, exportedModes []export.ExportedFixtureMode, exportedChannels []export.ExportedChannelDefinition) ([]string, map[string]string, error) {
 	var warnings []string
+	modeRefIDToNameMap := make(map[string]string)
 
 	// Get existing modes for this definition
 	existingModes, err := s.fixtureRepo.GetDefinitionModes(ctx, existingDefID)
 	if err != nil {
-		return warnings, err
+		return warnings, modeRefIDToNameMap, err
 	}
 
-	// Build a set of existing mode names
+	// Build a set of existing mode names and track refID -> name mapping for existing modes
 	existingModeNames := make(map[string]bool)
 	for _, m := range existingModes {
 		existingModeNames[m.Name] = true
@@ -114,7 +116,7 @@ func (s *Service) importModesForExistingDefinition(ctx context.Context, existing
 	// Get existing channels for this definition to build name -> ID mapping
 	existingChannels, err := s.fixtureRepo.GetDefinitionChannels(ctx, existingDefID)
 	if err != nil {
-		return warnings, err
+		return warnings, modeRefIDToNameMap, err
 	}
 
 	// Build channel name -> existing channel ID mapping
@@ -131,10 +133,11 @@ func (s *Service) importModesForExistingDefinition(ctx context.Context, existing
 		}
 	}
 
-	// Import each mode that doesn't already exist
+	// Import each mode that doesn't already exist and track the mapping
 	for _, mode := range exportedModes {
 		if existingModeNames[mode.Name] {
-			// Mode already exists, skip
+			// Mode already exists, track the mapping
+			modeRefIDToNameMap[mode.RefID] = mode.Name
 			continue
 		}
 
@@ -146,8 +149,11 @@ func (s *Service) importModesForExistingDefinition(ctx context.Context, existing
 		}
 
 		if err := s.fixtureRepo.CreateMode(ctx, newMode); err != nil {
-			return warnings, err
+			return warnings, modeRefIDToNameMap, err
 		}
+
+		// Track the mapping of old mode refID -> new mode name
+		modeRefIDToNameMap[mode.RefID] = newMode.Name
 
 		// Create mode channels
 		var modeChannels []models.ModeChannel
@@ -181,12 +187,12 @@ func (s *Service) importModesForExistingDefinition(ctx context.Context, existing
 
 		if len(modeChannels) > 0 {
 			if err := s.fixtureRepo.CreateModeChannels(ctx, modeChannels); err != nil {
-				return warnings, err
+				return warnings, modeRefIDToNameMap, err
 			}
 		}
 	}
 
-	return warnings, nil
+	return warnings, modeRefIDToNameMap, nil
 }
 
 // ImportProject imports a project from JSON.
@@ -243,6 +249,7 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 	definitionIDMap := make(map[string]string) // old ID -> new ID
 	fixtureIDMap := make(map[string]string)    // old ID -> new ID
 	sceneIDMap := make(map[string]string)      // old ID -> new ID
+	modeRefIDToNameMap := make(map[string]string) // old mode refID -> new mode name
 
 	// Import fixture definitions
 	for _, def := range exported.FixtureDefinitions {
@@ -256,11 +263,15 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 				definitionIDMap[def.RefID] = existing.ID
 				// Import modes that don't already exist on the existing definition
 				if len(def.Modes) > 0 {
-					modeWarnings, err := s.importModesForExistingDefinition(ctx, existing.ID, def.Modes, def.Channels)
+					modeWarnings, modeMappings, err := s.importModesForExistingDefinition(ctx, existing.ID, def.Modes, def.Channels)
 					if err != nil {
 						return "", nil, nil, err
 					}
 					warnings = append(warnings, modeWarnings...)
+					// Merge mode mappings into global map
+					for oldRefID, modeName := range modeMappings {
+						modeRefIDToNameMap[oldRefID] = modeName
+					}
 				}
 				continue
 			}
@@ -278,11 +289,15 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 				definitionIDMap[def.RefID] = existing.ID
 				// Import modes that don't already exist on the existing definition
 				if len(def.Modes) > 0 {
-					modeWarnings, err := s.importModesForExistingDefinition(ctx, existing.ID, def.Modes, def.Channels)
+					modeWarnings, modeMappings, err := s.importModesForExistingDefinition(ctx, existing.ID, def.Modes, def.Channels)
 					if err != nil {
 						return "", nil, nil, err
 					}
 					warnings = append(warnings, modeWarnings...)
+					// Merge mode mappings into global map
+					for oldRefID, modeName := range modeMappings {
+						modeRefIDToNameMap[oldRefID] = modeName
+					}
 				}
 				warnings = append(warnings, "Skipped existing fixture definition: "+def.Manufacturer+" "+def.Model)
 				continue
@@ -295,11 +310,15 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 				definitionIDMap[def.RefID] = existing.ID
 				// Import modes that don't already exist on the existing definition
 				if len(def.Modes) > 0 {
-					modeWarnings, err := s.importModesForExistingDefinition(ctx, existing.ID, def.Modes, def.Channels)
+					modeWarnings, modeMappings, err := s.importModesForExistingDefinition(ctx, existing.ID, def.Modes, def.Channels)
 					if err != nil {
 						return "", nil, nil, err
 					}
 					warnings = append(warnings, modeWarnings...)
+					// Merge mode mappings into global map
+					for oldRefID, modeName := range modeMappings {
+						modeRefIDToNameMap[oldRefID] = modeName
+					}
 				}
 				warnings = append(warnings, "Reused existing fixture definition (Replace merges modes): "+def.Manufacturer+" "+def.Model)
 				continue
@@ -365,6 +384,9 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 				return "", nil, nil, err
 			}
 
+			// Track the mapping of old mode refID -> new mode name
+			modeRefIDToNameMap[mode.RefID] = newMode.Name
+
 			// Create mode channels
 			var modeChannels []models.ModeChannel
 			for _, mc := range mode.ModeChannels {
@@ -411,6 +433,25 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 			tagsJSON = &str
 		}
 
+		// Determine the correct mode name to use
+		// Prefer modeRefId mapping if available, otherwise fall back to modeName
+		var modeName *string
+		if f.ModeRefID != nil && *f.ModeRefID != "" {
+			// Use the mode refID to look up the correct mode name
+			if mappedModeName, ok := modeRefIDToNameMap[*f.ModeRefID]; ok {
+				modeName = &mappedModeName
+			} else {
+				// ModeRefID not found in map, fall back to ModeName
+				modeName = f.ModeName
+				if modeName != nil && *modeName != "" {
+					warnings = append(warnings, "Mode refID '"+*f.ModeRefID+"' not found for fixture '"+f.Name+"', using mode name '"+*modeName+"' instead")
+				}
+			}
+		} else {
+			// No modeRefID, use the modeName directly (backwards compatibility)
+			modeName = f.ModeName
+		}
+
 		newFixture := &models.FixtureInstance{
 			Name:           f.Name,
 			Description:    f.Description,
@@ -422,7 +463,7 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 			Manufacturer:   &def.Manufacturer,
 			Model:          &def.Model,
 			Type:           &def.Type,
-			ModeName:       f.ModeName,
+			ModeName:       modeName,
 			ChannelCount:   f.ChannelCount,
 			ProjectOrder:   f.ProjectOrder,
 			LayoutX:        f.LayoutX,
@@ -451,23 +492,96 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 				})
 			}
 		} else {
-			// Get channels from definition
-			channels, err := s.fixtureRepo.GetDefinitionChannels(ctx, newDefID)
-			if err != nil {
-				return "", nil, nil, err
-			}
+			// Get channels based on the selected mode, or all channels if no mode specified
+			if modeName != nil && *modeName != "" {
+				// Get the mode for this fixture
+				modes, err := s.fixtureRepo.GetDefinitionModes(ctx, newDefID)
+				if err != nil {
+					return "", nil, nil, err
+				}
 
-			for _, ch := range channels {
-				instanceChannels = append(instanceChannels, models.InstanceChannel{
-					Offset:       ch.Offset,
-					Name:         ch.Name,
-					Type:         ch.Type,
-					MinValue:     ch.MinValue,
-					MaxValue:     ch.MaxValue,
-					DefaultValue: ch.DefaultValue,
-					FadeBehavior: ch.FadeBehavior,
-					IsDiscrete:   ch.IsDiscrete,
-				})
+				// Find the mode by name
+				var selectedMode *models.FixtureMode
+				for i := range modes {
+					if modes[i].Name == *modeName {
+						selectedMode = &modes[i]
+						break
+					}
+				}
+
+				if selectedMode != nil {
+					// Get mode channels (these define which channels are used and in what order)
+					modeChannels, err := s.fixtureRepo.GetModeChannels(ctx, selectedMode.ID)
+					if err != nil {
+						return "", nil, nil, err
+					}
+
+					// Get all channel definitions
+					allChannels, err := s.fixtureRepo.GetDefinitionChannels(ctx, newDefID)
+					if err != nil {
+						return "", nil, nil, err
+					}
+
+					// Build a map of channel ID to channel definition
+					channelMap := make(map[string]models.ChannelDefinition)
+					for _, ch := range allChannels {
+						channelMap[ch.ID] = ch
+					}
+
+					// Create instance channels from mode channels (in mode order)
+					for _, mc := range modeChannels {
+						if ch, ok := channelMap[mc.ChannelID]; ok {
+							instanceChannels = append(instanceChannels, models.InstanceChannel{
+								Offset:       mc.Offset, // Use mode's offset, not definition's offset
+								Name:         ch.Name,
+								Type:         ch.Type,
+								MinValue:     ch.MinValue,
+								MaxValue:     ch.MaxValue,
+								DefaultValue: ch.DefaultValue,
+								FadeBehavior: ch.FadeBehavior,
+								IsDiscrete:   ch.IsDiscrete,
+							})
+						}
+					}
+				} else {
+					// Mode not found, fall back to all definition channels
+					channels, err := s.fixtureRepo.GetDefinitionChannels(ctx, newDefID)
+					if err != nil {
+						return "", nil, nil, err
+					}
+
+					for _, ch := range channels {
+						instanceChannels = append(instanceChannels, models.InstanceChannel{
+							Offset:       ch.Offset,
+							Name:         ch.Name,
+							Type:         ch.Type,
+							MinValue:     ch.MinValue,
+							MaxValue:     ch.MaxValue,
+							DefaultValue: ch.DefaultValue,
+							FadeBehavior: ch.FadeBehavior,
+							IsDiscrete:   ch.IsDiscrete,
+						})
+					}
+				}
+			} else {
+				// No mode specified, use all definition channels
+				channels, err := s.fixtureRepo.GetDefinitionChannels(ctx, newDefID)
+				if err != nil {
+					return "", nil, nil, err
+				}
+
+				for _, ch := range channels {
+					instanceChannels = append(instanceChannels, models.InstanceChannel{
+						Offset:       ch.Offset,
+						Name:         ch.Name,
+						Type:         ch.Type,
+						MinValue:     ch.MinValue,
+						MaxValue:     ch.MaxValue,
+						DefaultValue: ch.DefaultValue,
+						FadeBehavior: ch.FadeBehavior,
+						IsDiscrete:   ch.IsDiscrete,
+					})
+				}
 			}
 		}
 		// Only set channel count from instance channels if not already set from import
