@@ -383,66 +383,23 @@ func (s *Service) UpdateAllRepositories() ([]*UpdateResult, error) {
 		}, nil
 	}
 
-	// Get current versions before update
-	infoBefore, err := s.GetSystemVersions()
-	previousVersions := make(map[string]string)
-	if err != nil {
-		log.Printf("Warning: failed to get versions before update: %v", err)
-		// Initialize with "unknown" to provide clearer feedback to users
-		for _, repo := range repositoryNames {
-			previousVersions[repo] = "unknown"
-		}
-	} else if infoBefore != nil {
-		for _, repo := range infoBefore.Repositories {
-			previousVersions[repo.Repository] = repo.Installed
-		}
-	}
-
-	// Execute update-repos.sh update-all
-	cmd := exec.Command(UpdateScriptPath, "update-all")
-	output, cmdErr := cmd.CombinedOutput()
-
-	// Get versions after update
-	infoAfter, err := s.GetSystemVersions()
-	newVersions := make(map[string]string)
-	if err != nil {
-		log.Printf("Warning: failed to get versions after update: %v", err)
-		// Initialize with "unknown" to provide clearer feedback to users
-		for _, repo := range repositoryNames {
-			newVersions[repo] = "unknown"
-		}
-	} else if infoAfter != nil {
-		for _, repo := range infoAfter.Repositories {
-			newVersions[repo.Repository] = repo.Installed
-		}
-	}
-
-	// Build results for each repository (using shared repositoryNames)
+	// Update repositories in order: frontend, MCP, then backend
+	// This ensures that if backend (self) update is triggered, other updates complete first
+	// The backend update uses systemd-run with delay to avoid connection issues
 	var results []*UpdateResult
 
-	if cmdErr != nil {
-		// Log full output server-side for debugging, return sanitized error to client
-		log.Printf("Update-all failed: %v\nFull output: %s", cmdErr, string(output))
-		// Update failed
-		for _, repo := range repositoryNames {
+	for _, repo := range repositoryNames {
+		log.Printf("UpdateAll: updating %s to latest", repo)
+		result, err := s.UpdateRepository(repo, nil) // nil = latest version
+		if err != nil {
+			log.Printf("UpdateAll: failed to update %s: %v", repo, err)
 			results = append(results, &UpdateResult{
-				Success:         false,
-				Repository:      repo,
-				PreviousVersion: previousVersions[repo],
-				NewVersion:      newVersions[repo],
-				Error:           fmt.Sprintf("Update failed: %v", cmdErr),
+				Success:    false,
+				Repository: repo,
+				Error:      fmt.Sprintf("Failed to start update: %v", err),
 			})
-		}
-	} else {
-		// Update succeeded
-		for _, repo := range repositoryNames {
-			results = append(results, &UpdateResult{
-				Success:         true,
-				Repository:      repo,
-				PreviousVersion: previousVersions[repo],
-				NewVersion:      newVersions[repo],
-				Message:         "Update completed successfully",
-			})
+		} else {
+			results = append(results, result)
 		}
 	}
 
