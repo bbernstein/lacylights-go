@@ -3116,3 +3116,532 @@ func TestImportProject_Integration_SceneBoardButtonWithUnknownScene(t *testing.T
 		t.Errorf("Expected 1 button (unknown scene button skipped), got %d", len(buttons))
 	}
 }
+
+func TestImportProject_ModeRefID_Integration(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+
+	// Create export data with fixtures using different modes
+	// This simulates an exported project where fixtures reference modes by refId
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "test-project",
+			Name:       "Mode RefID Import Test",
+		},
+		FixtureDefinitions: []export.ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "Chauvet DJ",
+				Model:        "SlimPAR Pro RGBA",
+				Type:         "LED_PAR",
+				IsBuiltIn:    false,
+				Modes: []export.ExportedFixtureMode{
+					{
+						RefID:        "mode-10ch",
+						Name:         "10-channel",
+						ChannelCount: 10,
+						ModeChannels: []export.ExportedModeChannel{
+							{ChannelRefID: "ch-dimmer", Offset: 0},
+							{ChannelRefID: "ch-red", Offset: 1},
+							{ChannelRefID: "ch-green", Offset: 2},
+							{ChannelRefID: "ch-blue", Offset: 3},
+							{ChannelRefID: "ch-amber", Offset: 4},
+							{ChannelRefID: "ch-strobe", Offset: 5},
+							{ChannelRefID: "ch-speed", Offset: 6},
+							{ChannelRefID: "ch-program", Offset: 7},
+							{ChannelRefID: "ch-dimmer-curve", Offset: 8},
+							{ChannelRefID: "ch-auto", Offset: 9},
+						},
+					},
+					{
+						RefID:        "mode-4ch",
+						Name:         "4-channel",
+						ChannelCount: 4,
+						ModeChannels: []export.ExportedModeChannel{
+							{ChannelRefID: "ch-red", Offset: 0},
+							{ChannelRefID: "ch-green", Offset: 1},
+							{ChannelRefID: "ch-blue", Offset: 2},
+							{ChannelRefID: "ch-amber", Offset: 3},
+						},
+					},
+					{
+						RefID:        "mode-5ch",
+						Name:         "5-channel",
+						ChannelCount: 5,
+						ModeChannels: []export.ExportedModeChannel{
+							{ChannelRefID: "ch-dimmer", Offset: 0},
+							{ChannelRefID: "ch-red", Offset: 1},
+							{ChannelRefID: "ch-green", Offset: 2},
+							{ChannelRefID: "ch-blue", Offset: 3},
+							{ChannelRefID: "ch-amber", Offset: 4},
+						},
+					},
+				},
+				Channels: []export.ExportedChannelDefinition{
+					{RefID: "ch-dimmer", Name: "Dimmer", Type: "INTENSITY", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-red", Name: "Red", Type: "RED", Offset: 1, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-green", Name: "Green", Type: "GREEN", Offset: 2, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-blue", Name: "Blue", Type: "BLUE", Offset: 3, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-amber", Name: "Amber", Type: "AMBER", Offset: 4, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-strobe", Name: "Strobe", Type: "STROBE", Offset: 5, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-speed", Name: "Speed", Type: "SPEED", Offset: 6, MinValue: 0, MaxValue: 255, DefaultValue: 128},
+					{RefID: "ch-program", Name: "Program", Type: "EFFECT", Offset: 7, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-dimmer-curve", Name: "Dimmer Curve", Type: "MAINTENANCE", Offset: 8, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-auto", Name: "Auto", Type: "EFFECT", Offset: 9, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+				},
+			},
+		},
+		FixtureInstances: []export.ExportedFixtureInstance{
+			{
+				RefID:           "fixture-1",
+				OriginalID:      "fixture-1",
+				Name:            "PAR 1",
+				DefinitionRefID: "def-1",
+				ModeName:        strPtr("4-channel"),
+				ModeRefID:       strPtr("mode-4ch"), // This should be used to set the correct mode
+				ChannelCount:    intPtr(4),
+				Universe:        1,
+				StartChannel:    1,
+			},
+			{
+				RefID:           "fixture-2",
+				OriginalID:      "fixture-2",
+				Name:            "PAR 2",
+				DefinitionRefID: "def-1",
+				ModeName:        strPtr("10-channel"),
+				ModeRefID:       strPtr("mode-10ch"), // This should be used to set the correct mode
+				ChannelCount:    intPtr(10),
+				Universe:        1,
+				StartChannel:    5,
+			},
+			{
+				RefID:           "fixture-3",
+				OriginalID:      "fixture-3",
+				Name:            "PAR 3",
+				DefinitionRefID: "def-1",
+				ModeName:        strPtr("5-channel"),
+				ModeRefID:       strPtr("mode-5ch"), // This should be used to set the correct mode
+				ChannelCount:    intPtr(5),
+				Universe:        1,
+				StartChannel:    15,
+			},
+		},
+	}
+
+	// Convert to JSON
+	jsonContent, err := exported.ToJSON()
+	if err != nil {
+		t.Fatalf("Failed to convert export to JSON: %v", err)
+	}
+
+	// Import the project
+	projectID, stats, warnings, err := service.ImportProject(ctx, jsonContent, ImportOptions{
+		Mode:                    ImportModeCreate,
+		ImportBuiltInFixtures:   false,
+		FixtureConflictStrategy: FixtureConflictSkip,
+	})
+
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	if len(warnings) > 0 {
+		t.Logf("Import warnings: %v", warnings)
+	}
+
+	// Verify import stats
+	if stats.FixtureDefinitionsCreated != 1 {
+		t.Errorf("Expected 1 fixture definition created, got %d", stats.FixtureDefinitionsCreated)
+	}
+	if stats.FixtureInstancesCreated != 3 {
+		t.Errorf("Expected 3 fixture instances created, got %d", stats.FixtureInstancesCreated)
+	}
+
+	// Get all fixtures from the imported project
+	fixtures, err := fixtureRepo.FindByProjectID(ctx, projectID)
+	if err != nil {
+		t.Fatalf("Failed to get fixtures: %v", err)
+	}
+
+	if len(fixtures) != 3 {
+		t.Fatalf("Expected 3 fixtures, got %d", len(fixtures))
+	}
+
+	// Build a map by name for easier verification
+	fixturesByName := make(map[string]*models.FixtureInstance)
+	for i, f := range fixtures {
+		fixturesByName[f.Name] = &fixtures[i]
+	}
+
+	// Verify PAR 1 (should have 4-channel mode)
+	par1 := fixturesByName["PAR 1"]
+	if par1 == nil {
+		t.Fatal("PAR 1 not found")
+	}
+	if par1.ModeName == nil || *par1.ModeName != "4-channel" {
+		t.Errorf("PAR 1: Expected ModeName '4-channel', got %v", par1.ModeName)
+	}
+	if par1.ChannelCount == nil || *par1.ChannelCount != 4 {
+		t.Errorf("PAR 1: Expected ChannelCount 4, got %v", par1.ChannelCount)
+	}
+
+	// Verify PAR 1 instance channels
+	par1Channels, err := fixtureRepo.GetInstanceChannels(ctx, par1.ID)
+	if err != nil {
+		t.Fatalf("Failed to get PAR 1 instance channels: %v", err)
+	}
+	if len(par1Channels) != 4 {
+		t.Errorf("PAR 1: Expected 4 instance channels, got %d", len(par1Channels))
+	}
+	// Verify the 4-channel mode uses Red, Green, Blue, Amber (no Dimmer)
+	expectedPar1Types := []string{"RED", "GREEN", "BLUE", "AMBER"}
+	for i, ch := range par1Channels {
+		if ch.Type != expectedPar1Types[i] {
+			t.Errorf("PAR 1 channel %d: Expected type %s, got %s", i, expectedPar1Types[i], ch.Type)
+		}
+		if ch.Offset != i {
+			t.Errorf("PAR 1 channel %d: Expected offset %d, got %d", i, i, ch.Offset)
+		}
+	}
+
+	// Verify PAR 2 (should have 10-channel mode)
+	par2 := fixturesByName["PAR 2"]
+	if par2 == nil {
+		t.Fatal("PAR 2 not found")
+	}
+	if par2.ModeName == nil || *par2.ModeName != "10-channel" {
+		t.Errorf("PAR 2: Expected ModeName '10-channel', got %v", par2.ModeName)
+	}
+	if par2.ChannelCount == nil || *par2.ChannelCount != 10 {
+		t.Errorf("PAR 2: Expected ChannelCount 10, got %v", par2.ChannelCount)
+	}
+
+	// Verify PAR 2 instance channels
+	par2Channels, err := fixtureRepo.GetInstanceChannels(ctx, par2.ID)
+	if err != nil {
+		t.Fatalf("Failed to get PAR 2 instance channels: %v", err)
+	}
+	if len(par2Channels) != 10 {
+		t.Errorf("PAR 2: Expected 10 instance channels, got %d", len(par2Channels))
+	}
+	// Verify the 10-channel mode uses all channels in order
+	expectedPar2Types := []string{"INTENSITY", "RED", "GREEN", "BLUE", "AMBER", "STROBE", "SPEED", "EFFECT", "MAINTENANCE", "EFFECT"}
+	for i, ch := range par2Channels {
+		if ch.Type != expectedPar2Types[i] {
+			t.Errorf("PAR 2 channel %d: Expected type %s, got %s", i, expectedPar2Types[i], ch.Type)
+		}
+		if ch.Offset != i {
+			t.Errorf("PAR 2 channel %d: Expected offset %d, got %d", i, i, ch.Offset)
+		}
+	}
+
+	// Verify PAR 3 (should have 5-channel mode)
+	par3 := fixturesByName["PAR 3"]
+	if par3 == nil {
+		t.Fatal("PAR 3 not found")
+	}
+	if par3.ModeName == nil || *par3.ModeName != "5-channel" {
+		t.Errorf("PAR 3: Expected ModeName '5-channel', got %v", par3.ModeName)
+	}
+	if par3.ChannelCount == nil || *par3.ChannelCount != 5 {
+		t.Errorf("PAR 3: Expected ChannelCount 5, got %v", par3.ChannelCount)
+	}
+
+	// Verify PAR 3 instance channels
+	par3Channels, err := fixtureRepo.GetInstanceChannels(ctx, par3.ID)
+	if err != nil {
+		t.Fatalf("Failed to get PAR 3 instance channels: %v", err)
+	}
+	if len(par3Channels) != 5 {
+		t.Errorf("PAR 3: Expected 5 instance channels, got %d", len(par3Channels))
+	}
+	// Verify the 5-channel mode uses Dimmer, Red, Green, Blue, Amber
+	expectedPar3Types := []string{"INTENSITY", "RED", "GREEN", "BLUE", "AMBER"}
+	for i, ch := range par3Channels {
+		if ch.Type != expectedPar3Types[i] {
+			t.Errorf("PAR 3 channel %d: Expected type %s, got %s", i, expectedPar3Types[i], ch.Type)
+		}
+		if ch.Offset != i {
+			t.Errorf("PAR 3 channel %d: Expected offset %d, got %d", i, i, ch.Offset)
+		}
+	}
+
+	// Verify that modes were created correctly
+	def := fixturesByName["PAR 1"]
+	if def == nil {
+		t.Fatal("Fixture definition not found")
+	}
+
+	modes, err := fixtureRepo.GetDefinitionModes(ctx, def.DefinitionID)
+	if err != nil {
+		t.Fatalf("Failed to get modes: %v", err)
+	}
+
+	if len(modes) != 3 {
+		t.Errorf("Expected 3 modes, got %d", len(modes))
+	}
+
+	// Verify that each mode has the correct name
+	modeNames := make(map[string]bool)
+	for _, mode := range modes {
+		modeNames[mode.Name] = true
+	}
+
+	if !modeNames["4-channel"] {
+		t.Error("Expected mode '4-channel' to exist")
+	}
+	if !modeNames["5-channel"] {
+		t.Error("Expected mode '5-channel' to exist")
+	}
+	if !modeNames["10-channel"] {
+		t.Error("Expected mode '10-channel' to exist")
+	}
+}
+
+func TestImportProject_ModeRefID_ExistingDefinition_Integration(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	sceneRepo := repositories.NewSceneRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+
+	// Create an existing fixture definition with one mode
+	def := &models.FixtureDefinition{
+		Manufacturer: "Chauvet DJ",
+		Model:        "SlimPAR Pro RGBA",
+		Type:         "LED_PAR",
+		IsBuiltIn:    false,
+	}
+	_ = fixtureRepo.CreateDefinition(ctx, def)
+
+	// Create channels (include Dimmer for 5-channel mode)
+	ch0 := &models.ChannelDefinition{ID: cuid.New(), Name: "Dimmer", Type: "INTENSITY", Offset: 0, DefinitionID: def.ID}
+	ch1 := &models.ChannelDefinition{ID: cuid.New(), Name: "Red", Type: "RED", Offset: 1, DefinitionID: def.ID}
+	ch2 := &models.ChannelDefinition{ID: cuid.New(), Name: "Green", Type: "GREEN", Offset: 2, DefinitionID: def.ID}
+	ch3 := &models.ChannelDefinition{ID: cuid.New(), Name: "Blue", Type: "BLUE", Offset: 3, DefinitionID: def.ID}
+	ch4 := &models.ChannelDefinition{ID: cuid.New(), Name: "Amber", Type: "AMBER", Offset: 4, DefinitionID: def.ID}
+	_ = fixtureRepo.CreateChannelDefinition(ctx, ch0)
+	_ = fixtureRepo.CreateChannelDefinition(ctx, ch1)
+	_ = fixtureRepo.CreateChannelDefinition(ctx, ch2)
+	_ = fixtureRepo.CreateChannelDefinition(ctx, ch3)
+	_ = fixtureRepo.CreateChannelDefinition(ctx, ch4)
+
+	// Create an existing mode (4-channel) - no Dimmer, just colors
+	existingMode := &models.FixtureMode{
+		Name:         "4-channel",
+		ChannelCount: 4,
+		DefinitionID: def.ID,
+	}
+	_ = fixtureRepo.CreateMode(ctx, existingMode)
+
+	// Create mode channels for the existing 4-channel mode
+	mc1 := &models.ModeChannel{ID: cuid.New(), ModeID: existingMode.ID, ChannelID: ch1.ID, Offset: 0}
+	mc2 := &models.ModeChannel{ID: cuid.New(), ModeID: existingMode.ID, ChannelID: ch2.ID, Offset: 1}
+	mc3 := &models.ModeChannel{ID: cuid.New(), ModeID: existingMode.ID, ChannelID: ch3.ID, Offset: 2}
+	mc4 := &models.ModeChannel{ID: cuid.New(), ModeID: existingMode.ID, ChannelID: ch4.ID, Offset: 3}
+	db.Create(mc1)
+	db.Create(mc2)
+	db.Create(mc3)
+	db.Create(mc4)
+
+	// Import a project that has the same definition with additional modes
+	exported := &export.ExportedProject{
+		Version: "1.0",
+		Project: &export.ExportProjectInfo{
+			OriginalID: "test-project",
+			Name:       "Mode RefID Existing Definition Test",
+		},
+		FixtureDefinitions: []export.ExportedFixtureDefinition{
+			{
+				RefID:        "def-1",
+				Manufacturer: "Chauvet DJ",
+				Model:        "SlimPAR Pro RGBA",
+				Type:         "LED_PAR",
+				IsBuiltIn:    false,
+				Modes: []export.ExportedFixtureMode{
+					{
+						RefID:        "mode-4ch",
+						Name:         "4-channel",
+						ChannelCount: 4,
+						ModeChannels: []export.ExportedModeChannel{
+							{ChannelRefID: "ch-red", Offset: 0},
+							{ChannelRefID: "ch-green", Offset: 1},
+							{ChannelRefID: "ch-blue", Offset: 2},
+							{ChannelRefID: "ch-amber", Offset: 3},
+						},
+					},
+					{
+						RefID:        "mode-5ch",
+						Name:         "5-channel",
+						ChannelCount: 5,
+						ModeChannels: []export.ExportedModeChannel{
+							{ChannelRefID: "ch-dimmer", Offset: 0},
+							{ChannelRefID: "ch-red", Offset: 1},
+							{ChannelRefID: "ch-green", Offset: 2},
+							{ChannelRefID: "ch-blue", Offset: 3},
+							{ChannelRefID: "ch-amber", Offset: 4},
+						},
+					},
+				},
+				Channels: []export.ExportedChannelDefinition{
+					{RefID: "ch-dimmer", Name: "Dimmer", Type: "INTENSITY", Offset: 0, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-red", Name: "Red", Type: "RED", Offset: 1, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-green", Name: "Green", Type: "GREEN", Offset: 2, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-blue", Name: "Blue", Type: "BLUE", Offset: 3, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+					{RefID: "ch-amber", Name: "Amber", Type: "AMBER", Offset: 4, MinValue: 0, MaxValue: 255, DefaultValue: 0},
+				},
+			},
+		},
+		FixtureInstances: []export.ExportedFixtureInstance{
+			{
+				RefID:           "fixture-1",
+				OriginalID:      "fixture-1",
+				Name:            "PAR 1",
+				DefinitionRefID: "def-1",
+				ModeName:        strPtr("4-channel"),
+				ModeRefID:       strPtr("mode-4ch"), // Should map to existing mode
+				Universe:        1,
+				StartChannel:    1,
+			},
+			{
+				RefID:           "fixture-2",
+				OriginalID:      "fixture-2",
+				Name:            "PAR 2",
+				DefinitionRefID: "def-1",
+				ModeName:        strPtr("5-channel"),
+				ModeRefID:       strPtr("mode-5ch"), // Should map to newly created mode
+				Universe:        1,
+				StartChannel:    5,
+			},
+		},
+	}
+
+	jsonContent, err := exported.ToJSON()
+	if err != nil {
+		t.Fatalf("Failed to convert export to JSON: %v", err)
+	}
+
+	// Import the project
+	projectID, stats, warnings, err := service.ImportProject(ctx, jsonContent, ImportOptions{
+		Mode:                    ImportModeCreate,
+		ImportBuiltInFixtures:   false,
+		FixtureConflictStrategy: FixtureConflictSkip,
+	})
+
+	if err != nil {
+		t.Fatalf("ImportProject failed: %v", err)
+	}
+
+	if len(warnings) > 0 {
+		t.Logf("Import warnings: %v", warnings)
+	}
+
+	// Verify that no new definition was created (existing one was reused)
+	if stats.FixtureDefinitionsCreated != 0 {
+		t.Errorf("Expected 0 fixture definitions created (should reuse existing), got %d", stats.FixtureDefinitionsCreated)
+	}
+
+	// Get all fixtures
+	fixtures, err := fixtureRepo.FindByProjectID(ctx, projectID)
+	if err != nil {
+		t.Fatalf("Failed to get fixtures: %v", err)
+	}
+
+	if len(fixtures) != 2 {
+		t.Fatalf("Expected 2 fixtures, got %d", len(fixtures))
+	}
+
+	// Build map by name
+	fixturesByName := make(map[string]*models.FixtureInstance)
+	for i, f := range fixtures {
+		fixturesByName[f.Name] = &fixtures[i]
+	}
+
+	// Verify PAR 1 uses existing 4-channel mode
+	par1 := fixturesByName["PAR 1"]
+	if par1 == nil {
+		t.Fatal("PAR 1 not found")
+	}
+	if par1.ModeName == nil || *par1.ModeName != "4-channel" {
+		t.Errorf("PAR 1: Expected ModeName '4-channel', got %v", par1.ModeName)
+	}
+
+	// Verify PAR 1 instance channels
+	par1Channels, err := fixtureRepo.GetInstanceChannels(ctx, par1.ID)
+	if err != nil {
+		t.Fatalf("Failed to get PAR 1 instance channels: %v", err)
+	}
+	if len(par1Channels) != 4 {
+		t.Errorf("PAR 1: Expected 4 instance channels, got %d", len(par1Channels))
+	}
+	// Verify the 4-channel mode uses Red, Green, Blue, Amber (no Dimmer)
+	expectedPar1Types := []string{"RED", "GREEN", "BLUE", "AMBER"}
+	for i, ch := range par1Channels {
+		if ch.Type != expectedPar1Types[i] {
+			t.Errorf("PAR 1 channel %d: Expected type %s, got %s", i, expectedPar1Types[i], ch.Type)
+		}
+	}
+
+	// Verify PAR 2 uses new 10-channel mode
+	par2 := fixturesByName["PAR 2"]
+	if par2 == nil {
+		t.Fatal("PAR 2 not found")
+	}
+	if par2.ModeName == nil || *par2.ModeName != "5-channel" {
+		t.Errorf("PAR 2: Expected ModeName '5-channel', got %v", par2.ModeName)
+	}
+
+	// Verify PAR 2 instance channels
+	par2Channels, err := fixtureRepo.GetInstanceChannels(ctx, par2.ID)
+	if err != nil {
+		t.Fatalf("Failed to get PAR 2 instance channels: %v", err)
+	}
+	if len(par2Channels) != 5 {
+		t.Errorf("PAR 2: Expected 5 instance channels, got %d", len(par2Channels))
+	}
+	// Verify the 5-channel mode uses Dimmer + colors
+	expectedPar2Types := []string{"INTENSITY", "RED", "GREEN", "BLUE", "AMBER"}
+	for i, ch := range par2Channels {
+		if ch.Type != expectedPar2Types[i] {
+			t.Errorf("PAR 2 channel %d: Expected type %s, got %s", i, expectedPar2Types[i], ch.Type)
+		}
+	}
+
+	// Verify that modes were created correctly (should have 2 modes total: existing + new)
+	modes, err := fixtureRepo.GetDefinitionModes(ctx, def.ID)
+	if err != nil {
+		t.Fatalf("Failed to get modes: %v", err)
+	}
+
+	if len(modes) != 2 {
+		t.Errorf("Expected 2 modes (1 existing + 1 new), got %d", len(modes))
+	}
+
+	modeNames := make(map[string]bool)
+	for _, mode := range modes {
+		modeNames[mode.Name] = true
+	}
+
+	if !modeNames["4-channel"] {
+		t.Error("Expected mode '4-channel' to exist")
+	}
+	if !modeNames["5-channel"] {
+		t.Error("Expected mode '5-channel' to exist")
+	}
+}

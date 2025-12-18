@@ -86,6 +86,7 @@ type ExportedFixtureInstance struct {
 	Description      *string                   `json:"description,omitempty"`
 	DefinitionRefID  string                    `json:"definitionRefId"`
 	ModeName         *string                   `json:"modeName,omitempty"`
+	ModeRefID        *string                   `json:"modeRefId,omitempty"`
 	ChannelCount     *int                      `json:"channelCount,omitempty"`
 	Universe         int                       `json:"universe"`
 	StartChannel     int                       `json:"startChannel"`
@@ -320,6 +321,9 @@ func (s *Service) ExportProjectWithOptions(ctx context.Context, projectID string
 			definitionIDs[f.DefinitionID] = true
 		}
 
+		// Track mode name -> mode ID mapping for each definition
+		modeNameToIDMap := make(map[string]map[string]string) // definitionID -> (modeName -> modeID)
+
 		// Export definitions
 		for defID := range definitionIDs {
 			def, err := s.fixtureRepo.FindDefinitionByID(ctx, defID)
@@ -363,6 +367,9 @@ func (s *Service) ExportProjectWithOptions(ctx context.Context, projectID string
 				return nil, nil, err
 			}
 
+			// Initialize mode name map for this definition
+			modeNameToIDMap[defID] = make(map[string]string)
+
 			for _, mode := range modes {
 				exportedMode := ExportedFixtureMode{
 					RefID:        mode.ID,
@@ -370,6 +377,9 @@ func (s *Service) ExportProjectWithOptions(ctx context.Context, projectID string
 					ShortName:    mode.ShortName,
 					ChannelCount: mode.ChannelCount,
 				}
+
+				// Track mode name -> ID mapping
+				modeNameToIDMap[defID][mode.Name] = mode.ID
 
 				// Get mode channels
 				modeChannels, err := s.fixtureRepo.GetModeChannels(ctx, mode.ID)
@@ -401,6 +411,18 @@ func (s *Service) ExportProjectWithOptions(ctx context.Context, projectID string
 				}
 			}
 
+			// Look up mode ref ID if mode name is set
+			var modeRefID *string
+			if f.ModeName != nil && *f.ModeName != "" {
+				if modeMap, ok := modeNameToIDMap[f.DefinitionID]; ok {
+					if modeID, ok := modeMap[*f.ModeName]; ok {
+						modeRefID = &modeID
+					}
+					// Note: If mode not found in map, modeRefID remains nil but we continue
+					// This is acceptable - the export will have modeName but not modeRefId
+				}
+			}
+
 			exported.FixtureInstances = append(exported.FixtureInstances, ExportedFixtureInstance{
 				RefID:           f.ID,
 				OriginalID:      f.ID,
@@ -408,6 +430,7 @@ func (s *Service) ExportProjectWithOptions(ctx context.Context, projectID string
 				Description:     f.Description,
 				DefinitionRefID: f.DefinitionID,
 				ModeName:        f.ModeName,
+				ModeRefID:       modeRefID,
 				ChannelCount:    f.ChannelCount,
 				Universe:        f.Universe,
 				StartChannel:    f.StartChannel,
