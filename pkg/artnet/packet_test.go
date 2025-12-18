@@ -37,7 +37,7 @@ func TestBuildDMXPacket(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			packet := BuildDMXPacket(tt.universe, tt.channels)
+			packet := BuildDMXPacket(tt.universe, tt.channels, 123) // Test with sequence 123
 
 			// Check packet size
 			if len(packet) != int(PacketSize) {
@@ -63,8 +63,8 @@ func TestBuildDMXPacket(t *testing.T) {
 			}
 
 			// Check Sequence
-			if packet[12] != 0 {
-				t.Errorf("BuildDMXPacket() Sequence = %d, want 0", packet[12])
+			if packet[12] != 123 {
+				t.Errorf("BuildDMXPacket() Sequence = %d, want 123", packet[12])
 			}
 
 			// Check Physical
@@ -94,7 +94,7 @@ func TestBuildDMXPacket_ChannelData(t *testing.T) {
 	channels[100] = 128 // Middle channel
 	channels[511] = 64  // Last channel
 
-	packet := BuildDMXPacket(1, channels)
+	packet := BuildDMXPacket(1, channels, 0)
 
 	// Check channel values in packet
 	if packet[18] != 255 {
@@ -111,7 +111,7 @@ func TestBuildDMXPacket_ChannelData(t *testing.T) {
 func TestBuildDMXPacket_ShortChannelArray(t *testing.T) {
 	// Test with fewer than 512 channels
 	channels := []byte{100, 200}
-	packet := BuildDMXPacket(1, channels)
+	packet := BuildDMXPacket(1, channels, 0)
 
 	// First two channels should have values
 	if packet[18] != 100 {
@@ -128,7 +128,7 @@ func TestBuildDMXPacket_ShortChannelArray(t *testing.T) {
 }
 
 func TestBuildDMXPacket_EmptyChannels(t *testing.T) {
-	packet := BuildDMXPacket(1, nil)
+	packet := BuildDMXPacket(1, nil, 0)
 
 	// Packet should still be valid with all zeros
 	if len(packet) != int(PacketSize) {
