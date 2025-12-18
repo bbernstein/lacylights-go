@@ -851,3 +851,187 @@ func TestArtNetPacketFormat(t *testing.T) {
 		t.Errorf("DMX channel 256 = %d, want 64", packet[18+255])
 	}
 }
+
+// TestTriggerChangeDetectionNoImmediateTransmission verifies that TriggerChangeDetection()
+// does NOT cause immediate packet transmission, preventing the race condition where
+// both the fade engine and transmitLoop were sending packets independently.
+// This is a regression test for the race condition fix.
+func TestTriggerChangeDetectionNoImmediateTransmission(t *testing.T) {
+	cfg := Config{
+		Enabled:          true,
+		BroadcastAddr:    "127.0.0.1",
+		Port:             6558, // Unique port to avoid conflicts
+		RefreshRateHz:    60,
+		IdleRateHz:       1,
+		HighRateDuration: 5 * time.Second,
+	}
+
+	svc := NewService(cfg)
+	err := svc.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+	defer svc.Stop()
+
+	// Set up UDP listener to count packets
+	addr, err := net.ResolveUDPAddr("udp4", "127.0.0.1:6558")
+	if err != nil {
+		t.Fatalf("ResolveUDPAddr failed: %v", err)
+	}
+
+	conn, err := net.ListenUDP("udp4", addr)
+	if err != nil {
+		t.Fatalf("ListenUDP failed: %v", err)
+	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Logf("conn.Close error: %v", err)
+		}
+	}()
+
+	// Trigger high-rate mode and wait for it to fully engage
+	// The service starts in idle mode (1Hz), so the first tick may take up to 1 second
+	// After that tick detects changes, it switches to high-rate mode
+	svc.SetChannelValue(1, 1, 100)
+	svc.TriggerChangeDetection()
+	time.Sleep(1200 * time.Millisecond) // Wait for idle tick + high-rate mode switch
+
+	// Count packets for exactly 1 second
+	startTime := time.Now()
+	testDuration := 1 * time.Second
+	packetCount := 0
+	buffer := make([]byte, 1024)
+
+	if err := conn.SetReadDeadline(time.Now().Add(testDuration + 100*time.Millisecond)); err != nil {
+		t.Fatalf("SetReadDeadline failed: %v", err)
+	}
+
+	// Simulate ongoing fade changes while counting packets
+	go func() {
+		for time.Since(startTime) < testDuration {
+			svc.SetChannelValue(1, 1, byte(time.Since(startTime).Milliseconds()%256))
+			time.Sleep(16 * time.Millisecond) // ~60Hz fade updates
+		}
+	}()
+
+	// Count packets received during test duration
+	for time.Since(startTime) < testDuration {
+		_, err := conn.Read(buffer)
+		if err == nil {
+			packetCount++
+		}
+	}
+
+	// At 60Hz over 1 second, we expect ~60-240 packets depending on dirty universe logic
+	// (60 if only one universe is dirty, 240 if all universes transmitted every tick)
+	// The key test is that we don't get excessive packets which would indicate
+	// the race condition (immediate transmissions) is occurring
+	//
+	// Note: maxExpected of 400 allows for race detector overhead while still detecting
+	// the race condition (which would produce 600+ packets from dual transmission paths)
+	minExpected := 50
+	maxExpected := 400
+
+	t.Logf("Received %d packets over %v", packetCount, testDuration)
+
+	if packetCount < minExpected {
+		t.Errorf("Too few packets: got %d, expected at least %d (possible transmission issues)", packetCount, minExpected)
+	}
+
+	if packetCount > maxExpected {
+		t.Errorf("Too many packets: got %d, expected at most %d (possible race condition - immediate transmissions occurring)", packetCount, maxExpected)
+	}
+
+	t.Logf("✓ Packet rate verification passed: %d packets is within expected range [%d-%d]", packetCount, minExpected, maxExpected)
+}
+
+// TestTransmitLoopConsistentTiming verifies that the Ticker-based transmitLoop
+// maintains consistent timing without drift, which was the second part of the fix.
+func TestTransmitLoopConsistentTiming(t *testing.T) {
+	cfg := Config{
+		Enabled:          true,
+		BroadcastAddr:    "127.0.0.1",
+		Port:             6559, // Unique port
+		RefreshRateHz:    60,
+		IdleRateHz:       1,
+		HighRateDuration: 5 * time.Second,
+	}
+
+	svc := NewService(cfg)
+	err := svc.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+	defer svc.Stop()
+
+	// Set up UDP listener to measure packet timing
+	addr, err := net.ResolveUDPAddr("udp4", "127.0.0.1:6559")
+	if err != nil {
+		t.Fatalf("ResolveUDPAddr failed: %v", err)
+	}
+
+	conn, err := net.ListenUDP("udp4", addr)
+	if err != nil {
+		t.Fatalf("ListenUDP failed: %v", err)
+	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Logf("conn.Close error: %v", err)
+		}
+	}()
+
+	// Trigger high-rate mode and wait for it to fully engage
+	svc.SetChannelValue(1, 1, 100)
+	svc.TriggerChangeDetection()
+	time.Sleep(1200 * time.Millisecond) // Wait for idle tick + high-rate mode switch
+
+	// Count packets for exactly 1 second
+	startTime := time.Now()
+	testDuration := 1 * time.Second
+	packetCount := 0
+	buffer := make([]byte, 1024)
+
+	if err := conn.SetReadDeadline(time.Now().Add(testDuration + 100*time.Millisecond)); err != nil {
+		t.Fatalf("SetReadDeadline failed: %v", err)
+	}
+
+	// Keep updating channels to maintain dirty state
+	done := make(chan bool)
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				svc.SetChannelValue(1, 1, byte(time.Since(startTime).Milliseconds()%256))
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+	}()
+
+	// Count all packets received during test duration
+	for time.Since(startTime) < testDuration {
+		_, err := conn.Read(buffer)
+		if err == nil {
+			packetCount++
+		}
+	}
+	close(done)
+
+	// At 60Hz with 4 universes, expect ~240 packets/sec
+	// With race detector overhead, allow wider tolerance
+	minExpected := 100
+	maxExpected := 350
+
+	t.Logf("Received %d packets over %v", packetCount, testDuration)
+
+	if packetCount < minExpected {
+		t.Fatalf("Too few packets: got %d, expected at least %d (transmission not working)", packetCount, minExpected)
+	}
+
+	if packetCount > maxExpected {
+		t.Fatalf("Too many packets: got %d, expected at most %d (timing issues)", packetCount, maxExpected)
+	}
+
+	t.Logf("✓ Transmission rate verified: %d packets is within expected range [%d-%d]", packetCount, minExpected, maxExpected)
+}

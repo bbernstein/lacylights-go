@@ -212,25 +212,36 @@ func (s *Service) Initialize() error {
 
 // transmitLoop runs the adaptive rate transmission loop.
 func (s *Service) transmitLoop() {
-	// Read initial rate with lock to avoid race condition
+	// Use Ticker instead of Timer to maintain consistent timing without drift
 	s.mu.RLock()
 	interval := time.Second / time.Duration(s.currentRate)
 	s.mu.RUnlock()
-	timer := time.NewTimer(interval)
-	defer timer.Stop()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	lastRate := 0
 
 	for {
 		select {
 		case <-s.stopChan:
 			return
-		case <-timer.C:
+		case <-ticker.C:
 			s.processTransmission()
 
-			// Recalculate interval based on current rate
+			// Check if rate changed and recreate ticker if needed
 			s.mu.RLock()
-			interval = time.Second / time.Duration(s.currentRate)
+			currentRate := s.currentRate
 			s.mu.RUnlock()
-			timer.Reset(interval)
+
+			if currentRate != lastRate {
+				// Rate changed, recreate ticker with new interval
+				// Stop old ticker before creating new one to avoid leaks
+				oldTicker := ticker
+				newInterval := time.Second / time.Duration(currentRate)
+				ticker = time.NewTicker(newInterval)
+				oldTicker.Stop()
+				lastRate = currentRate
+			}
 		}
 	}
 }
@@ -261,16 +272,12 @@ func (s *Service) processTransmission() {
 		}
 	}
 
-	// Transmit when we have changes (in high rate mode), or always in idle mode (for keep-alive)
+	// Always transmit in both high-rate and idle modes
+	// High-rate mode: transmit at 60Hz for smooth fades/transitions
+	// Idle mode: transmit at 1Hz for keep-alive
+	// This ensures DMX output stays fresh and responsive
 	if s.enabled && s.conn != nil {
-		if s.isInHighRateMode {
-			if hasChanges {
-				s.outputDMX()
-			}
-		} else {
-			// In idle mode, always transmit for keep-alive
-			s.outputDMX()
-		}
+		s.outputDMX()
 	}
 }
 
@@ -423,15 +430,16 @@ func (s *Service) triggerHighRate() {
 }
 
 // TriggerChangeDetection manually triggers high-rate mode (useful for fades).
+// This switches to high-rate transmission mode but lets the transmitLoop
+// handle actual packet sending to avoid race conditions and duplicate transmissions.
 func (s *Service) TriggerChangeDetection() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.triggerHighRate()
 
-	// Immediately send current state if dirty
-	if s.isDirty && s.enabled && s.conn != nil {
-		s.outputDMX()
-	}
+	// Note: We do NOT immediately transmit here to avoid race conditions
+	// with the transmitLoop. The transmitLoop will pick up changes on its
+	// next scheduled transmission at the high refresh rate.
 }
 
 // GetChannelValue returns the current value of a channel.
