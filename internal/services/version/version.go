@@ -3,6 +3,7 @@
 package version
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -252,8 +253,15 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 			args = append(args, targetVersion)
 		}
 		cmd = exec.Command(SelfUpdateScriptPath, args...)
+
+		// Capture stdout and stderr for debugging
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
 		// Start the command without waiting for it to complete
 		// The wrapper script will schedule the update via systemd-run and exit immediately
+		log.Printf("Starting self-update script: %s %v", SelfUpdateScriptPath, args)
 		err = cmd.Start()
 		if err != nil {
 			log.Printf("Failed to start self-update for %s: %v", repository, err)
@@ -265,8 +273,14 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 			}, nil
 		}
 		// Reap the process in background to prevent zombie processes
+		// and log any output for debugging
 		go func() {
-			_ = cmd.Wait()
+			waitErr := cmd.Wait()
+			stdoutStr := stdout.String()
+			stderrStr := stderr.String()
+			if waitErr != nil || len(stdoutStr) > 0 || len(stderrStr) > 0 {
+				log.Printf("Self-update script completed: err=%v, stdout=%s, stderr=%s", waitErr, stdoutStr, stderrStr)
+			}
 		}()
 		// Don't wait for the command to complete - let it run in the background
 		// For self-updates, return success immediately
