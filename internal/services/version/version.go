@@ -19,6 +19,8 @@ const (
 	UpdateScriptPath = "/opt/lacylights/scripts/update-repos.sh"
 	// SelfUpdateScriptPath is the path to the self-update wrapper for updating lacylights-go itself
 	SelfUpdateScriptPath = "/opt/lacylights/scripts/self-update.sh"
+	// UpdateLogPath is the path to the update log file
+	UpdateLogPath = "/opt/lacylights/logs/update.log"
 )
 
 var (
@@ -242,17 +244,45 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 	var output []byte
 
 	if repository == "lacylights-go" {
-		// Self-update: use async wrapper to avoid deadlock where:
+		// Self-update: use systemd-run directly to avoid deadlock where:
 		// 1. Backend waits to send GraphQL response
 		// 2. Update script waits for backend to stop
-		// Solution: wrapper returns immediately, update runs in background via systemd-run
-		args := []string{repository}
+		// Solution: systemd-run schedules update with delay, returns immediately
+		//
+		// We call sudo systemd-run directly instead of using a wrapper script
+		// because the backend has NoNewPrivileges=true which prevents child processes
+		// from using sudo. The sudoers entry allows this specific sudo command.
 		targetVersion := "latest"
 		if version != nil && *version != "" {
 			targetVersion = *version
-			args = append(args, targetVersion)
 		}
-		cmd = exec.Command(SelfUpdateScriptPath, args...)
+
+		// Build the update command that systemd-run will execute
+		// Quote all arguments for shell safety
+		updateCmd := fmt.Sprintf("'%s' update '%s'", UpdateScriptPath, repository)
+		if targetVersion != "latest" {
+			updateCmd += fmt.Sprintf(" '%s'", targetVersion)
+		}
+		updateCmd += fmt.Sprintf(" >> %s 2>&1", UpdateLogPath)
+
+		// Build systemd-run command with unique unit name to avoid conflicts
+		// Use nanosecond precision to prevent race conditions from concurrent requests
+		// NOTE: Requires sudoers entry allowing wildcard: lacylights-self-update-*
+		timestamp := time.Now().Format("20060102-150405.000000")
+		unitName := fmt.Sprintf("lacylights-self-update-%s", timestamp)
+
+		args := []string{
+			"systemd-run",
+			"--unit=" + unitName,
+			"--description=LacyLights Self-Update to " + targetVersion,
+			"--on-active=3s",
+			"--timer-property=AccuracySec=100ms",
+			"/bin/bash",
+			"-c",
+			updateCmd,
+		}
+
+		cmd = exec.Command("sudo", args...)
 
 		// Capture stdout and stderr for debugging
 		var stdout, stderr bytes.Buffer
@@ -260,8 +290,7 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 		cmd.Stderr = &stderr
 
 		// Start the command without waiting for it to complete
-		// The wrapper script will schedule the update via systemd-run and exit immediately
-		log.Printf("Starting self-update script: %s %v", SelfUpdateScriptPath, args)
+		log.Printf("Starting self-update: sudo systemd-run --unit=%s (target: %s)", unitName, targetVersion)
 		err = cmd.Start()
 		if err != nil {
 			log.Printf("Failed to start self-update for %s: %v", repository, err)
@@ -279,13 +308,13 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 			stdoutStr := stdout.String()
 			stderrStr := stderr.String()
 			if waitErr != nil || len(stdoutStr) > 0 || len(stderrStr) > 0 {
-				log.Printf("Self-update script completed: err=%v, stdout=%s, stderr=%s", waitErr, stdoutStr, stderrStr)
+				log.Printf("Self-update systemd-run completed: err=%v, stdout=%s, stderr=%s", waitErr, stdoutStr, stderrStr)
 			}
 		}()
 		// Don't wait for the command to complete - let it run in the background
 		// For self-updates, return success immediately
 		// The actual update happens in the background via systemd-run
-		log.Printf("Self-update scheduled for %s to %s", repository, targetVersion)
+		log.Printf("Self-update scheduled for %s to %s (unit: %s)", repository, targetVersion, unitName)
 		return &UpdateResult{
 			Success:         true,
 			Repository:      repository,
