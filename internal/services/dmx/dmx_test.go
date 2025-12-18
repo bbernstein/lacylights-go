@@ -851,3 +851,185 @@ func TestArtNetPacketFormat(t *testing.T) {
 		t.Errorf("DMX channel 256 = %d, want 64", packet[18+255])
 	}
 }
+
+// TestTriggerChangeDetectionNoImmediateTransmission verifies that TriggerChangeDetection()
+// does NOT cause immediate packet transmission, preventing the race condition where
+// both the fade engine and transmitLoop were sending packets independently.
+// This is a regression test for the race condition fix.
+func TestTriggerChangeDetectionNoImmediateTransmission(t *testing.T) {
+	cfg := Config{
+		Enabled:          true,
+		BroadcastAddr:    "127.0.0.1",
+		Port:             6558, // Unique port to avoid conflicts
+		RefreshRateHz:    60,
+		IdleRateHz:       1,
+		HighRateDuration: 5 * time.Second,
+	}
+
+	svc := NewService(cfg)
+	err := svc.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+	defer svc.Stop()
+
+	// Set up UDP listener to count packets
+	addr, err := net.ResolveUDPAddr("udp4", "127.0.0.1:6558")
+	if err != nil {
+		t.Fatalf("ResolveUDPAddr failed: %v", err)
+	}
+
+	conn, err := net.ListenUDP("udp4", addr)
+	if err != nil {
+		t.Fatalf("ListenUDP failed: %v", err)
+	}
+	defer conn.Close()
+
+	// Trigger high-rate mode and wait for it to fully engage
+	// The service starts in idle mode (1Hz), so the first tick may take up to 1 second
+	// After that tick detects changes, it switches to high-rate mode
+	svc.SetChannelValue(1, 1, 100)
+	svc.TriggerChangeDetection()
+	time.Sleep(1200 * time.Millisecond) // Wait for idle tick + high-rate mode switch
+
+	// Count packets for exactly 1 second
+	startTime := time.Now()
+	testDuration := 1 * time.Second
+	packetCount := 0
+	buffer := make([]byte, 1024)
+
+	conn.SetReadDeadline(time.Now().Add(testDuration + 100*time.Millisecond))
+
+	// Simulate ongoing fade changes while counting packets
+	go func() {
+		for time.Since(startTime) < testDuration {
+			svc.SetChannelValue(1, 1, byte(time.Since(startTime).Milliseconds()%256))
+			time.Sleep(16 * time.Millisecond) // ~60Hz fade updates
+		}
+	}()
+
+	// Count packets received during test duration
+	for time.Since(startTime) < testDuration {
+		_, err := conn.Read(buffer)
+		if err == nil {
+			packetCount++
+		}
+	}
+
+	// At 60Hz over 1 second, we expect ~60-240 packets depending on dirty universe logic
+	// (60 if only one universe is dirty, 240 if all universes transmitted every tick)
+	// The key test is that we don't get 400+ packets which would indicate
+	// the race condition (immediate transmissions) is occurring
+	minExpected := 50
+	maxExpected := 300
+
+	t.Logf("Received %d packets over %v", packetCount, testDuration)
+
+	if packetCount < minExpected {
+		t.Errorf("Too few packets: got %d, expected at least %d (possible transmission issues)", packetCount, minExpected)
+	}
+
+	if packetCount > maxExpected {
+		t.Errorf("Too many packets: got %d, expected at most %d (possible race condition - immediate transmissions occurring)", packetCount, maxExpected)
+	}
+
+	t.Logf("✓ Packet rate verification passed: %d packets is within expected range [%d-%d]", packetCount, minExpected, maxExpected)
+}
+
+// TestTransmitLoopConsistentTiming verifies that the Ticker-based transmitLoop
+// maintains consistent timing without drift, which was the second part of the fix.
+func TestTransmitLoopConsistentTiming(t *testing.T) {
+	cfg := Config{
+		Enabled:          true,
+		BroadcastAddr:    "127.0.0.1",
+		Port:             6559, // Unique port
+		RefreshRateHz:    60,
+		IdleRateHz:       1,
+		HighRateDuration: 5 * time.Second,
+	}
+
+	svc := NewService(cfg)
+	err := svc.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+	defer svc.Stop()
+
+	// Set up UDP listener to measure packet timing
+	addr, err := net.ResolveUDPAddr("udp4", "127.0.0.1:6559")
+	if err != nil {
+		t.Fatalf("ResolveUDPAddr failed: %v", err)
+	}
+
+	conn, err := net.ListenUDP("udp4", addr)
+	if err != nil {
+		t.Fatalf("ListenUDP failed: %v", err)
+	}
+	defer conn.Close()
+
+	// Trigger high-rate mode and wait for it to fully engage
+	svc.SetChannelValue(1, 1, 100)
+	svc.TriggerChangeDetection()
+	time.Sleep(1200 * time.Millisecond) // Wait for idle tick + high-rate mode switch
+
+	// Keep updating channels to maintain dirty state and continuous transmission
+	go func() {
+		for i := 0; i < 100; i++ {
+			svc.SetChannelValue(1, 1, byte(i))
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+
+	// Collect packet timestamps for universe 1 only
+	// (Art-Net packet format: universe is at byte 14-15, little-endian)
+	timestamps := make([]time.Time, 0, 60)
+	buffer := make([]byte, 1024)
+	conn.SetReadDeadline(time.Now().Add(1100 * time.Millisecond))
+
+	for len(timestamps) < 60 {
+		n, err := conn.Read(buffer)
+		if err != nil {
+			break
+		}
+		// Check if this is a universe 1 packet (universe is 0-indexed in packet)
+		if n >= 18 && buffer[14] == 0 && buffer[15] == 0 {
+			timestamps = append(timestamps, time.Now())
+		}
+	}
+
+	if len(timestamps) < 50 {
+		t.Fatalf("Received too few universe 1 packets: %d, expected ~60", len(timestamps))
+	}
+
+	// Calculate intervals between packets
+	var intervals []time.Duration
+	for i := 1; i < len(timestamps); i++ {
+		intervals = append(intervals, timestamps[i].Sub(timestamps[i-1]))
+	}
+
+	// Calculate average interval
+	var sum time.Duration
+	for _, interval := range intervals {
+		sum += interval
+	}
+	avgInterval := sum / time.Duration(len(intervals))
+
+	expectedInterval := time.Second / 60  // 16.67ms
+	tolerance := 4 * time.Millisecond // ±4ms tolerance to account for timing variations
+
+	t.Logf("Average packet interval: %v (expected: %v ±%v)", avgInterval, expectedInterval, tolerance)
+
+	if avgInterval < expectedInterval-tolerance || avgInterval > expectedInterval+tolerance {
+		t.Errorf("Average interval %v is outside expected range [%v - %v]", avgInterval, expectedInterval-tolerance, expectedInterval+tolerance)
+	}
+
+	// Check for excessive drift (no interval should be > 25ms unless there's a problem)
+	maxDrift := 25 * time.Millisecond
+	for i, interval := range intervals {
+		if interval > maxDrift {
+			t.Errorf("Excessive drift detected at packet %d: %v (max expected: %v)", i, interval, maxDrift)
+		}
+	}
+
+	t.Logf("✓ Timing consistency verified: average interval %v is within tolerance", avgInterval)
+}

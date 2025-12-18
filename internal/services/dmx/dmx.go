@@ -270,16 +270,12 @@ func (s *Service) processTransmission() {
 		}
 	}
 
-	// Transmit when we have changes (in high rate mode), or always in idle mode (for keep-alive)
+	// Always transmit in both high-rate and idle modes
+	// High-rate mode: transmit at 60Hz for smooth fades/transitions
+	// Idle mode: transmit at 1Hz for keep-alive
+	// This ensures DMX output stays fresh and responsive
 	if s.enabled && s.conn != nil {
-		if s.isInHighRateMode {
-			if hasChanges {
-				s.outputDMX()
-			}
-		} else {
-			// In idle mode, always transmit for keep-alive
-			s.outputDMX()
-		}
+		s.outputDMX()
 	}
 }
 
