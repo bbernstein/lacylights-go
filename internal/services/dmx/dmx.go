@@ -474,14 +474,10 @@ func (s *Service) ForceImmediateTransmission() {
 	wasInIdleMode := !s.isInHighRateMode
 	s.triggerHighRate()
 
-	// Mark everything as dirty to ensure transmission
-	s.isDirty = true
-	for universe := range s.universes {
-		s.dirtyUniverses[universe] = true
-	}
-
-	// Immediately send Art-Net packets
-	if s.enabled && s.conn != nil {
+	// Immediately send Art-Net packets for any pending changes
+	// Note: We don't mark all universes dirty here - only universes with actual
+	// pending changes (already marked dirty by SetChannelValue, etc.) are transmitted
+	if s.enabled && s.conn != nil && s.isDirty {
 		s.outputDMX()
 	}
 

@@ -348,8 +348,7 @@ func (e *Engine) FadeChannels(targets []ChannelTarget, duration time.Duration, f
 		onComplete: onComplete,
 	}
 
-	// Trigger high-rate DMX transmission mode
-	// The ticker reset fix ensures the next processFades happens at 60Hz, not 1Hz
+	// Force immediate DMX transmission and switch to high-rate mode to ensure smooth fade output
 	e.dmxService.ForceImmediateTransmission()
 
 	return fadeID
