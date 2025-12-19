@@ -269,7 +269,9 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 
 		// Build systemd-run command with unique unit name to avoid conflicts
 		// Use nanosecond precision to prevent race conditions from concurrent requests
-		// NOTE: Requires sudoers entry allowing wildcard: lacylights-self-update-*
+		// NOTE: Requires sudoers entries allowing wildcards:
+		//   - lacylights-self-update-* (for Go updates)
+		//   - lacylights-mcp-update-* (for MCP updates)
 		timestamp := time.Now().Format("20060102-150405.000000")
 		var unitName, description string
 		if repository == "lacylights-go" {
@@ -323,7 +325,7 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 		// Don't wait for the command to complete - let it run in the background
 		// For updates that stop the backend, return success immediately
 		// The actual update happens in the background via systemd-run
-		log.Printf("%s update scheduled to %s (unit: %s)", repository, targetVersion, unitName)
+		log.Printf("%s update scheduled: version=%s, unit=%s", repository, targetVersion, unitName)
 		return &UpdateResult{
 			Success:         true,
 			Repository:      repository,
