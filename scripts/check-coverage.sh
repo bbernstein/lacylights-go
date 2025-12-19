@@ -25,7 +25,7 @@ get_threshold() {
         "internal/database") echo 86 ;;  # Connect/Close functions
         "internal/services/network") echo 64 ;;  # macOS-specific code paths not covered on Linux CI
         "internal/services/export") echo 87 ;;  # Integration tests provide good coverage
-        "internal/services/dmx") echo 85 ;;
+        "internal/services/dmx") echo 88 ;;
         "internal/services/playback") echo 81 ;;  # Integration tests, handleFollowTime via timers
         "internal/services/import") echo 78 ;;  # Integration tests provide good coverage
         "internal/services/ofl") echo 35 ;;  # New package, bundle operations conditional on embedded data
