@@ -348,6 +348,9 @@ func (e *Engine) FadeChannels(targets []ChannelTarget, duration time.Duration, f
 		onComplete: onComplete,
 	}
 
+	// Force immediate DMX transmission and switch to high-rate mode to ensure smooth fade output
+	e.dmxService.ForceImmediateTransmission()
+
 	return fadeID
 }
 

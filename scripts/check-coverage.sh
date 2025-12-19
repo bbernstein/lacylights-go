@@ -19,18 +19,18 @@ get_threshold() {
         "internal/config") echo 100 ;;
         "internal/database/models") echo 100 ;;  # TableName methods
         "internal/services/pubsub") echo 100 ;;
-        "internal/database/repositories") echo 91 ;;  # Integration tests, error handling branches require mocking
+        "internal/services/fade") echo 93 ;;
+        "internal/database/repositories") echo 92 ;;  # Integration tests, error handling branches require mocking
         "internal/services/preview") echo 91 ;;  # Integration tests provide good coverage
-        "internal/services/fade") echo 91 ;;
-        "internal/database") echo 86 ;;  # Connect/Close functions
         "internal/services/network") echo 64 ;;  # macOS-specific code paths not covered on Linux CI
-        "internal/services/export") echo 87 ;;  # Integration tests provide good coverage
-        "internal/services/dmx") echo 85 ;;
+        "internal/services/export") echo 88 ;;  # Integration tests provide good coverage
+        "internal/services/dmx") echo 88 ;;
+        "internal/database") echo 86 ;;  # Connect/Close functions
+        "internal/services/import") echo 83 ;;  # Integration tests provide good coverage
         "internal/services/playback") echo 81 ;;  # Integration tests, handleFollowTime via timers
-        "internal/services/import") echo 78 ;;  # Integration tests provide good coverage
         "internal/services/ofl") echo 35 ;;  # New package, bundle operations conditional on embedded data
+        "internal/graphql/resolvers") echo 23 ;;  # Auto-generated code, coverage via service tests
         "cmd/server") echo 16 ;;  # main() is untestable, helper functions covered
-        "internal/graphql/resolvers") echo 17 ;;  # Auto-generated code, coverage via service tests
         *) echo "" ;;
     esac
 }

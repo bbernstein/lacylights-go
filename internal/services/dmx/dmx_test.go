@@ -1040,3 +1040,191 @@ func TestTransmitLoopConsistentTiming(t *testing.T) {
 
 	t.Logf("✓ Transmission rate verified: %d packets is within expected range [%d-%d]", packetCount, minExpected, maxExpected)
 }
+
+// TestForceImmediateTransmission verifies that ForceImmediateTransmission
+// sends packets immediately and switches to high-rate mode.
+func TestForceImmediateTransmission(t *testing.T) {
+	cfg := Config{
+		Enabled:          true,
+		BroadcastAddr:    "127.0.0.1",
+		Port:             6560, // Unique port
+		RefreshRateHz:    60,
+		IdleRateHz:       1,
+		HighRateDuration: 2 * time.Second,
+	}
+
+	svc := NewService(cfg)
+	err := svc.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+	defer svc.Stop()
+
+	// Set up UDP listener
+	addr, err := net.ResolveUDPAddr("udp4", "127.0.0.1:6560")
+	if err != nil {
+		t.Fatalf("ResolveUDPAddr failed: %v", err)
+	}
+
+	conn, err := net.ListenUDP("udp4", addr)
+	if err != nil {
+		t.Fatalf("ListenUDP failed: %v", err)
+	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Logf("conn.Close error: %v", err)
+		}
+	}()
+
+	// Set a channel value
+	svc.SetChannelValue(1, 1, 128)
+
+	// Call ForceImmediateTransmission
+	startTime := time.Now()
+	svc.ForceImmediateTransmission()
+
+	// Should receive packet immediately (within 100ms)
+	buffer := make([]byte, 1024)
+	if err := conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
+		t.Fatalf("SetReadDeadline failed: %v", err)
+	}
+
+	n, err := conn.Read(buffer)
+	if err != nil {
+		t.Fatalf("Failed to receive immediate packet: %v", err)
+	}
+
+	elapsed := time.Since(startTime)
+	t.Logf("✓ Received packet immediately in %v", elapsed)
+
+	if elapsed > 100*time.Millisecond {
+		t.Errorf("Packet took too long: %v (should be < 100ms)", elapsed)
+	}
+
+	// Verify it's a valid Art-Net packet
+	if n < 18 {
+		t.Fatalf("Packet too small: got %d bytes", n)
+	}
+
+	// Verify service is in high-rate mode
+	if !svc.IsActive() {
+		t.Error("Service should be in high-rate mode after ForceImmediateTransmission")
+	}
+
+	if svc.GetCurrentRate() != cfg.RefreshRateHz {
+		t.Errorf("Current rate should be %dHz, got %dHz", cfg.RefreshRateHz, svc.GetCurrentRate())
+	}
+}
+
+// TestForceImmediateTransmissionFromIdleMode verifies the ticker reset mechanism
+// that fixes the vertical spike issue when triggering fades from idle mode.
+func TestForceImmediateTransmissionFromIdleMode(t *testing.T) {
+	cfg := Config{
+		Enabled:          true,
+		BroadcastAddr:    "127.0.0.1",
+		Port:             6561, // Unique port
+		RefreshRateHz:    60,
+		IdleRateHz:       1,
+		HighRateDuration: 500 * time.Millisecond,
+	}
+
+	svc := NewService(cfg)
+	err := svc.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+	defer svc.Stop()
+
+	// Set up UDP listener
+	addr, err := net.ResolveUDPAddr("udp4", "127.0.0.1:6561")
+	if err != nil {
+		t.Fatalf("ResolveUDPAddr failed: %v", err)
+	}
+
+	conn, err := net.ListenUDP("udp4", addr)
+	if err != nil {
+		t.Fatalf("ListenUDP failed: %v", err)
+	}
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Logf("conn.Close error: %v", err)
+		}
+	}()
+
+	// Wait for idle mode (longer than HighRateDuration)
+	time.Sleep(600 * time.Millisecond)
+
+	// Verify we're in idle mode
+	if svc.GetCurrentRate() != cfg.IdleRateHz {
+		t.Errorf("Expected idle rate %dHz, got %dHz", cfg.IdleRateHz, svc.GetCurrentRate())
+	}
+
+	// Trigger ForceImmediateTransmission from idle mode
+	svc.SetChannelValue(1, 1, 200)
+
+	// Record time before calling ForceImmediateTransmission
+	callTime := time.Now()
+	svc.ForceImmediateTransmission()
+
+	// Verify immediate transmission: first packet should arrive immediately (< 50ms)
+	buffer := make([]byte, 1024)
+	if err := conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
+		t.Fatalf("SetReadDeadline failed: %v", err)
+	}
+
+	_, err = conn.Read(buffer)
+	if err != nil {
+		t.Fatalf("Failed to receive first packet: %v", err)
+	}
+
+	firstPacketDelay := time.Since(callTime)
+	if firstPacketDelay > 50*time.Millisecond {
+		t.Errorf("First packet took too long: %v (should be < 50ms)", firstPacketDelay)
+	}
+	t.Logf("✓ First packet arrived in %v after ForceImmediateTransmission", firstPacketDelay)
+
+	// Verify system switched to high-rate mode
+	if !svc.IsActive() {
+		t.Error("Service should be in high-rate mode after ForceImmediateTransmission")
+	}
+
+	if svc.GetCurrentRate() != cfg.RefreshRateHz {
+		t.Errorf("Current rate should be %dHz, got %dHz", cfg.RefreshRateHz, svc.GetCurrentRate())
+	}
+
+	t.Logf("✓ System successfully switched from idle (%dHz) to high-rate (%dHz) mode", cfg.IdleRateHz, cfg.RefreshRateHz)
+	t.Logf("✓ Ticker reset mechanism verified: immediate transmission from idle mode")
+}
+
+// TestForceImmediateTransmissionMultipleCalls verifies that multiple rapid
+// calls to ForceImmediateTransmission don't cause issues.
+func TestForceImmediateTransmissionMultipleCalls(t *testing.T) {
+	cfg := Config{
+		Enabled:          true,
+		BroadcastAddr:    "127.0.0.1",
+		Port:             6562, // Unique port
+		RefreshRateHz:    60,
+		IdleRateHz:       1,
+		HighRateDuration: 2 * time.Second,
+	}
+
+	svc := NewService(cfg)
+	err := svc.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+	defer svc.Stop()
+
+	// Call ForceImmediateTransmission multiple times rapidly
+	for i := 0; i < 10; i++ {
+		svc.SetChannelValue(1, 1, byte(i*10))
+		svc.ForceImmediateTransmission()
+	}
+
+	// Should not panic or cause issues
+	if !svc.IsActive() {
+		t.Error("Service should be in high-rate mode")
+	}
+
+	t.Log("✓ Multiple ForceImmediateTransmission calls handled correctly")
+}
