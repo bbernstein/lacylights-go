@@ -60,8 +60,9 @@ type Service struct {
 	addr *net.UDPAddr
 
 	// Control
-	stopChan chan struct{}
-	running  bool
+	stopChan       chan struct{}
+	resetTickerChan chan struct{} // Signal to reset ticker immediately when rate changes
+	running        bool
 }
 
 // Config holds DMX service configuration.
@@ -158,6 +159,7 @@ func NewService(cfg Config) *Service {
 		currentRate:      idleRate, // Start at idle rate until first change
 		isInHighRateMode: false,
 		stopChan:         make(chan struct{}),
+		resetTickerChan:  make(chan struct{}, 1), // Buffered to avoid blocking
 	}
 
 	// Initialize universes with 512 channels each, all set to 0
@@ -228,6 +230,20 @@ func (s *Service) transmitLoop() {
 		select {
 		case <-s.stopChan:
 			return
+		case <-s.resetTickerChan:
+			// Immediately reset ticker when rate changes (e.g., from ForceImmediateTransmission)
+			s.mu.RLock()
+			currentRate := s.currentRate
+			s.mu.RUnlock()
+
+			if currentRate != lastRate {
+				oldTicker := ticker
+				newInterval := time.Second / time.Duration(currentRate)
+				ticker = time.NewTicker(newInterval)
+				oldTicker.Stop()
+				lastRate = currentRate
+				log.Printf("📡 DMX transmitLoop: ticker reset to %dHz immediately", currentRate)
+			}
 		case <-ticker.C:
 			s.processTransmission()
 
@@ -432,6 +448,7 @@ func (s *Service) triggerHighRate() {
 	if !s.isInHighRateMode {
 		s.isInHighRateMode = true
 		s.currentRate = s.refreshRateHz
+		log.Printf("📡 DMX transmission: switching to high rate (%dHz) - active fade/transition", s.refreshRateHz)
 	}
 }
 
@@ -446,6 +463,40 @@ func (s *Service) TriggerChangeDetection() {
 	// Note: We do NOT immediately transmit here to avoid race conditions
 	// with the transmitLoop. The transmitLoop will pick up changes on its
 	// next scheduled transmission at the high refresh rate.
+}
+
+// ForceImmediateTransmission forces an immediate Art-Net transmission.
+// This is used when we need to ensure the first frame of a fade is sent
+// immediately without waiting for the next transmitLoop tick.
+func (s *Service) ForceImmediateTransmission() {
+	s.mu.Lock()
+
+	wasInIdleMode := !s.isInHighRateMode
+	s.triggerHighRate()
+
+	// Mark everything as dirty to ensure transmission
+	s.isDirty = true
+	for universe := range s.universes {
+		s.dirtyUniverses[universe] = true
+	}
+
+	// Immediately send Art-Net packets
+	if s.enabled && s.conn != nil {
+		s.outputDMX()
+	}
+
+	s.mu.Unlock()
+
+	// If we were in idle mode, signal the transmitLoop to reset ticker immediately
+	// This ensures the next frame is sent at 60Hz, not 1Hz
+	if wasInIdleMode {
+		select {
+		case s.resetTickerChan <- struct{}{}:
+			// Signal sent successfully
+		default:
+			// Channel already has a pending signal, no need to send another
+		}
+	}
 }
 
 // GetChannelValue returns the current value of a channel.
