@@ -243,10 +243,12 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 	var cmd *exec.Cmd
 	var output []byte
 
-	if repository == "lacylights-go" {
-		// Self-update: use systemd-run directly to avoid deadlock where:
+	// Both lacylights-go and lacylights-mcp updates require systemd-run because they stop the backend
+	if repository == "lacylights-go" || repository == "lacylights-mcp" {
+		// Use systemd-run directly to avoid deadlock where:
 		// 1. Backend waits to send GraphQL response
-		// 2. Update script waits for backend to stop
+		// 2. Update script stops the backend (for go self-update or mcp update)
+		// 3. Stopping backend kills the update script (child process)
 		// Solution: systemd-run schedules update with delay, returns immediately
 		//
 		// We call sudo systemd-run directly instead of using a wrapper script
@@ -267,14 +269,23 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 
 		// Build systemd-run command with unique unit name to avoid conflicts
 		// Use nanosecond precision to prevent race conditions from concurrent requests
-		// NOTE: Requires sudoers entry allowing wildcard: lacylights-self-update-*
+		// NOTE: Requires sudoers entries allowing wildcards:
+		//   - lacylights-self-update-* (for Go updates)
+		//   - lacylights-mcp-update-* (for MCP updates)
 		timestamp := time.Now().Format("20060102-150405.000000")
-		unitName := fmt.Sprintf("lacylights-self-update-%s", timestamp)
+		var unitName, description string
+		if repository == "lacylights-go" {
+			unitName = fmt.Sprintf("lacylights-self-update-%s", timestamp)
+			description = "LacyLights Self-Update to " + targetVersion
+		} else {
+			unitName = fmt.Sprintf("lacylights-mcp-update-%s", timestamp)
+			description = "LacyLights MCP Update to " + targetVersion
+		}
 
 		args := []string{
 			"systemd-run",
 			"--unit=" + unitName,
-			"--description=LacyLights Self-Update to " + targetVersion,
+			"--description=" + description,
 			"--on-active=3s",
 			"--timer-property=AccuracySec=100ms",
 			"/bin/bash",
@@ -290,10 +301,10 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 		cmd.Stderr = &stderr
 
 		// Start the command without waiting for it to complete
-		log.Printf("Starting self-update: sudo systemd-run --unit=%s (target: %s)", unitName, targetVersion)
+		log.Printf("Starting %s update: sudo systemd-run --unit=%s (target: %s)", repository, unitName, targetVersion)
 		err = cmd.Start()
 		if err != nil {
-			log.Printf("Failed to start self-update for %s: %v", repository, err)
+			log.Printf("Failed to start update for %s: %v", repository, err)
 			return &UpdateResult{
 				Success:         false,
 				Repository:      repository,
@@ -308,13 +319,13 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 			stdoutStr := stdout.String()
 			stderrStr := stderr.String()
 			if waitErr != nil || len(stdoutStr) > 0 || len(stderrStr) > 0 {
-				log.Printf("Self-update systemd-run completed: err=%v, stdout=%s, stderr=%s", waitErr, stdoutStr, stderrStr)
+				log.Printf("%s update systemd-run completed: err=%v, stdout=%s, stderr=%s", repository, waitErr, stdoutStr, stderrStr)
 			}
 		}()
 		// Don't wait for the command to complete - let it run in the background
-		// For self-updates, return success immediately
+		// For updates that stop the backend, return success immediately
 		// The actual update happens in the background via systemd-run
-		log.Printf("Self-update scheduled for %s to %s (unit: %s)", repository, targetVersion, unitName)
+		log.Printf("%s update scheduled: version=%s, unit=%s", repository, targetVersion, unitName)
 		return &UpdateResult{
 			Success:         true,
 			Repository:      repository,
@@ -324,7 +335,7 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 		}, nil
 	}
 
-	// Regular update for other components (fe, mcp)
+	// Regular update for other components (fe only - doesn't stop backend)
 	args := []string{"update", repository}
 	if version != nil && *version != "" {
 		args = append(args, *version)
