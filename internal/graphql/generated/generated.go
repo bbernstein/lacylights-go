@@ -4966,6 +4966,13 @@ enum ChannelType {
   WHITE
   AMBER
   UV
+  CYAN
+  MAGENTA
+  YELLOW
+  LIME
+  INDIGO
+  COLD_WHITE
+  WARM_WHITE
   PAN
   TILT
   ZOOM

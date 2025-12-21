@@ -284,6 +284,20 @@ func mapChannelType(capability *OFLCapability) string {
 				return "AMBER"
 			case "uv":
 				return "UV"
+			case "cyan":
+				return "CYAN"
+			case "magenta":
+				return "MAGENTA"
+			case "yellow":
+				return "YELLOW"
+			case "lime":
+				return "LIME"
+			case "indigo":
+				return "INDIGO"
+			case "cold white":
+				return "COLD_WHITE"
+			case "warm white":
+				return "WARM_WHITE"
 			}
 		}
 		return "OTHER"
