@@ -796,6 +796,13 @@ const (
 	ChannelTypeWhite      ChannelType = "WHITE"
 	ChannelTypeAmber      ChannelType = "AMBER"
 	ChannelTypeUv         ChannelType = "UV"
+	ChannelTypeCyan       ChannelType = "CYAN"
+	ChannelTypeMagenta    ChannelType = "MAGENTA"
+	ChannelTypeYellow     ChannelType = "YELLOW"
+	ChannelTypeLime       ChannelType = "LIME"
+	ChannelTypeIndigo     ChannelType = "INDIGO"
+	ChannelTypeColdWhite  ChannelType = "COLD_WHITE"
+	ChannelTypeWarmWhite  ChannelType = "WARM_WHITE"
 	ChannelTypePan        ChannelType = "PAN"
 	ChannelTypeTilt       ChannelType = "TILT"
 	ChannelTypeZoom       ChannelType = "ZOOM"
@@ -817,6 +824,13 @@ var AllChannelType = []ChannelType{
 	ChannelTypeWhite,
 	ChannelTypeAmber,
 	ChannelTypeUv,
+	ChannelTypeCyan,
+	ChannelTypeMagenta,
+	ChannelTypeYellow,
+	ChannelTypeLime,
+	ChannelTypeIndigo,
+	ChannelTypeColdWhite,
+	ChannelTypeWarmWhite,
 	ChannelTypePan,
 	ChannelTypeTilt,
 	ChannelTypeZoom,
@@ -832,7 +846,7 @@ var AllChannelType = []ChannelType{
 
 func (e ChannelType) IsValid() bool {
 	switch e {
-	case ChannelTypeIntensity, ChannelTypeRed, ChannelTypeGreen, ChannelTypeBlue, ChannelTypeWhite, ChannelTypeAmber, ChannelTypeUv, ChannelTypePan, ChannelTypeTilt, ChannelTypeZoom, ChannelTypeFocus, ChannelTypeIris, ChannelTypeGobo, ChannelTypeColorWheel, ChannelTypeEffect, ChannelTypeStrobe, ChannelTypeMacro, ChannelTypeOther:
+	case ChannelTypeIntensity, ChannelTypeRed, ChannelTypeGreen, ChannelTypeBlue, ChannelTypeWhite, ChannelTypeAmber, ChannelTypeUv, ChannelTypeCyan, ChannelTypeMagenta, ChannelTypeYellow, ChannelTypeLime, ChannelTypeIndigo, ChannelTypeColdWhite, ChannelTypeWarmWhite, ChannelTypePan, ChannelTypeTilt, ChannelTypeZoom, ChannelTypeFocus, ChannelTypeIris, ChannelTypeGobo, ChannelTypeColorWheel, ChannelTypeEffect, ChannelTypeStrobe, ChannelTypeMacro, ChannelTypeOther:
 		return true
 	}
 	return false
