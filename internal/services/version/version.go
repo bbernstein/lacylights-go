@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -24,10 +25,12 @@ const (
 )
 
 // Build information - set at build time via ldflags or by calling SetBuildInfo
+// Uses sync.Once to ensure thread-safe initialization
 var (
 	buildVersion   = "0.1.0"
 	buildGitCommit = "unknown"
 	buildTime      = "unknown"
+	buildInfoOnce  sync.Once
 )
 
 // BuildInfo contains server build information for version verification
@@ -37,11 +40,21 @@ type BuildInfo struct {
 	BuildTime string
 }
 
-// SetBuildInfo sets the build information (called from main package)
+// SetBuildInfo sets the build information (called from main package at startup).
+// Uses sync.Once to ensure thread-safe initialization that happens exactly once.
+// Empty string values are ignored to preserve default values during development builds.
 func SetBuildInfo(version, gitCommit, buildTimeVal string) {
-	buildVersion = version
-	buildGitCommit = gitCommit
-	buildTime = buildTimeVal
+	buildInfoOnce.Do(func() {
+		if version != "" {
+			buildVersion = version
+		}
+		if gitCommit != "" {
+			buildGitCommit = gitCommit
+		}
+		if buildTimeVal != "" {
+			buildTime = buildTimeVal
+		}
+	})
 }
 
 // GetBuildInfo returns the current build information
@@ -51,6 +64,15 @@ func GetBuildInfo() BuildInfo {
 		GitCommit: buildGitCommit,
 		BuildTime: buildTime,
 	}
+}
+
+// ResetBuildInfoForTesting resets the build info to defaults for testing purposes.
+// This should only be called from test code.
+func ResetBuildInfoForTesting() {
+	buildVersion = "0.1.0"
+	buildGitCommit = "unknown"
+	buildTime = "unknown"
+	buildInfoOnce = sync.Once{}
 }
 
 var (

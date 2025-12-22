@@ -1,6 +1,7 @@
 package version
 
 import (
+	"sync"
 	"testing"
 )
 
@@ -179,4 +180,152 @@ func TestIsUpdateAvailable(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetBuildInfo_Defaults(t *testing.T) {
+	// Reset to defaults before testing
+	ResetBuildInfoForTesting()
+
+	info := GetBuildInfo()
+
+	if info.Version != "0.1.0" {
+		t.Errorf("Expected default version '0.1.0', got %q", info.Version)
+	}
+	if info.GitCommit != "unknown" {
+		t.Errorf("Expected default gitCommit 'unknown', got %q", info.GitCommit)
+	}
+	if info.BuildTime != "unknown" {
+		t.Errorf("Expected default buildTime 'unknown', got %q", info.BuildTime)
+	}
+}
+
+func TestSetBuildInfo(t *testing.T) {
+	// Reset to defaults before testing
+	ResetBuildInfoForTesting()
+
+	SetBuildInfo("v1.2.3", "abc123", "2025-01-15T10:30:00Z")
+
+	info := GetBuildInfo()
+
+	if info.Version != "v1.2.3" {
+		t.Errorf("Expected version 'v1.2.3', got %q", info.Version)
+	}
+	if info.GitCommit != "abc123" {
+		t.Errorf("Expected gitCommit 'abc123', got %q", info.GitCommit)
+	}
+	if info.BuildTime != "2025-01-15T10:30:00Z" {
+		t.Errorf("Expected buildTime '2025-01-15T10:30:00Z', got %q", info.BuildTime)
+	}
+}
+
+func TestSetBuildInfo_EmptyStringsPreserveDefaults(t *testing.T) {
+	// Reset to defaults before testing
+	ResetBuildInfoForTesting()
+
+	// Empty strings should preserve default values
+	SetBuildInfo("", "", "")
+
+	info := GetBuildInfo()
+
+	if info.Version != "0.1.0" {
+		t.Errorf("Expected default version '0.1.0' when empty string passed, got %q", info.Version)
+	}
+	if info.GitCommit != "unknown" {
+		t.Errorf("Expected default gitCommit 'unknown' when empty string passed, got %q", info.GitCommit)
+	}
+	if info.BuildTime != "unknown" {
+		t.Errorf("Expected default buildTime 'unknown' when empty string passed, got %q", info.BuildTime)
+	}
+}
+
+func TestSetBuildInfo_PartialEmptyStrings(t *testing.T) {
+	// Reset to defaults before testing
+	ResetBuildInfoForTesting()
+
+	// Only set version, leave others as defaults
+	SetBuildInfo("v2.0.0", "", "")
+
+	info := GetBuildInfo()
+
+	if info.Version != "v2.0.0" {
+		t.Errorf("Expected version 'v2.0.0', got %q", info.Version)
+	}
+	if info.GitCommit != "unknown" {
+		t.Errorf("Expected default gitCommit 'unknown' when empty string passed, got %q", info.GitCommit)
+	}
+	if info.BuildTime != "unknown" {
+		t.Errorf("Expected default buildTime 'unknown' when empty string passed, got %q", info.BuildTime)
+	}
+}
+
+func TestSetBuildInfo_OnlyCalledOnce(t *testing.T) {
+	// Reset to defaults before testing
+	ResetBuildInfoForTesting()
+
+	// First call should set the values
+	SetBuildInfo("v1.0.0", "first", "2025-01-01T00:00:00Z")
+
+	// Second call should be ignored due to sync.Once
+	SetBuildInfo("v2.0.0", "second", "2025-12-31T23:59:59Z")
+
+	info := GetBuildInfo()
+
+	if info.Version != "v1.0.0" {
+		t.Errorf("Expected version 'v1.0.0' (first call), got %q", info.Version)
+	}
+	if info.GitCommit != "first" {
+		t.Errorf("Expected gitCommit 'first' (first call), got %q", info.GitCommit)
+	}
+	if info.BuildTime != "2025-01-01T00:00:00Z" {
+		t.Errorf("Expected buildTime '2025-01-01T00:00:00Z' (first call), got %q", info.BuildTime)
+	}
+}
+
+func TestSetBuildInfo_ConcurrentAccess(t *testing.T) {
+	// Reset to defaults before testing
+	ResetBuildInfoForTesting()
+
+	// Test concurrent access to ensure thread safety
+	var wg sync.WaitGroup
+	const numGoroutines = 100
+
+	// Start multiple goroutines trying to set build info simultaneously
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			SetBuildInfo("v1.0.0", "concurrent", "2025-01-01T00:00:00Z")
+		}(i)
+	}
+
+	wg.Wait()
+
+	// All should have completed without panic
+	info := GetBuildInfo()
+	if info.Version != "v1.0.0" {
+		t.Errorf("Expected version 'v1.0.0' after concurrent access, got %q", info.Version)
+	}
+}
+
+func TestGetBuildInfo_ConcurrentReads(t *testing.T) {
+	// Reset to defaults before testing
+	ResetBuildInfoForTesting()
+	SetBuildInfo("v1.0.0", "abc123", "2025-01-15T10:30:00Z")
+
+	// Test concurrent reads
+	var wg sync.WaitGroup
+	const numGoroutines = 100
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			info := GetBuildInfo()
+			if info.Version != "v1.0.0" {
+				t.Errorf("Expected version 'v1.0.0', got %q", info.Version)
+			}
+		}()
+	}
+
+	wg.Wait()
 }
