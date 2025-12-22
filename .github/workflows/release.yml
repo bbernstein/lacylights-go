@@ -267,12 +267,15 @@ jobs:
             "darwin/arm64"
           )
 
+          # Capture build time once for all platforms - intentionally shared so all
+          # binaries from the same release have identical timestamps for consistency
+          BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
           for PLATFORM in "${PLATFORMS[@]}"; do
             GOOS="${PLATFORM%/*}"
             GOARCH="${PLATFORM#*/}"
             OUTPUT="dist/lacylights-${GOOS}-${GOARCH}"
 
-            BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             LDFLAGS="-X main.Version=v${{ steps.new_version.outputs.version }} -X main.GitCommit=${{ github.sha }} -X main.BuildTime=${BUILD_TIME}"
             if [ "$GOARCH" = "arm" ]; then
               GOARM=7 GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "$LDFLAGS" -o "$OUTPUT" ./cmd/server

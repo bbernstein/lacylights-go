@@ -25,12 +25,13 @@ const (
 )
 
 // Build information - set at build time via ldflags or by calling SetBuildInfo
-// Uses sync.Once to ensure thread-safe initialization
+// Protected by buildInfoMu for thread-safe access
 var (
 	buildVersion   = "0.1.0"
 	buildGitCommit = "unknown"
 	buildTime      = "unknown"
 	buildInfoOnce  sync.Once
+	buildInfoMu    sync.RWMutex
 )
 
 // BuildInfo contains server build information for version verification
@@ -41,10 +42,13 @@ type BuildInfo struct {
 }
 
 // SetBuildInfo sets the build information (called from main package at startup).
-// Uses sync.Once to ensure thread-safe initialization that happens exactly once.
-// Empty string values are ignored to preserve default values during development builds.
+// Uses sync.Once to ensure initialization happens exactly once, and RWMutex for
+// thread-safe access. Empty string values are ignored to preserve default values
+// during development builds.
 func SetBuildInfo(version, gitCommit, buildTimeVal string) {
 	buildInfoOnce.Do(func() {
+		buildInfoMu.Lock()
+		defer buildInfoMu.Unlock()
 		if version != "" {
 			buildVersion = version
 		}
@@ -57,8 +61,11 @@ func SetBuildInfo(version, gitCommit, buildTimeVal string) {
 	})
 }
 
-// GetBuildInfo returns the current build information
+// GetBuildInfo returns the current build information.
+// Thread-safe for concurrent access.
 func GetBuildInfo() BuildInfo {
+	buildInfoMu.RLock()
+	defer buildInfoMu.RUnlock()
 	return BuildInfo{
 		Version:   buildVersion,
 		GitCommit: buildGitCommit,
@@ -67,8 +74,11 @@ func GetBuildInfo() BuildInfo {
 }
 
 // ResetBuildInfoForTesting resets the build info to defaults for testing purposes.
-// This should only be called from test code.
+// This function is thread-safe and can be called from concurrent tests.
+// WARNING: This should only be called from test code.
 func ResetBuildInfoForTesting() {
+	buildInfoMu.Lock()
+	defer buildInfoMu.Unlock()
 	buildVersion = "0.1.0"
 	buildGitCommit = "unknown"
 	buildTime = "unknown"
