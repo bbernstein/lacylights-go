@@ -12,6 +12,16 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 )
 
+// Server build information for version verification
+type BuildInfo struct {
+	// Semantic version (e.g., v0.8.10)
+	Version string `json:"version"`
+	// Git commit hash from which this build was made
+	GitCommit string `json:"gitCommit"`
+	// UTC timestamp when this build was created
+	BuildTime string `json:"buildTime"`
+}
+
 type BulkCueCreateInput struct {
 	Cues []*CreateCueInput `json:"cues"`
 }

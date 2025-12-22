@@ -49,6 +49,12 @@ func TestHealthCheckHandler(t *testing.T) {
 	if !strings.Contains(bodyStr, `"timestamp":`) {
 		t.Error("Expected timestamp in response")
 	}
+	if !strings.Contains(bodyStr, `"gitCommit":`) {
+		t.Error("Expected gitCommit in response")
+	}
+	if !strings.Contains(bodyStr, `"buildTime":`) {
+		t.Error("Expected buildTime in response")
+	}
 }
 
 func TestPrintBanner(t *testing.T) {

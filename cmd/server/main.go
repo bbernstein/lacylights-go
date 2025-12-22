@@ -35,6 +35,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/services/fade"
 	"github.com/bbernstein/lacylights-go/internal/services/ofl"
 	"github.com/bbernstein/lacylights-go/internal/services/playback"
+	"github.com/bbernstein/lacylights-go/internal/services/version"
 	"gorm.io/gorm"
 )
 
@@ -46,6 +47,9 @@ var (
 )
 
 func main() {
+	// Set build info for the version package (used by GraphQL resolver)
+	version.SetBuildInfo(Version, GitCommit, BuildTime)
+
 	// Load .env file if present
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using environment variables")
@@ -273,8 +277,9 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
   "status": "ok",
   "timestamp": "%s",
   "version": "%s",
-  "uptime": "N/A"
-}`, time.Now().UTC().Format(time.RFC3339), Version)
+  "gitCommit": "%s",
+  "buildTime": "%s"
+}`, time.Now().UTC().Format(time.RFC3339), Version, GitCommit, BuildTime)
 
 	_, _ = w.Write([]byte(response))
 }

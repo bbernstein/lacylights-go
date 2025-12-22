@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/99designs/gqlgen/client"
+
+	"github.com/bbernstein/lacylights-go/internal/services/version"
 )
 
 // =============================================================================
@@ -1932,5 +1934,87 @@ func TestScenesByIds(t *testing.T) {
 
 	if len(queryResp.ScenesByIds) != 2 {
 		t.Errorf("Expected 2 scenes, got %d", len(queryResp.ScenesByIds))
+	}
+}
+
+// =============================================================================
+// BuildInfo Query Tests
+// =============================================================================
+
+func TestBuildInfo_Query(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Reset build info for testing and set known values
+	version.ResetBuildInfoForTesting()
+	version.SetBuildInfo("v1.2.3", "abc123def", "2025-01-15T10:30:00Z")
+
+	var resp struct {
+		BuildInfo struct {
+			Version   string `json:"version"`
+			GitCommit string `json:"gitCommit"`
+			BuildTime string `json:"buildTime"`
+		} `json:"buildInfo"`
+	}
+
+	err := c.Post(`query {
+		buildInfo {
+			version
+			gitCommit
+			buildTime
+		}
+	}`, &resp)
+
+	if err != nil {
+		t.Fatalf("BuildInfo query failed: %v", err)
+	}
+
+	if resp.BuildInfo.Version != "v1.2.3" {
+		t.Errorf("Expected version 'v1.2.3', got %q", resp.BuildInfo.Version)
+	}
+	if resp.BuildInfo.GitCommit != "abc123def" {
+		t.Errorf("Expected gitCommit 'abc123def', got %q", resp.BuildInfo.GitCommit)
+	}
+	if resp.BuildInfo.BuildTime != "2025-01-15T10:30:00Z" {
+		t.Errorf("Expected buildTime '2025-01-15T10:30:00Z', got %q", resp.BuildInfo.BuildTime)
+	}
+}
+
+func TestBuildInfo_DefaultValues(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Reset build info to defaults
+	version.ResetBuildInfoForTesting()
+
+	var resp struct {
+		BuildInfo struct {
+			Version   string `json:"version"`
+			GitCommit string `json:"gitCommit"`
+			BuildTime string `json:"buildTime"`
+		} `json:"buildInfo"`
+	}
+
+	err := c.Post(`query {
+		buildInfo {
+			version
+			gitCommit
+			buildTime
+		}
+	}`, &resp)
+
+	if err != nil {
+		t.Fatalf("BuildInfo query failed: %v", err)
+	}
+
+	// Should return default values when not set via ldflags
+	if resp.BuildInfo.Version != "0.1.0" {
+		t.Errorf("Expected default version '0.1.0', got %q", resp.BuildInfo.Version)
+	}
+	if resp.BuildInfo.GitCommit != "unknown" {
+		t.Errorf("Expected default gitCommit 'unknown', got %q", resp.BuildInfo.GitCommit)
+	}
+	if resp.BuildInfo.BuildTime != "unknown" {
+		t.Errorf("Expected default buildTime 'unknown', got %q", resp.BuildInfo.BuildTime)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,6 +23,67 @@ const (
 	// UpdateLogPath is the path to the update log file
 	UpdateLogPath = "/opt/lacylights/logs/update.log"
 )
+
+// Build information - set at build time via ldflags or by calling SetBuildInfo
+// Protected by buildInfoMu for thread-safe access
+var (
+	buildVersion   = "0.1.0"
+	buildGitCommit = "unknown"
+	buildTime      = "unknown"
+	buildInfoOnce  sync.Once
+	buildInfoMu    sync.RWMutex
+)
+
+// BuildInfo contains server build information for version verification
+type BuildInfo struct {
+	Version   string
+	GitCommit string
+	BuildTime string
+}
+
+// SetBuildInfo sets the build information (called from main package at startup).
+// Uses sync.Once to ensure initialization happens exactly once, and RWMutex for
+// thread-safe access. Empty string values are ignored to preserve default values
+// during development builds.
+func SetBuildInfo(version, gitCommit, buildTimeVal string) {
+	buildInfoOnce.Do(func() {
+		buildInfoMu.Lock()
+		defer buildInfoMu.Unlock()
+		if version != "" {
+			buildVersion = version
+		}
+		if gitCommit != "" {
+			buildGitCommit = gitCommit
+		}
+		if buildTimeVal != "" {
+			buildTime = buildTimeVal
+		}
+	})
+}
+
+// GetBuildInfo returns the current build information.
+// Thread-safe for concurrent access.
+func GetBuildInfo() BuildInfo {
+	buildInfoMu.RLock()
+	defer buildInfoMu.RUnlock()
+	return BuildInfo{
+		Version:   buildVersion,
+		GitCommit: buildGitCommit,
+		BuildTime: buildTime,
+	}
+}
+
+// ResetBuildInfoForTesting resets the build info to defaults for testing purposes.
+// This function is thread-safe and can be called from concurrent tests.
+// WARNING: This should only be called from test code.
+func ResetBuildInfoForTesting() {
+	buildInfoMu.Lock()
+	defer buildInfoMu.Unlock()
+	buildVersion = "0.1.0"
+	buildGitCommit = "unknown"
+	buildTime = "unknown"
+	buildInfoOnce = sync.Once{}
+}
 
 var (
 	// repositoryNames is the canonical list of managed repositories
