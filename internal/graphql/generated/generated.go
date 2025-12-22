@@ -64,6 +64,12 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
+	BuildInfo struct {
+		BuildTime func(childComplexity int) int
+		GitCommit func(childComplexity int) int
+		Version   func(childComplexity int) int
+	}
+
 	BulkDeleteResult struct {
 		DeletedCount func(childComplexity int) int
 		DeletedIds   func(childComplexity int) int
@@ -548,6 +554,7 @@ type ComplexityRoot struct {
 	Query struct {
 		AllDmxOutput                    func(childComplexity int) int
 		AvailableVersions               func(childComplexity int, repository string) int
+		BuildInfo                       func(childComplexity int) int
 		ChannelMap                      func(childComplexity int, projectID string, universe *int) int
 		CheckOFLUpdates                 func(childComplexity int) int
 		CompareScenes                   func(childComplexity int, sceneID1 string, sceneID2 string) int
@@ -979,6 +986,7 @@ type QueryResolver interface {
 	GetQLCFixtureMappingSuggestions(ctx context.Context, projectID string) (*QLCFixtureMappingResult, error)
 	SystemVersions(ctx context.Context) (*SystemVersionInfo, error)
 	AvailableVersions(ctx context.Context, repository string) ([]string, error)
+	BuildInfo(ctx context.Context) (*BuildInfo, error)
 	OflImportStatus(ctx context.Context) (*OFLImportStatus, error)
 	CheckOFLUpdates(ctx context.Context) (*OFLUpdateCheckResult, error)
 	FixturesByIds(ctx context.Context, ids []string) ([]*models.FixtureInstance, error)
@@ -1045,6 +1053,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	ec := executionContext{nil, e, 0, 0, nil}
 	_ = ec
 	switch typeName + "." + field {
+
+	case "BuildInfo.buildTime":
+		if e.complexity.BuildInfo.BuildTime == nil {
+			break
+		}
+
+		return e.complexity.BuildInfo.BuildTime(childComplexity), true
+	case "BuildInfo.gitCommit":
+		if e.complexity.BuildInfo.GitCommit == nil {
+			break
+		}
+
+		return e.complexity.BuildInfo.GitCommit(childComplexity), true
+	case "BuildInfo.version":
+		if e.complexity.BuildInfo.Version == nil {
+			break
+		}
+
+		return e.complexity.BuildInfo.Version(childComplexity), true
 
 	case "BulkDeleteResult.deletedCount":
 		if e.complexity.BulkDeleteResult.DeletedCount == nil {
@@ -3619,6 +3646,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.AvailableVersions(childComplexity, args["repository"].(string)), true
+	case "Query.buildInfo":
+		if e.complexity.Query.BuildInfo == nil {
+			break
+		}
+
+		return e.complexity.Query.BuildInfo(childComplexity), true
 	case "Query.channelMap":
 		if e.complexity.Query.ChannelMap == nil {
 			break
@@ -5583,6 +5616,16 @@ type UpdateResult {
   error: String
 }
 
+"Server build information for version verification"
+type BuildInfo {
+  "Semantic version (e.g., v0.8.10)"
+  version: String!
+  "Git commit hash from which this build was made"
+  gitCommit: String!
+  "UTC timestamp when this build was created"
+  buildTime: String!
+}
+
 type NetworkInterfaceOption {
   name: String!
   address: String!
@@ -6214,6 +6257,8 @@ type Query {
   # Version Management
   systemVersions: SystemVersionInfo!
   availableVersions(repository: String!): [String!]!
+  "Get server build information for version verification"
+  buildInfo: BuildInfo!
 
   # Open Fixture Library
   "Get the current status of any ongoing OFL import"
@@ -8233,6 +8278,93 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 // endregion ************************** directives.gotpl **************************
 
 // region    **************************** field.gotpl *****************************
+
+func (ec *executionContext) _BuildInfo_version(ctx context.Context, field graphql.CollectedField, obj *BuildInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BuildInfo_version,
+		func(ctx context.Context) (any, error) {
+			return obj.Version, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BuildInfo_version(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BuildInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BuildInfo_gitCommit(ctx context.Context, field graphql.CollectedField, obj *BuildInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BuildInfo_gitCommit,
+		func(ctx context.Context) (any, error) {
+			return obj.GitCommit, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BuildInfo_gitCommit(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BuildInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BuildInfo_buildTime(ctx context.Context, field graphql.CollectedField, obj *BuildInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BuildInfo_buildTime,
+		func(ctx context.Context) (any, error) {
+			return obj.BuildTime, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BuildInfo_buildTime(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BuildInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
 
 func (ec *executionContext) _BulkDeleteResult_deletedCount(ctx context.Context, field graphql.CollectedField, obj *BulkDeleteResult) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
@@ -23176,6 +23308,43 @@ func (ec *executionContext) fieldContext_Query_availableVersions(ctx context.Con
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_buildInfo(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_buildInfo,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().BuildInfo(ctx)
+		},
+		nil,
+		ec.marshalNBuildInfo2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBuildInfo,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_buildInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "version":
+				return ec.fieldContext_BuildInfo_version(ctx, field)
+			case "gitCommit":
+				return ec.fieldContext_BuildInfo_gitCommit(ctx, field)
+			case "buildTime":
+				return ec.fieldContext_BuildInfo_buildTime(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type BuildInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_oflImportStatus(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -31458,6 +31627,55 @@ func (ec *executionContext) unmarshalInputUpdateSettingInput(ctx context.Context
 
 // region    **************************** object.gotpl ****************************
 
+var buildInfoImplementors = []string{"BuildInfo"}
+
+func (ec *executionContext) _BuildInfo(ctx context.Context, sel ast.SelectionSet, obj *BuildInfo) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, buildInfoImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("BuildInfo")
+		case "version":
+			out.Values[i] = ec._BuildInfo_version(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "gitCommit":
+			out.Values[i] = ec._BuildInfo_gitCommit(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "buildTime":
+			out.Values[i] = ec._BuildInfo_buildTime(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var bulkDeleteResultImplementors = []string{"BulkDeleteResult"}
 
 func (ec *executionContext) _BulkDeleteResult(ctx context.Context, sel ast.SelectionSet, obj *BulkDeleteResult) graphql.Marshaler {
@@ -37129,6 +37347,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "buildInfo":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_buildInfo(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "oflImportStatus":
 			field := field
 
@@ -39373,6 +39613,20 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) marshalNBuildInfo2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBuildInfo(ctx context.Context, sel ast.SelectionSet, v BuildInfo) graphql.Marshaler {
+	return ec._BuildInfo(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNBuildInfo2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBuildInfo(ctx context.Context, sel ast.SelectionSet, v *BuildInfo) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._BuildInfo(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNBulkCueCreateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkCueCreateInput(ctx context.Context, v any) (BulkCueCreateInput, error) {

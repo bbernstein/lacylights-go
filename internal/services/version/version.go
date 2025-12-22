@@ -23,6 +23,36 @@ const (
 	UpdateLogPath = "/opt/lacylights/logs/update.log"
 )
 
+// Build information - set at build time via ldflags or by calling SetBuildInfo
+var (
+	buildVersion   = "0.1.0"
+	buildGitCommit = "unknown"
+	buildTime      = "unknown"
+)
+
+// BuildInfo contains server build information for version verification
+type BuildInfo struct {
+	Version   string
+	GitCommit string
+	BuildTime string
+}
+
+// SetBuildInfo sets the build information (called from main package)
+func SetBuildInfo(version, gitCommit, buildTimeVal string) {
+	buildVersion = version
+	buildGitCommit = gitCommit
+	buildTime = buildTimeVal
+}
+
+// GetBuildInfo returns the current build information
+func GetBuildInfo() BuildInfo {
+	return BuildInfo{
+		Version:   buildVersion,
+		GitCommit: buildGitCommit,
+		BuildTime: buildTime,
+	}
+}
+
 var (
 	// repositoryNames is the canonical list of managed repositories
 	repositoryNames = []string{"lacylights-fe", "lacylights-go", "lacylights-mcp"}

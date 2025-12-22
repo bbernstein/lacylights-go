@@ -638,6 +638,16 @@ type UpdateResult {
   error: String
 }
 
+"Server build information for version verification"
+type BuildInfo {
+  "Semantic version (e.g., v0.8.10)"
+  version: String!
+  "Git commit hash from which this build was made"
+  gitCommit: String!
+  "UTC timestamp when this build was created"
+  buildTime: String!
+}
+
 type NetworkInterfaceOption {
   name: String!
   address: String!
@@ -1269,6 +1279,8 @@ type Query {
   # Version Management
   systemVersions: SystemVersionInfo!
   availableVersions(repository: String!): [String!]!
+  "Get server build information for version verification"
+  buildInfo: BuildInfo!
 
   # Open Fixture Library
   "Get the current status of any ongoing OFL import"

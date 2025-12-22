@@ -20,6 +20,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/services/network"
 	"github.com/bbernstein/lacylights-go/internal/services/ofl"
 	"github.com/bbernstein/lacylights-go/internal/services/pubsub"
+	"github.com/bbernstein/lacylights-go/internal/services/version"
 	"github.com/lucsky/cuid"
 	"gorm.io/gorm"
 )
@@ -4211,6 +4212,16 @@ func (r *queryResolver) SystemVersions(ctx context.Context) (*generated.SystemVe
 // Returns available versions for a specific repository
 func (r *queryResolver) AvailableVersions(ctx context.Context, repository string) ([]string, error) {
 	return r.VersionService.GetAvailableVersions(repository)
+}
+
+// BuildInfo is the resolver for the buildInfo field.
+func (r *queryResolver) BuildInfo(ctx context.Context) (*generated.BuildInfo, error) {
+	info := version.GetBuildInfo()
+	return &generated.BuildInfo{
+		Version:   info.Version,
+		GitCommit: info.GitCommit,
+		BuildTime: info.BuildTime,
+	}, nil
 }
 
 // OflImportStatus is the resolver for the oflImportStatus field.
