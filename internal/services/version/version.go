@@ -319,6 +319,17 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 		// Security: We call the run-update.sh script which validates all inputs
 		// before executing. This prevents command injection attacks.
 		// The sudoers entry only allows specific systemd-run patterns with this script.
+
+		// Verify the secure update runner script exists
+		if _, err := os.Stat(RunUpdateScriptPath); err != nil {
+			return &UpdateResult{
+				Success:         false,
+				Repository:      repository,
+				PreviousVersion: previousVersion,
+				Error:           "Update script not available on this system",
+			}, nil
+		}
+
 		targetVersion := "latest"
 		if version != nil && *version != "" {
 			targetVersion = *version
