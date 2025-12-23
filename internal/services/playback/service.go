@@ -212,18 +212,20 @@ func (s *Service) GetGlobalPlaybackStatus(ctx context.Context) *GlobalPlaybackSt
 
 	s.mu.RUnlock()
 
-	// Get cue list details from database
-	var cueList models.CueList
-	result := s.db.WithContext(ctx).
-		Preload("Cues").
-		First(&cueList, "id = ?", cueListID)
-
+	// Get cue list details from database (if available)
 	var cueListName *string
 	var cueCount *int
-	if result.Error == nil {
-		cueListName = &cueList.Name
-		count := len(cueList.Cues)
-		cueCount = &count
+	if s.db != nil {
+		var cueList models.CueList
+		result := s.db.WithContext(ctx).
+			Preload("Cues").
+			First(&cueList, "id = ?", cueListID)
+
+		if result.Error == nil {
+			cueListName = &cueList.Name
+			count := len(cueList.Cues)
+			cueCount = &count
+		}
 	}
 
 	return &GlobalPlaybackStatus{
