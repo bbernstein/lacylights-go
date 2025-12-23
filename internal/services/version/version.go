@@ -20,6 +20,9 @@ const (
 	UpdateScriptPath = "/opt/lacylights/scripts/update-repos.sh"
 	// SelfUpdateScriptPath is the path to the self-update wrapper for updating lacylights-go itself
 	SelfUpdateScriptPath = "/opt/lacylights/scripts/self-update.sh"
+	// RunUpdateScriptPath is the path to the secure update runner script
+	// This script validates inputs before running updates, preventing command injection
+	RunUpdateScriptPath = "/opt/lacylights/scripts/run-update.sh"
 	// UpdateLogPath is the path to the update log file
 	UpdateLogPath = "/opt/lacylights/logs/update.log"
 )
@@ -313,46 +316,40 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 		// 3. Stopping backend kills the update script (child process)
 		// Solution: systemd-run schedules update with delay, returns immediately
 		//
-		// We call sudo systemd-run directly instead of using a wrapper script
-		// because the backend has NoNewPrivileges=true which prevents child processes
-		// from using sudo. The sudoers entry allows this specific sudo command.
+		// Security: We call the run-update.sh script which validates all inputs
+		// before executing. This prevents command injection attacks.
+		// The sudoers entry only allows specific systemd-run patterns with this script.
 		targetVersion := "latest"
 		if version != nil && *version != "" {
 			targetVersion = *version
 		}
 
-		// Build the update command that systemd-run will execute
-		// Quote all arguments for shell safety
-		updateCmd := fmt.Sprintf("'%s' update '%s'", UpdateScriptPath, repository)
-		if targetVersion != "latest" {
-			updateCmd += fmt.Sprintf(" '%s'", targetVersion)
-		}
-		updateCmd += fmt.Sprintf(" >> %s 2>&1", UpdateLogPath)
-
-		// Build systemd-run command with unique unit name to avoid conflicts
-		// Use nanosecond precision to prevent race conditions from concurrent requests
-		// NOTE: Requires sudoers entries allowing wildcards:
-		//   - lacylights-self-update-* (for Go updates)
-		//   - lacylights-mcp-update-* (for MCP updates)
-		timestamp := time.Now().Format("20060102-150405.000000")
+		// Build systemd-run command with static unit name
+		// Note: Static unit names mean only one update can run at a time per type.
+		// This is intentional - concurrent updates would cause conflicts anyway.
 		var unitName, description string
 		if repository == "lacylights-go" {
-			unitName = fmt.Sprintf("lacylights-self-update-%s", timestamp)
+			unitName = "lacylights-self-update"
 			description = "LacyLights Self-Update to " + targetVersion
 		} else {
-			unitName = fmt.Sprintf("lacylights-mcp-update-%s", timestamp)
+			unitName = "lacylights-mcp-update"
 			description = "LacyLights MCP Update to " + targetVersion
 		}
 
+		// Build arguments for systemd-run
+		// The run-update.sh script handles logging internally
 		args := []string{
 			"systemd-run",
 			"--unit=" + unitName,
 			"--description=" + description,
 			"--on-active=3s",
 			"--timer-property=AccuracySec=100ms",
-			"/bin/bash",
-			"-c",
-			updateCmd,
+			RunUpdateScriptPath,
+			repository,
+		}
+		// Add version argument if not "latest"
+		if targetVersion != "latest" {
+			args = append(args, targetVersion)
 		}
 
 		cmd = exec.Command("sudo", args...)
