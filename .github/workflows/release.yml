@@ -642,6 +642,124 @@ jobs:
 
           echo "DynamoDB updated: component=${{ env.COMPONENT }}, version=$VERSION"
 
+      - name: Update versions.json index
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DIST_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DIST_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_DIST_REGION }}
+        run: |
+          set -e
+          COMPONENT="${{ env.COMPONENT }}"
+          TABLE_NAME="${{ secrets.AWS_DIST_TABLE_NAME || 'lacylights-releases' }}"
+
+          # Validate COMPONENT matches expected values
+          case "$COMPONENT" in
+            go|web|mcp|rpi)
+              echo "Processing versions for component: $COMPONENT"
+              ;;
+            *)
+              echo "Error: Invalid COMPONENT value '$COMPONENT'. Expected: go, web, mcp, or rpi"
+              exit 1
+              ;;
+          esac
+
+          echo "Querying DynamoDB for all $COMPONENT versions from table $TABLE_NAME..."
+
+          # Query all versions for this component from DynamoDB
+          VERSIONS_DATA=$(aws dynamodb query \
+            --table-name "$TABLE_NAME" \
+            --key-condition-expression "component = :comp" \
+            --expression-attribute-values '{":comp": {"S": "'"$COMPONENT"'"}}' \
+            --projection-expression "#v, releaseDate, isPrerelease, platforms" \
+            --expression-attribute-names '{"#v": "version"}' \
+            --output json)
+
+          # Validate DynamoDB response before processing with jq
+          if ! echo "$VERSIONS_DATA" | jq -e '.Items and (.Items | type == "array")' > /dev/null; then
+            echo "Error: Unexpected DynamoDB query response when building versions.json for $COMPONENT"
+            echo "Raw response:"
+            echo "$VERSIONS_DATA"
+            exit 1
+          fi
+
+          # Define common sorting function for semantic versioning
+          # Sorts: stable versions first (by semantic version desc), then prereleases (by semantic version desc)
+          SORT_FUNCTION='
+            sort_by(
+              # Build composite sort key:
+              # 1. isPrerelease (false < true) so stable come first
+              # 2. -major, -minor, -patch so higher versions come first
+              # 3. prerelease suffix for deterministic ordering among prereleases
+              (
+                .version as $v
+                | ($v | split("-")[0] | split(".") | map(tonumber)) as $nums
+                | [
+                    .isPrerelease,
+                    -($nums[0] // 0),
+                    -($nums[1] // 0),
+                    -($nums[2] // 0),
+                    ($v | split("-")[1] // "")
+                  ]
+              )
+            )
+          '
+
+          # Build versions.json using jq with proper semver sorting
+          # For Go, we include platform info since it has multi-platform builds
+          if [ "$COMPONENT" = "go" ]; then
+            echo "$VERSIONS_DATA" | jq '
+              .Items | map({
+                version: .version.S,
+                releaseDate: .releaseDate.S,
+                isPrerelease: .isPrerelease.BOOL,
+                platforms: (.platforms.L // [] | map({
+                  os: .M.os.S,
+                  arch: .M.arch.S,
+                  url: .M.url.S,
+                  sha256: .M.sha256.S,
+                  fileSize: (.M.fileSize.N | tonumber)
+                }))
+              }) |
+              '"$SORT_FUNCTION"'
+            ' > versions.json
+          else
+            # For non-Go components, omit platform details from versions.json
+            echo "$VERSIONS_DATA" | jq '
+              .Items | map({
+                version: .version.S,
+                releaseDate: .releaseDate.S,
+                isPrerelease: .isPrerelease.BOOL
+              }) |
+              '"$SORT_FUNCTION"'
+            ' > versions.json
+          fi
+
+          # Validate that versions.json was successfully created before upload
+          if [ ! -f versions.json ] || [ ! -s versions.json ]; then
+            echo "Error: versions.json was not created or is empty"
+            exit 1
+          fi
+
+          # Validate that versions.json contains valid JSON
+          if ! jq empty versions.json >/dev/null 2>&1; then
+            echo "Error: versions.json contains invalid JSON"
+            echo "Contents of versions.json:"
+            cat versions.json
+            exit 1
+          fi
+
+          echo "Generated versions.json with $(jq length versions.json) versions"
+          cat versions.json
+
+          # Upload versions.json
+          aws s3 cp versions.json \
+            "s3://${{ secrets.AWS_DIST_BUCKET }}/releases/${COMPONENT}/versions.json" \
+            --content-type "application/json" \
+            --cache-control "max-age=300, must-revalidate" \
+            --metadata-directive REPLACE
+
+          echo "✓ versions.json updated for $COMPONENT"
+
       - name: Create Git tag
         run: |
           set -e
