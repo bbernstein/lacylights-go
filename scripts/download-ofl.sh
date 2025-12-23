@@ -25,28 +25,39 @@ echo "Target: $OUTPUT_FILE"
 # Create data directory if it doesn't exist
 mkdir -p "$DATA_DIR"
 
-# Download the zipball with retry logic
+# Download with exponential backoff retry logic
+# Retries on server errors (5xx), rate limits (429), and connection failures
+# Fails immediately on other client errors (4xx)
 MAX_RETRIES=5
 RETRY_DELAY=5
 
 download_with_retry() {
     local attempt=1
     local http_code
+    local curl_exit
 
     while [ $attempt -le $MAX_RETRIES ]; do
         echo -e "${YELLOW}Fetching from GitHub (attempt $attempt/$MAX_RETRIES)...${NC}"
-        http_code=$(curl -L -w "%{http_code}" -o "$OUTPUT_FILE.tmp" --connect-timeout 30 --max-time 300 "$OFL_API_URL" 2>/dev/null)
 
-        if [ "$http_code" -eq 200 ]; then
+        # Capture both curl exit code and HTTP status code
+        http_code=$(curl -L -w "%{http_code}" -o "$OUTPUT_FILE.tmp" --connect-timeout 30 --max-time 300 "$OFL_API_URL" 2>/dev/null) || curl_exit=$?
+        curl_exit=${curl_exit:-0}
+
+        if [ "$curl_exit" -eq 0 ] && [ "$http_code" -eq 200 ]; then
             return 0
         fi
 
-        echo -e "${YELLOW}Download failed with HTTP $http_code${NC}"
+        # Handle curl failures (connection errors, timeouts, etc.)
+        if [ "$curl_exit" -ne 0 ]; then
+            echo -e "${YELLOW}Connection failed (curl exit code: $curl_exit)${NC}"
+        else
+            echo -e "${YELLOW}Download failed with HTTP $http_code${NC}"
 
-        # Don't retry on client errors (4xx) except 429 (rate limit)
-        if [ "$http_code" -ge 400 ] && [ "$http_code" -lt 500 ] && [ "$http_code" -ne 429 ]; then
-            echo -e "${RED}Client error - not retrying${NC}"
-            return 1
+            # Don't retry on client errors (4xx) except 429 (rate limit)
+            if [ "$http_code" -ge 400 ] && [ "$http_code" -lt 500 ] && [ "$http_code" -ne 429 ]; then
+                echo -e "${RED}Client error - not retrying${NC}"
+                return 1
+            fi
         fi
 
         if [ $attempt -lt $MAX_RETRIES ]; then
