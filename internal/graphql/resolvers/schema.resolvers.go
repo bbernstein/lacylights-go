@@ -1279,6 +1279,13 @@ func (r *mutationResolver) UpdateScene(ctx context.Context, id string, input gen
 		return nil, err
 	}
 
+	// If this scene is currently active (displayed on DMX), re-apply its values
+	// so changes are immediately reflected in the output
+	if err := r.reapplyActiveSceneIfNeeded(ctx, id); err != nil {
+		// Log the error but don't fail the update - the scene was saved successfully
+		log.Printf("Warning: failed to re-apply active scene after update: %v", err)
+	}
+
 	return scene, nil
 }
 
@@ -1508,6 +1515,13 @@ func (r *mutationResolver) AddFixturesToScene(ctx context.Context, sceneID strin
 		}
 	}
 
+	// If this scene is currently active (displayed on DMX), re-apply its values
+	// so changes are immediately reflected in the output
+	if err := r.reapplyActiveSceneIfNeeded(ctx, sceneID); err != nil {
+		// Log the error but don't fail the update - the scene was saved successfully
+		log.Printf("Warning: failed to re-apply active scene after adding fixtures: %v", err)
+	}
+
 	return scene, nil
 }
 
@@ -1526,6 +1540,13 @@ func (r *mutationResolver) RemoveFixturesFromScene(ctx context.Context, sceneID 
 		if err := r.SceneRepo.DeleteFixtureValue(ctx, sceneID, fixtureID); err != nil {
 			return nil, err
 		}
+	}
+
+	// If this scene is currently active (displayed on DMX), re-apply its values
+	// so changes are immediately reflected in the output
+	if err := r.reapplyActiveSceneIfNeeded(ctx, sceneID); err != nil {
+		// Log the error but don't fail the update - the scene was saved successfully
+		log.Printf("Warning: failed to re-apply active scene after removing fixtures: %v", err)
 	}
 
 	return scene, nil
@@ -1621,6 +1642,13 @@ func (r *mutationResolver) UpdateScenePartial(ctx context.Context, sceneID strin
 	// Save the scene
 	if err := r.SceneRepo.Update(ctx, scene); err != nil {
 		return nil, err
+	}
+
+	// If this scene is currently active (displayed on DMX), re-apply its values
+	// so changes are immediately reflected in the output
+	if err := r.reapplyActiveSceneIfNeeded(ctx, sceneID); err != nil {
+		// Log the error but don't fail the update - the scene was saved successfully
+		log.Printf("Warning: failed to re-apply active scene after update: %v", err)
 	}
 
 	return scene, nil

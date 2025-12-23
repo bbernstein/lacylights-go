@@ -1,6 +1,7 @@
 package resolvers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -155,4 +156,74 @@ func sparseChannelsEqual(channelsJSON1, channelsJSON2 string) bool {
 	}
 
 	return true
+}
+
+// reapplyActiveSceneIfNeeded checks if the given scene is currently active and
+// if so, re-applies its DMX values immediately. This ensures that when an active
+// scene is edited and saved, the changes are immediately reflected in the DMX output.
+// Returns nil if the scene is not active or if the scene was successfully re-applied.
+func (r *Resolver) reapplyActiveSceneIfNeeded(ctx context.Context, sceneID string) error {
+	// Check if this scene is currently active
+	activeSceneID := r.DMXService.GetActiveSceneID()
+	if activeSceneID == nil || *activeSceneID != sceneID {
+		// Scene is not active, nothing to do
+		return nil
+	}
+
+	// Scene is active - reload and re-apply its DMX values
+	var scene models.Scene
+	result := r.db.Preload("FixtureValues").First(&scene, "id = ?", sceneID)
+	if result.Error != nil {
+		return fmt.Errorf("failed to reload scene: %w", result.Error)
+	}
+
+	// Load fixtures for the scene's fixture values
+	var fixtureIDs []string
+	for _, fv := range scene.FixtureValues {
+		fixtureIDs = append(fixtureIDs, fv.FixtureID)
+	}
+
+	var fixtures []models.FixtureInstance
+	if len(fixtureIDs) > 0 {
+		r.db.Where("id IN ?", fixtureIDs).Find(&fixtures)
+	}
+
+	// Create fixture lookup map
+	fixtureMap := make(map[string]*models.FixtureInstance)
+	for i := range fixtures {
+		fixtureMap[fixtures[i].ID] = &fixtures[i]
+	}
+
+	// Set channel values directly (no fade, immediate update)
+	for _, fixtureValue := range scene.FixtureValues {
+		fixture := fixtureMap[fixtureValue.FixtureID]
+		if fixture == nil {
+			continue
+		}
+
+		// Parse sparse channel values from JSON
+		var channels []models.ChannelValue
+		if err := json.Unmarshal([]byte(fixtureValue.Channels), &channels); err != nil {
+			log.Printf("Warning: failed to unmarshal channels for fixtureID %s in sceneID %s: %v", fixtureValue.FixtureID, sceneID, err)
+			continue
+		}
+
+		// Set channel values - only channels that exist in the sparse array
+		for _, ch := range channels {
+			dmxChannel := fixture.StartChannel + ch.Offset
+
+			// Validate DMX channel is within bounds
+			if !validateDMXChannel(dmxChannel, fixture.Universe, fixture.ID, ch.Offset) {
+				continue
+			}
+
+			r.DMXService.SetChannelValue(fixture.Universe, dmxChannel, byte(ch.Value))
+		}
+	}
+
+	// Force immediate transmission
+	r.DMXService.TriggerChangeDetection()
+
+	log.Printf("Re-applied active scene %s after update", sceneID)
+	return nil
 }
