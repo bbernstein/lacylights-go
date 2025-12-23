@@ -684,17 +684,19 @@ jobs:
 
           # Define common sorting function for semantic versioning
           # Sorts: stable versions first (by semantic version desc), then prereleases (by semantic version desc)
+          # Filters out items with null/invalid versions first
           SORT_FUNCTION='
-            sort_by(
+            map(select(.version != null and (.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+"))))
+            | sort_by(
               # Build composite sort key:
               # 1. isPrerelease (false < true) so stable come first
               # 2. -major, -minor, -patch so higher versions come first
               # 3. prerelease suffix for deterministic ordering among prereleases
               (
                 .version as $v
-                | ($v | split("-")[0] | split(".") | map(tonumber)) as $nums
+                | ($v | split("-")[0] | split(".") | map(tonumber? // 0)) as $nums
                 | [
-                    .isPrerelease,
+                    (.isPrerelease // false),
                     -($nums[0] // 0),
                     -($nums[1] // 0),
                     -($nums[2] // 0),
@@ -717,7 +719,7 @@ jobs:
                   arch: .M.arch.S,
                   url: .M.url.S,
                   sha256: .M.sha256.S,
-                  fileSize: (.M.fileSize.N | tonumber)
+                  fileSize: (.M.fileSize.N // "0" | tonumber)
                 }))
               }) |
               '"$SORT_FUNCTION"'
