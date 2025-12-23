@@ -61,6 +61,7 @@ download_with_retry() {
             # Don't retry on client errors (4xx) except 429 (rate limit)
             if [ "$http_code" -ge 400 ] && [ "$http_code" -lt 500 ] && [ "$http_code" -ne 429 ]; then
                 echo -e "${RED}Client error - not retrying${NC}"
+                rm -f "$OUTPUT_FILE.tmp"
                 return 1
             fi
         fi
