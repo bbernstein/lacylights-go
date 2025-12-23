@@ -4030,6 +4030,24 @@ func (r *queryResolver) CueListPlaybackStatus(ctx context.Context, cueListID str
 	return gqlStatus, nil
 }
 
+// GlobalPlaybackStatus is the resolver for the globalPlaybackStatus field.
+func (r *queryResolver) GlobalPlaybackStatus(ctx context.Context) (*generated.GlobalPlaybackStatus, error) {
+	status := r.PlaybackService.GetGlobalPlaybackStatus(ctx)
+
+	fadeProgress := status.FadeProgress
+	return &generated.GlobalPlaybackStatus{
+		IsPlaying:       status.IsPlaying,
+		IsFading:        status.IsFading,
+		CueListID:       status.CueListID,
+		CueListName:     status.CueListName,
+		CurrentCueIndex: status.CurrentCueIndex,
+		CueCount:        status.CueCount,
+		CurrentCueName:  status.CurrentCueName,
+		FadeProgress:    &fadeProgress,
+		LastUpdated:     status.LastUpdated,
+	}, nil
+}
+
 // Cue is the resolver for the cue field.
 func (r *queryResolver) Cue(ctx context.Context, id string) (*models.Cue, error) {
 	return r.CueRepo.FindByID(ctx, id)
@@ -4679,6 +4697,41 @@ func (r *subscriptionResolver) CueListPlaybackUpdated(ctx context.Context, cueLi
 					return
 				}
 				if status, valid := msg.(*generated.CueListPlaybackStatus); valid {
+					select {
+					case outputChan <- status:
+					case <-ctx.Done():
+						r.PubSub.Unsubscribe(sub)
+						return
+					}
+				}
+			}
+		}
+	}()
+
+	return outputChan, nil
+}
+
+// GlobalPlaybackStatusUpdated is the resolver for the globalPlaybackStatusUpdated field.
+func (r *subscriptionResolver) GlobalPlaybackStatusUpdated(ctx context.Context) (<-chan *generated.GlobalPlaybackStatus, error) {
+	// Subscribe to global playback status updates (no filter, receives all updates)
+	sub := r.PubSub.Subscribe(pubsub.TopicGlobalPlaybackStatus, "", 10)
+
+	// Create the output channel
+	outputChan := make(chan *generated.GlobalPlaybackStatus, 10)
+
+	// Start a goroutine to forward messages
+	go func() {
+		defer close(outputChan)
+		for {
+			select {
+			case <-ctx.Done():
+				r.PubSub.Unsubscribe(sub)
+				return
+			case msg, ok := <-sub.Channel:
+				if !ok {
+					return
+				}
+				if status, valid := msg.(*generated.GlobalPlaybackStatus); valid {
 					select {
 					case outputChan <- status:
 					case <-ctx.Done():

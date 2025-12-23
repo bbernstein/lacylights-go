@@ -117,6 +117,26 @@ func (r *Resolver) wirePubSub() {
 		r.PubSub.Publish(pubsub.TopicCueListPlayback, status.CueListID, gqlStatus)
 	})
 
+	// Wire up PlaybackService to publish global playback status updates
+	r.PlaybackService.SetGlobalUpdateCallback(func(status *playback.GlobalPlaybackStatus) {
+		// Convert playback status to generated type
+		fadeProgress := status.FadeProgress
+		gqlStatus := &generated.GlobalPlaybackStatus{
+			IsPlaying:       status.IsPlaying,
+			IsFading:        status.IsFading,
+			CueListID:       status.CueListID,
+			CueListName:     status.CueListName,
+			CurrentCueIndex: status.CurrentCueIndex,
+			CueCount:        status.CueCount,
+			CurrentCueName:  status.CurrentCueName,
+			FadeProgress:    &fadeProgress,
+			LastUpdated:     status.LastUpdated,
+		}
+
+		// Global playback status uses empty filter since it's not filtered by cue list
+		r.PubSub.Publish(pubsub.TopicGlobalPlaybackStatus, "", gqlStatus)
+	})
+
 	// Wire up PreviewService to publish preview session updates
 	r.PreviewService.SetSessionUpdateCallback(func(session *preview.Session, dmxOutput []preview.DMXOutput) {
 		// Convert to models.PreviewSession for the subscription
