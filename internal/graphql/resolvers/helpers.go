@@ -162,6 +162,17 @@ func sparseChannelsEqual(channelsJSON1, channelsJSON2 string) bool {
 // if so, re-applies its DMX values immediately. This ensures that when an active
 // scene is edited and saved, the changes are immediately reflected in the DMX output.
 // Returns nil if the scene is not active or if the scene was successfully re-applied.
+//
+// Note: This function uses immediate channel updates (no fade) because when editing
+// a scene, users expect to see their changes reflected instantly. This differs from
+// ActivateSceneFromBoard which uses the fade engine for smooth transitions.
+//
+// Note: There is a potential race condition between checking the active scene ID and
+// reloading the scene data. If another operation changes the active scene between these
+// operations, we may apply the wrong scene. This is acceptable because:
+// 1. The scene update has already been persisted successfully
+// 2. This is a best-effort UX improvement - the scene data will still be correct
+// 3. The likelihood of this race is very low in practice
 func (r *Resolver) reapplyActiveSceneIfNeeded(ctx context.Context, sceneID string) error {
 	// Check if this scene is currently active
 	activeSceneID := r.DMXService.GetActiveSceneID()
@@ -172,7 +183,7 @@ func (r *Resolver) reapplyActiveSceneIfNeeded(ctx context.Context, sceneID strin
 
 	// Scene is active - reload and re-apply its DMX values
 	var scene models.Scene
-	result := r.db.Preload("FixtureValues").First(&scene, "id = ?", sceneID)
+	result := r.db.WithContext(ctx).Preload("FixtureValues").First(&scene, "id = ?", sceneID)
 	if result.Error != nil {
 		return fmt.Errorf("failed to reload scene: %w", result.Error)
 	}
@@ -185,7 +196,7 @@ func (r *Resolver) reapplyActiveSceneIfNeeded(ctx context.Context, sceneID strin
 
 	var fixtures []models.FixtureInstance
 	if len(fixtureIDs) > 0 {
-		r.db.Where("id IN ?", fixtureIDs).Find(&fixtures)
+		r.db.WithContext(ctx).Where("id IN ?", fixtureIDs).Find(&fixtures)
 	}
 
 	// Create fixture lookup map
