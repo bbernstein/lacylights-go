@@ -25,7 +25,7 @@ echo "Target: $OUTPUT_FILE"
 # Create data directory if it doesn't exist
 mkdir -p "$DATA_DIR"
 
-# Download with exponential backoff retry logic
+# Download with linear backoff retry logic (5s, 10s, 15s, 20s, 25s)
 # Retries on server errors (5xx), rate limits (429), and connection failures
 # Fails immediately on other client errors (4xx)
 MAX_RETRIES=5
@@ -42,6 +42,11 @@ download_with_retry() {
         # Capture both curl exit code and HTTP status code
         http_code=$(curl -L -w "%{http_code}" -o "$OUTPUT_FILE.tmp" --connect-timeout 30 --max-time 300 "$OFL_API_URL" 2>/dev/null) || curl_exit=$?
         curl_exit=${curl_exit:-0}
+
+        # Validate http_code is numeric before comparisons
+        if [[ ! "$http_code" =~ ^[0-9]+$ ]]; then
+            http_code=0
+        fi
 
         if [ "$curl_exit" -eq 0 ] && [ "$http_code" -eq 200 ]; then
             return 0
