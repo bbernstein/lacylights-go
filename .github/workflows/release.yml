@@ -686,7 +686,7 @@ jobs:
           # Sorts: stable versions first (by semantic version desc), then prereleases (by semantic version desc)
           # Filters out items with null/invalid versions first
           SORT_FUNCTION='
-            map(select(.version != null and (.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+"))))
+            map(select(.version != null and (.version | test("^[0-9]+\\.[0-9]+\\.[0-9]+(-.+)?$"))))
             | sort_by(
               # Build composite sort key:
               # 1. isPrerelease (false < true) so stable come first
@@ -713,7 +713,7 @@ jobs:
               .Items | map({
                 version: .version.S,
                 releaseDate: .releaseDate.S,
-                isPrerelease: .isPrerelease.BOOL,
+                isPrerelease: (.isPrerelease.BOOL // false),
                 platforms: (.platforms.L // [] | map({
                   os: .M.os.S,
                   arch: .M.arch.S,
@@ -730,7 +730,7 @@ jobs:
               .Items | map({
                 version: .version.S,
                 releaseDate: .releaseDate.S,
-                isPrerelease: .isPrerelease.BOOL
+                isPrerelease: (.isPrerelease.BOOL // false)
               }) |
               '"$SORT_FUNCTION"'
             ' > versions.json
