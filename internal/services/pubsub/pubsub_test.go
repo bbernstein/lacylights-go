@@ -330,6 +330,7 @@ func TestTopicConstants(t *testing.T) {
 		TopicProjectUpdated,
 		TopicPreviewSession,
 		TopicCueListPlayback,
+		TopicGlobalPlaybackStatus,
 		TopicSystemInfo,
 		TopicWiFiStatus,
 	}

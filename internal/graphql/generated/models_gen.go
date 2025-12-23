@@ -402,6 +402,27 @@ type FixtureValueInput struct {
 	SceneOrder graphql.Omittable[*int] `json:"sceneOrder,omitempty"`
 }
 
+// Global playback status - returns which cue list is currently playing (if any)
+type GlobalPlaybackStatus struct {
+	// True if any cue list is currently playing
+	IsPlaying bool `json:"isPlaying"`
+	// True if a fade transition is in progress
+	IsFading bool `json:"isFading"`
+	// ID of the currently playing cue list (null if not playing)
+	CueListID *string `json:"cueListId,omitempty"`
+	// Name of the currently playing cue list (null if not playing)
+	CueListName *string `json:"cueListName,omitempty"`
+	// Current cue index in the playing cue list (null if not playing)
+	CurrentCueIndex *int `json:"currentCueIndex,omitempty"`
+	// Total number of cues in the playing cue list (null if not playing)
+	CueCount *int `json:"cueCount,omitempty"`
+	// Name of the currently playing cue (null if not playing)
+	CurrentCueName *string `json:"currentCueName,omitempty"`
+	// Fade progress percentage (0-100)
+	FadeProgress *float64 `json:"fadeProgress,omitempty"`
+	LastUpdated  string   `json:"lastUpdated"`
+}
+
 type ImportOFLFixtureInput struct {
 	Manufacturer   string                   `json:"manufacturer"`
 	OflFixtureJSON string                   `json:"oflFixtureJson"`

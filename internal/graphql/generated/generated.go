@@ -279,6 +279,18 @@ type ComplexityRoot struct {
 		SceneOrder func(childComplexity int) int
 	}
 
+	GlobalPlaybackStatus struct {
+		CueCount        func(childComplexity int) int
+		CueListID       func(childComplexity int) int
+		CueListName     func(childComplexity int) int
+		CurrentCueIndex func(childComplexity int) int
+		CurrentCueName  func(childComplexity int) int
+		FadeProgress    func(childComplexity int) int
+		IsFading        func(childComplexity int) int
+		IsPlaying       func(childComplexity int) int
+		LastUpdated     func(childComplexity int) int
+	}
+
 	ImportResult struct {
 		ProjectID func(childComplexity int) int
 		Stats     func(childComplexity int) int
@@ -574,6 +586,7 @@ type ComplexityRoot struct {
 		FixtureUsage                    func(childComplexity int, fixtureID string) int
 		FixturesByIds                   func(childComplexity int, ids []string) int
 		GetQLCFixtureMappingSuggestions func(childComplexity int, projectID string) int
+		GlobalPlaybackStatus            func(childComplexity int) int
 		NetworkInterfaceOptions         func(childComplexity int) int
 		OflImportStatus                 func(childComplexity int) int
 		PreviewSession                  func(childComplexity int, sessionID string) int
@@ -698,13 +711,14 @@ type ComplexityRoot struct {
 	}
 
 	Subscription struct {
-		CueListPlaybackUpdated func(childComplexity int, cueListID string) int
-		DmxOutputChanged       func(childComplexity int, universe *int) int
-		OflImportProgress      func(childComplexity int) int
-		PreviewSessionUpdated  func(childComplexity int, projectID string) int
-		ProjectUpdated         func(childComplexity int, projectID string) int
-		SystemInfoUpdated      func(childComplexity int) int
-		WifiStatusUpdated      func(childComplexity int) int
+		CueListPlaybackUpdated      func(childComplexity int, cueListID string) int
+		DmxOutputChanged            func(childComplexity int, universe *int) int
+		GlobalPlaybackStatusUpdated func(childComplexity int) int
+		OflImportProgress           func(childComplexity int) int
+		PreviewSessionUpdated       func(childComplexity int, projectID string) int
+		ProjectUpdated              func(childComplexity int, projectID string) int
+		SystemInfoUpdated           func(childComplexity int) int
+		WifiStatusUpdated           func(childComplexity int) int
 	}
 
 	SystemInfo struct {
@@ -970,6 +984,7 @@ type QueryResolver interface {
 	CueLists(ctx context.Context, projectID string) ([]*CueListSummary, error)
 	CueList(ctx context.Context, id string, page *int, perPage *int, includeSceneDetails *bool) (*models.CueList, error)
 	CueListPlaybackStatus(ctx context.Context, cueListID string) (*CueListPlaybackStatus, error)
+	GlobalPlaybackStatus(ctx context.Context) (*GlobalPlaybackStatus, error)
 	Cue(ctx context.Context, id string) (*models.Cue, error)
 	SearchCues(ctx context.Context, cueListID string, query string, page *int, perPage *int) (*CuePage, error)
 	DmxOutput(ctx context.Context, universe int) ([]int, error)
@@ -1026,6 +1041,7 @@ type SubscriptionResolver interface {
 	ProjectUpdated(ctx context.Context, projectID string) (<-chan *models.Project, error)
 	PreviewSessionUpdated(ctx context.Context, projectID string) (<-chan *models.PreviewSession, error)
 	CueListPlaybackUpdated(ctx context.Context, cueListID string) (<-chan *CueListPlaybackStatus, error)
+	GlobalPlaybackStatusUpdated(ctx context.Context) (<-chan *GlobalPlaybackStatus, error)
 	SystemInfoUpdated(ctx context.Context) (<-chan *SystemInfo, error)
 	WifiStatusUpdated(ctx context.Context) (<-chan *WiFiStatus, error)
 	OflImportProgress(ctx context.Context) (<-chan *OFLImportStatus, error)
@@ -1918,6 +1934,61 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.FixtureValue.SceneOrder(childComplexity), true
+
+	case "GlobalPlaybackStatus.cueCount":
+		if e.complexity.GlobalPlaybackStatus.CueCount == nil {
+			break
+		}
+
+		return e.complexity.GlobalPlaybackStatus.CueCount(childComplexity), true
+	case "GlobalPlaybackStatus.cueListId":
+		if e.complexity.GlobalPlaybackStatus.CueListID == nil {
+			break
+		}
+
+		return e.complexity.GlobalPlaybackStatus.CueListID(childComplexity), true
+	case "GlobalPlaybackStatus.cueListName":
+		if e.complexity.GlobalPlaybackStatus.CueListName == nil {
+			break
+		}
+
+		return e.complexity.GlobalPlaybackStatus.CueListName(childComplexity), true
+	case "GlobalPlaybackStatus.currentCueIndex":
+		if e.complexity.GlobalPlaybackStatus.CurrentCueIndex == nil {
+			break
+		}
+
+		return e.complexity.GlobalPlaybackStatus.CurrentCueIndex(childComplexity), true
+	case "GlobalPlaybackStatus.currentCueName":
+		if e.complexity.GlobalPlaybackStatus.CurrentCueName == nil {
+			break
+		}
+
+		return e.complexity.GlobalPlaybackStatus.CurrentCueName(childComplexity), true
+	case "GlobalPlaybackStatus.fadeProgress":
+		if e.complexity.GlobalPlaybackStatus.FadeProgress == nil {
+			break
+		}
+
+		return e.complexity.GlobalPlaybackStatus.FadeProgress(childComplexity), true
+	case "GlobalPlaybackStatus.isFading":
+		if e.complexity.GlobalPlaybackStatus.IsFading == nil {
+			break
+		}
+
+		return e.complexity.GlobalPlaybackStatus.IsFading(childComplexity), true
+	case "GlobalPlaybackStatus.isPlaying":
+		if e.complexity.GlobalPlaybackStatus.IsPlaying == nil {
+			break
+		}
+
+		return e.complexity.GlobalPlaybackStatus.IsPlaying(childComplexity), true
+	case "GlobalPlaybackStatus.lastUpdated":
+		if e.complexity.GlobalPlaybackStatus.LastUpdated == nil {
+			break
+		}
+
+		return e.complexity.GlobalPlaybackStatus.LastUpdated(childComplexity), true
 
 	case "ImportResult.projectId":
 		if e.complexity.ImportResult.ProjectID == nil {
@@ -3851,6 +3922,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.GetQLCFixtureMappingSuggestions(childComplexity, args["projectId"].(string)), true
+	case "Query.globalPlaybackStatus":
+		if e.complexity.Query.GlobalPlaybackStatus == nil {
+			break
+		}
+
+		return e.complexity.Query.GlobalPlaybackStatus(childComplexity), true
 	case "Query.networkInterfaceOptions":
 		if e.complexity.Query.NetworkInterfaceOptions == nil {
 			break
@@ -4503,6 +4580,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Subscription.DmxOutputChanged(childComplexity, args["universe"].(*int)), true
+	case "Subscription.globalPlaybackStatusUpdated":
+		if e.complexity.Subscription.GlobalPlaybackStatusUpdated == nil {
+			break
+		}
+
+		return e.complexity.Subscription.GlobalPlaybackStatusUpdated(childComplexity), true
 	case "Subscription.oflImportProgress":
 		if e.complexity.Subscription.OflImportProgress == nil {
 			break
@@ -5293,6 +5376,27 @@ type CueListPlaybackStatus {
   currentCue: Cue
   nextCue: Cue
   previousCue: Cue
+  fadeProgress: Float
+  lastUpdated: String!
+}
+
+"Global playback status - returns which cue list is currently playing (if any)"
+type GlobalPlaybackStatus {
+  "True if any cue list is currently playing"
+  isPlaying: Boolean!
+  "True if a fade transition is in progress"
+  isFading: Boolean!
+  "ID of the currently playing cue list (null if not playing)"
+  cueListId: ID
+  "Name of the currently playing cue list (null if not playing)"
+  cueListName: String
+  "Current cue index in the playing cue list (null if not playing)"
+  currentCueIndex: Int
+  "Total number of cues in the playing cue list (null if not playing)"
+  cueCount: Int
+  "Name of the currently playing cue (null if not playing)"
+  currentCueName: String
+  "Fade progress percentage (0-100)"
   fadeProgress: Float
   lastUpdated: String!
 }
@@ -6217,6 +6321,8 @@ type Query {
     includeSceneDetails: Boolean = false
   ): CueList
   cueListPlaybackStatus(cueListId: ID!): CueListPlaybackStatus
+  "Get global playback status - which cue list is currently playing (if any)"
+  globalPlaybackStatus: GlobalPlaybackStatus!
 
   # Cues
   cue(id: ID!): Cue
@@ -6476,6 +6582,8 @@ type Subscription {
   projectUpdated(projectId: ID!): Project!
   previewSessionUpdated(projectId: ID!): PreviewSession!
   cueListPlaybackUpdated(cueListId: ID!): CueListPlaybackStatus!
+  "Global playback status updates - triggered when any cue list starts/stops/changes cue"
+  globalPlaybackStatusUpdated: GlobalPlaybackStatus!
   systemInfoUpdated: SystemInfo!
   wifiStatusUpdated: WiFiStatus!
   "Real-time updates during OFL import"
@@ -12794,6 +12902,267 @@ func (ec *executionContext) fieldContext_FixtureValue_sceneOrder(_ context.Conte
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GlobalPlaybackStatus_isPlaying(ctx context.Context, field graphql.CollectedField, obj *GlobalPlaybackStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GlobalPlaybackStatus_isPlaying,
+		func(ctx context.Context) (any, error) {
+			return obj.IsPlaying, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GlobalPlaybackStatus_isPlaying(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GlobalPlaybackStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GlobalPlaybackStatus_isFading(ctx context.Context, field graphql.CollectedField, obj *GlobalPlaybackStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GlobalPlaybackStatus_isFading,
+		func(ctx context.Context) (any, error) {
+			return obj.IsFading, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GlobalPlaybackStatus_isFading(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GlobalPlaybackStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GlobalPlaybackStatus_cueListId(ctx context.Context, field graphql.CollectedField, obj *GlobalPlaybackStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GlobalPlaybackStatus_cueListId,
+		func(ctx context.Context) (any, error) {
+			return obj.CueListID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_GlobalPlaybackStatus_cueListId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GlobalPlaybackStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GlobalPlaybackStatus_cueListName(ctx context.Context, field graphql.CollectedField, obj *GlobalPlaybackStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GlobalPlaybackStatus_cueListName,
+		func(ctx context.Context) (any, error) {
+			return obj.CueListName, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_GlobalPlaybackStatus_cueListName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GlobalPlaybackStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GlobalPlaybackStatus_currentCueIndex(ctx context.Context, field graphql.CollectedField, obj *GlobalPlaybackStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GlobalPlaybackStatus_currentCueIndex,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentCueIndex, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_GlobalPlaybackStatus_currentCueIndex(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GlobalPlaybackStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GlobalPlaybackStatus_cueCount(ctx context.Context, field graphql.CollectedField, obj *GlobalPlaybackStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GlobalPlaybackStatus_cueCount,
+		func(ctx context.Context) (any, error) {
+			return obj.CueCount, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_GlobalPlaybackStatus_cueCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GlobalPlaybackStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GlobalPlaybackStatus_currentCueName(ctx context.Context, field graphql.CollectedField, obj *GlobalPlaybackStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GlobalPlaybackStatus_currentCueName,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentCueName, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_GlobalPlaybackStatus_currentCueName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GlobalPlaybackStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GlobalPlaybackStatus_fadeProgress(ctx context.Context, field graphql.CollectedField, obj *GlobalPlaybackStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GlobalPlaybackStatus_fadeProgress,
+		func(ctx context.Context) (any, error) {
+			return obj.FadeProgress, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_GlobalPlaybackStatus_fadeProgress(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GlobalPlaybackStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GlobalPlaybackStatus_lastUpdated(ctx context.Context, field graphql.CollectedField, obj *GlobalPlaybackStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GlobalPlaybackStatus_lastUpdated,
+		func(ctx context.Context) (any, error) {
+			return obj.LastUpdated, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GlobalPlaybackStatus_lastUpdated(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GlobalPlaybackStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -22576,6 +22945,55 @@ func (ec *executionContext) fieldContext_Query_cueListPlaybackStatus(ctx context
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_globalPlaybackStatus(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_globalPlaybackStatus,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().GlobalPlaybackStatus(ctx)
+		},
+		nil,
+		ec.marshalNGlobalPlaybackStatus2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGlobalPlaybackStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_globalPlaybackStatus(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "isPlaying":
+				return ec.fieldContext_GlobalPlaybackStatus_isPlaying(ctx, field)
+			case "isFading":
+				return ec.fieldContext_GlobalPlaybackStatus_isFading(ctx, field)
+			case "cueListId":
+				return ec.fieldContext_GlobalPlaybackStatus_cueListId(ctx, field)
+			case "cueListName":
+				return ec.fieldContext_GlobalPlaybackStatus_cueListName(ctx, field)
+			case "currentCueIndex":
+				return ec.fieldContext_GlobalPlaybackStatus_currentCueIndex(ctx, field)
+			case "cueCount":
+				return ec.fieldContext_GlobalPlaybackStatus_cueCount(ctx, field)
+			case "currentCueName":
+				return ec.fieldContext_GlobalPlaybackStatus_currentCueName(ctx, field)
+			case "fadeProgress":
+				return ec.fieldContext_GlobalPlaybackStatus_fadeProgress(ctx, field)
+			case "lastUpdated":
+				return ec.fieldContext_GlobalPlaybackStatus_lastUpdated(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type GlobalPlaybackStatus", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_cue(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -26252,6 +26670,55 @@ func (ec *executionContext) fieldContext_Subscription_cueListPlaybackUpdated(ctx
 	if fc.Args, err = ec.field_Subscription_cueListPlaybackUpdated_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_globalPlaybackStatusUpdated(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_globalPlaybackStatusUpdated,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Subscription().GlobalPlaybackStatusUpdated(ctx)
+		},
+		nil,
+		ec.marshalNGlobalPlaybackStatus2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGlobalPlaybackStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_globalPlaybackStatusUpdated(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "isPlaying":
+				return ec.fieldContext_GlobalPlaybackStatus_isPlaying(ctx, field)
+			case "isFading":
+				return ec.fieldContext_GlobalPlaybackStatus_isFading(ctx, field)
+			case "cueListId":
+				return ec.fieldContext_GlobalPlaybackStatus_cueListId(ctx, field)
+			case "cueListName":
+				return ec.fieldContext_GlobalPlaybackStatus_cueListName(ctx, field)
+			case "currentCueIndex":
+				return ec.fieldContext_GlobalPlaybackStatus_currentCueIndex(ctx, field)
+			case "cueCount":
+				return ec.fieldContext_GlobalPlaybackStatus_cueCount(ctx, field)
+			case "currentCueName":
+				return ec.fieldContext_GlobalPlaybackStatus_currentCueName(ctx, field)
+			case "fadeProgress":
+				return ec.fieldContext_GlobalPlaybackStatus_fadeProgress(ctx, field)
+			case "lastUpdated":
+				return ec.fieldContext_GlobalPlaybackStatus_lastUpdated(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type GlobalPlaybackStatus", field.Name)
+		},
 	}
 	return fc, nil
 }
@@ -33960,6 +34427,67 @@ func (ec *executionContext) _FixtureValue(ctx context.Context, sel ast.Selection
 	return out
 }
 
+var globalPlaybackStatusImplementors = []string{"GlobalPlaybackStatus"}
+
+func (ec *executionContext) _GlobalPlaybackStatus(ctx context.Context, sel ast.SelectionSet, obj *GlobalPlaybackStatus) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, globalPlaybackStatusImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("GlobalPlaybackStatus")
+		case "isPlaying":
+			out.Values[i] = ec._GlobalPlaybackStatus_isPlaying(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isFading":
+			out.Values[i] = ec._GlobalPlaybackStatus_isFading(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cueListId":
+			out.Values[i] = ec._GlobalPlaybackStatus_cueListId(ctx, field, obj)
+		case "cueListName":
+			out.Values[i] = ec._GlobalPlaybackStatus_cueListName(ctx, field, obj)
+		case "currentCueIndex":
+			out.Values[i] = ec._GlobalPlaybackStatus_currentCueIndex(ctx, field, obj)
+		case "cueCount":
+			out.Values[i] = ec._GlobalPlaybackStatus_cueCount(ctx, field, obj)
+		case "currentCueName":
+			out.Values[i] = ec._GlobalPlaybackStatus_currentCueName(ctx, field, obj)
+		case "fadeProgress":
+			out.Values[i] = ec._GlobalPlaybackStatus_fadeProgress(ctx, field, obj)
+		case "lastUpdated":
+			out.Values[i] = ec._GlobalPlaybackStatus_lastUpdated(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var importResultImplementors = []string{"ImportResult"}
 
 func (ec *executionContext) _ImportResult(ctx context.Context, sel ast.SelectionSet, obj *ImportResult) graphql.Marshaler {
@@ -37007,6 +37535,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "globalPlaybackStatus":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_globalPlaybackStatus(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "cue":
 			field := field
 
@@ -38707,6 +39257,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_previewSessionUpdated(ctx, fields[0])
 	case "cueListPlaybackUpdated":
 		return ec._Subscription_cueListPlaybackUpdated(ctx, fields[0])
+	case "globalPlaybackStatusUpdated":
+		return ec._Subscription_globalPlaybackStatusUpdated(ctx, fields[0])
 	case "systemInfoUpdated":
 		return ec._Subscription_systemInfoUpdated(ctx, fields[0])
 	case "wifiStatusUpdated":
@@ -41128,6 +41680,20 @@ func (ec *executionContext) marshalNFloat2float64(ctx context.Context, sel ast.S
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) marshalNGlobalPlaybackStatus2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGlobalPlaybackStatus(ctx context.Context, sel ast.SelectionSet, v GlobalPlaybackStatus) graphql.Marshaler {
+	return ec._GlobalPlaybackStatus(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNGlobalPlaybackStatus2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGlobalPlaybackStatus(ctx context.Context, sel ast.SelectionSet, v *GlobalPlaybackStatus) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._GlobalPlaybackStatus(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNID2string(ctx context.Context, v any) (string, error) {

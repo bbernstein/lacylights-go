@@ -319,6 +319,27 @@ type CueListPlaybackStatus {
   lastUpdated: String!
 }
 
+"Global playback status - returns which cue list is currently playing (if any)"
+type GlobalPlaybackStatus {
+  "True if any cue list is currently playing"
+  isPlaying: Boolean!
+  "True if a fade transition is in progress"
+  isFading: Boolean!
+  "ID of the currently playing cue list (null if not playing)"
+  cueListId: ID
+  "Name of the currently playing cue list (null if not playing)"
+  cueListName: String
+  "Current cue index in the playing cue list (null if not playing)"
+  currentCueIndex: Int
+  "Total number of cues in the playing cue list (null if not playing)"
+  cueCount: Int
+  "Name of the currently playing cue (null if not playing)"
+  currentCueName: String
+  "Fade progress percentage (0-100)"
+  fadeProgress: Float
+  lastUpdated: String!
+}
+
 type User {
   id: ID!
   email: String!
@@ -1239,6 +1260,8 @@ type Query {
     includeSceneDetails: Boolean = false
   ): CueList
   cueListPlaybackStatus(cueListId: ID!): CueListPlaybackStatus
+  "Get global playback status - which cue list is currently playing (if any)"
+  globalPlaybackStatus: GlobalPlaybackStatus!
 
   # Cues
   cue(id: ID!): Cue
@@ -1498,6 +1521,8 @@ type Subscription {
   projectUpdated(projectId: ID!): Project!
   previewSessionUpdated(projectId: ID!): PreviewSession!
   cueListPlaybackUpdated(cueListId: ID!): CueListPlaybackStatus!
+  "Global playback status updates - triggered when any cue list starts/stops/changes cue"
+  globalPlaybackStatusUpdated: GlobalPlaybackStatus!
   systemInfoUpdated: SystemInfo!
   wifiStatusUpdated: WiFiStatus!
   "Real-time updates during OFL import"

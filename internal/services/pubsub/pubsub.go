@@ -9,13 +9,14 @@ import (
 type Topic string
 
 const (
-	TopicDMXOutput         Topic = "DMX_OUTPUT_CHANGED"
-	TopicProjectUpdated    Topic = "PROJECT_UPDATED"
-	TopicPreviewSession    Topic = "PREVIEW_SESSION_UPDATED"
-	TopicCueListPlayback   Topic = "CUE_LIST_PLAYBACK_UPDATED"
-	TopicSystemInfo        Topic = "SYSTEM_INFO_UPDATED"
-	TopicWiFiStatus        Topic = "WIFI_STATUS_UPDATED"
-	TopicOFLImportProgress Topic = "OFL_IMPORT_PROGRESS"
+	TopicDMXOutput               Topic = "DMX_OUTPUT_CHANGED"
+	TopicProjectUpdated          Topic = "PROJECT_UPDATED"
+	TopicPreviewSession          Topic = "PREVIEW_SESSION_UPDATED"
+	TopicCueListPlayback         Topic = "CUE_LIST_PLAYBACK_UPDATED"
+	TopicGlobalPlaybackStatus    Topic = "GLOBAL_PLAYBACK_STATUS_UPDATED"
+	TopicSystemInfo              Topic = "SYSTEM_INFO_UPDATED"
+	TopicWiFiStatus              Topic = "WIFI_STATUS_UPDATED"
+	TopicOFLImportProgress       Topic = "OFL_IMPORT_PROGRESS"
 )
 
 // Subscriber represents a subscription channel.

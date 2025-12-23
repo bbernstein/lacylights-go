@@ -48,6 +48,19 @@ type CueListPlaybackStatus struct {
 	LastUpdated     string
 }
 
+// GlobalPlaybackStatus represents the global playback state across all cue lists.
+type GlobalPlaybackStatus struct {
+	IsPlaying       bool
+	IsFading        bool
+	CueListID       *string
+	CueListName     *string
+	CurrentCueIndex *int
+	CueCount        *int
+	CurrentCueName  *string
+	FadeProgress    float64
+	LastUpdated     string
+}
+
 // Service manages cue list playback.
 type Service struct {
 	mu sync.RWMutex
@@ -66,6 +79,9 @@ type Service struct {
 
 	// Callback for subscription updates (optional)
 	onUpdate func(status *CueListPlaybackStatus)
+
+	// Callback for global playback status updates (optional)
+	onGlobalUpdate func(status *GlobalPlaybackStatus)
 }
 
 // NewService creates a new playback service.
@@ -86,6 +102,13 @@ func (s *Service) SetUpdateCallback(callback func(status *CueListPlaybackStatus)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onUpdate = callback
+}
+
+// SetGlobalUpdateCallback sets the callback for global playback status updates.
+func (s *Service) SetGlobalUpdateCallback(callback func(status *GlobalPlaybackStatus)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onGlobalUpdate = callback
 }
 
 // GetPlaybackState returns a copy of the current playback state for a cue list.
@@ -141,6 +164,78 @@ func (s *Service) GetFormattedStatus(cueListID string) *CueListPlaybackStatus {
 		CurrentCue:      state.CurrentCue,
 		FadeProgress:    state.FadeProgress,
 		LastUpdated:     state.LastUpdated.Format(time.RFC3339),
+	}
+}
+
+// GetGlobalPlaybackStatus returns the global playback status across all cue lists.
+// It finds the currently playing cue list (if any) and returns its status with cue list details.
+func (s *Service) GetGlobalPlaybackStatus(ctx context.Context) *GlobalPlaybackStatus {
+	s.mu.RLock()
+
+	// Find the currently playing cue list
+	var playingState *PlaybackState
+	for _, state := range s.states {
+		if state.IsPlaying {
+			playingState = state
+			break
+		}
+	}
+
+	// If nothing is playing, return empty status
+	if playingState == nil {
+		s.mu.RUnlock()
+		return &GlobalPlaybackStatus{
+			IsPlaying:   false,
+			IsFading:    false,
+			LastUpdated: time.Now().Format(time.RFC3339),
+		}
+	}
+
+	// Copy the state data while holding the lock
+	cueListID := playingState.CueListID
+	isPlaying := playingState.IsPlaying
+	isFading := playingState.IsFading
+	fadeProgress := playingState.FadeProgress
+	lastUpdated := playingState.LastUpdated.Format(time.RFC3339)
+
+	var currentCueIndex *int
+	if playingState.CurrentCueIndex != nil {
+		idx := *playingState.CurrentCueIndex
+		currentCueIndex = &idx
+	}
+
+	var currentCueName *string
+	if playingState.CurrentCue != nil {
+		name := playingState.CurrentCue.Name
+		currentCueName = &name
+	}
+
+	s.mu.RUnlock()
+
+	// Get cue list details from database
+	var cueList models.CueList
+	result := s.db.WithContext(ctx).
+		Preload("Cues").
+		First(&cueList, "id = ?", cueListID)
+
+	var cueListName *string
+	var cueCount *int
+	if result.Error == nil {
+		cueListName = &cueList.Name
+		count := len(cueList.Cues)
+		cueCount = &count
+	}
+
+	return &GlobalPlaybackStatus{
+		IsPlaying:       isPlaying,
+		IsFading:        isFading,
+		CueListID:       &cueListID,
+		CueListName:     cueListName,
+		CurrentCueIndex: currentCueIndex,
+		CueCount:        cueCount,
+		CurrentCueName:  currentCueName,
+		FadeProgress:    fadeProgress,
+		LastUpdated:     lastUpdated,
 	}
 }
 
@@ -791,11 +886,18 @@ func (s *Service) startFadeProgress(cueListID string, fadeTime float64) {
 func (s *Service) emitUpdate(cueListID string) {
 	s.mu.RLock()
 	callback := s.onUpdate
+	globalCallback := s.onGlobalUpdate
 	s.mu.RUnlock()
 
 	if callback != nil {
 		status := s.GetFormattedStatus(cueListID)
 		callback(status)
+	}
+
+	// Also emit global playback status update
+	if globalCallback != nil {
+		globalStatus := s.GetGlobalPlaybackStatus(context.Background())
+		globalCallback(globalStatus)
 	}
 }
 

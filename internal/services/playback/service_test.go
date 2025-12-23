@@ -635,3 +635,93 @@ func TestCueListPlaybackStatusStructHasIsFading(t *testing.T) {
 		t.Error("Expected IsFading to be false after setting to false")
 	}
 }
+
+func TestGlobalPlaybackStatus(t *testing.T) {
+	cueIndex := 1
+	cueCount := 5
+	cueListID := "cue-list-1"
+	cueListName := "Main Show"
+	cueName := "Opening"
+
+	status := &GlobalPlaybackStatus{
+		IsPlaying:       true,
+		IsFading:        true,
+		CueListID:       &cueListID,
+		CueListName:     &cueListName,
+		CurrentCueIndex: &cueIndex,
+		CueCount:        &cueCount,
+		CurrentCueName:  &cueName,
+		FadeProgress:    50.0,
+		LastUpdated:     "2025-12-23T10:00:00Z",
+	}
+
+	if !status.IsPlaying {
+		t.Error("Expected IsPlaying to be true")
+	}
+	if !status.IsFading {
+		t.Error("Expected IsFading to be true")
+	}
+	if status.CueListID == nil || *status.CueListID != "cue-list-1" {
+		t.Error("Expected CueListID to be cue-list-1")
+	}
+	if status.CueListName == nil || *status.CueListName != "Main Show" {
+		t.Error("Expected CueListName to be Main Show")
+	}
+	if status.CurrentCueIndex == nil || *status.CurrentCueIndex != 1 {
+		t.Error("Expected CurrentCueIndex to be 1")
+	}
+	if status.CueCount == nil || *status.CueCount != 5 {
+		t.Error("Expected CueCount to be 5")
+	}
+	if status.CurrentCueName == nil || *status.CurrentCueName != "Opening" {
+		t.Error("Expected CurrentCueName to be Opening")
+	}
+	if status.FadeProgress != 50.0 {
+		t.Errorf("Expected FadeProgress 50.0, got %f", status.FadeProgress)
+	}
+}
+
+func TestGlobalPlaybackStatus_NotPlaying(t *testing.T) {
+	status := &GlobalPlaybackStatus{
+		IsPlaying:   false,
+		IsFading:    false,
+		LastUpdated: "2025-12-23T10:00:00Z",
+	}
+
+	if status.IsPlaying {
+		t.Error("Expected IsPlaying to be false")
+	}
+	if status.IsFading {
+		t.Error("Expected IsFading to be false")
+	}
+	if status.CueListID != nil {
+		t.Error("Expected CueListID to be nil when not playing")
+	}
+	if status.CueListName != nil {
+		t.Error("Expected CueListName to be nil when not playing")
+	}
+	if status.CurrentCueIndex != nil {
+		t.Error("Expected CurrentCueIndex to be nil when not playing")
+	}
+}
+
+func TestSetGlobalUpdateCallback(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	callbackCalled := false
+	service.SetGlobalUpdateCallback(func(status *GlobalPlaybackStatus) {
+		callbackCalled = true
+	})
+
+	// Trigger an emit (this will call both callbacks)
+	service.emitUpdate("test-cue-list")
+
+	if !callbackCalled {
+		t.Error("Expected global callback to be called")
+	}
+}
