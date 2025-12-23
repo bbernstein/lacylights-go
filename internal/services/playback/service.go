@@ -28,6 +28,8 @@ type CueForPlayback struct {
 // PlaybackState represents the current state of cue list playback.
 type PlaybackState struct {
 	CueListID       string
+	CueListName     string // Cached cue list name (avoids DB query on status updates)
+	CueCount        int    // Cached count of cues in the list (avoids DB query on status updates)
 	CurrentCueIndex *int
 	IsPlaying       bool // True when scene values are active on DMX (stays true after fade until stopped)
 	IsFading        bool // True when a fade transition is in progress
@@ -169,6 +171,11 @@ func (s *Service) GetFormattedStatus(cueListID string) *CueListPlaybackStatus {
 
 // GetGlobalPlaybackStatus returns the global playback status across all cue lists.
 // It finds the currently playing cue list (if any) and returns its status with cue list details.
+//
+// Note: This implementation assumes only one cue list is playing at a time. While the system
+// doesn't enforce this constraint at the architecture level, the typical usage pattern is
+// sequential playback. If multiple cue lists are playing simultaneously, this method returns
+// the first one found (map iteration order is non-deterministic in Go).
 func (s *Service) GetGlobalPlaybackStatus(ctx context.Context) *GlobalPlaybackStatus {
 	s.mu.RLock()
 
@@ -191,8 +198,10 @@ func (s *Service) GetGlobalPlaybackStatus(ctx context.Context) *GlobalPlaybackSt
 		}
 	}
 
-	// Copy the state data while holding the lock
+	// Copy the state data while holding the lock (no DB query needed - all cached)
 	cueListID := playingState.CueListID
+	cueListName := playingState.CueListName
+	cueCount := playingState.CueCount
 	isPlaying := playingState.IsPlaying
 	isFading := playingState.IsFading
 	fadeProgress := playingState.FadeProgress
@@ -212,29 +221,13 @@ func (s *Service) GetGlobalPlaybackStatus(ctx context.Context) *GlobalPlaybackSt
 
 	s.mu.RUnlock()
 
-	// Get cue list details from database (if available)
-	var cueListName *string
-	var cueCount *int
-	if s.db != nil {
-		var cueList models.CueList
-		result := s.db.WithContext(ctx).
-			Preload("Cues").
-			First(&cueList, "id = ?", cueListID)
-
-		if result.Error == nil {
-			cueListName = &cueList.Name
-			count := len(cueList.Cues)
-			cueCount = &count
-		}
-	}
-
 	return &GlobalPlaybackStatus{
 		IsPlaying:       isPlaying,
 		IsFading:        isFading,
 		CueListID:       &cueListID,
-		CueListName:     cueListName,
+		CueListName:     &cueListName,
 		CurrentCueIndex: currentCueIndex,
-		CueCount:        cueCount,
+		CueCount:        &cueCount,
 		CurrentCueName:  currentCueName,
 		FadeProgress:    fadeProgress,
 		LastUpdated:     lastUpdated,
@@ -242,7 +235,8 @@ func (s *Service) GetGlobalPlaybackStatus(ctx context.Context) *GlobalPlaybackSt
 }
 
 // StartCue starts playing a cue.
-func (s *Service) StartCue(cueListID string, cueIndex int, cue *CueForPlayback) {
+// cueListName and cueCount are cached to avoid DB queries during status updates.
+func (s *Service) StartCue(cueListID string, cueListName string, cueCount int, cueIndex int, cue *CueForPlayback) {
 	// Stop any existing playback for this cue list
 	s.StopCueList(cueListID)
 
@@ -250,6 +244,8 @@ func (s *Service) StartCue(cueListID string, cueIndex int, cue *CueForPlayback) 
 	now := time.Now()
 	state := &PlaybackState{
 		CueListID:       cueListID,
+		CueListName:     cueListName,
+		CueCount:        cueCount,
 		CurrentCueIndex: &cueIndex,
 		IsPlaying:       true,  // Scene is now active on DMX
 		IsFading:        true,  // Fade transition is starting
@@ -478,7 +474,7 @@ func (s *Service) handleFollowTime(cueListID string, currentCueIndex int) {
 		FadeOutTime: nextCue.FadeOutTime,
 		FollowTime:  nextCue.FollowTime,
 	}
-	s.StartCue(cueListID, nextCueIndex, cueForPlayback)
+	s.StartCue(cueListID, cueList.Name, len(cueList.Cues), nextCueIndex, cueForPlayback)
 }
 
 // StopCueList stops playback for a cue list.
@@ -571,7 +567,7 @@ func (s *Service) JumpToCue(ctx context.Context, cueListID string, cueIndex int,
 		FollowTime:  cue.FollowTime,
 	}
 
-	s.StartCue(cueListID, cueIndex, cueForPlayback)
+	s.StartCue(cueListID, cueList.Name, len(cueList.Cues), cueIndex, cueForPlayback)
 	return nil
 }
 
@@ -623,7 +619,7 @@ func (s *Service) NextCue(ctx context.Context, cueListID string, fadeInTimeOverr
 		FadeOutTime: cue.FadeOutTime,
 		FollowTime:  cue.FollowTime,
 	}
-	s.StartCue(cueListID, nextIndex, cueForPlayback)
+	s.StartCue(cueListID, cueList.Name, len(cueList.Cues), nextIndex, cueForPlayback)
 
 	return nil
 }
@@ -676,7 +672,7 @@ func (s *Service) PreviousCue(ctx context.Context, cueListID string, fadeInTimeO
 		FadeOutTime: cue.FadeOutTime,
 		FollowTime:  cue.FollowTime,
 	}
-	s.StartCue(cueListID, prevIndex, cueForPlayback)
+	s.StartCue(cueListID, cueList.Name, len(cueList.Cues), prevIndex, cueForPlayback)
 
 	return nil
 }
@@ -724,7 +720,7 @@ func (s *Service) GoToCueNumber(ctx context.Context, cueListID string, cueNumber
 		FadeOutTime: cue.FadeOutTime,
 		FollowTime:  cue.FollowTime,
 	}
-	s.StartCue(cueListID, cueIndex, cueForPlayback)
+	s.StartCue(cueListID, cueList.Name, len(cueList.Cues), cueIndex, cueForPlayback)
 
 	return nil
 }
@@ -772,7 +768,7 @@ func (s *Service) GoToCueName(ctx context.Context, cueListID string, cueName str
 		FadeOutTime: cue.FadeOutTime,
 		FollowTime:  cue.FollowTime,
 	}
-	s.StartCue(cueListID, cueIndex, cueForPlayback)
+	s.StartCue(cueListID, cueList.Name, len(cueList.Cues), cueIndex, cueForPlayback)
 
 	return nil
 }
@@ -828,7 +824,7 @@ func (s *Service) StartCueList(ctx context.Context, cueListID string, startFromC
 		FadeOutTime: cue.FadeOutTime,
 		FollowTime:  cue.FollowTime,
 	}
-	s.StartCue(cueListID, startIndex, cueForPlayback)
+	s.StartCue(cueListID, cueList.Name, len(cueList.Cues), startIndex, cueForPlayback)
 
 	return nil
 }
