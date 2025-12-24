@@ -177,7 +177,7 @@ func main() {
 	// Note: We intentionally do NOT use middleware.Timeout here because:
 	// 1. WebSocket connections are long-lived and need to stay open indefinitely
 	// 2. The timeout middleware cancels the request context, which kills subscriptions
-	// 3. HTTP server timeouts (ReadTimeout, WriteTimeout, IdleTimeout) handle regular requests
+	// 3. HTTP server timeouts (ReadTimeout, WriteTimeout, IdleTimeout) protect against slow clients
 	// 4. WebSocket keepalive (10s ping interval) handles connection health
 
 	// CORS
