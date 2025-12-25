@@ -320,11 +320,20 @@ func (s *Service) ConnectToNetwork(ctx context.Context, ssid string, password *s
 	s.notifyModeChange()
 	s.mu.Unlock()
 
+	// Delete any existing connection for this SSID to avoid corrupted profiles
+	// This is safe - if no connection exists, nmcli just returns an error we ignore
+	_, _ = s.executor.Execute("nmcli", "connection", "delete", ssid)
+
 	// Try to connect using nmcli
 	var args []string
 	if password != nil && *password != "" {
-		// Connect with password
-		args = []string{"device", "wifi", "connect", ssid, "password", *password}
+		// Connect with password - use explicit wifi-sec settings to avoid key-mgmt errors
+		args = []string{
+			"device", "wifi", "connect", ssid,
+			"password", *password,
+			"--",
+			"wifi-sec.key-mgmt", "wpa-psk",
+		}
 	} else {
 		// Connect without password (open network or saved credentials)
 		args = []string{"device", "wifi", "connect", ssid}
