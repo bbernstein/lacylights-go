@@ -2,7 +2,9 @@ package wifi
 
 import (
 	"context"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 
 // mockExecutor implements CommandExecutor for testing.
 type mockExecutor struct {
+	mu        sync.RWMutex
 	responses map[string][]byte
 	errors    map[string]error
 	calls     []string
@@ -30,6 +33,9 @@ func (m *mockExecutor) Execute(name string, args ...string) ([]byte, error) {
 }
 
 func (m *mockExecutor) ExecuteWithTimeout(_ time.Duration, name string, args ...string) ([]byte, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	key := name + " " + strings.Join(args, " ")
 	m.calls = append(m.calls, key)
 
@@ -46,6 +52,8 @@ func (m *mockExecutor) ExecuteWithTimeout(_ time.Duration, name string, args ...
 }
 
 func (m *mockExecutor) setResponse(cmd string, response string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.responses[cmd] = []byte(response)
 }
 
@@ -276,7 +284,11 @@ func TestAPConfigDefaults(t *testing.T) {
 }
 
 func TestSetWiFiEnabled_NotLinux(t *testing.T) {
-	// This test will only run on non-Linux systems
+	// Skip this test on Linux since it tests non-Linux behavior
+	if runtime.GOOS == "linux" {
+		t.Skip("Skipping test on Linux - tests non-Linux behavior")
+	}
+
 	s := NewService()
 	mock := newMockExecutor()
 	s.SetExecutor(mock)
@@ -357,6 +369,11 @@ func TestGetStatus_IncludesMinutesRemaining(t *testing.T) {
 }
 
 func TestConnectToNetwork_NotLinux(t *testing.T) {
+	// Skip this test on Linux since it tests non-Linux behavior
+	if runtime.GOOS == "linux" {
+		t.Skip("Skipping test on Linux - tests non-Linux behavior")
+	}
+
 	s := NewService()
 	mock := newMockExecutor()
 	s.SetExecutor(mock)
@@ -372,6 +389,11 @@ func TestConnectToNetwork_NotLinux(t *testing.T) {
 }
 
 func TestDisconnect_NotLinux(t *testing.T) {
+	// Skip this test on Linux since it tests non-Linux behavior
+	if runtime.GOOS == "linux" {
+		t.Skip("Skipping test on Linux - tests non-Linux behavior")
+	}
+
 	s := NewService()
 	mock := newMockExecutor()
 	s.SetExecutor(mock)
@@ -387,6 +409,11 @@ func TestDisconnect_NotLinux(t *testing.T) {
 }
 
 func TestForgetNetwork_NotLinux(t *testing.T) {
+	// Skip this test on Linux since it tests non-Linux behavior
+	if runtime.GOOS == "linux" {
+		t.Skip("Skipping test on Linux - tests non-Linux behavior")
+	}
+
 	s := NewService()
 	mock := newMockExecutor()
 	s.SetExecutor(mock)
