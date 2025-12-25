@@ -116,6 +116,11 @@ func (s *Service) GetStatus(ctx context.Context) (*Status, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	return s.getStatusLocked(), nil
+}
+
+// getStatusLocked builds the status. Caller must hold s.mu lock.
+func (s *Service) getStatusLocked() *Status {
 	// Update minutes remaining before returning status
 	s.updateAPMinutesRemaining()
 
@@ -133,7 +138,7 @@ func (s *Service) GetStatus(ctx context.Context) (*Status, error) {
 		s.fillClientStatus(status)
 	}
 
-	return status, nil
+	return status
 }
 
 // GetAPConfig returns the current AP configuration.
@@ -178,10 +183,13 @@ func (s *Service) SetWiFiEnabled(ctx context.Context, enabled bool) (*Status, er
 	// Give NetworkManager a moment to update status
 	time.Sleep(500 * time.Millisecond)
 
-	// Notify status change
+	// Notify status change and return status (both require lock)
+	s.mu.Lock()
 	s.notifyStatusChange()
+	status := s.getStatusLocked()
+	s.mu.Unlock()
 
-	return s.GetStatus(ctx)
+	return status, nil
 }
 
 // ScanNetworks scans for available WiFi networks.
@@ -700,9 +708,10 @@ func (s *Service) notifyModeChange() {
 	}
 }
 
+// notifyStatusChange notifies status callback. Caller must hold s.mu lock.
 func (s *Service) notifyStatusChange() {
 	if s.statusCallback != nil {
-		status, _ := s.GetStatus(context.Background())
+		status := s.getStatusLocked()
 		go s.statusCallback(status)
 	}
 }
