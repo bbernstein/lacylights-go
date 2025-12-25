@@ -15,6 +15,11 @@ import (
 )
 
 const (
+	// commandTimeout is the timeout for shell commands to prevent hanging.
+	commandTimeout = 5 * time.Second
+)
+
+const (
 	// DefaultAPTimeout is the default AP mode timeout in minutes.
 	DefaultAPTimeout = 30
 	// APConnectionName is the NetworkManager connection name for AP mode.
@@ -48,7 +53,16 @@ type Service struct {
 type realExecutor struct{}
 
 func (e *realExecutor) Execute(name string, args ...string) ([]byte, error) {
-	return exec.Command(name, args...).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, args...)
+	output, err := cmd.Output()
+	if ctx.Err() == context.DeadlineExceeded {
+		log.Printf("WiFi: command timed out after %v: %s %v", commandTimeout, name, args)
+		return nil, fmt.Errorf("command timed out: %s", name)
+	}
+	return output, err
 }
 
 // NewService creates a new WiFi service.
