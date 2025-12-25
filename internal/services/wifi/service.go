@@ -173,6 +173,15 @@ func (s *Service) ScanNetworks(ctx context.Context, rescan bool, deduplicate boo
 		return []Network{}, nil
 	}
 
+	// Don't scan when in AP mode - the WiFi adapter is busy hosting the hotspot
+	s.mu.RLock()
+	currentMode := s.mode
+	s.mu.RUnlock()
+	if currentMode == ModeAP || currentMode == ModeStartingAP {
+		log.Printf("WiFi: Skipping network scan - in AP mode")
+		return []Network{}, nil
+	}
+
 	// Trigger a rescan if requested
 	if rescan {
 		_, err := s.executor.Execute("nmcli", "device", "wifi", "rescan")
