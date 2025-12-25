@@ -17,6 +17,9 @@ import (
 const (
 	// commandTimeout is the timeout for shell commands to prevent hanging.
 	commandTimeout = 5 * time.Second
+	// connectTimeout is a longer timeout for WiFi connect operations
+	// which need time for authentication and DHCP.
+	connectTimeout = 30 * time.Second
 )
 
 const (
@@ -53,13 +56,17 @@ type Service struct {
 type realExecutor struct{}
 
 func (e *realExecutor) Execute(name string, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
+	return e.ExecuteWithTimeout(commandTimeout, name, args...)
+}
+
+func (e *realExecutor) ExecuteWithTimeout(timeout time.Duration, name string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, name, args...)
 	output, err := cmd.Output()
 	if ctx.Err() == context.DeadlineExceeded {
-		log.Printf("WiFi: command timed out after %v: %s %v", commandTimeout, name, args)
+		log.Printf("WiFi: command timed out after %v: %s %v", timeout, name, args)
 		return nil, fmt.Errorf("command timed out: %s", name)
 	}
 	return output, err
@@ -318,7 +325,8 @@ func (s *Service) ConnectToNetwork(ctx context.Context, ssid string, password *s
 		args = []string{"device", "wifi", "connect", ssid}
 	}
 
-	output, err := s.executor.Execute("nmcli", args...)
+	// Use longer timeout for connect - it needs time for auth and DHCP
+	output, err := s.executor.ExecuteWithTimeout(connectTimeout, "nmcli", args...)
 	if err != nil {
 		log.Printf("Failed to connect to WiFi network %s: %v, output: %s", ssid, err, string(output))
 		s.mu.Lock()

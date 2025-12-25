@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+// NOTE: time package is used for APClient.ConnectedAt and CommandExecutor.ExecuteWithTimeout
+
 // Mode represents the current WiFi operation mode.
 type Mode string
 
@@ -94,4 +96,5 @@ type ModeResult struct {
 // CommandExecutor interface for executing shell commands (for testing).
 type CommandExecutor interface {
 	Execute(name string, args ...string) ([]byte, error)
+	ExecuteWithTimeout(timeout time.Duration, name string, args ...string) ([]byte, error)
 }

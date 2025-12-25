@@ -26,6 +26,10 @@ func newMockExecutor() *mockExecutor {
 }
 
 func (m *mockExecutor) Execute(name string, args ...string) ([]byte, error) {
+	return m.ExecuteWithTimeout(0, name, args...)
+}
+
+func (m *mockExecutor) ExecuteWithTimeout(_ time.Duration, name string, args ...string) ([]byte, error) {
 	key := name + " " + strings.Join(args, " ")
 	m.calls = append(m.calls, key)
 
