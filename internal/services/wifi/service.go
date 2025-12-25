@@ -498,7 +498,8 @@ func (s *Service) isConnected() bool {
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
 		if strings.HasPrefix(line, s.wifiInterface+":") {
-			return strings.Contains(line, "connected")
+			// Check for ":connected" to avoid matching "disconnected"
+			return strings.Contains(line, ":connected")
 		}
 	}
 
