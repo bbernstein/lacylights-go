@@ -2925,6 +2925,39 @@ func (r *mutationResolver) ForgetWiFiNetwork(ctx context.Context, ssid string) (
 	return false, nil
 }
 
+// StartAPMode is the resolver for the startAPMode field.
+func (r *mutationResolver) StartAPMode(ctx context.Context) (*generated.WiFiModeResult, error) {
+	result, err := r.WiFiService.StartAPMode(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &generated.WiFiModeResult{
+		Success: result.Success,
+		Message: result.Message,
+		Mode:    generated.WiFiMode(result.Mode),
+	}, nil
+}
+
+// StopAPMode is the resolver for the stopAPMode field.
+func (r *mutationResolver) StopAPMode(ctx context.Context, connectToSsid *string) (*generated.WiFiModeResult, error) {
+	result, err := r.WiFiService.StopAPMode(ctx, connectToSsid)
+	if err != nil {
+		return nil, err
+	}
+
+	return &generated.WiFiModeResult{
+		Success: result.Success,
+		Message: result.Message,
+		Mode:    generated.WiFiMode(result.Mode),
+	}, nil
+}
+
+// ResetAPTimeout is the resolver for the resetAPTimeout field.
+func (r *mutationResolver) ResetAPTimeout(ctx context.Context) (bool, error) {
+	return r.WiFiService.ResetAPTimeout(ctx)
+}
+
 // UpdateRepository is the resolver for the updateRepository field.
 // Updates a specific repository to a specific version
 func (r *mutationResolver) UpdateRepository(ctx context.Context, repository string, version *string) (*generated.UpdateResult, error) {
@@ -4217,6 +4250,49 @@ func (r *queryResolver) SavedWifiNetworks(ctx context.Context) ([]*generated.WiF
 	return []*generated.WiFiNetwork{}, nil
 }
 
+// WifiMode is the resolver for the wifiMode field.
+func (r *queryResolver) WifiMode(ctx context.Context) (generated.WiFiMode, error) {
+	mode := r.WiFiService.GetMode()
+	return generated.WiFiMode(mode), nil
+}
+
+// ApConfig is the resolver for the apConfig field.
+func (r *queryResolver) ApConfig(ctx context.Context) (*generated.APConfig, error) {
+	config := r.WiFiService.GetAPConfig()
+	if config == nil {
+		return nil, nil
+	}
+
+	return &generated.APConfig{
+		Ssid:             config.SSID,
+		IPAddress:        config.IPAddress,
+		Channel:          config.Channel,
+		ClientCount:      config.ClientCount,
+		TimeoutMinutes:   config.TimeoutMinutes,
+		MinutesRemaining: config.MinutesRemaining,
+	}, nil
+}
+
+// ApClients is the resolver for the apClients field.
+func (r *queryResolver) ApClients(ctx context.Context) ([]*generated.APClient, error) {
+	clients := r.WiFiService.GetAPClients()
+	if clients == nil {
+		return []*generated.APClient{}, nil
+	}
+
+	var result []*generated.APClient
+	for _, client := range clients {
+		result = append(result, &generated.APClient{
+			MacAddress:  client.MACAddress,
+			IPAddress:   client.IPAddress,
+			Hostname:    client.Hostname,
+			ConnectedAt: client.ConnectedAt.Format("2006-01-02T15:04:05Z07:00"),
+		})
+	}
+
+	return result, nil
+}
+
 // GetQLCFixtureMappingSuggestions is the resolver for the getQLCFixtureMappingSuggestions field.
 // Returns empty result - QLC+ integration not available
 func (r *queryResolver) GetQLCFixtureMappingSuggestions(ctx context.Context, projectID string) (*generated.QLCFixtureMappingResult, error) {
@@ -4807,6 +4883,40 @@ func (r *subscriptionResolver) WifiStatusUpdated(ctx context.Context) (<-chan *g
 					case <-ctx.Done():
 						r.PubSub.Unsubscribe(sub)
 						return
+					}
+				}
+			}
+		}
+	}()
+
+	return outputChan, nil
+}
+
+// WifiModeChanged is the resolver for the wifiModeChanged field.
+func (r *subscriptionResolver) WifiModeChanged(ctx context.Context) (<-chan generated.WiFiMode, error) {
+	// Subscribe to WiFi mode changes (no filter)
+	sub := r.PubSub.Subscribe(pubsub.TopicWiFiModeChanged, "", 10)
+
+	// Create the output channel
+	outputChan := make(chan generated.WiFiMode, 10)
+
+	// Start a goroutine to forward messages
+	go func() {
+		defer close(outputChan)
+		for {
+			select {
+			case <-ctx.Done():
+				r.PubSub.Unsubscribe(sub)
+				return
+			case msg, ok := <-sub.Channel:
+				if !ok {
+					return
+				}
+				if mode, valid := msg.(generated.WiFiMode); valid {
+					select {
+					case outputChan <- mode:
+					default:
+						// Channel full, skip message
 					}
 				}
 			}

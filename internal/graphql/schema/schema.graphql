@@ -681,6 +681,14 @@ type NetworkInterfaceOption {
 # WIFI TYPES
 # =============================================================================
 
+enum WiFiMode {
+  CLIENT
+  AP
+  DISABLED
+  CONNECTING
+  STARTING_AP
+}
+
 type WiFiNetwork {
   ssid: String!
   signalStrength: Int!
@@ -688,6 +696,22 @@ type WiFiNetwork {
   security: WiFiSecurityType!
   inUse: Boolean!
   saved: Boolean!
+}
+
+type APConfig {
+  ssid: String!
+  ipAddress: String!
+  channel: Int!
+  clientCount: Int!
+  timeoutMinutes: Int!
+  minutesRemaining: Int
+}
+
+type APClient {
+  macAddress: String!
+  ipAddress: String
+  hostname: String
+  connectedAt: String!
 }
 
 type WiFiStatus {
@@ -699,12 +723,21 @@ type WiFiStatus {
   ipAddress: String
   macAddress: String
   frequency: String
+  mode: WiFiMode!
+  apConfig: APConfig
+  connectedClients: [APClient!]
 }
 
 type WiFiConnectionResult {
   success: Boolean!
   message: String
   connected: Boolean!
+}
+
+type WiFiModeResult {
+  success: Boolean!
+  message: String
+  mode: WiFiMode!
 }
 
 # =============================================================================
@@ -1295,6 +1328,9 @@ type Query {
   wifiNetworks(rescan: Boolean = true, deduplicate: Boolean = true): [WiFiNetwork!]!
   wifiStatus: WiFiStatus!
   savedWifiNetworks: [WiFiNetwork!]!
+  wifiMode: WiFiMode!
+  apConfig: APConfig
+  apClients: [APClient!]!
 
   # QLC+ Fixture Mapping Suggestions (read-only)
   getQLCFixtureMappingSuggestions(projectId: ID!): QLCFixtureMappingResult!
@@ -1500,6 +1536,9 @@ type Mutation {
   disconnectWiFi: WiFiConnectionResult!
   setWiFiEnabled(enabled: Boolean!): WiFiStatus!
   forgetWiFiNetwork(ssid: String!): Boolean!
+  startAPMode: WiFiModeResult!
+  stopAPMode(connectToSSID: String): WiFiModeResult!
+  resetAPTimeout: Boolean!
 
   # Version Management
   updateRepository(repository: String!, version: String): UpdateResult!
@@ -1525,6 +1564,7 @@ type Subscription {
   globalPlaybackStatusUpdated: GlobalPlaybackStatus!
   systemInfoUpdated: SystemInfo!
   wifiStatusUpdated: WiFiStatus!
+  wifiModeChanged: WiFiMode!
   "Real-time updates during OFL import"
   oflImportProgress: OFLImportStatus!
 }

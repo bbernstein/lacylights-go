@@ -16,6 +16,7 @@ const (
 	TopicGlobalPlaybackStatus    Topic = "GLOBAL_PLAYBACK_STATUS_UPDATED"
 	TopicSystemInfo              Topic = "SYSTEM_INFO_UPDATED"
 	TopicWiFiStatus              Topic = "WIFI_STATUS_UPDATED"
+	TopicWiFiModeChanged         Topic = "WIFI_MODE_CHANGED"
 	TopicOFLImportProgress       Topic = "OFL_IMPORT_PROGRESS"
 )
 
