@@ -279,6 +279,135 @@ func (s *Service) ScanNetworks(ctx context.Context, rescan bool, deduplicate boo
 	return networks, nil
 }
 
+// ConnectToNetwork connects to a WiFi network.
+func (s *Service) ConnectToNetwork(ctx context.Context, ssid string, password *string) (*ConnectionResult, error) {
+	if runtime.GOOS != "linux" {
+		return &ConnectionResult{
+			Success:   false,
+			Message:   stringPtr("WiFi management only available on Linux"),
+			Connected: false,
+		}, nil
+	}
+
+	s.mu.Lock()
+	// If in AP mode, stop it first
+	if s.mode == ModeAP {
+		s.mu.Unlock()
+		_, err := s.StopAPMode(ctx, nil)
+		if err != nil {
+			return &ConnectionResult{
+				Success:   false,
+				Message:   stringPtr(fmt.Sprintf("Failed to stop AP mode: %v", err)),
+				Connected: false,
+			}, nil
+		}
+		s.mu.Lock()
+	}
+
+	s.mode = ModeConnecting
+	s.notifyModeChange()
+	s.mu.Unlock()
+
+	// Try to connect using nmcli
+	var args []string
+	if password != nil && *password != "" {
+		// Connect with password
+		args = []string{"device", "wifi", "connect", ssid, "password", *password}
+	} else {
+		// Connect without password (open network or saved credentials)
+		args = []string{"device", "wifi", "connect", ssid}
+	}
+
+	output, err := s.executor.Execute("nmcli", args...)
+	if err != nil {
+		log.Printf("Failed to connect to WiFi network %s: %v, output: %s", ssid, err, string(output))
+		s.mu.Lock()
+		s.mode = ModeClient
+		s.notifyModeChange()
+		s.mu.Unlock()
+
+		// Parse error message
+		errMsg := string(output)
+		if errMsg == "" {
+			errMsg = err.Error()
+		}
+		return &ConnectionResult{
+			Success:   false,
+			Message:   stringPtr(fmt.Sprintf("Connection failed: %s", errMsg)),
+			Connected: false,
+		}, nil
+	}
+
+	// Give NetworkManager time to establish connection
+	time.Sleep(2 * time.Second)
+
+	s.mu.Lock()
+	s.mode = ModeClient
+	s.notifyModeChange()
+	s.notifyStatusChange()
+	s.mu.Unlock()
+
+	log.Printf("Successfully connected to WiFi network: %s", ssid)
+
+	return &ConnectionResult{
+		Success:   true,
+		Message:   stringPtr(fmt.Sprintf("Connected to %s", ssid)),
+		Connected: true,
+	}, nil
+}
+
+// Disconnect disconnects from the current WiFi network.
+func (s *Service) Disconnect(ctx context.Context) (*ConnectionResult, error) {
+	if runtime.GOOS != "linux" {
+		return &ConnectionResult{
+			Success:   false,
+			Message:   stringPtr("WiFi management only available on Linux"),
+			Connected: false,
+		}, nil
+	}
+
+	// Disconnect the WiFi interface
+	_, err := s.executor.Execute("nmcli", "device", "disconnect", s.wifiInterface)
+	if err != nil {
+		log.Printf("Failed to disconnect WiFi: %v", err)
+		return &ConnectionResult{
+			Success:   false,
+			Message:   stringPtr(fmt.Sprintf("Disconnect failed: %v", err)),
+			Connected: s.isConnected(),
+		}, nil
+	}
+
+	// Notify status change
+	s.mu.Lock()
+	s.notifyStatusChange()
+	s.mu.Unlock()
+
+	log.Printf("Disconnected from WiFi")
+
+	return &ConnectionResult{
+		Success:   true,
+		Message:   stringPtr("Disconnected from WiFi"),
+		Connected: false,
+	}, nil
+}
+
+// ForgetNetwork removes a saved WiFi network.
+func (s *Service) ForgetNetwork(ctx context.Context, ssid string) (bool, error) {
+	if runtime.GOOS != "linux" {
+		return false, nil
+	}
+
+	// Delete the connection by name
+	_, err := s.executor.Execute("nmcli", "connection", "delete", ssid)
+	if err != nil {
+		log.Printf("Failed to forget WiFi network %s: %v", ssid, err)
+		return false, nil
+	}
+
+	log.Printf("Forgot WiFi network: %s", ssid)
+	return true, nil
+}
+
 // parseSecurityType converts nmcli security string to SecurityType.
 func parseSecurityType(security string) SecurityType {
 	security = strings.ToUpper(security)

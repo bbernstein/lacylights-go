@@ -349,3 +349,46 @@ func TestGetStatus_IncludesMinutesRemaining(t *testing.T) {
 	// Should be approximately 25 minutes remaining (30 - 5)
 	assert.InDelta(t, 25, *status.APConfig.MinutesRemaining, 1)
 }
+
+func TestConnectToNetwork_NotLinux(t *testing.T) {
+	s := NewService()
+	mock := newMockExecutor()
+	s.SetExecutor(mock)
+
+	ctx := context.Background()
+	result, err := s.ConnectToNetwork(ctx, "TestNetwork", nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	// On non-Linux, should fail gracefully
+	assert.False(t, result.Success)
+	assert.Contains(t, *result.Message, "Linux")
+}
+
+func TestDisconnect_NotLinux(t *testing.T) {
+	s := NewService()
+	mock := newMockExecutor()
+	s.SetExecutor(mock)
+
+	ctx := context.Background()
+	result, err := s.Disconnect(ctx)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	// On non-Linux, should fail gracefully
+	assert.False(t, result.Success)
+	assert.Contains(t, *result.Message, "Linux")
+}
+
+func TestForgetNetwork_NotLinux(t *testing.T) {
+	s := NewService()
+	mock := newMockExecutor()
+	s.SetExecutor(mock)
+
+	ctx := context.Background()
+	success, err := s.ForgetNetwork(ctx, "TestNetwork")
+
+	require.NoError(t, err)
+	// On non-Linux, should return false
+	assert.False(t, success)
+}

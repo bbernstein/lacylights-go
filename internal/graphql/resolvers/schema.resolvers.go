@@ -2888,24 +2888,28 @@ func (r *mutationResolver) UpdateFadeUpdateRate(ctx context.Context, rateHz int)
 }
 
 // ConnectWiFi is the resolver for the connectWiFi field.
-// Returns failure - WiFi not available on this platform
 func (r *mutationResolver) ConnectWiFi(ctx context.Context, ssid string, password *string) (*generated.WiFiConnectionResult, error) {
-	msg := "WiFi management not available on this platform"
+	result, err := r.WiFiService.ConnectToNetwork(ctx, ssid, password)
+	if err != nil {
+		return nil, err
+	}
 	return &generated.WiFiConnectionResult{
-		Success:   false,
-		Message:   &msg,
-		Connected: false,
+		Success:   result.Success,
+		Message:   result.Message,
+		Connected: result.Connected,
 	}, nil
 }
 
 // DisconnectWiFi is the resolver for the disconnectWiFi field.
-// Returns failure - WiFi not available on this platform
 func (r *mutationResolver) DisconnectWiFi(ctx context.Context) (*generated.WiFiConnectionResult, error) {
-	msg := "WiFi management not available on this platform"
+	result, err := r.WiFiService.Disconnect(ctx)
+	if err != nil {
+		return nil, err
+	}
 	return &generated.WiFiConnectionResult{
-		Success:   false,
-		Message:   &msg,
-		Connected: false,
+		Success:   result.Success,
+		Message:   result.Message,
+		Connected: result.Connected,
 	}, nil
 }
 
@@ -2919,9 +2923,8 @@ func (r *mutationResolver) SetWiFiEnabled(ctx context.Context, enabled bool) (*g
 }
 
 // ForgetWiFiNetwork is the resolver for the forgetWiFiNetwork field.
-// Returns false - WiFi not available on this platform
 func (r *mutationResolver) ForgetWiFiNetwork(ctx context.Context, ssid string) (bool, error) {
-	return false, nil
+	return r.WiFiService.ForgetNetwork(ctx, ssid)
 }
 
 // StartAPMode is the resolver for the startAPMode field.
