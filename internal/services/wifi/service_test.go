@@ -2,6 +2,7 @@ package wifi
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"strings"
 	"sync"
@@ -424,4 +425,151 @@ func TestForgetNetwork_NotLinux(t *testing.T) {
 	require.NoError(t, err)
 	// On non-Linux, should return false
 	assert.False(t, success)
+}
+
+func TestParseSecurityType(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected SecurityType
+	}{
+		{"WPA3-EAP", SecurityWPA3EAP},
+		{"wpa3 eap", SecurityWPA3EAP},
+		{"WPA3-PSK", SecurityWPA3PSK},
+		{"WPA3", SecurityWPA3PSK},
+		{"WPA2-EAP", SecurityWPAEAP},
+		{"WPA-EAP", SecurityWPAEAP},
+		{"WPA2-PSK", SecurityWPAPSK},
+		{"WPA", SecurityWPAPSK},
+		{"WEP", SecurityWEP},
+		{"wep", SecurityWEP},
+		{"OWE", SecurityOWE},
+		{"", SecurityOpen},
+		{"--", SecurityOpen},
+		{"UNKNOWN", SecurityWPAPSK}, // Default to WPA-PSK
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			result := parseSecurityType(tc.input)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestGenerateAPSSID_Fallback(t *testing.T) {
+	s := NewService()
+	mock := newMockExecutor()
+	s.SetExecutor(mock)
+
+	// Test with error (no response set = returns empty = error case)
+	mock.mu.Lock()
+	mock.errors["cat /sys/class/net/wlan0/address"] = fmt.Errorf("file not found")
+	mock.mu.Unlock()
+
+	ssid := s.generateAPSSID()
+	// Should return fallback format
+	assert.True(t, strings.HasPrefix(ssid, "lacylights-"))
+	assert.Len(t, ssid, 15) // "lacylights-" + 4 hex chars
+}
+
+func TestGenerateAPSSID_ShortMAC(t *testing.T) {
+	s := NewService()
+	mock := newMockExecutor()
+	s.SetExecutor(mock)
+
+	// Test with short MAC address (less than 4 chars after removing colons)
+	mock.setResponse("cat /sys/class/net/wlan0/address", "ab")
+	ssid := s.generateAPSSID()
+	assert.Equal(t, "lacylights-AB", ssid)
+}
+
+func TestStartAPMode_AlreadyInAPMode(t *testing.T) {
+	s := NewService()
+	mock := newMockExecutor()
+	s.SetExecutor(mock)
+
+	// Set to AP mode
+	s.mu.Lock()
+	s.mode = ModeAP
+	s.apConfig = &APConfig{
+		SSID:           "lacylights-TEST",
+		IPAddress:      APIPAddress,
+		Channel:        APChannel,
+		TimeoutMinutes: 30,
+	}
+	s.mu.Unlock()
+
+	ctx := context.Background()
+	result, err := s.StartAPMode(ctx)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.Success)
+	assert.Equal(t, ModeAP, result.Mode)
+	assert.Contains(t, *result.Message, "Already in AP mode")
+}
+
+func TestStopAPMode_WithTimeout(t *testing.T) {
+	s := NewService()
+	mock := newMockExecutor()
+	s.SetExecutor(mock)
+
+	// Set to AP mode with timer
+	s.mu.Lock()
+	s.mode = ModeAP
+	s.apConfig = &APConfig{
+		SSID:           "lacylights-TEST",
+		TimeoutMinutes: 30,
+	}
+	s.apTimer = time.NewTimer(10 * time.Minute)
+	s.mu.Unlock()
+
+	ctx := context.Background()
+	result, err := s.StopAPMode(ctx, nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.Success)
+	assert.Equal(t, ModeClient, result.Mode)
+}
+
+func TestGetAPClients_InAPMode(t *testing.T) {
+	s := NewService()
+	mock := newMockExecutor()
+	s.SetExecutor(mock)
+
+	// Set to AP mode with clients
+	s.mode = ModeAP
+	s.apConfig = &APConfig{
+		SSID: "lacylights-TEST",
+	}
+	ip1 := "192.168.4.10"
+	ip2 := "192.168.4.11"
+	hostname := "device1"
+	s.connectedClients = []APClient{
+		{MACAddress: "aa:bb:cc:dd:ee:ff", IPAddress: &ip1, Hostname: &hostname, ConnectedAt: time.Now()},
+		{MACAddress: "11:22:33:44:55:66", IPAddress: &ip2, ConnectedAt: time.Now()},
+	}
+
+	clients := s.GetAPClients()
+
+	assert.Len(t, clients, 2)
+	assert.Equal(t, "aa:bb:cc:dd:ee:ff", clients[0].MACAddress)
+}
+
+func TestSetExecutor(t *testing.T) {
+	s := NewService()
+	mock := newMockExecutor()
+
+	// Set executor and verify it's used
+	s.SetExecutor(mock)
+	mock.setResponse("cat /sys/class/net/wlan0/address", "aa:bb:cc:dd:ee:ff")
+
+	ssid := s.generateAPSSID()
+	assert.Equal(t, "lacylights-EEFF", ssid)
+
+	// Verify mock was called
+	mock.mu.RLock()
+	assert.Len(t, mock.calls, 1)
+	mock.mu.RUnlock()
 }
