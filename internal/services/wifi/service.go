@@ -64,7 +64,8 @@ func (e *realExecutor) ExecuteWithTimeout(timeout time.Duration, name string, ar
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, name, args...)
-	output, err := cmd.Output()
+	// Use CombinedOutput to capture both stdout and stderr
+	output, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
 		log.Printf("WiFi: command timed out after %v: %s %v", timeout, name, args)
 		return nil, fmt.Errorf("command timed out: %s", name)
@@ -297,8 +298,9 @@ func (s *Service) ConnectToNetwork(ctx context.Context, ssid string, password *s
 	}
 
 	s.mu.Lock()
+	wasInAPMode := s.mode == ModeAP
 	// If in AP mode, stop it first
-	if s.mode == ModeAP {
+	if wasInAPMode {
 		s.mu.Unlock()
 		_, err := s.StopAPMode(ctx, nil)
 		if err != nil {
@@ -308,6 +310,9 @@ func (s *Service) ConnectToNetwork(ctx context.Context, ssid string, password *s
 				Connected: false,
 			}, nil
 		}
+		// Give NetworkManager time to fully release the interface after AP mode
+		log.Printf("Waiting for interface to be released after AP mode...")
+		time.Sleep(3 * time.Second)
 		s.mu.Lock()
 	}
 
@@ -326,28 +331,61 @@ func (s *Service) ConnectToNetwork(ctx context.Context, ssid string, password *s
 	}
 
 	// Use longer timeout for connect - it needs time for auth and DHCP
-	output, err := s.executor.ExecuteWithTimeout(connectTimeout, "nmcli", args...)
-	if err != nil {
-		log.Printf("Failed to connect to WiFi network %s: %v, output: %s", ssid, err, string(output))
-		s.mu.Lock()
-		s.mode = ModeClient
-		s.notifyModeChange()
-		s.mu.Unlock()
-
-		// Parse error message
-		errMsg := string(output)
-		if errMsg == "" {
-			errMsg = err.Error()
-		}
-		return &ConnectionResult{
-			Success:   false,
-			Message:   stringPtr(fmt.Sprintf("Connection failed: %s", errMsg)),
-			Connected: false,
-		}, nil
+	// Retry up to 3 times since first attempt after AP mode may fail
+	var output []byte
+	var err error
+	maxRetries := 1
+	if wasInAPMode {
+		maxRetries = 3 // More retries needed when transitioning from AP mode
 	}
 
-	// Give NetworkManager time to establish connection
-	time.Sleep(2 * time.Second)
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		log.Printf("WiFi connect attempt %d/%d for SSID: %s", attempt, maxRetries, ssid)
+		output, err = s.executor.ExecuteWithTimeout(connectTimeout, "nmcli", args...)
+		if err == nil {
+			break
+		}
+		log.Printf("Connect attempt %d failed: %v, output: %s", attempt, err, string(output))
+
+		// Check if we're actually connected despite the error
+		if s.isConnected() {
+			log.Printf("Actually connected despite error - treating as success")
+			err = nil
+			break
+		}
+
+		if attempt < maxRetries {
+			log.Printf("Waiting before retry...")
+			time.Sleep(2 * time.Second)
+		}
+	}
+
+	if err != nil {
+		// Final check - are we actually connected?
+		if s.isConnected() {
+			log.Printf("Connected despite nmcli error")
+		} else {
+			log.Printf("Failed to connect to WiFi network %s after %d attempts", ssid, maxRetries)
+			s.mu.Lock()
+			s.mode = ModeClient
+			s.notifyModeChange()
+			s.mu.Unlock()
+
+			// Parse error message from output
+			errMsg := strings.TrimSpace(string(output))
+			if errMsg == "" {
+				errMsg = err.Error()
+			}
+			return &ConnectionResult{
+				Success:   false,
+				Message:   stringPtr(fmt.Sprintf("Connection failed: %s", errMsg)),
+				Connected: false,
+			}, nil
+		}
+	}
+
+	// Give NetworkManager a moment to fully establish connection
+	time.Sleep(1 * time.Second)
 
 	s.mu.Lock()
 	s.mode = ModeClient
