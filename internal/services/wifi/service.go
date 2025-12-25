@@ -735,12 +735,37 @@ func (s *Service) refreshAPClientsLocked() {
 		return
 	}
 
-	// Read DHCP leases
-	output, err := s.executor.Execute("cat", "/var/lib/misc/dnsmasq.leases")
-	if err != nil {
-		log.Printf("Failed to read DHCP leases: %v", err)
+	// Try multiple possible DHCP lease file locations
+	// NetworkManager with shared connections uses different paths
+	leaseFiles := []string{
+		"/var/lib/NetworkManager/dnsmasq-" + s.wifiInterface + ".leases",
+		"/var/lib/misc/dnsmasq.leases",
+		"/run/NetworkManager/dnsmasq-" + s.wifiInterface + ".leases",
+	}
+
+	var output []byte
+	var err error
+	var foundFile string
+	for _, file := range leaseFiles {
+		output, err = s.executor.Execute("cat", file)
+		if err == nil && len(output) > 0 {
+			foundFile = file
+			break
+		}
+	}
+
+	if foundFile == "" {
+		// No leases file found - try to get clients from arp table as fallback
+		output, err = s.executor.Execute("arp", "-n")
+		if err != nil {
+			log.Printf("Failed to read DHCP leases and arp table")
+			return
+		}
+		s.parseArpTable(output)
 		return
 	}
+
+	log.Printf("Reading DHCP leases from: %s", foundFile)
 
 	var clients []APClient
 	lines := strings.Split(string(output), "\n")
@@ -764,6 +789,36 @@ func (s *Service) refreshAPClientsLocked() {
 		}
 	}
 
+	s.connectedClients = clients
+	if s.apConfig != nil {
+		s.apConfig.ClientCount = len(clients)
+	}
+}
+
+// parseArpTable parses the arp -n output to find connected clients.
+// This is a fallback when DHCP lease files are not available.
+// Only includes entries for our AP subnet (192.168.4.x).
+func (s *Service) parseArpTable(output []byte) {
+	var clients []APClient
+	lines := strings.Split(string(output), "\n")
+	// arp -n output format: Address HWtype HWaddress Flags Mask Iface
+	// Example: 192.168.4.10 ether dc:a6:32:12:ab:cd C wlan0
+	arpRegex := regexp.MustCompile(`^(192\.168\.4\.\d+)\s+\w+\s+([0-9a-f:]+)\s+\w+\s+\S*\s*` + s.wifiInterface)
+
+	for _, line := range lines {
+		matches := arpRegex.FindStringSubmatch(line)
+		if len(matches) >= 3 {
+			ip := matches[1]
+			client := APClient{
+				MACAddress:  matches[2],
+				IPAddress:   &ip,
+				ConnectedAt: time.Now(), // ARP doesn't have connection time
+			}
+			clients = append(clients, client)
+		}
+	}
+
+	log.Printf("Found %d clients from ARP table", len(clients))
 	s.connectedClients = clients
 	if s.apConfig != nil {
 		s.apConfig.ClientCount = len(clients)
