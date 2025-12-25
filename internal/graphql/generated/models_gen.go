@@ -12,6 +12,22 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 )
 
+type APClient struct {
+	MacAddress  string  `json:"macAddress"`
+	IPAddress   *string `json:"ipAddress,omitempty"`
+	Hostname    *string `json:"hostname,omitempty"`
+	ConnectedAt string  `json:"connectedAt"`
+}
+
+type APConfig struct {
+	Ssid             string `json:"ssid"`
+	IPAddress        string `json:"ipAddress"`
+	Channel          int    `json:"channel"`
+	ClientCount      int    `json:"clientCount"`
+	TimeoutMinutes   int    `json:"timeoutMinutes"`
+	MinutesRemaining *int   `json:"minutesRemaining,omitempty"`
+}
+
 // Server build information for version verification
 type BuildInfo struct {
 	// Semantic version (e.g., v0.8.10)
@@ -797,6 +813,12 @@ type WiFiConnectionResult struct {
 	Connected bool    `json:"connected"`
 }
 
+type WiFiModeResult struct {
+	Success bool     `json:"success"`
+	Message *string  `json:"message,omitempty"`
+	Mode    WiFiMode `json:"mode"`
+}
+
 type WiFiNetwork struct {
 	Ssid           string           `json:"ssid"`
 	SignalStrength int              `json:"signalStrength"`
@@ -807,14 +829,17 @@ type WiFiNetwork struct {
 }
 
 type WiFiStatus struct {
-	Available      bool    `json:"available"`
-	Enabled        bool    `json:"enabled"`
-	Connected      bool    `json:"connected"`
-	Ssid           *string `json:"ssid,omitempty"`
-	SignalStrength *int    `json:"signalStrength,omitempty"`
-	IPAddress      *string `json:"ipAddress,omitempty"`
-	MacAddress     *string `json:"macAddress,omitempty"`
-	Frequency      *string `json:"frequency,omitempty"`
+	Available        bool        `json:"available"`
+	Enabled          bool        `json:"enabled"`
+	Connected        bool        `json:"connected"`
+	Ssid             *string     `json:"ssid,omitempty"`
+	SignalStrength   *int        `json:"signalStrength,omitempty"`
+	IPAddress        *string     `json:"ipAddress,omitempty"`
+	MacAddress       *string     `json:"macAddress,omitempty"`
+	Frequency        *string     `json:"frequency,omitempty"`
+	Mode             WiFiMode    `json:"mode"`
+	ApConfig         *APConfig   `json:"apConfig,omitempty"`
+	ConnectedClients []*APClient `json:"connectedClients,omitempty"`
 }
 
 type ChannelType string
@@ -1562,6 +1587,67 @@ func (e *UserRole) UnmarshalJSON(b []byte) error {
 }
 
 func (e UserRole) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type WiFiMode string
+
+const (
+	WiFiModeClient     WiFiMode = "CLIENT"
+	WiFiModeAp         WiFiMode = "AP"
+	WiFiModeDisabled   WiFiMode = "DISABLED"
+	WiFiModeConnecting WiFiMode = "CONNECTING"
+	WiFiModeStartingAp WiFiMode = "STARTING_AP"
+)
+
+var AllWiFiMode = []WiFiMode{
+	WiFiModeClient,
+	WiFiModeAp,
+	WiFiModeDisabled,
+	WiFiModeConnecting,
+	WiFiModeStartingAp,
+}
+
+func (e WiFiMode) IsValid() bool {
+	switch e {
+	case WiFiModeClient, WiFiModeAp, WiFiModeDisabled, WiFiModeConnecting, WiFiModeStartingAp:
+		return true
+	}
+	return false
+}
+
+func (e WiFiMode) String() string {
+	return string(e)
+}
+
+func (e *WiFiMode) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = WiFiMode(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid WiFiMode", str)
+	}
+	return nil
+}
+
+func (e WiFiMode) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *WiFiMode) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e WiFiMode) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

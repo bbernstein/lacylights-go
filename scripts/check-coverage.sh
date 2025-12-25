@@ -29,6 +29,8 @@ get_threshold() {
         "internal/services/import") echo 83 ;;  # Integration tests provide good coverage
         "internal/services/playback") echo 81 ;;  # Integration tests, handleFollowTime via timers
         "internal/services/ofl") echo 35 ;;  # New package, bundle operations conditional on embedded data
+        "internal/services/wifi") echo 44 ;;  # WiFi AP mode, platform-specific branches
+        "internal/services/version") echo 30 ;;  # Version info retrieval
         "internal/graphql/resolvers") echo 23 ;;  # Auto-generated code, coverage via service tests
         "cmd/server") echo 16 ;;  # main() is untestable, helper functions covered
         *) echo "" ;;

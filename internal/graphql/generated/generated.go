@@ -64,6 +64,22 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
+	APClient struct {
+		ConnectedAt func(childComplexity int) int
+		Hostname    func(childComplexity int) int
+		IPAddress   func(childComplexity int) int
+		MacAddress  func(childComplexity int) int
+	}
+
+	APConfig struct {
+		Channel          func(childComplexity int) int
+		ClientCount      func(childComplexity int) int
+		IPAddress        func(childComplexity int) int
+		MinutesRemaining func(childComplexity int) int
+		Ssid             func(childComplexity int) int
+		TimeoutMinutes   func(childComplexity int) int
+	}
+
 	BuildInfo struct {
 		BuildTime func(childComplexity int) int
 		GitCommit func(childComplexity int) int
@@ -396,11 +412,14 @@ type ComplexityRoot struct {
 		ReorderCues                            func(childComplexity int, cueListID string, cueOrders []*CueOrderInput) int
 		ReorderProjectFixtures                 func(childComplexity int, projectID string, fixtureOrders []*FixtureOrderInput) int
 		ReorderSceneFixtures                   func(childComplexity int, sceneID string, fixtureOrders []*FixtureOrderInput) int
+		ResetAPTimeout                         func(childComplexity int) int
 		SetChannelValue                        func(childComplexity int, universe int, channel int, value int) int
 		SetSceneLive                           func(childComplexity int, sceneID string) int
 		SetWiFiEnabled                         func(childComplexity int, enabled bool) int
+		StartAPMode                            func(childComplexity int) int
 		StartCueList                           func(childComplexity int, cueListID string, startFromCue *int, fadeInTime *float64) int
 		StartPreviewSession                    func(childComplexity int, projectID string) int
+		StopAPMode                             func(childComplexity int, connectToSsid *string) int
 		StopCueList                            func(childComplexity int, cueListID string) int
 		TriggerOFLImport                       func(childComplexity int, options *OFLImportOptionsInput) int
 		UpdateAllRepositories                  func(childComplexity int) int
@@ -565,6 +584,8 @@ type ComplexityRoot struct {
 
 	Query struct {
 		AllDmxOutput                    func(childComplexity int) int
+		ApClients                       func(childComplexity int) int
+		ApConfig                        func(childComplexity int) int
 		AvailableVersions               func(childComplexity int, repository string) int
 		BuildInfo                       func(childComplexity int) int
 		ChannelMap                      func(childComplexity int, projectID string, universe *int) int
@@ -611,6 +632,7 @@ type ComplexityRoot struct {
 		SuggestChannelAssignment        func(childComplexity int, input ChannelAssignmentInput) int
 		SystemInfo                      func(childComplexity int) int
 		SystemVersions                  func(childComplexity int) int
+		WifiMode                        func(childComplexity int) int
 		WifiNetworks                    func(childComplexity int, rescan *bool, deduplicate *bool) int
 		WifiStatus                      func(childComplexity int) int
 	}
@@ -718,6 +740,7 @@ type ComplexityRoot struct {
 		PreviewSessionUpdated       func(childComplexity int, projectID string) int
 		ProjectUpdated              func(childComplexity int, projectID string) int
 		SystemInfoUpdated           func(childComplexity int) int
+		WifiModeChanged             func(childComplexity int) int
 		WifiStatusUpdated           func(childComplexity int) int
 	}
 
@@ -769,6 +792,12 @@ type ComplexityRoot struct {
 		Success   func(childComplexity int) int
 	}
 
+	WiFiModeResult struct {
+		Message func(childComplexity int) int
+		Mode    func(childComplexity int) int
+		Success func(childComplexity int) int
+	}
+
 	WiFiNetwork struct {
 		Frequency      func(childComplexity int) int
 		InUse          func(childComplexity int) int
@@ -779,14 +808,17 @@ type ComplexityRoot struct {
 	}
 
 	WiFiStatus struct {
-		Available      func(childComplexity int) int
-		Connected      func(childComplexity int) int
-		Enabled        func(childComplexity int) int
-		Frequency      func(childComplexity int) int
-		IPAddress      func(childComplexity int) int
-		MacAddress     func(childComplexity int) int
-		SignalStrength func(childComplexity int) int
-		Ssid           func(childComplexity int) int
+		ApConfig         func(childComplexity int) int
+		Available        func(childComplexity int) int
+		Connected        func(childComplexity int) int
+		ConnectedClients func(childComplexity int) int
+		Enabled          func(childComplexity int) int
+		Frequency        func(childComplexity int) int
+		IPAddress        func(childComplexity int) int
+		MacAddress       func(childComplexity int) int
+		Mode             func(childComplexity int) int
+		SignalStrength   func(childComplexity int) int
+		Ssid             func(childComplexity int) int
 	}
 }
 
@@ -931,6 +963,9 @@ type MutationResolver interface {
 	DisconnectWiFi(ctx context.Context) (*WiFiConnectionResult, error)
 	SetWiFiEnabled(ctx context.Context, enabled bool) (*WiFiStatus, error)
 	ForgetWiFiNetwork(ctx context.Context, ssid string) (bool, error)
+	StartAPMode(ctx context.Context) (*WiFiModeResult, error)
+	StopAPMode(ctx context.Context, connectToSsid *string) (*WiFiModeResult, error)
+	ResetAPTimeout(ctx context.Context) (bool, error)
 	UpdateRepository(ctx context.Context, repository string, version *string) (*UpdateResult, error)
 	UpdateAllRepositories(ctx context.Context) ([]*UpdateResult, error)
 	TriggerOFLImport(ctx context.Context, options *OFLImportOptionsInput) (*OFLImportResult, error)
@@ -998,6 +1033,9 @@ type QueryResolver interface {
 	WifiNetworks(ctx context.Context, rescan *bool, deduplicate *bool) ([]*WiFiNetwork, error)
 	WifiStatus(ctx context.Context) (*WiFiStatus, error)
 	SavedWifiNetworks(ctx context.Context) ([]*WiFiNetwork, error)
+	WifiMode(ctx context.Context) (WiFiMode, error)
+	ApConfig(ctx context.Context) (*APConfig, error)
+	ApClients(ctx context.Context) ([]*APClient, error)
 	GetQLCFixtureMappingSuggestions(ctx context.Context, projectID string) (*QLCFixtureMappingResult, error)
 	SystemVersions(ctx context.Context) (*SystemVersionInfo, error)
 	AvailableVersions(ctx context.Context, repository string) ([]string, error)
@@ -1044,6 +1082,7 @@ type SubscriptionResolver interface {
 	GlobalPlaybackStatusUpdated(ctx context.Context) (<-chan *GlobalPlaybackStatus, error)
 	SystemInfoUpdated(ctx context.Context) (<-chan *SystemInfo, error)
 	WifiStatusUpdated(ctx context.Context) (<-chan *WiFiStatus, error)
+	WifiModeChanged(ctx context.Context) (<-chan WiFiMode, error)
 	OflImportProgress(ctx context.Context) (<-chan *OFLImportStatus, error)
 }
 type UserResolver interface {
@@ -1069,6 +1108,68 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	ec := executionContext{nil, e, 0, 0, nil}
 	_ = ec
 	switch typeName + "." + field {
+
+	case "APClient.connectedAt":
+		if e.complexity.APClient.ConnectedAt == nil {
+			break
+		}
+
+		return e.complexity.APClient.ConnectedAt(childComplexity), true
+	case "APClient.hostname":
+		if e.complexity.APClient.Hostname == nil {
+			break
+		}
+
+		return e.complexity.APClient.Hostname(childComplexity), true
+	case "APClient.ipAddress":
+		if e.complexity.APClient.IPAddress == nil {
+			break
+		}
+
+		return e.complexity.APClient.IPAddress(childComplexity), true
+	case "APClient.macAddress":
+		if e.complexity.APClient.MacAddress == nil {
+			break
+		}
+
+		return e.complexity.APClient.MacAddress(childComplexity), true
+
+	case "APConfig.channel":
+		if e.complexity.APConfig.Channel == nil {
+			break
+		}
+
+		return e.complexity.APConfig.Channel(childComplexity), true
+	case "APConfig.clientCount":
+		if e.complexity.APConfig.ClientCount == nil {
+			break
+		}
+
+		return e.complexity.APConfig.ClientCount(childComplexity), true
+	case "APConfig.ipAddress":
+		if e.complexity.APConfig.IPAddress == nil {
+			break
+		}
+
+		return e.complexity.APConfig.IPAddress(childComplexity), true
+	case "APConfig.minutesRemaining":
+		if e.complexity.APConfig.MinutesRemaining == nil {
+			break
+		}
+
+		return e.complexity.APConfig.MinutesRemaining(childComplexity), true
+	case "APConfig.ssid":
+		if e.complexity.APConfig.Ssid == nil {
+			break
+		}
+
+		return e.complexity.APConfig.Ssid(childComplexity), true
+	case "APConfig.timeoutMinutes":
+		if e.complexity.APConfig.TimeoutMinutes == nil {
+			break
+		}
+
+		return e.complexity.APConfig.TimeoutMinutes(childComplexity), true
 
 	case "BuildInfo.buildTime":
 		if e.complexity.BuildInfo.BuildTime == nil {
@@ -2849,6 +2950,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.ReorderSceneFixtures(childComplexity, args["sceneId"].(string), args["fixtureOrders"].([]*FixtureOrderInput)), true
+	case "Mutation.resetAPTimeout":
+		if e.complexity.Mutation.ResetAPTimeout == nil {
+			break
+		}
+
+		return e.complexity.Mutation.ResetAPTimeout(childComplexity), true
 	case "Mutation.setChannelValue":
 		if e.complexity.Mutation.SetChannelValue == nil {
 			break
@@ -2882,6 +2989,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.SetWiFiEnabled(childComplexity, args["enabled"].(bool)), true
+	case "Mutation.startAPMode":
+		if e.complexity.Mutation.StartAPMode == nil {
+			break
+		}
+
+		return e.complexity.Mutation.StartAPMode(childComplexity), true
 	case "Mutation.startCueList":
 		if e.complexity.Mutation.StartCueList == nil {
 			break
@@ -2904,6 +3017,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.StartPreviewSession(childComplexity, args["projectId"].(string)), true
+	case "Mutation.stopAPMode":
+		if e.complexity.Mutation.StopAPMode == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_stopAPMode_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.StopAPMode(childComplexity, args["connectToSSID"].(*string)), true
 	case "Mutation.stopCueList":
 		if e.complexity.Mutation.StopCueList == nil {
 			break
@@ -3706,6 +3830,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.AllDmxOutput(childComplexity), true
+	case "Query.apClients":
+		if e.complexity.Query.ApClients == nil {
+			break
+		}
+
+		return e.complexity.Query.ApClients(childComplexity), true
+	case "Query.apConfig":
+		if e.complexity.Query.ApConfig == nil {
+			break
+		}
+
+		return e.complexity.Query.ApConfig(childComplexity), true
 	case "Query.availableVersions":
 		if e.complexity.Query.AvailableVersions == nil {
 			break
@@ -4157,6 +4293,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.SystemVersions(childComplexity), true
+	case "Query.wifiMode":
+		if e.complexity.Query.WifiMode == nil {
+			break
+		}
+
+		return e.complexity.Query.WifiMode(childComplexity), true
 	case "Query.wifiNetworks":
 		if e.complexity.Query.WifiNetworks == nil {
 			break
@@ -4620,6 +4762,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Subscription.SystemInfoUpdated(childComplexity), true
+	case "Subscription.wifiModeChanged":
+		if e.complexity.Subscription.WifiModeChanged == nil {
+			break
+		}
+
+		return e.complexity.Subscription.WifiModeChanged(childComplexity), true
 	case "Subscription.wifiStatusUpdated":
 		if e.complexity.Subscription.WifiStatusUpdated == nil {
 			break
@@ -4796,6 +4944,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.WiFiConnectionResult.Success(childComplexity), true
 
+	case "WiFiModeResult.message":
+		if e.complexity.WiFiModeResult.Message == nil {
+			break
+		}
+
+		return e.complexity.WiFiModeResult.Message(childComplexity), true
+	case "WiFiModeResult.mode":
+		if e.complexity.WiFiModeResult.Mode == nil {
+			break
+		}
+
+		return e.complexity.WiFiModeResult.Mode(childComplexity), true
+	case "WiFiModeResult.success":
+		if e.complexity.WiFiModeResult.Success == nil {
+			break
+		}
+
+		return e.complexity.WiFiModeResult.Success(childComplexity), true
+
 	case "WiFiNetwork.frequency":
 		if e.complexity.WiFiNetwork.Frequency == nil {
 			break
@@ -4833,6 +5000,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.WiFiNetwork.Ssid(childComplexity), true
 
+	case "WiFiStatus.apConfig":
+		if e.complexity.WiFiStatus.ApConfig == nil {
+			break
+		}
+
+		return e.complexity.WiFiStatus.ApConfig(childComplexity), true
 	case "WiFiStatus.available":
 		if e.complexity.WiFiStatus.Available == nil {
 			break
@@ -4845,6 +5018,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.WiFiStatus.Connected(childComplexity), true
+	case "WiFiStatus.connectedClients":
+		if e.complexity.WiFiStatus.ConnectedClients == nil {
+			break
+		}
+
+		return e.complexity.WiFiStatus.ConnectedClients(childComplexity), true
 	case "WiFiStatus.enabled":
 		if e.complexity.WiFiStatus.Enabled == nil {
 			break
@@ -4869,6 +5048,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.WiFiStatus.MacAddress(childComplexity), true
+	case "WiFiStatus.mode":
+		if e.complexity.WiFiStatus.Mode == nil {
+			break
+		}
+
+		return e.complexity.WiFiStatus.Mode(childComplexity), true
 	case "WiFiStatus.signalStrength":
 		if e.complexity.WiFiStatus.SignalStrength == nil {
 			break
@@ -5742,6 +5927,14 @@ type NetworkInterfaceOption {
 # WIFI TYPES
 # =============================================================================
 
+enum WiFiMode {
+  CLIENT
+  AP
+  DISABLED
+  CONNECTING
+  STARTING_AP
+}
+
 type WiFiNetwork {
   ssid: String!
   signalStrength: Int!
@@ -5749,6 +5942,22 @@ type WiFiNetwork {
   security: WiFiSecurityType!
   inUse: Boolean!
   saved: Boolean!
+}
+
+type APConfig {
+  ssid: String!
+  ipAddress: String!
+  channel: Int!
+  clientCount: Int!
+  timeoutMinutes: Int!
+  minutesRemaining: Int
+}
+
+type APClient {
+  macAddress: String!
+  ipAddress: String
+  hostname: String
+  connectedAt: String!
 }
 
 type WiFiStatus {
@@ -5760,12 +5969,21 @@ type WiFiStatus {
   ipAddress: String
   macAddress: String
   frequency: String
+  mode: WiFiMode!
+  apConfig: APConfig
+  connectedClients: [APClient!]
 }
 
 type WiFiConnectionResult {
   success: Boolean!
   message: String
   connected: Boolean!
+}
+
+type WiFiModeResult {
+  success: Boolean!
+  message: String
+  mode: WiFiMode!
 }
 
 # =============================================================================
@@ -6356,6 +6574,9 @@ type Query {
   wifiNetworks(rescan: Boolean = true, deduplicate: Boolean = true): [WiFiNetwork!]!
   wifiStatus: WiFiStatus!
   savedWifiNetworks: [WiFiNetwork!]!
+  wifiMode: WiFiMode!
+  apConfig: APConfig
+  apClients: [APClient!]!
 
   # QLC+ Fixture Mapping Suggestions (read-only)
   getQLCFixtureMappingSuggestions(projectId: ID!): QLCFixtureMappingResult!
@@ -6561,6 +6782,9 @@ type Mutation {
   disconnectWiFi: WiFiConnectionResult!
   setWiFiEnabled(enabled: Boolean!): WiFiStatus!
   forgetWiFiNetwork(ssid: String!): Boolean!
+  startAPMode: WiFiModeResult!
+  stopAPMode(connectToSSID: String): WiFiModeResult!
+  resetAPTimeout: Boolean!
 
   # Version Management
   updateRepository(repository: String!, version: String): UpdateResult!
@@ -6586,6 +6810,7 @@ type Subscription {
   globalPlaybackStatusUpdated: GlobalPlaybackStatus!
   systemInfoUpdated: SystemInfo!
   wifiStatusUpdated: WiFiStatus!
+  wifiModeChanged: WiFiMode!
   "Real-time updates during OFL import"
   oflImportProgress: OFLImportStatus!
 }
@@ -7473,6 +7698,17 @@ func (ec *executionContext) field_Mutation_startPreviewSession_args(ctx context.
 		return nil, err
 	}
 	args["projectId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_stopAPMode_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "connectToSSID", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["connectToSSID"] = arg0
 	return args, nil
 }
 
@@ -8386,6 +8622,296 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 // endregion ************************** directives.gotpl **************************
 
 // region    **************************** field.gotpl *****************************
+
+func (ec *executionContext) _APClient_macAddress(ctx context.Context, field graphql.CollectedField, obj *APClient) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_APClient_macAddress,
+		func(ctx context.Context) (any, error) {
+			return obj.MacAddress, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_APClient_macAddress(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "APClient",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _APClient_ipAddress(ctx context.Context, field graphql.CollectedField, obj *APClient) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_APClient_ipAddress,
+		func(ctx context.Context) (any, error) {
+			return obj.IPAddress, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_APClient_ipAddress(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "APClient",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _APClient_hostname(ctx context.Context, field graphql.CollectedField, obj *APClient) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_APClient_hostname,
+		func(ctx context.Context) (any, error) {
+			return obj.Hostname, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_APClient_hostname(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "APClient",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _APClient_connectedAt(ctx context.Context, field graphql.CollectedField, obj *APClient) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_APClient_connectedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.ConnectedAt, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_APClient_connectedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "APClient",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _APConfig_ssid(ctx context.Context, field graphql.CollectedField, obj *APConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_APConfig_ssid,
+		func(ctx context.Context) (any, error) {
+			return obj.Ssid, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_APConfig_ssid(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "APConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _APConfig_ipAddress(ctx context.Context, field graphql.CollectedField, obj *APConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_APConfig_ipAddress,
+		func(ctx context.Context) (any, error) {
+			return obj.IPAddress, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_APConfig_ipAddress(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "APConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _APConfig_channel(ctx context.Context, field graphql.CollectedField, obj *APConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_APConfig_channel,
+		func(ctx context.Context) (any, error) {
+			return obj.Channel, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_APConfig_channel(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "APConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _APConfig_clientCount(ctx context.Context, field graphql.CollectedField, obj *APConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_APConfig_clientCount,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_APConfig_clientCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "APConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _APConfig_timeoutMinutes(ctx context.Context, field graphql.CollectedField, obj *APConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_APConfig_timeoutMinutes,
+		func(ctx context.Context) (any, error) {
+			return obj.TimeoutMinutes, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_APConfig_timeoutMinutes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "APConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _APConfig_minutesRemaining(ctx context.Context, field graphql.CollectedField, obj *APConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_APConfig_minutesRemaining,
+		func(ctx context.Context) (any, error) {
+			return obj.MinutesRemaining, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_APConfig_minutesRemaining(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "APConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
 
 func (ec *executionContext) _BuildInfo_version(ctx context.Context, field graphql.CollectedField, obj *BuildInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
@@ -18390,6 +18916,12 @@ func (ec *executionContext) fieldContext_Mutation_setWiFiEnabled(ctx context.Con
 				return ec.fieldContext_WiFiStatus_macAddress(ctx, field)
 			case "frequency":
 				return ec.fieldContext_WiFiStatus_frequency(ctx, field)
+			case "mode":
+				return ec.fieldContext_WiFiStatus_mode(ctx, field)
+			case "apConfig":
+				return ec.fieldContext_WiFiStatus_apConfig(ctx, field)
+			case "connectedClients":
+				return ec.fieldContext_WiFiStatus_connectedClients(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WiFiStatus", field.Name)
 		},
@@ -18445,6 +18977,121 @@ func (ec *executionContext) fieldContext_Mutation_forgetWiFiNetwork(ctx context.
 	if fc.Args, err = ec.field_Mutation_forgetWiFiNetwork_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_startAPMode(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_startAPMode,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Mutation().StartAPMode(ctx)
+		},
+		nil,
+		ec.marshalNWiFiModeResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐWiFiModeResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_startAPMode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "success":
+				return ec.fieldContext_WiFiModeResult_success(ctx, field)
+			case "message":
+				return ec.fieldContext_WiFiModeResult_message(ctx, field)
+			case "mode":
+				return ec.fieldContext_WiFiModeResult_mode(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WiFiModeResult", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_stopAPMode(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_stopAPMode,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().StopAPMode(ctx, fc.Args["connectToSSID"].(*string))
+		},
+		nil,
+		ec.marshalNWiFiModeResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐWiFiModeResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_stopAPMode(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "success":
+				return ec.fieldContext_WiFiModeResult_success(ctx, field)
+			case "message":
+				return ec.fieldContext_WiFiModeResult_message(ctx, field)
+			case "mode":
+				return ec.fieldContext_WiFiModeResult_mode(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WiFiModeResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_stopAPMode_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_resetAPTimeout(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_resetAPTimeout,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Mutation().ResetAPTimeout(ctx)
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_resetAPTimeout(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
 	}
 	return fc, nil
 }
@@ -23547,6 +24194,12 @@ func (ec *executionContext) fieldContext_Query_wifiStatus(_ context.Context, fie
 				return ec.fieldContext_WiFiStatus_macAddress(ctx, field)
 			case "frequency":
 				return ec.fieldContext_WiFiStatus_frequency(ctx, field)
+			case "mode":
+				return ec.fieldContext_WiFiStatus_mode(ctx, field)
+			case "apConfig":
+				return ec.fieldContext_WiFiStatus_apConfig(ctx, field)
+			case "connectedClients":
+				return ec.fieldContext_WiFiStatus_connectedClients(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WiFiStatus", field.Name)
 		},
@@ -23592,6 +24245,117 @@ func (ec *executionContext) fieldContext_Query_savedWifiNetworks(_ context.Conte
 				return ec.fieldContext_WiFiNetwork_saved(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WiFiNetwork", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_wifiMode(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_wifiMode,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().WifiMode(ctx)
+		},
+		nil,
+		ec.marshalNWiFiMode2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐWiFiMode,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_wifiMode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type WiFiMode does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_apConfig(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_apConfig,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().ApConfig(ctx)
+		},
+		nil,
+		ec.marshalOAPConfig2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐAPConfig,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_apConfig(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "ssid":
+				return ec.fieldContext_APConfig_ssid(ctx, field)
+			case "ipAddress":
+				return ec.fieldContext_APConfig_ipAddress(ctx, field)
+			case "channel":
+				return ec.fieldContext_APConfig_channel(ctx, field)
+			case "clientCount":
+				return ec.fieldContext_APConfig_clientCount(ctx, field)
+			case "timeoutMinutes":
+				return ec.fieldContext_APConfig_timeoutMinutes(ctx, field)
+			case "minutesRemaining":
+				return ec.fieldContext_APConfig_minutesRemaining(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type APConfig", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_apClients(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_apClients,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().ApClients(ctx)
+		},
+		nil,
+		ec.marshalNAPClient2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐAPClientᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_apClients(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "macAddress":
+				return ec.fieldContext_APClient_macAddress(ctx, field)
+			case "ipAddress":
+				return ec.fieldContext_APClient_ipAddress(ctx, field)
+			case "hostname":
+				return ec.fieldContext_APClient_hostname(ctx, field)
+			case "connectedAt":
+				return ec.fieldContext_APClient_connectedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type APClient", field.Name)
 		},
 	}
 	return fc, nil
@@ -26800,8 +27564,43 @@ func (ec *executionContext) fieldContext_Subscription_wifiStatusUpdated(_ contex
 				return ec.fieldContext_WiFiStatus_macAddress(ctx, field)
 			case "frequency":
 				return ec.fieldContext_WiFiStatus_frequency(ctx, field)
+			case "mode":
+				return ec.fieldContext_WiFiStatus_mode(ctx, field)
+			case "apConfig":
+				return ec.fieldContext_WiFiStatus_apConfig(ctx, field)
+			case "connectedClients":
+				return ec.fieldContext_WiFiStatus_connectedClients(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WiFiStatus", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_wifiModeChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_wifiModeChanged,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Subscription().WifiModeChanged(ctx)
+		},
+		nil,
+		ec.marshalNWiFiMode2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐWiFiMode,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_wifiModeChanged(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type WiFiMode does not have child fields")
 		},
 	}
 	return fc, nil
@@ -27683,6 +28482,93 @@ func (ec *executionContext) fieldContext_WiFiConnectionResult_connected(_ contex
 	return fc, nil
 }
 
+func (ec *executionContext) _WiFiModeResult_success(ctx context.Context, field graphql.CollectedField, obj *WiFiModeResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WiFiModeResult_success,
+		func(ctx context.Context) (any, error) {
+			return obj.Success, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WiFiModeResult_success(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WiFiModeResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WiFiModeResult_message(ctx context.Context, field graphql.CollectedField, obj *WiFiModeResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WiFiModeResult_message,
+		func(ctx context.Context) (any, error) {
+			return obj.Message, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_WiFiModeResult_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WiFiModeResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WiFiModeResult_mode(ctx context.Context, field graphql.CollectedField, obj *WiFiModeResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WiFiModeResult_mode,
+		func(ctx context.Context) (any, error) {
+			return obj.Mode, nil
+		},
+		nil,
+		ec.marshalNWiFiMode2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐWiFiMode,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WiFiModeResult_mode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WiFiModeResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type WiFiMode does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _WiFiNetwork_ssid(ctx context.Context, field graphql.CollectedField, obj *WiFiNetwork) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -28084,6 +28970,117 @@ func (ec *executionContext) fieldContext_WiFiStatus_frequency(_ context.Context,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WiFiStatus_mode(ctx context.Context, field graphql.CollectedField, obj *WiFiStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WiFiStatus_mode,
+		func(ctx context.Context) (any, error) {
+			return obj.Mode, nil
+		},
+		nil,
+		ec.marshalNWiFiMode2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐWiFiMode,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WiFiStatus_mode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WiFiStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type WiFiMode does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WiFiStatus_apConfig(ctx context.Context, field graphql.CollectedField, obj *WiFiStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WiFiStatus_apConfig,
+		func(ctx context.Context) (any, error) {
+			return obj.ApConfig, nil
+		},
+		nil,
+		ec.marshalOAPConfig2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐAPConfig,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_WiFiStatus_apConfig(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WiFiStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "ssid":
+				return ec.fieldContext_APConfig_ssid(ctx, field)
+			case "ipAddress":
+				return ec.fieldContext_APConfig_ipAddress(ctx, field)
+			case "channel":
+				return ec.fieldContext_APConfig_channel(ctx, field)
+			case "clientCount":
+				return ec.fieldContext_APConfig_clientCount(ctx, field)
+			case "timeoutMinutes":
+				return ec.fieldContext_APConfig_timeoutMinutes(ctx, field)
+			case "minutesRemaining":
+				return ec.fieldContext_APConfig_minutesRemaining(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type APConfig", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WiFiStatus_connectedClients(ctx context.Context, field graphql.CollectedField, obj *WiFiStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WiFiStatus_connectedClients,
+		func(ctx context.Context) (any, error) {
+			return obj.ConnectedClients, nil
+		},
+		nil,
+		ec.marshalOAPClient2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐAPClientᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_WiFiStatus_connectedClients(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WiFiStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "macAddress":
+				return ec.fieldContext_APClient_macAddress(ctx, field)
+			case "ipAddress":
+				return ec.fieldContext_APClient_ipAddress(ctx, field)
+			case "hostname":
+				return ec.fieldContext_APClient_hostname(ctx, field)
+			case "connectedAt":
+				return ec.fieldContext_APClient_connectedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type APClient", field.Name)
 		},
 	}
 	return fc, nil
@@ -32094,6 +33091,115 @@ func (ec *executionContext) unmarshalInputUpdateSettingInput(ctx context.Context
 
 // region    **************************** object.gotpl ****************************
 
+var aPClientImplementors = []string{"APClient"}
+
+func (ec *executionContext) _APClient(ctx context.Context, sel ast.SelectionSet, obj *APClient) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, aPClientImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("APClient")
+		case "macAddress":
+			out.Values[i] = ec._APClient_macAddress(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "ipAddress":
+			out.Values[i] = ec._APClient_ipAddress(ctx, field, obj)
+		case "hostname":
+			out.Values[i] = ec._APClient_hostname(ctx, field, obj)
+		case "connectedAt":
+			out.Values[i] = ec._APClient_connectedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var aPConfigImplementors = []string{"APConfig"}
+
+func (ec *executionContext) _APConfig(ctx context.Context, sel ast.SelectionSet, obj *APConfig) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, aPConfigImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("APConfig")
+		case "ssid":
+			out.Values[i] = ec._APConfig_ssid(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "ipAddress":
+			out.Values[i] = ec._APConfig_ipAddress(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "channel":
+			out.Values[i] = ec._APConfig_channel(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clientCount":
+			out.Values[i] = ec._APConfig_clientCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "timeoutMinutes":
+			out.Values[i] = ec._APConfig_timeoutMinutes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "minutesRemaining":
+			out.Values[i] = ec._APConfig_minutesRemaining(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var buildInfoImplementors = []string{"BuildInfo"}
 
 func (ec *executionContext) _BuildInfo(ctx context.Context, sel ast.SelectionSet, obj *BuildInfo) graphql.Marshaler {
@@ -35487,6 +36593,27 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "startAPMode":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_startAPMode(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "stopAPMode":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_stopAPMode(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "resetAPTimeout":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_resetAPTimeout(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "updateRepository":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateRepository(ctx, field)
@@ -37831,6 +38958,69 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "wifiMode":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_wifiMode(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "apConfig":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_apConfig(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "apClients":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_apClients(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "getQLCFixtureMappingSuggestions":
 			field := field
 
@@ -39263,6 +40453,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_systemInfoUpdated(ctx, fields[0])
 	case "wifiStatusUpdated":
 		return ec._Subscription_wifiStatusUpdated(ctx, fields[0])
+	case "wifiModeChanged":
+		return ec._Subscription_wifiModeChanged(ctx, fields[0])
 	case "oflImportProgress":
 		return ec._Subscription_oflImportProgress(ctx, fields[0])
 	default:
@@ -39693,6 +40885,52 @@ func (ec *executionContext) _WiFiConnectionResult(ctx context.Context, sel ast.S
 	return out
 }
 
+var wiFiModeResultImplementors = []string{"WiFiModeResult"}
+
+func (ec *executionContext) _WiFiModeResult(ctx context.Context, sel ast.SelectionSet, obj *WiFiModeResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, wiFiModeResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WiFiModeResult")
+		case "success":
+			out.Values[i] = ec._WiFiModeResult_success(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "message":
+			out.Values[i] = ec._WiFiModeResult_message(ctx, field, obj)
+		case "mode":
+			out.Values[i] = ec._WiFiModeResult_mode(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var wiFiNetworkImplementors = []string{"WiFiNetwork"}
 
 func (ec *executionContext) _WiFiNetwork(ctx context.Context, sel ast.SelectionSet, obj *WiFiNetwork) graphql.Marshaler {
@@ -39793,6 +41031,15 @@ func (ec *executionContext) _WiFiStatus(ctx context.Context, sel ast.SelectionSe
 			out.Values[i] = ec._WiFiStatus_macAddress(ctx, field, obj)
 		case "frequency":
 			out.Values[i] = ec._WiFiStatus_frequency(ctx, field, obj)
+		case "mode":
+			out.Values[i] = ec._WiFiStatus_mode(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "apConfig":
+			out.Values[i] = ec._WiFiStatus_apConfig(ctx, field, obj)
+		case "connectedClients":
+			out.Values[i] = ec._WiFiStatus_connectedClients(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -40150,6 +41397,60 @@ func (ec *executionContext) ___Type(ctx context.Context, sel ast.SelectionSet, o
 // endregion **************************** object.gotpl ****************************
 
 // region    ***************************** type.gotpl *****************************
+
+func (ec *executionContext) marshalNAPClient2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐAPClientᚄ(ctx context.Context, sel ast.SelectionSet, v []*APClient) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNAPClient2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐAPClient(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNAPClient2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐAPClient(ctx context.Context, sel ast.SelectionSet, v *APClient) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._APClient(ctx, sel, v)
+}
 
 func (ec *executionContext) unmarshalNBoolean2bool(ctx context.Context, v any) (bool, error) {
 	res, err := graphql.UnmarshalBoolean(v)
@@ -43361,6 +44662,30 @@ func (ec *executionContext) marshalNWiFiConnectionResult2ᚖgithubᚗcomᚋbbern
 	return ec._WiFiConnectionResult(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNWiFiMode2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐWiFiMode(ctx context.Context, v any) (WiFiMode, error) {
+	var res WiFiMode
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNWiFiMode2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐWiFiMode(ctx context.Context, sel ast.SelectionSet, v WiFiMode) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNWiFiModeResult2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐWiFiModeResult(ctx context.Context, sel ast.SelectionSet, v WiFiModeResult) graphql.Marshaler {
+	return ec._WiFiModeResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNWiFiModeResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐWiFiModeResult(ctx context.Context, sel ast.SelectionSet, v *WiFiModeResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._WiFiModeResult(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNWiFiNetwork2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐWiFiNetworkᚄ(ctx context.Context, sel ast.SelectionSet, v []*WiFiNetwork) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
@@ -43690,6 +45015,60 @@ func (ec *executionContext) marshalN__TypeKind2string(ctx context.Context, sel a
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) marshalOAPClient2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐAPClientᚄ(ctx context.Context, sel ast.SelectionSet, v []*APClient) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNAPClient2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐAPClient(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalOAPConfig2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐAPConfig(ctx context.Context, sel ast.SelectionSet, v *APConfig) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._APConfig(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOBoolean2bool(ctx context.Context, v any) (bool, error) {

@@ -16,6 +16,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/services/preview"
 	"github.com/bbernstein/lacylights-go/internal/services/pubsub"
 	"github.com/bbernstein/lacylights-go/internal/services/version"
+	"github.com/bbernstein/lacylights-go/internal/services/wifi"
 	"gorm.io/gorm"
 )
 
@@ -43,6 +44,7 @@ type Resolver struct {
 	OFLManager      *ofl.Manager
 	PreviewService  *preview.Service
 	VersionService  *version.Service
+	WiFiService     *wifi.Service
 	PubSub          *pubsub.PubSub
 }
 
@@ -78,6 +80,7 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *fade.Engine, 
 		OFLManager:      oflManager,
 		PreviewService:  preview.NewService(fixtureRepo, sceneRepo, dmxService),
 		VersionService:  version.NewService(),
+		WiFiService:     wifi.NewService(),
 		PubSub:          ps,
 	}
 
@@ -164,4 +167,78 @@ func (r *Resolver) wirePubSub() {
 			r.PubSub.Publish(pubsub.TopicDMXOutput, fmt.Sprintf("%d", output.Universe), universeOutput)
 		}
 	})
+
+	// Wire up WiFi service callbacks
+	r.WiFiService.SetModeCallback(func(mode wifi.Mode) {
+		r.PubSub.Publish(pubsub.TopicWiFiModeChanged, "", generated.WiFiMode(mode))
+	})
+
+	r.WiFiService.SetStatusCallback(func(status *wifi.Status) {
+		// Convert to generated type and publish
+		gqlStatus := convertWiFiStatus(status)
+		r.PubSub.Publish(pubsub.TopicWiFiStatus, "", gqlStatus)
+	})
+}
+
+// convertWiFiStatus converts a wifi.Status to generated.WiFiStatus.
+func convertWiFiStatus(status *wifi.Status) *generated.WiFiStatus {
+	if status == nil {
+		return nil
+	}
+
+	gqlStatus := &generated.WiFiStatus{
+		Available: status.Available,
+		Enabled:   status.Enabled,
+		Connected: status.Connected,
+		Mode:      generated.WiFiMode(status.Mode),
+	}
+
+	if status.SSID != nil {
+		gqlStatus.Ssid = status.SSID
+	}
+	if status.SignalStrength != nil {
+		gqlStatus.SignalStrength = status.SignalStrength
+	}
+	if status.IPAddress != nil {
+		gqlStatus.IPAddress = status.IPAddress
+	}
+	if status.MACAddress != nil {
+		gqlStatus.MacAddress = status.MACAddress
+	}
+	if status.Frequency != nil {
+		gqlStatus.Frequency = status.Frequency
+	}
+
+	// Convert AP config if present
+	if status.APConfig != nil {
+		gqlStatus.ApConfig = &generated.APConfig{
+			Ssid:           status.APConfig.SSID,
+			IPAddress:      status.APConfig.IPAddress,
+			Channel:        status.APConfig.Channel,
+			ClientCount:    status.APConfig.ClientCount,
+			TimeoutMinutes: status.APConfig.TimeoutMinutes,
+		}
+		if status.APConfig.MinutesRemaining != nil {
+			gqlStatus.ApConfig.MinutesRemaining = status.APConfig.MinutesRemaining
+		}
+	}
+
+	// Convert connected clients if present
+	if status.ConnectedClients != nil {
+		for _, client := range status.ConnectedClients {
+			gqlClient := &generated.APClient{
+				MacAddress:  client.MACAddress,
+				ConnectedAt: client.ConnectedAt.Format("2006-01-02T15:04:05Z07:00"),
+			}
+			if client.IPAddress != nil {
+				gqlClient.IPAddress = client.IPAddress
+			}
+			if client.Hostname != nil {
+				gqlClient.Hostname = client.Hostname
+			}
+			gqlStatus.ConnectedClients = append(gqlStatus.ConnectedClients, gqlClient)
+		}
+	}
+
+	return gqlStatus
 }

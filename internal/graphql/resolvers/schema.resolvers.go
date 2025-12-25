@@ -2888,41 +2888,76 @@ func (r *mutationResolver) UpdateFadeUpdateRate(ctx context.Context, rateHz int)
 }
 
 // ConnectWiFi is the resolver for the connectWiFi field.
-// Returns failure - WiFi not available on this platform
 func (r *mutationResolver) ConnectWiFi(ctx context.Context, ssid string, password *string) (*generated.WiFiConnectionResult, error) {
-	msg := "WiFi management not available on this platform"
+	result, err := r.WiFiService.ConnectToNetwork(ctx, ssid, password)
+	if err != nil {
+		return nil, err
+	}
 	return &generated.WiFiConnectionResult{
-		Success:   false,
-		Message:   &msg,
-		Connected: false,
+		Success:   result.Success,
+		Message:   result.Message,
+		Connected: result.Connected,
 	}, nil
 }
 
 // DisconnectWiFi is the resolver for the disconnectWiFi field.
-// Returns failure - WiFi not available on this platform
 func (r *mutationResolver) DisconnectWiFi(ctx context.Context) (*generated.WiFiConnectionResult, error) {
-	msg := "WiFi management not available on this platform"
+	result, err := r.WiFiService.Disconnect(ctx)
+	if err != nil {
+		return nil, err
+	}
 	return &generated.WiFiConnectionResult{
-		Success:   false,
-		Message:   &msg,
-		Connected: false,
+		Success:   result.Success,
+		Message:   result.Message,
+		Connected: result.Connected,
 	}, nil
 }
 
 // SetWiFiEnabled is the resolver for the setWiFiEnabled field.
-// Returns status indicating WiFi is not available on this platform
 func (r *mutationResolver) SetWiFiEnabled(ctx context.Context, enabled bool) (*generated.WiFiStatus, error) {
-	return &generated.WiFiStatus{
-		Available: false,
-		Enabled:   false,
-		Connected: false,
-	}, nil
+	status, err := r.WiFiService.SetWiFiEnabled(ctx, enabled)
+	if err != nil {
+		return nil, err
+	}
+	return convertWiFiStatus(status), nil
 }
 
 // ForgetWiFiNetwork is the resolver for the forgetWiFiNetwork field.
-// Returns false - WiFi not available on this platform
 func (r *mutationResolver) ForgetWiFiNetwork(ctx context.Context, ssid string) (bool, error) {
-	return false, nil
+	return r.WiFiService.ForgetNetwork(ctx, ssid)
+}
+
+// StartAPMode is the resolver for the startAPMode field.
+func (r *mutationResolver) StartAPMode(ctx context.Context) (*generated.WiFiModeResult, error) {
+	result, err := r.WiFiService.StartAPMode(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &generated.WiFiModeResult{
+		Success: result.Success,
+		Message: result.Message,
+		Mode:    generated.WiFiMode(result.Mode),
+	}, nil
+}
+
+// StopAPMode is the resolver for the stopAPMode field.
+func (r *mutationResolver) StopAPMode(ctx context.Context, connectToSsid *string) (*generated.WiFiModeResult, error) {
+	result, err := r.WiFiService.StopAPMode(ctx, connectToSsid)
+	if err != nil {
+		return nil, err
+	}
+
+	return &generated.WiFiModeResult{
+		Success: result.Success,
+		Message: result.Message,
+		Mode:    generated.WiFiMode(result.Mode),
+	}, nil
+}
+
+// ResetAPTimeout is the resolver for the resetAPTimeout field.
+func (r *mutationResolver) ResetAPTimeout(ctx context.Context) (bool, error) {
+	return r.WiFiService.ResetAPTimeout(ctx)
 }
 
 // UpdateRepository is the resolver for the updateRepository field.
@@ -4196,25 +4231,86 @@ func (r *queryResolver) NetworkInterfaceOptions(ctx context.Context) ([]*generat
 }
 
 // WifiNetworks is the resolver for the wifiNetworks field.
-// Returns empty list - WiFi not available on this platform
 func (r *queryResolver) WifiNetworks(ctx context.Context, rescan *bool, deduplicate *bool) ([]*generated.WiFiNetwork, error) {
-	return []*generated.WiFiNetwork{}, nil
+	doRescan := rescan != nil && *rescan
+	doDeduplicate := deduplicate == nil || *deduplicate // Default to true
+
+	networks, err := r.WiFiService.ScanNetworks(ctx, doRescan, doDeduplicate)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []*generated.WiFiNetwork
+	for _, n := range networks {
+		result = append(result, &generated.WiFiNetwork{
+			Ssid:           n.SSID,
+			SignalStrength: n.SignalStrength,
+			Frequency:      n.Frequency,
+			Security:       generated.WiFiSecurityType(n.Security),
+			InUse:          n.InUse,
+			Saved:          n.Saved,
+		})
+	}
+
+	return result, nil
 }
 
 // WifiStatus is the resolver for the wifiStatus field.
-// Returns status indicating WiFi is not available on this platform
 func (r *queryResolver) WifiStatus(ctx context.Context) (*generated.WiFiStatus, error) {
-	return &generated.WiFiStatus{
-		Available: false,
-		Enabled:   false,
-		Connected: false,
-	}, nil
+	status, err := r.WiFiService.GetStatus(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return convertWiFiStatus(status), nil
 }
 
 // SavedWifiNetworks is the resolver for the savedWifiNetworks field.
 // Returns empty list - WiFi not available on this platform
 func (r *queryResolver) SavedWifiNetworks(ctx context.Context) ([]*generated.WiFiNetwork, error) {
 	return []*generated.WiFiNetwork{}, nil
+}
+
+// WifiMode is the resolver for the wifiMode field.
+func (r *queryResolver) WifiMode(ctx context.Context) (generated.WiFiMode, error) {
+	mode := r.WiFiService.GetMode()
+	return generated.WiFiMode(mode), nil
+}
+
+// ApConfig is the resolver for the apConfig field.
+func (r *queryResolver) ApConfig(ctx context.Context) (*generated.APConfig, error) {
+	config := r.WiFiService.GetAPConfig()
+	if config == nil {
+		return nil, nil
+	}
+
+	return &generated.APConfig{
+		Ssid:             config.SSID,
+		IPAddress:        config.IPAddress,
+		Channel:          config.Channel,
+		ClientCount:      config.ClientCount,
+		TimeoutMinutes:   config.TimeoutMinutes,
+		MinutesRemaining: config.MinutesRemaining,
+	}, nil
+}
+
+// ApClients is the resolver for the apClients field.
+func (r *queryResolver) ApClients(ctx context.Context) ([]*generated.APClient, error) {
+	clients := r.WiFiService.GetAPClients()
+	if clients == nil {
+		return []*generated.APClient{}, nil
+	}
+
+	var result []*generated.APClient
+	for _, client := range clients {
+		result = append(result, &generated.APClient{
+			MacAddress:  client.MACAddress,
+			IPAddress:   client.IPAddress,
+			Hostname:    client.Hostname,
+			ConnectedAt: client.ConnectedAt.Format("2006-01-02T15:04:05Z07:00"),
+		})
+	}
+
+	return result, nil
 }
 
 // GetQLCFixtureMappingSuggestions is the resolver for the getQLCFixtureMappingSuggestions field.
@@ -4807,6 +4903,40 @@ func (r *subscriptionResolver) WifiStatusUpdated(ctx context.Context) (<-chan *g
 					case <-ctx.Done():
 						r.PubSub.Unsubscribe(sub)
 						return
+					}
+				}
+			}
+		}
+	}()
+
+	return outputChan, nil
+}
+
+// WifiModeChanged is the resolver for the wifiModeChanged field.
+func (r *subscriptionResolver) WifiModeChanged(ctx context.Context) (<-chan generated.WiFiMode, error) {
+	// Subscribe to WiFi mode changes (no filter)
+	sub := r.PubSub.Subscribe(pubsub.TopicWiFiModeChanged, "", 10)
+
+	// Create the output channel
+	outputChan := make(chan generated.WiFiMode, 10)
+
+	// Start a goroutine to forward messages
+	go func() {
+		defer close(outputChan)
+		for {
+			select {
+			case <-ctx.Done():
+				r.PubSub.Unsubscribe(sub)
+				return
+			case msg, ok := <-sub.Channel:
+				if !ok {
+					return
+				}
+				if mode, valid := msg.(generated.WiFiMode); valid {
+					select {
+					case outputChan <- mode:
+					default:
+						// Channel full, skip message
 					}
 				}
 			}
