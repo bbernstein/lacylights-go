@@ -467,13 +467,18 @@ func (s *Service) detectCurrentMode() {
 				parts := strings.Split(line, ":")
 				if len(parts) >= 1 {
 					ssid := parts[0]
+					// Set apStartTime to now - gives a fresh timeout from server start
+					now := time.Now()
+					s.apStartTime = &now
 					s.apConfig = &APConfig{
 						SSID:           ssid,
 						IPAddress:      APIPAddress,
 						Channel:        APChannel,
 						TimeoutMinutes: s.apTimeoutMinutes,
 					}
-					log.Printf("Detected existing AP mode with SSID: %s", ssid)
+					// Start the AP timeout timer
+					s.startAPTimer()
+					log.Printf("Detected existing AP mode with SSID: %s, timeout reset to %d minutes", ssid, s.apTimeoutMinutes)
 				}
 				return
 			}

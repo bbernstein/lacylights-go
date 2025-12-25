@@ -287,3 +287,40 @@ func TestSetWiFiEnabled_NotLinux(t *testing.T) {
 		assert.NotContains(t, call, "nmcli radio wifi")
 	}
 }
+
+func TestGetAPConfig_MinutesRemaining(t *testing.T) {
+	s := NewService()
+
+	// Set to AP mode with apStartTime
+	s.mode = ModeAP
+	startTime := time.Now().Add(-5 * time.Minute) // Started 5 minutes ago
+	s.apStartTime = &startTime
+	s.apConfig = &APConfig{
+		SSID:           "lacylights-TEST",
+		TimeoutMinutes: 30,
+	}
+
+	config := s.GetAPConfig()
+
+	require.NotNil(t, config)
+	require.NotNil(t, config.MinutesRemaining)
+	// Should be approximately 25 minutes remaining (30 - 5)
+	assert.InDelta(t, 25, *config.MinutesRemaining, 1)
+}
+
+func TestGetAPConfig_WithoutStartTime(t *testing.T) {
+	s := NewService()
+
+	// Set to AP mode without apStartTime
+	s.mode = ModeAP
+	s.apConfig = &APConfig{
+		SSID:           "lacylights-TEST",
+		TimeoutMinutes: 30,
+	}
+
+	config := s.GetAPConfig()
+
+	require.NotNil(t, config)
+	// MinutesRemaining should be nil when apStartTime is nil
+	assert.Nil(t, config.MinutesRemaining)
+}
