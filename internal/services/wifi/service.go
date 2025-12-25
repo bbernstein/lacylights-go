@@ -124,6 +124,11 @@ func (s *Service) getStatusLocked() *Status {
 	// Update minutes remaining before returning status
 	s.updateAPMinutesRemaining()
 
+	// Refresh connected clients if in AP mode
+	if s.mode == ModeAP {
+		s.refreshAPClientsLocked()
+	}
+
 	status := &Status{
 		Available:        s.isWiFiAvailable(),
 		Enabled:          s.isWiFiEnabled(),
@@ -721,6 +726,11 @@ func (s *Service) RefreshAPClients() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.refreshAPClientsLocked()
+}
+
+// refreshAPClientsLocked updates the client list. Caller must hold s.mu lock.
+func (s *Service) refreshAPClientsLocked() {
 	if s.mode != ModeAP {
 		return
 	}
