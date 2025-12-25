@@ -198,17 +198,10 @@ func (s *Service) SetWiFiEnabled(ctx context.Context, enabled bool) (*Status, er
 }
 
 // ScanNetworks scans for available WiFi networks.
+// Note: Scanning may work in AP mode on some WiFi adapters. We attempt it
+// regardless of mode, relying on command timeouts to prevent hanging.
 func (s *Service) ScanNetworks(ctx context.Context, rescan bool, deduplicate bool) ([]Network, error) {
 	if runtime.GOOS != "linux" {
-		return []Network{}, nil
-	}
-
-	// Don't scan when in AP mode - the WiFi adapter is busy hosting the hotspot
-	s.mu.RLock()
-	currentMode := s.mode
-	s.mu.RUnlock()
-	if currentMode == ModeAP || currentMode == ModeStartingAP {
-		log.Printf("WiFi: Skipping network scan - in AP mode")
 		return []Network{}, nil
 	}
 
@@ -216,7 +209,7 @@ func (s *Service) ScanNetworks(ctx context.Context, rescan bool, deduplicate boo
 	if rescan {
 		_, err := s.executor.Execute("nmcli", "device", "wifi", "rescan")
 		if err != nil {
-			log.Printf("WiFi rescan failed (may be rate-limited): %v", err)
+			log.Printf("WiFi rescan failed (may be rate-limited or in AP mode): %v", err)
 			// Continue anyway - we can still list cached results
 		}
 		// Give the scan a moment to complete
