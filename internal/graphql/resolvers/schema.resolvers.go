@@ -4235,13 +4235,12 @@ func (r *queryResolver) WifiNetworks(ctx context.Context, rescan *bool, deduplic
 }
 
 // WifiStatus is the resolver for the wifiStatus field.
-// Returns status indicating WiFi is not available on this platform
 func (r *queryResolver) WifiStatus(ctx context.Context) (*generated.WiFiStatus, error) {
-	return &generated.WiFiStatus{
-		Available: false,
-		Enabled:   false,
-		Connected: false,
-	}, nil
+	status, err := r.WiFiService.GetStatus(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return convertWiFiStatus(status), nil
 }
 
 // SavedWifiNetworks is the resolver for the savedWifiNetworks field.

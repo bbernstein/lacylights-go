@@ -322,15 +322,21 @@ func (s *Service) detectCurrentMode() {
 
 func (s *Service) isWiFiAvailable() bool {
 	if runtime.GOOS != "linux" {
+		log.Printf("WiFi: Not on Linux (GOOS=%s), WiFi unavailable", runtime.GOOS)
 		return false
 	}
 
 	output, err := s.executor.Execute("nmcli", "-t", "-f", "DEVICE,TYPE", "device", "status")
 	if err != nil {
+		log.Printf("WiFi: nmcli command failed: %v", err)
 		return false
 	}
 
-	return strings.Contains(string(output), "wifi")
+	hasWifi := strings.Contains(string(output), "wifi")
+	if !hasWifi {
+		log.Printf("WiFi: No wifi device found in nmcli output: %q", string(output))
+	}
+	return hasWifi
 }
 
 func (s *Service) isWiFiEnabled() bool {
