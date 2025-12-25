@@ -324,3 +324,28 @@ func TestGetAPConfig_WithoutStartTime(t *testing.T) {
 	// MinutesRemaining should be nil when apStartTime is nil
 	assert.Nil(t, config.MinutesRemaining)
 }
+
+func TestGetStatus_IncludesMinutesRemaining(t *testing.T) {
+	s := NewService()
+	mock := newMockExecutor()
+	s.SetExecutor(mock)
+
+	// Set to AP mode with apStartTime
+	s.mode = ModeAP
+	startTime := time.Now().Add(-5 * time.Minute) // Started 5 minutes ago
+	s.apStartTime = &startTime
+	s.apConfig = &APConfig{
+		SSID:           "lacylights-TEST",
+		TimeoutMinutes: 30,
+	}
+
+	ctx := context.Background()
+	status, err := s.GetStatus(ctx)
+
+	require.NoError(t, err)
+	require.NotNil(t, status)
+	require.NotNil(t, status.APConfig)
+	require.NotNil(t, status.APConfig.MinutesRemaining)
+	// Should be approximately 25 minutes remaining (30 - 5)
+	assert.InDelta(t, 25, *status.APConfig.MinutesRemaining, 1)
+}

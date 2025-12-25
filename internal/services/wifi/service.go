@@ -113,8 +113,11 @@ func (s *Service) GetMode() Mode {
 
 // GetStatus returns the current WiFi status.
 func (s *Service) GetStatus(ctx context.Context) (*Status, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Update minutes remaining before returning status
+	s.updateAPMinutesRemaining()
 
 	status := &Status{
 		Available:        s.isWiFiAvailable(),
