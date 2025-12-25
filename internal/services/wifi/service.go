@@ -446,20 +446,41 @@ func (s *Service) detectCurrentMode() {
 		return
 	}
 
-	// Check if AP connection is active
-	output, err := s.executor.Execute("nmcli", "-t", "-f", "NAME,DEVICE,STATE", "connection", "show", "--active")
+	// Check if wlan0 is in AP mode by looking at the connection type
+	// nmcli -t -f NAME,TYPE,DEVICE connection show --active
+	output, err := s.executor.Execute("nmcli", "-t", "-f", "NAME,TYPE,DEVICE", "connection", "show", "--active")
 	if err != nil {
 		log.Printf("Failed to detect WiFi mode: %v", err)
 		s.mode = ModeClient
 		return
 	}
 
-	if strings.Contains(string(output), APConnectionName) {
-		s.mode = ModeAP
-		// TODO: Restore AP config from active connection
-	} else {
-		s.mode = ModeClient
+	// Check for AP mode connections on wlan0
+	// Also check for connections with "lacylights" prefix (our AP naming convention)
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		if strings.Contains(line, s.wifiInterface) {
+			// Check if it's our AP connection (starts with "lacylights-")
+			if strings.HasPrefix(line, "lacylights-") {
+				s.mode = ModeAP
+				// Extract SSID from connection name
+				parts := strings.Split(line, ":")
+				if len(parts) >= 1 {
+					ssid := parts[0]
+					s.apConfig = &APConfig{
+						SSID:           ssid,
+						IPAddress:      APIPAddress,
+						Channel:        APChannel,
+						TimeoutMinutes: s.apTimeoutMinutes,
+					}
+					log.Printf("Detected existing AP mode with SSID: %s", ssid)
+				}
+				return
+			}
+		}
 	}
+
+	s.mode = ModeClient
 }
 
 func (s *Service) isWiFiAvailable() bool {
