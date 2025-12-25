@@ -322,20 +322,36 @@ func (s *Service) ConnectToNetwork(ctx context.Context, ssid string, password *s
 
 	// Delete any existing connection for this SSID to avoid corrupted profiles
 	// This is safe - if no connection exists, nmcli just returns an error we ignore
+	log.Printf("Deleting any existing connection for SSID: %s", ssid)
 	_, _ = s.executor.Execute("nmcli", "connection", "delete", ssid)
 
-	// Try to connect using nmcli
+	// For password-protected networks, create connection explicitly with proper security settings
+	// This avoids the "key-mgmt property is missing" error
+	if password != nil && *password != "" {
+		log.Printf("Creating new connection profile for SSID: %s", ssid)
+		// Create connection with explicit WPA-PSK settings
+		addArgs := []string{
+			"connection", "add",
+			"type", "wifi",
+			"con-name", ssid,
+			"ssid", ssid,
+			"wifi-sec.key-mgmt", "wpa-psk",
+			"wifi-sec.psk", *password,
+		}
+		output, err := s.executor.Execute("nmcli", addArgs...)
+		if err != nil {
+			log.Printf("Failed to create connection: %v, output: %s", err, string(output))
+			// Continue anyway - try the direct connect as fallback
+		}
+	}
+
+	// Try to connect/activate
 	var args []string
 	if password != nil && *password != "" {
-		// Connect with password - use explicit wifi-sec settings to avoid key-mgmt errors
-		args = []string{
-			"device", "wifi", "connect", ssid,
-			"password", *password,
-			"--",
-			"wifi-sec.key-mgmt", "wpa-psk",
-		}
+		// Activate the connection we just created
+		args = []string{"connection", "up", ssid}
 	} else {
-		// Connect without password (open network or saved credentials)
+		// For open networks or saved credentials, use direct connect
 		args = []string{"device", "wifi", "connect", ssid}
 	}
 
