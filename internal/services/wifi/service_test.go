@@ -268,3 +268,22 @@ func TestAPConfigDefaults(t *testing.T) {
 	assert.Equal(t, "192.168.4.1", APIPAddress)
 	assert.Equal(t, 6, APChannel)
 }
+
+func TestSetWiFiEnabled_NotLinux(t *testing.T) {
+	// This test will only run on non-Linux systems
+	s := NewService()
+	mock := newMockExecutor()
+	s.SetExecutor(mock)
+
+	ctx := context.Background()
+
+	// On non-Linux, should return current status without error
+	status, err := s.SetWiFiEnabled(ctx, true)
+	require.NoError(t, err)
+	require.NotNil(t, status)
+
+	// Should not have called nmcli on non-Linux
+	for _, call := range mock.calls {
+		assert.NotContains(t, call, "nmcli radio wifi")
+	}
+}

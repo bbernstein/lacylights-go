@@ -137,6 +137,36 @@ func (s *Service) GetAPClients() []APClient {
 	return s.connectedClients
 }
 
+// SetWiFiEnabled enables or disables the WiFi radio.
+func (s *Service) SetWiFiEnabled(ctx context.Context, enabled bool) (*Status, error) {
+	if runtime.GOOS != "linux" {
+		return s.GetStatus(ctx)
+	}
+
+	var arg string
+	if enabled {
+		arg = "on"
+	} else {
+		arg = "off"
+	}
+
+	_, err := s.executor.Execute("nmcli", "radio", "wifi", arg)
+	if err != nil {
+		log.Printf("Failed to set WiFi enabled=%v: %v", enabled, err)
+		return nil, fmt.Errorf("failed to set WiFi enabled: %w", err)
+	}
+
+	log.Printf("WiFi radio set to %s", arg)
+
+	// Give NetworkManager a moment to update status
+	time.Sleep(500 * time.Millisecond)
+
+	// Notify status change
+	s.notifyStatusChange()
+
+	return s.GetStatus(ctx)
+}
+
 // StartAPMode starts the access point mode.
 func (s *Service) StartAPMode(ctx context.Context) (*ModeResult, error) {
 	s.mu.Lock()

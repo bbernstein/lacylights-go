@@ -2910,13 +2910,12 @@ func (r *mutationResolver) DisconnectWiFi(ctx context.Context) (*generated.WiFiC
 }
 
 // SetWiFiEnabled is the resolver for the setWiFiEnabled field.
-// Returns status indicating WiFi is not available on this platform
 func (r *mutationResolver) SetWiFiEnabled(ctx context.Context, enabled bool) (*generated.WiFiStatus, error) {
-	return &generated.WiFiStatus{
-		Available: false,
-		Enabled:   false,
-		Connected: false,
-	}, nil
+	status, err := r.WiFiService.SetWiFiEnabled(ctx, enabled)
+	if err != nil {
+		return nil, err
+	}
+	return convertWiFiStatus(status), nil
 }
 
 // ForgetWiFiNetwork is the resolver for the forgetWiFiNetwork field.
