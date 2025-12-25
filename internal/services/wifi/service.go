@@ -198,7 +198,7 @@ func (s *Service) SetWiFiEnabled(ctx context.Context, enabled bool) (*Status, er
 
 	// Notify status change and return status (both require lock)
 	s.mu.Lock()
-	s.notifyStatusChange()
+	s.notifyStatusChangeLocked()
 	status := s.getStatusLocked()
 	s.mu.Unlock()
 
@@ -415,7 +415,7 @@ func (s *Service) ConnectToNetwork(ctx context.Context, ssid string, password *s
 	s.mu.Lock()
 	s.mode = ModeClient
 	s.notifyModeChange()
-	s.notifyStatusChange()
+	s.notifyStatusChangeLocked()
 	s.mu.Unlock()
 
 	log.Printf("Successfully connected to WiFi network: %s", ssid)
@@ -450,7 +450,7 @@ func (s *Service) Disconnect(ctx context.Context) (*ConnectionResult, error) {
 
 	// Notify status change
 	s.mu.Lock()
-	s.notifyStatusChange()
+	s.notifyStatusChangeLocked()
 	s.mu.Unlock()
 
 	log.Printf("Disconnected from WiFi")
@@ -571,7 +571,7 @@ func (s *Service) StartAPMode(ctx context.Context) (*ModeResult, error) {
 
 	// Notify callbacks
 	s.notifyModeChange()
-	s.notifyStatusChange()
+	s.notifyStatusChangeLocked()
 
 	log.Printf("AP mode started with SSID: %s", ssid)
 
@@ -623,7 +623,7 @@ func (s *Service) StopAPMode(ctx context.Context, connectToSSID *string) (*ModeR
 
 	s.mode = ModeClient
 	s.notifyModeChange()
-	s.notifyStatusChange()
+	s.notifyStatusChangeLocked()
 
 	log.Printf("AP mode stopped")
 
@@ -906,8 +906,8 @@ func (s *Service) notifyModeChange() {
 	}
 }
 
-// notifyStatusChange notifies status callback. Caller must hold s.mu lock.
-func (s *Service) notifyStatusChange() {
+// notifyStatusChangeLocked sends status update to callback. Caller must hold s.mu lock.
+func (s *Service) notifyStatusChangeLocked() {
 	if s.statusCallback != nil {
 		status := s.getStatusLocked()
 		go s.statusCallback(status)

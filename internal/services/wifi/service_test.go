@@ -211,7 +211,9 @@ func TestCallbacks(t *testing.T) {
 	}
 
 	// Trigger status callback and wait for result
-	s.notifyStatusChange()
+	s.mu.Lock()
+	s.notifyStatusChangeLocked()
+	s.mu.Unlock()
 	select {
 	case calledStatus := <-statusChan:
 		assert.NotNil(t, calledStatus)
