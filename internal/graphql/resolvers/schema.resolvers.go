@@ -4228,9 +4228,28 @@ func (r *queryResolver) NetworkInterfaceOptions(ctx context.Context) ([]*generat
 }
 
 // WifiNetworks is the resolver for the wifiNetworks field.
-// Returns empty list - WiFi not available on this platform
 func (r *queryResolver) WifiNetworks(ctx context.Context, rescan *bool, deduplicate *bool) ([]*generated.WiFiNetwork, error) {
-	return []*generated.WiFiNetwork{}, nil
+	doRescan := rescan != nil && *rescan
+	doDeduplicate := deduplicate == nil || *deduplicate // Default to true
+
+	networks, err := r.WiFiService.ScanNetworks(ctx, doRescan, doDeduplicate)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []*generated.WiFiNetwork
+	for _, n := range networks {
+		result = append(result, &generated.WiFiNetwork{
+			Ssid:           n.SSID,
+			SignalStrength: n.SignalStrength,
+			Frequency:      n.Frequency,
+			Security:       generated.WiFiSecurityType(n.Security),
+			InUse:          n.InUse,
+			Saved:          n.Saved,
+		})
+	}
+
+	return result, nil
 }
 
 // WifiStatus is the resolver for the wifiStatus field.

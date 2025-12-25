@@ -167,6 +167,109 @@ func (s *Service) SetWiFiEnabled(ctx context.Context, enabled bool) (*Status, er
 	return s.GetStatus(ctx)
 }
 
+// ScanNetworks scans for available WiFi networks.
+func (s *Service) ScanNetworks(ctx context.Context, rescan bool, deduplicate bool) ([]Network, error) {
+	if runtime.GOOS != "linux" {
+		return []Network{}, nil
+	}
+
+	// Trigger a rescan if requested
+	if rescan {
+		_, err := s.executor.Execute("nmcli", "device", "wifi", "rescan")
+		if err != nil {
+			log.Printf("WiFi rescan failed (may be rate-limited): %v", err)
+			// Continue anyway - we can still list cached results
+		}
+		// Give the scan a moment to complete
+		time.Sleep(2 * time.Second)
+	}
+
+	// Get list of available networks
+	// Format: SSID:SIGNAL:SECURITY:FREQ:IN-USE
+	output, err := s.executor.Execute("nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY,FREQ,IN-USE", "device", "wifi", "list")
+	if err != nil {
+		log.Printf("Failed to list WiFi networks: %v", err)
+		return nil, fmt.Errorf("failed to list networks: %w", err)
+	}
+
+	var networks []Network
+	seenSSIDs := make(map[string]bool)
+	lines := strings.Split(string(output), "\n")
+
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+
+		// Parse the colon-separated fields
+		// Note: SSID may contain colons, so we need to be careful
+		parts := strings.Split(line, ":")
+		if len(parts) < 5 {
+			continue
+		}
+
+		// Last 4 fields are SIGNAL, SECURITY, FREQ, IN-USE
+		// Everything before that is the SSID (which may contain colons)
+		inUse := parts[len(parts)-1]
+		freq := parts[len(parts)-2]
+		security := parts[len(parts)-3]
+		signalStr := parts[len(parts)-4]
+		ssid := strings.Join(parts[:len(parts)-4], ":")
+
+		// Skip empty SSIDs (hidden networks)
+		if ssid == "" {
+			continue
+		}
+
+		// Deduplicate by SSID if requested
+		if deduplicate {
+			if seenSSIDs[ssid] {
+				continue
+			}
+			seenSSIDs[ssid] = true
+		}
+
+		// Parse signal strength (ignore error - default to 0 if parsing fails)
+		signal := 0
+		_, _ = fmt.Sscanf(signalStr, "%d", &signal)
+
+		network := Network{
+			SSID:           ssid,
+			SignalStrength: signal,
+			Frequency:      freq,
+			Security:       parseSecurityType(security),
+			InUse:          inUse == "*",
+		}
+
+		networks = append(networks, network)
+	}
+
+	return networks, nil
+}
+
+// parseSecurityType converts nmcli security string to SecurityType.
+func parseSecurityType(security string) SecurityType {
+	security = strings.ToUpper(security)
+	switch {
+	case strings.Contains(security, "WPA3") && strings.Contains(security, "EAP"):
+		return SecurityWPA3EAP
+	case strings.Contains(security, "WPA3"):
+		return SecurityWPA3PSK
+	case strings.Contains(security, "WPA") && strings.Contains(security, "EAP"):
+		return SecurityWPAEAP
+	case strings.Contains(security, "WPA"):
+		return SecurityWPAPSK
+	case strings.Contains(security, "WEP"):
+		return SecurityWEP
+	case strings.Contains(security, "OWE"):
+		return SecurityOWE
+	case security == "" || security == "--":
+		return SecurityOpen
+	default:
+		return SecurityWPAPSK // Default to WPA-PSK for unknown
+	}
+}
+
 // StartAPMode starts the access point mode.
 func (s *Service) StartAPMode(ctx context.Context) (*ModeResult, error) {
 	s.mu.Lock()
