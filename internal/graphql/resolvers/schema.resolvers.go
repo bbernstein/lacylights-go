@@ -2887,6 +2887,73 @@ func (r *mutationResolver) UpdateFadeUpdateRate(ctx context.Context, rateHz int)
 	return true, nil
 }
 
+// SetArtNetEnabled is the resolver for the setArtNetEnabled field.
+// When disabling, optionally fades to black then stops ArtNet transmission.
+// When enabling, restores ArtNet transmission with the saved broadcast address.
+//
+// Note on fade behavior:
+// - With fadeTime > 0: Uses FadeEngine.FadeToBlack() for a gradual, smooth transition
+// - Without fadeTime: Uses DMXService.FadeToBlack() for an instant blackout
+// The mutation returns immediately; fade completion happens asynchronously.
+func (r *mutationResolver) SetArtNetEnabled(ctx context.Context, enabled bool, fadeTime *float64) (*generated.ArtNetStatus, error) {
+	// Validate fadeTime if provided
+	if fadeTime != nil && (*fadeTime < 0 || *fadeTime > 60) {
+		return nil, fmt.Errorf("fadeTime must be between 0 and 60 seconds")
+	}
+
+	if !enabled {
+		// Fade to black first if fadeTime is provided
+		if fadeTime != nil && *fadeTime > 0 {
+			// Use FadeEngine for gradual fade - this happens asynchronously
+			duration := time.Duration(*fadeTime * float64(time.Second))
+			r.FadeEngine.FadeToBlack(duration, "")
+			// Don't block - let fade complete asynchronously
+			// Disable ArtNet immediately; channels will fade to black via FadeEngine
+		} else {
+			// Instant blackout using DMXService (sets all channels to 0 immediately)
+			r.DMXService.FadeToBlack()
+		}
+
+		// Disable ArtNet transmission immediately
+		// This stops packet transmission; fade may still be in progress for visual effect
+		r.DMXService.DisableArtNet()
+
+		// Clear any active scene tracking
+		r.DMXService.ClearActiveScene()
+
+		// Persist setting
+		_, err := r.SettingRepo.Upsert(ctx, "artnet_enabled", "false")
+		if err != nil {
+			return nil, fmt.Errorf("failed to save artnet_enabled setting: %w", err)
+		}
+	} else {
+		// Re-enable with saved broadcast address
+		broadcastSetting, err := r.SettingRepo.FindByKey(ctx, "artnet_broadcast_address")
+		if err != nil {
+			log.Printf("Warning: failed to load broadcast address setting: %v", err)
+		}
+		addr := "255.255.255.255"
+		if broadcastSetting != nil && broadcastSetting.Value != "" {
+			addr = broadcastSetting.Value
+		}
+
+		if err := r.DMXService.ReloadBroadcastAddress(addr); err != nil {
+			return nil, fmt.Errorf("failed to enable ArtNet: %w", err)
+		}
+
+		// Persist setting
+		_, err = r.SettingRepo.Upsert(ctx, "artnet_enabled", "true")
+		if err != nil {
+			return nil, fmt.Errorf("failed to save artnet_enabled setting: %w", err)
+		}
+	}
+
+	return &generated.ArtNetStatus{
+		Enabled:          r.DMXService.IsEnabled(),
+		BroadcastAddress: r.DMXService.GetBroadcastAddress(),
+	}, nil
+}
+
 // ConnectWiFi is the resolver for the connectWiFi field.
 func (r *mutationResolver) ConnectWiFi(ctx context.Context, ssid string, password *string) (*generated.WiFiConnectionResult, error) {
 	result, err := r.WiFiService.ConnectToNetwork(ctx, ssid, password)
@@ -4205,6 +4272,15 @@ func (r *queryResolver) SystemInfo(ctx context.Context) (*generated.SystemInfo, 
 		ArtnetEnabled:          r.DMXService.IsEnabled(),
 		ArtnetBroadcastAddress: r.DMXService.GetBroadcastAddress(),
 		FadeUpdateRateHz:       r.FadeEngine.GetUpdateRateHz(),
+	}, nil
+}
+
+// ArtNetStatus is the resolver for the artNetStatus field.
+// Returns the current ArtNet transmission status.
+func (r *queryResolver) ArtNetStatus(ctx context.Context) (*generated.ArtNetStatus, error) {
+	return &generated.ArtNetStatus{
+		Enabled:          r.DMXService.IsEnabled(),
+		BroadcastAddress: r.DMXService.GetBroadcastAddress(),
 	}, nil
 }
 

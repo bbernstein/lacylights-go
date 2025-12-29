@@ -28,6 +28,11 @@ type APConfig struct {
 	MinutesRemaining *int   `json:"minutesRemaining,omitempty"`
 }
 
+type ArtNetStatus struct {
+	Enabled          bool   `json:"enabled"`
+	BroadcastAddress string `json:"broadcastAddress"`
+}
+
 // Server build information for version verification
 type BuildInfo struct {
 	// Semantic version (e.g., v0.8.10)

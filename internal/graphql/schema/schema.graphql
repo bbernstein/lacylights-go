@@ -384,6 +384,11 @@ type SystemInfo {
   fadeUpdateRateHz: Int!
 }
 
+type ArtNetStatus {
+  enabled: Boolean!
+  broadcastAddress: String!
+}
+
 # =============================================================================
 # PAGINATION TYPES
 # =============================================================================
@@ -1322,6 +1327,7 @@ type Query {
 
   # System Information
   systemInfo: SystemInfo!
+  artNetStatus: ArtNetStatus!
   networkInterfaceOptions: [NetworkInterfaceOption!]!
 
   # WiFi Configuration
@@ -1530,6 +1536,9 @@ type Mutation {
   # Settings
   updateSetting(input: UpdateSettingInput!): Setting!
   updateFadeUpdateRate(rateHz: Int!): Boolean!
+
+  # Art-Net Control
+  setArtNetEnabled(enabled: Boolean!, fadeTime: Float): ArtNetStatus!
 
   # WiFi Configuration
   connectWiFi(ssid: String!, password: String): WiFiConnectionResult!

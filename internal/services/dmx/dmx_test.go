@@ -501,9 +501,9 @@ func TestDisableArtNet(t *testing.T) {
 		t.Error("Service should be disabled after DisableArtNet")
 	}
 
-	// Broadcast address should be empty
-	if service.GetBroadcastAddress() != "" {
-		t.Errorf("GetBroadcastAddress() = %s, want empty", service.GetBroadcastAddress())
+	// Broadcast address should be preserved (for status display and re-enabling)
+	if service.GetBroadcastAddress() != "127.0.0.1" {
+		t.Errorf("GetBroadcastAddress() = %s, want 127.0.0.1 (preserved)", service.GetBroadcastAddress())
 	}
 }
 

@@ -141,13 +141,28 @@ func main() {
 		// Continue anyway - DMX may be disabled or broadcast address unavailable
 	}
 
-	// Load saved broadcast address from database
+	// Check ArtNet settings from database
 	settingRepo := repositories.NewSettingRepository(db)
-	if savedAddr, err := settingRepo.FindByKey(context.Background(), "artnet_broadcast_address"); err == nil && savedAddr != nil && savedAddr.Value != "" {
-		log.Printf("📡 Loading saved Art-Net broadcast address: %s", savedAddr.Value)
-		if err := dmxService.ReloadBroadcastAddress(savedAddr.Value); err != nil {
-			log.Printf("Warning: failed to load saved broadcast address: %v", err)
+
+	// First check if ArtNet was disabled (blackout mode) before shutdown
+	// We check this BEFORE loading broadcast address to avoid brief transmission on startup
+	artnetDisabled := false
+	if savedEnabled, err := settingRepo.FindByKey(context.Background(), "artnet_enabled"); err == nil && savedEnabled != nil && savedEnabled.Value == "false" {
+		artnetDisabled = true
+		log.Printf("🔌 Art-Net will start disabled based on saved setting (blackout mode)")
+	}
+
+	// Load saved broadcast address from database (only if ArtNet is not disabled)
+	if !artnetDisabled {
+		if savedAddr, err := settingRepo.FindByKey(context.Background(), "artnet_broadcast_address"); err == nil && savedAddr != nil && savedAddr.Value != "" {
+			log.Printf("📡 Loading saved Art-Net broadcast address: %s", savedAddr.Value)
+			if err := dmxService.ReloadBroadcastAddress(savedAddr.Value); err != nil {
+				log.Printf("Warning: failed to load saved broadcast address: %v", err)
+			}
 		}
+	} else {
+		// Disable ArtNet now that DMX service is initialized
+		dmxService.DisableArtNet()
 	}
 
 	// Create fade engine with configured update rate (or saved rate from database)

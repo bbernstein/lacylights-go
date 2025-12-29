@@ -722,6 +722,8 @@ func (s *Service) ReloadBroadcastAddress(newAddress string) error {
 }
 
 // DisableArtNet disables Art-Net output and closes the connection.
+// The broadcast address is preserved so it can be displayed in status
+// and used when re-enabling without needing to reload from settings.
 func (s *Service) DisableArtNet() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -731,6 +733,6 @@ func (s *Service) DisableArtNet() {
 		s.conn = nil
 	}
 	s.enabled = false
-	s.broadcastAddr = ""
+	// Note: broadcastAddr is intentionally preserved for status display and re-enabling
 	log.Printf("🔌 Art-Net output disabled")
 }
