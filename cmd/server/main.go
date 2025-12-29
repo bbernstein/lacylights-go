@@ -150,6 +150,12 @@ func main() {
 		}
 	}
 
+	// Check if ArtNet was disabled (blackout mode) before shutdown
+	if savedEnabled, err := settingRepo.FindByKey(context.Background(), "artnet_enabled"); err == nil && savedEnabled != nil && savedEnabled.Value == "false" {
+		log.Printf("🔌 Art-Net disabled based on saved setting (blackout mode)")
+		dmxService.DisableArtNet()
+	}
+
 	// Create fade engine with configured update rate (or saved rate from database)
 	fadeUpdateRate := cfg.FadeUpdateRateHz
 	if savedRate, err := settingRepo.FindByKey(context.Background(), "fade_update_rate_hz"); err == nil && savedRate != nil && savedRate.Value != "" {

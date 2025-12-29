@@ -80,6 +80,11 @@ type ComplexityRoot struct {
 		TimeoutMinutes   func(childComplexity int) int
 	}
 
+	ArtNetStatus struct {
+		BroadcastAddress func(childComplexity int) int
+		Enabled          func(childComplexity int) int
+	}
+
 	BuildInfo struct {
 		BuildTime func(childComplexity int) int
 		GitCommit func(childComplexity int) int
@@ -413,6 +418,7 @@ type ComplexityRoot struct {
 		ReorderProjectFixtures                 func(childComplexity int, projectID string, fixtureOrders []*FixtureOrderInput) int
 		ReorderSceneFixtures                   func(childComplexity int, sceneID string, fixtureOrders []*FixtureOrderInput) int
 		ResetAPTimeout                         func(childComplexity int) int
+		SetArtNetEnabled                       func(childComplexity int, enabled bool, fadeTime *float64) int
 		SetChannelValue                        func(childComplexity int, universe int, channel int, value int) int
 		SetSceneLive                           func(childComplexity int, sceneID string) int
 		SetWiFiEnabled                         func(childComplexity int, enabled bool) int
@@ -586,6 +592,7 @@ type ComplexityRoot struct {
 		AllDmxOutput                    func(childComplexity int) int
 		ApClients                       func(childComplexity int) int
 		ApConfig                        func(childComplexity int) int
+		ArtNetStatus                    func(childComplexity int) int
 		AvailableVersions               func(childComplexity int, repository string) int
 		BuildInfo                       func(childComplexity int) int
 		ChannelMap                      func(childComplexity int, projectID string, universe *int) int
@@ -959,6 +966,7 @@ type MutationResolver interface {
 	ExportProjectToQlc(ctx context.Context, projectID string, fixtureMappings []*FixtureMappingInput) (*QLCExportResult, error)
 	UpdateSetting(ctx context.Context, input UpdateSettingInput) (*models.Setting, error)
 	UpdateFadeUpdateRate(ctx context.Context, rateHz int) (bool, error)
+	SetArtNetEnabled(ctx context.Context, enabled bool, fadeTime *float64) (*ArtNetStatus, error)
 	ConnectWiFi(ctx context.Context, ssid string, password *string) (*WiFiConnectionResult, error)
 	DisconnectWiFi(ctx context.Context) (*WiFiConnectionResult, error)
 	SetWiFiEnabled(ctx context.Context, enabled bool) (*WiFiStatus, error)
@@ -1029,6 +1037,7 @@ type QueryResolver interface {
 	Settings(ctx context.Context) ([]*models.Setting, error)
 	Setting(ctx context.Context, key string) (*models.Setting, error)
 	SystemInfo(ctx context.Context) (*SystemInfo, error)
+	ArtNetStatus(ctx context.Context) (*ArtNetStatus, error)
 	NetworkInterfaceOptions(ctx context.Context) ([]*NetworkInterfaceOption, error)
 	WifiNetworks(ctx context.Context, rescan *bool, deduplicate *bool) ([]*WiFiNetwork, error)
 	WifiStatus(ctx context.Context) (*WiFiStatus, error)
@@ -1170,6 +1179,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.APConfig.TimeoutMinutes(childComplexity), true
+
+	case "ArtNetStatus.broadcastAddress":
+		if e.complexity.ArtNetStatus.BroadcastAddress == nil {
+			break
+		}
+
+		return e.complexity.ArtNetStatus.BroadcastAddress(childComplexity), true
+	case "ArtNetStatus.enabled":
+		if e.complexity.ArtNetStatus.Enabled == nil {
+			break
+		}
+
+		return e.complexity.ArtNetStatus.Enabled(childComplexity), true
 
 	case "BuildInfo.buildTime":
 		if e.complexity.BuildInfo.BuildTime == nil {
@@ -2956,6 +2978,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.ResetAPTimeout(childComplexity), true
+	case "Mutation.setArtNetEnabled":
+		if e.complexity.Mutation.SetArtNetEnabled == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setArtNetEnabled_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.SetArtNetEnabled(childComplexity, args["enabled"].(bool), args["fadeTime"].(*float64)), true
 	case "Mutation.setChannelValue":
 		if e.complexity.Mutation.SetChannelValue == nil {
 			break
@@ -3842,6 +3875,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.ApConfig(childComplexity), true
+	case "Query.artNetStatus":
+		if e.complexity.Query.ArtNetStatus == nil {
+			break
+		}
+
+		return e.complexity.Query.ArtNetStatus(childComplexity), true
 	case "Query.availableVersions":
 		if e.complexity.Query.AvailableVersions == nil {
 			break
@@ -5630,6 +5669,11 @@ type SystemInfo {
   fadeUpdateRateHz: Int!
 }
 
+type ArtNetStatus {
+  enabled: Boolean!
+  broadcastAddress: String!
+}
+
 # =============================================================================
 # PAGINATION TYPES
 # =============================================================================
@@ -6568,6 +6612,7 @@ type Query {
 
   # System Information
   systemInfo: SystemInfo!
+  artNetStatus: ArtNetStatus!
   networkInterfaceOptions: [NetworkInterfaceOption!]!
 
   # WiFi Configuration
@@ -6776,6 +6821,9 @@ type Mutation {
   # Settings
   updateSetting(input: UpdateSettingInput!): Setting!
   updateFadeUpdateRate(rateHz: Int!): Boolean!
+
+  # Art-Net Control
+  setArtNetEnabled(enabled: Boolean!, fadeTime: Float): ArtNetStatus!
 
   # WiFi Configuration
   connectWiFi(ssid: String!, password: String): WiFiConnectionResult!
@@ -7623,6 +7671,22 @@ func (ec *executionContext) field_Mutation_reorderSceneFixtures_args(ctx context
 		return nil, err
 	}
 	args["fixtureOrders"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_setArtNetEnabled_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "enabled", ec.unmarshalNBoolean2bool)
+	if err != nil {
+		return nil, err
+	}
+	args["enabled"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "fadeTime", ec.unmarshalOFloat2ᚖfloat64)
+	if err != nil {
+		return nil, err
+	}
+	args["fadeTime"] = arg1
 	return args, nil
 }
 
@@ -8908,6 +8972,64 @@ func (ec *executionContext) fieldContext_APConfig_minutesRemaining(_ context.Con
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtNetStatus_enabled(ctx context.Context, field graphql.CollectedField, obj *ArtNetStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtNetStatus_enabled,
+		func(ctx context.Context) (any, error) {
+			return obj.Enabled, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtNetStatus_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtNetStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtNetStatus_broadcastAddress(ctx context.Context, field graphql.CollectedField, obj *ArtNetStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtNetStatus_broadcastAddress,
+		func(ctx context.Context) (any, error) {
+			return obj.BroadcastAddress, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtNetStatus_broadcastAddress(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtNetStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -18789,6 +18911,53 @@ func (ec *executionContext) fieldContext_Mutation_updateFadeUpdateRate(ctx conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_setArtNetEnabled(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_setArtNetEnabled,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().SetArtNetEnabled(ctx, fc.Args["enabled"].(bool), fc.Args["fadeTime"].(*float64))
+		},
+		nil,
+		ec.marshalNArtNetStatus2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐArtNetStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_setArtNetEnabled(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "enabled":
+				return ec.fieldContext_ArtNetStatus_enabled(ctx, field)
+			case "broadcastAddress":
+				return ec.fieldContext_ArtNetStatus_broadcastAddress(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ArtNetStatus", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setArtNetEnabled_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_connectWiFi(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -24053,6 +24222,41 @@ func (ec *executionContext) fieldContext_Query_systemInfo(_ context.Context, fie
 				return ec.fieldContext_SystemInfo_fadeUpdateRateHz(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SystemInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_artNetStatus(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_artNetStatus,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().ArtNetStatus(ctx)
+		},
+		nil,
+		ec.marshalNArtNetStatus2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐArtNetStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_artNetStatus(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "enabled":
+				return ec.fieldContext_ArtNetStatus_enabled(ctx, field)
+			case "broadcastAddress":
+				return ec.fieldContext_ArtNetStatus_broadcastAddress(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ArtNetStatus", field.Name)
 		},
 	}
 	return fc, nil
@@ -33200,6 +33404,50 @@ func (ec *executionContext) _APConfig(ctx context.Context, sel ast.SelectionSet,
 	return out
 }
 
+var artNetStatusImplementors = []string{"ArtNetStatus"}
+
+func (ec *executionContext) _ArtNetStatus(ctx context.Context, sel ast.SelectionSet, obj *ArtNetStatus) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, artNetStatusImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ArtNetStatus")
+		case "enabled":
+			out.Values[i] = ec._ArtNetStatus_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "broadcastAddress":
+			out.Values[i] = ec._ArtNetStatus_broadcastAddress(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var buildInfoImplementors = []string{"BuildInfo"}
 
 func (ec *executionContext) _BuildInfo(ctx context.Context, sel ast.SelectionSet, obj *BuildInfo) graphql.Marshaler {
@@ -36565,6 +36813,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "setArtNetEnabled":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setArtNetEnabled(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "connectWiFi":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_connectWiFi(ctx, field)
@@ -38858,6 +39113,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_systemInfo(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "artNetStatus":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_artNetStatus(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -41450,6 +41727,20 @@ func (ec *executionContext) marshalNAPClient2ᚖgithubᚗcomᚋbbernsteinᚋlacy
 		return graphql.Null
 	}
 	return ec._APClient(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNArtNetStatus2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐArtNetStatus(ctx context.Context, sel ast.SelectionSet, v ArtNetStatus) graphql.Marshaler {
+	return ec._ArtNetStatus(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNArtNetStatus2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐArtNetStatus(ctx context.Context, sel ast.SelectionSet, v *ArtNetStatus) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ArtNetStatus(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNBoolean2bool(ctx context.Context, v any) (bool, error) {

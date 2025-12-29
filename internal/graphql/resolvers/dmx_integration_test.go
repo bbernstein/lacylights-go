@@ -826,3 +826,195 @@ func TestFadeUpdateRate_ValidationErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestArtNetStatus_Query(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	var resp struct {
+		ArtNetStatus struct {
+			Enabled          bool   `json:"enabled"`
+			BroadcastAddress string `json:"broadcastAddress"`
+		} `json:"artNetStatus"`
+	}
+
+	err := c.Post(`query {
+		artNetStatus {
+			enabled
+			broadcastAddress
+		}
+	}`, &resp)
+
+	if err != nil {
+		t.Fatalf("ArtNetStatus query failed: %v", err)
+	}
+
+	// In test mode, artnet is disabled
+	if resp.ArtNetStatus.Enabled != false {
+		t.Errorf("Expected enabled=false in test mode, got %v", resp.ArtNetStatus.Enabled)
+	}
+}
+
+func TestSetArtNetEnabled_Disable(t *testing.T) {
+	c, resolver, cleanup := testSetup(t)
+	defer cleanup()
+
+	// First set some channel values to verify fade to black works
+	resolver.DMXService.SetChannelValue(1, 1, 255)
+	resolver.DMXService.SetChannelValue(1, 100, 128)
+
+	var resp struct {
+		SetArtNetEnabled struct {
+			Enabled          bool   `json:"enabled"`
+			BroadcastAddress string `json:"broadcastAddress"`
+		} `json:"setArtNetEnabled"`
+	}
+
+	// Disable ArtNet with instant blackout (no fadeTime)
+	err := c.Post(`mutation {
+		setArtNetEnabled(enabled: false) {
+			enabled
+			broadcastAddress
+		}
+	}`, &resp)
+
+	if err != nil {
+		t.Fatalf("SetArtNetEnabled mutation failed: %v", err)
+	}
+
+	// Should return disabled state
+	if resp.SetArtNetEnabled.Enabled != false {
+		t.Errorf("Expected enabled=false after disable, got %v", resp.SetArtNetEnabled.Enabled)
+	}
+
+	// Verify DMX service is disabled
+	if resolver.DMXService.IsEnabled() {
+		t.Error("Expected DMX service to be disabled")
+	}
+
+	// Verify channels were set to 0
+	if resolver.DMXService.GetChannelValue(1, 1) != 0 {
+		t.Errorf("Expected channel 1,1 to be 0 after blackout, got %d", resolver.DMXService.GetChannelValue(1, 1))
+	}
+	if resolver.DMXService.GetChannelValue(1, 100) != 0 {
+		t.Errorf("Expected channel 1,100 to be 0 after blackout, got %d", resolver.DMXService.GetChannelValue(1, 100))
+	}
+
+	// Verify setting was persisted
+	setting, err := resolver.SettingRepo.FindByKey(context.Background(), "artnet_enabled")
+	if err != nil {
+		t.Fatalf("Failed to get artnet_enabled setting: %v", err)
+	}
+	if setting == nil || setting.Value != "false" {
+		t.Errorf("Expected artnet_enabled setting to be 'false', got %v", setting)
+	}
+}
+
+func TestSetArtNetEnabled_DisableWithFade(t *testing.T) {
+	c, resolver, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Set some channel values
+	resolver.DMXService.SetChannelValue(1, 1, 255)
+
+	var resp struct {
+		SetArtNetEnabled struct {
+			Enabled          bool   `json:"enabled"`
+			BroadcastAddress string `json:"broadcastAddress"`
+		} `json:"setArtNetEnabled"`
+	}
+
+	// Disable ArtNet with a very short fade time
+	err := c.Post(`mutation {
+		setArtNetEnabled(enabled: false, fadeTime: 0.05) {
+			enabled
+			broadcastAddress
+		}
+	}`, &resp)
+
+	if err != nil {
+		t.Fatalf("SetArtNetEnabled mutation failed: %v", err)
+	}
+
+	// Should return disabled state
+	if resp.SetArtNetEnabled.Enabled != false {
+		t.Errorf("Expected enabled=false after disable with fade, got %v", resp.SetArtNetEnabled.Enabled)
+	}
+
+	// Wait for fade to complete
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify channel was set to 0
+	if resolver.DMXService.GetChannelValue(1, 1) != 0 {
+		t.Errorf("Expected channel 1,1 to be 0 after fade blackout, got %d", resolver.DMXService.GetChannelValue(1, 1))
+	}
+}
+
+func TestSetArtNetEnabled_Enable(t *testing.T) {
+	c, resolver, cleanup := testSetup(t)
+	defer cleanup()
+
+	// First disable ArtNet
+	var disableResp struct {
+		SetArtNetEnabled struct {
+			Enabled bool `json:"enabled"`
+		} `json:"setArtNetEnabled"`
+	}
+
+	err := c.Post(`mutation {
+		setArtNetEnabled(enabled: false) {
+			enabled
+		}
+	}`, &disableResp)
+	if err != nil {
+		t.Fatalf("SetArtNetEnabled disable failed: %v", err)
+	}
+
+	// Save a broadcast address setting
+	_, err = resolver.SettingRepo.Upsert(context.Background(), "artnet_broadcast_address", "192.168.1.255")
+	if err != nil {
+		t.Fatalf("Failed to save broadcast address: %v", err)
+	}
+
+	// Now enable ArtNet
+	var enableResp struct {
+		SetArtNetEnabled struct {
+			Enabled          bool   `json:"enabled"`
+			BroadcastAddress string `json:"broadcastAddress"`
+		} `json:"setArtNetEnabled"`
+	}
+
+	err = c.Post(`mutation {
+		setArtNetEnabled(enabled: true) {
+			enabled
+			broadcastAddress
+		}
+	}`, &enableResp)
+
+	if err != nil {
+		t.Fatalf("SetArtNetEnabled enable failed: %v", err)
+	}
+
+	// Should return enabled state with saved broadcast address
+	if enableResp.SetArtNetEnabled.Enabled != true {
+		t.Errorf("Expected enabled=true after enable, got %v", enableResp.SetArtNetEnabled.Enabled)
+	}
+
+	if enableResp.SetArtNetEnabled.BroadcastAddress != "192.168.1.255" {
+		t.Errorf("Expected broadcastAddress='192.168.1.255', got %v", enableResp.SetArtNetEnabled.BroadcastAddress)
+	}
+
+	// Verify DMX service is enabled
+	if !resolver.DMXService.IsEnabled() {
+		t.Error("Expected DMX service to be enabled")
+	}
+
+	// Verify setting was persisted
+	setting, err := resolver.SettingRepo.FindByKey(context.Background(), "artnet_enabled")
+	if err != nil {
+		t.Fatalf("Failed to get artnet_enabled setting: %v", err)
+	}
+	if setting == nil || setting.Value != "true" {
+		t.Errorf("Expected artnet_enabled setting to be 'true', got %v", setting)
+	}
+}
