@@ -2896,6 +2896,11 @@ func (r *mutationResolver) UpdateFadeUpdateRate(ctx context.Context, rateHz int)
 // - Without fadeTime: Uses DMXService.FadeToBlack() for an instant blackout
 // The mutation returns immediately; fade completion happens asynchronously.
 func (r *mutationResolver) SetArtNetEnabled(ctx context.Context, enabled bool, fadeTime *float64) (*generated.ArtNetStatus, error) {
+	// Validate fadeTime if provided
+	if fadeTime != nil && (*fadeTime < 0 || *fadeTime > 60) {
+		return nil, fmt.Errorf("fadeTime must be between 0 and 60 seconds")
+	}
+
 	if !enabled {
 		// Fade to black first if fadeTime is provided
 		if fadeTime != nil && *fadeTime > 0 {

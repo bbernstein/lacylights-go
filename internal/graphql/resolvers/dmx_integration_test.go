@@ -3,6 +3,7 @@ package resolvers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -1016,5 +1017,46 @@ func TestSetArtNetEnabled_Enable(t *testing.T) {
 	}
 	if setting == nil || setting.Value != "true" {
 		t.Errorf("Expected artnet_enabled setting to be 'true', got %v", setting)
+	}
+}
+
+func TestSetArtNetEnabled_InvalidFadeTime(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Test negative fadeTime
+	var resp struct {
+		SetArtNetEnabled struct {
+			Enabled bool `json:"enabled"`
+		} `json:"setArtNetEnabled"`
+	}
+
+	err := c.Post(`mutation {
+		setArtNetEnabled(enabled: false, fadeTime: -1) {
+			enabled
+		}
+	}`, &resp)
+
+	if err == nil {
+		t.Fatal("Expected error for negative fadeTime, got none")
+	}
+
+	if !strings.Contains(err.Error(), "fadeTime must be between 0 and 60 seconds") {
+		t.Errorf("Expected fadeTime validation error, got: %v", err)
+	}
+
+	// Test fadeTime exceeding max
+	err = c.Post(`mutation {
+		setArtNetEnabled(enabled: false, fadeTime: 120) {
+			enabled
+		}
+	}`, &resp)
+
+	if err == nil {
+		t.Fatal("Expected error for fadeTime > 60, got none")
+	}
+
+	if !strings.Contains(err.Error(), "fadeTime must be between 0 and 60 seconds") {
+		t.Errorf("Expected fadeTime validation error, got: %v", err)
 	}
 }
