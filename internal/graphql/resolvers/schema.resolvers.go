@@ -2890,20 +2890,27 @@ func (r *mutationResolver) UpdateFadeUpdateRate(ctx context.Context, rateHz int)
 // SetArtNetEnabled is the resolver for the setArtNetEnabled field.
 // When disabling, optionally fades to black then stops ArtNet transmission.
 // When enabling, restores ArtNet transmission with the saved broadcast address.
+//
+// Note on fade behavior:
+// - With fadeTime > 0: Uses FadeEngine.FadeToBlack() for a gradual, smooth transition
+// - Without fadeTime: Uses DMXService.FadeToBlack() for an instant blackout
+// The mutation returns immediately; fade completion happens asynchronously.
 func (r *mutationResolver) SetArtNetEnabled(ctx context.Context, enabled bool, fadeTime *float64) (*generated.ArtNetStatus, error) {
 	if !enabled {
 		// Fade to black first if fadeTime is provided
 		if fadeTime != nil && *fadeTime > 0 {
+			// Use FadeEngine for gradual fade - this happens asynchronously
 			duration := time.Duration(*fadeTime * float64(time.Second))
 			r.FadeEngine.FadeToBlack(duration, "")
-			// Wait for fade to complete
-			time.Sleep(duration + 100*time.Millisecond)
+			// Don't block - let fade complete asynchronously
+			// Disable ArtNet immediately; channels will fade to black via FadeEngine
 		} else {
-			// Instant blackout
+			// Instant blackout using DMXService (sets all channels to 0 immediately)
 			r.DMXService.FadeToBlack()
 		}
 
-		// Disable ArtNet transmission
+		// Disable ArtNet transmission immediately
+		// This stops packet transmission; fade may still be in progress for visual effect
 		r.DMXService.DisableArtNet()
 
 		// Clear any active scene tracking
@@ -2916,7 +2923,10 @@ func (r *mutationResolver) SetArtNetEnabled(ctx context.Context, enabled bool, f
 		}
 	} else {
 		// Re-enable with saved broadcast address
-		broadcastSetting, _ := r.SettingRepo.FindByKey(ctx, "artnet_broadcast_address")
+		broadcastSetting, err := r.SettingRepo.FindByKey(ctx, "artnet_broadcast_address")
+		if err != nil {
+			log.Printf("Warning: failed to load broadcast address setting: %v", err)
+		}
 		addr := "255.255.255.255"
 		if broadcastSetting != nil && broadcastSetting.Value != "" {
 			addr = broadcastSetting.Value
@@ -2927,7 +2937,7 @@ func (r *mutationResolver) SetArtNetEnabled(ctx context.Context, enabled bool, f
 		}
 
 		// Persist setting
-		_, err := r.SettingRepo.Upsert(ctx, "artnet_enabled", "true")
+		_, err = r.SettingRepo.Upsert(ctx, "artnet_enabled", "true")
 		if err != nil {
 			return nil, fmt.Errorf("failed to save artnet_enabled setting: %w", err)
 		}
