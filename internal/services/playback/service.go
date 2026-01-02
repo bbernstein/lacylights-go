@@ -585,19 +585,31 @@ func (s *Service) PausePlayingCueLists() {
 func (s *Service) ResumeCueList(ctx context.Context, cueListID string) error {
 	s.mu.RLock()
 	state := s.states[cueListID]
+	if state == nil {
+		s.mu.RUnlock()
+		return fmt.Errorf("cue list not found")
+	}
+
+	// Copy values while holding the lock to avoid race conditions
+	isPaused := state.IsPaused
+	var currentCueIndex *int
+	if state.CurrentCueIndex != nil {
+		idx := *state.CurrentCueIndex
+		currentCueIndex = &idx
+	}
 	s.mu.RUnlock()
 
-	if state == nil || !state.IsPaused {
+	if !isPaused {
 		return fmt.Errorf("cue list is not paused")
 	}
 
-	if state.CurrentCueIndex == nil {
+	if currentCueIndex == nil {
 		return fmt.Errorf("no current cue to resume")
 	}
 
 	// Execute the current cue's DMX values instantly (zero fade time)
 	zeroFade := float64(0)
-	return s.JumpToCue(ctx, cueListID, *state.CurrentCueIndex, &zeroFade)
+	return s.JumpToCue(ctx, cueListID, *currentCueIndex, &zeroFade)
 }
 
 // StopAllCueLists stops all cue list playback.
