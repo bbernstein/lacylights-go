@@ -1,6 +1,7 @@
 package playback
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -1009,5 +1010,370 @@ func TestStopCueList_NonExistent(t *testing.T) {
 	state := service.GetPlaybackState("non-existent-cue-list")
 	if state != nil {
 		t.Error("Expected nil state for non-existent cue list after stop")
+	}
+}
+
+func TestPauseCueList(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	// Set up a playing state
+	cueIndex := 5
+	service.states["test-cue-list"] = &PlaybackState{
+		CueListID:       "test-cue-list",
+		CurrentCueIndex: &cueIndex,
+		IsPlaying:       true,
+		IsPaused:        false,
+		IsFading:        true,
+		FadeProgress:    50.0,
+		LastUpdated:     time.Now(),
+	}
+
+	// Create timers to test cleanup
+	ticker := time.NewTicker(100 * time.Millisecond)
+	service.fadeProgressTickers["test-cue-list"] = ticker
+	timer := time.NewTimer(10 * time.Second)
+	service.followTimers["test-cue-list"] = timer
+	fadeTimer := time.NewTimer(10 * time.Second)
+	service.fadeCompleteTimers["test-cue-list"] = fadeTimer
+
+	// Pause the cue list
+	service.PauseCueList("test-cue-list")
+
+	// Verify state was updated
+	state := service.GetPlaybackState("test-cue-list")
+	if state.IsPlaying {
+		t.Error("Expected IsPlaying to be false after pause")
+	}
+	if !state.IsPaused {
+		t.Error("Expected IsPaused to be true after pause")
+	}
+	if state.IsFading {
+		t.Error("Expected IsFading to be false after pause")
+	}
+	if state.FadeProgress != 0 {
+		t.Errorf("Expected FadeProgress 0 after pause, got %f", state.FadeProgress)
+	}
+
+	// Verify CurrentCueIndex is preserved
+	if state.CurrentCueIndex == nil || *state.CurrentCueIndex != 5 {
+		t.Errorf("Expected CurrentCueIndex 5 to be preserved, got %v", state.CurrentCueIndex)
+	}
+
+	// Verify timers were cleaned up
+	if _, exists := service.fadeProgressTickers["test-cue-list"]; exists {
+		t.Error("Expected fade progress ticker to be removed after pause")
+	}
+	if _, exists := service.followTimers["test-cue-list"]; exists {
+		t.Error("Expected follow timer to be removed after pause")
+	}
+	if _, exists := service.fadeCompleteTimers["test-cue-list"]; exists {
+		t.Error("Expected fade complete timer to be removed after pause")
+	}
+}
+
+func TestPauseCueList_NotPlaying(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	// Set up a stopped state
+	cueIndex := 3
+	service.states["test-cue-list"] = &PlaybackState{
+		CueListID:       "test-cue-list",
+		CurrentCueIndex: &cueIndex,
+		IsPlaying:       false,
+		IsPaused:        false,
+		LastUpdated:     time.Now(),
+	}
+
+	// Pause should do nothing since not playing
+	service.PauseCueList("test-cue-list")
+
+	// Verify state unchanged
+	state := service.GetPlaybackState("test-cue-list")
+	if state.IsPlaying {
+		t.Error("Expected IsPlaying to remain false")
+	}
+	if state.IsPaused {
+		t.Error("Expected IsPaused to remain false since was not playing")
+	}
+}
+
+func TestPauseCueList_NonExistent(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	// Pause on non-existent should not panic
+	service.PauseCueList("non-existent")
+
+	// State should still be nil
+	state := service.GetPlaybackState("non-existent")
+	if state != nil {
+		t.Error("Expected nil state for non-existent cue list")
+	}
+}
+
+func TestPausePlayingCueLists(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	// Set up multiple states: some playing, some not
+	cueIndex := 0
+	service.states["playing-1"] = &PlaybackState{
+		CueListID:       "playing-1",
+		CurrentCueIndex: &cueIndex,
+		IsPlaying:       true,
+		IsPaused:        false,
+		LastUpdated:     time.Now(),
+	}
+	service.states["playing-2"] = &PlaybackState{
+		CueListID:       "playing-2",
+		CurrentCueIndex: &cueIndex,
+		IsPlaying:       true,
+		IsPaused:        false,
+		LastUpdated:     time.Now(),
+	}
+	service.states["stopped-1"] = &PlaybackState{
+		CueListID:       "stopped-1",
+		CurrentCueIndex: &cueIndex,
+		IsPlaying:       false,
+		IsPaused:        false,
+		LastUpdated:     time.Now(),
+	}
+
+	// Pause all playing cue lists
+	service.PausePlayingCueLists()
+
+	// Verify playing cue lists are paused
+	state1 := service.GetPlaybackState("playing-1")
+	if state1.IsPlaying || !state1.IsPaused {
+		t.Error("Expected playing-1 to be paused")
+	}
+	state2 := service.GetPlaybackState("playing-2")
+	if state2.IsPlaying || !state2.IsPaused {
+		t.Error("Expected playing-2 to be paused")
+	}
+
+	// Verify stopped cue list is unchanged
+	stateStopped := service.GetPlaybackState("stopped-1")
+	if stateStopped.IsPaused {
+		t.Error("Expected stopped-1 to remain not paused")
+	}
+}
+
+func TestStopCueList_ClearsPausedState(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	// Set up a paused state
+	cueIndex := 3
+	service.states["test-cue-list"] = &PlaybackState{
+		CueListID:       "test-cue-list",
+		CurrentCueIndex: &cueIndex,
+		IsPlaying:       false,
+		IsPaused:        true,
+		LastUpdated:     time.Now(),
+	}
+
+	// Stop the cue list
+	service.StopCueList("test-cue-list")
+
+	// Verify both playing and paused are false
+	state := service.GetPlaybackState("test-cue-list")
+	if state.IsPlaying {
+		t.Error("Expected IsPlaying to be false after stop")
+	}
+	if state.IsPaused {
+		t.Error("Expected IsPaused to be false after stop")
+	}
+}
+
+func TestGetFormattedStatus_PausedState(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	// Set up a paused state
+	cueIndex := 2
+	service.states["test-cue-list"] = &PlaybackState{
+		CueListID:       "test-cue-list",
+		CurrentCueIndex: &cueIndex,
+		IsPlaying:       false,
+		IsPaused:        true,
+		IsFading:        false,
+		LastUpdated:     time.Now(),
+	}
+
+	status := service.GetFormattedStatus("test-cue-list")
+
+	if status.IsPlaying {
+		t.Error("Expected IsPlaying to be false in formatted status")
+	}
+	if !status.IsPaused {
+		t.Error("Expected IsPaused to be true in formatted status")
+	}
+	if status.CurrentCueIndex == nil || *status.CurrentCueIndex != 2 {
+		t.Errorf("Expected CurrentCueIndex 2, got %v", status.CurrentCueIndex)
+	}
+}
+
+func TestPlaybackState_IsPausedField(t *testing.T) {
+	now := time.Now()
+	cueIndex := 0
+	state := &PlaybackState{
+		CueListID:       "cue-list-1",
+		CurrentCueIndex: &cueIndex,
+		IsPlaying:       false,
+		IsPaused:        true,
+		IsFading:        false,
+		FadeProgress:    0,
+		StartTime:       &now,
+		LastUpdated:     now,
+	}
+
+	if state.IsPlaying {
+		t.Error("Expected IsPlaying to be false")
+	}
+	if !state.IsPaused {
+		t.Error("Expected IsPaused to be true")
+	}
+}
+
+func TestCueListPlaybackStatus_IsPausedField(t *testing.T) {
+	cueIndex := 1
+	status := &CueListPlaybackStatus{
+		CueListID:       "cue-list-1",
+		CurrentCueIndex: &cueIndex,
+		IsPlaying:       false,
+		IsPaused:        true,
+		IsFading:        false,
+		FadeProgress:    0,
+		LastUpdated:     "2025-11-26T10:00:00Z",
+	}
+
+	if status.IsPlaying {
+		t.Error("Expected IsPlaying to be false")
+	}
+	if !status.IsPaused {
+		t.Error("Expected IsPaused to be true")
+	}
+}
+
+func TestGlobalPlaybackStatus_IsPausedField(t *testing.T) {
+	cueListID := "cue-list-1"
+	cueListName := "Test List"
+	status := &GlobalPlaybackStatus{
+		IsPlaying:   false,
+		IsPaused:    true,
+		IsFading:    false,
+		CueListID:   &cueListID,
+		CueListName: &cueListName,
+		LastUpdated: "2025-11-26T10:00:00Z",
+	}
+
+	if status.IsPlaying {
+		t.Error("Expected IsPlaying to be false")
+	}
+	if !status.IsPaused {
+		t.Error("Expected IsPaused to be true")
+	}
+}
+
+func TestResumeCueList_NotFound(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	ctx := context.Background()
+	err := service.ResumeCueList(ctx, "non-existent-cue-list")
+
+	if err == nil {
+		t.Error("Expected error for non-existent cue list")
+	}
+	if err.Error() != "cue list not found" {
+		t.Errorf("Expected 'cue list not found' error, got: %v", err)
+	}
+}
+
+func TestResumeCueList_NotPaused(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	// Set up a playing (not paused) state
+	cueIndex := 0
+	service.states["test-cue-list"] = &PlaybackState{
+		CueListID:       "test-cue-list",
+		CurrentCueIndex: &cueIndex,
+		IsPlaying:       true,
+		IsPaused:        false,
+		LastUpdated:     time.Now(),
+	}
+
+	ctx := context.Background()
+	err := service.ResumeCueList(ctx, "test-cue-list")
+
+	if err == nil {
+		t.Error("Expected error for non-paused cue list")
+	}
+	if err.Error() != "cue list is not paused" {
+		t.Errorf("Expected 'cue list is not paused' error, got: %v", err)
+	}
+}
+
+func TestResumeCueList_NilCurrentCueIndex(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	// Set up a paused state without a current cue index
+	service.states["test-cue-list"] = &PlaybackState{
+		CueListID:       "test-cue-list",
+		CurrentCueIndex: nil, // No cue index
+		IsPlaying:       false,
+		IsPaused:        true,
+		LastUpdated:     time.Now(),
+	}
+
+	ctx := context.Background()
+	err := service.ResumeCueList(ctx, "test-cue-list")
+
+	if err == nil {
+		t.Error("Expected error for nil current cue index")
+	}
+	if err.Error() != "no current cue to resume" {
+		t.Errorf("Expected 'no current cue to resume' error, got: %v", err)
 	}
 }
