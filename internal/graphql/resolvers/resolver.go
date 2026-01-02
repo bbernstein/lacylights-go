@@ -100,6 +100,7 @@ func (r *Resolver) wirePubSub() {
 			CueListID:       status.CueListID,
 			CurrentCueIndex: status.CurrentCueIndex,
 			IsPlaying:       status.IsPlaying,
+			IsPaused:        status.IsPaused,
 			IsFading:        status.IsFading,
 			FadeProgress:    &fadeProgress,
 			LastUpdated:     status.LastUpdated,
@@ -126,6 +127,7 @@ func (r *Resolver) wirePubSub() {
 		fadeProgress := status.FadeProgress
 		gqlStatus := &generated.GlobalPlaybackStatus{
 			IsPlaying:       status.IsPlaying,
+			IsPaused:        status.IsPaused,
 			IsFading:        status.IsFading,
 			CueListID:       status.CueListID,
 			CueListName:     status.CueListName,

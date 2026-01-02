@@ -2044,6 +2044,9 @@ func (r *mutationResolver) BulkDeleteSceneBoardButtons(ctx context.Context, butt
 
 // ActivateSceneFromBoard is the resolver for the activateSceneFromBoard field.
 func (r *mutationResolver) ActivateSceneFromBoard(ctx context.Context, sceneBoardID string, sceneID string, fadeTimeOverride *float64) (bool, error) {
+	// Auto-pause any playing cue lists since a scene is being activated outside cue context
+	r.PlaybackService.PausePlayingCueLists()
+
 	// Verify scene board exists
 	var board models.SceneBoard
 	result := r.db.WithContext(ctx).First(&board, "id = ?", sceneBoardID)
@@ -2591,6 +2594,9 @@ func (r *mutationResolver) SetChannelValue(ctx context.Context, universe int, ch
 
 // SetSceneLive is the resolver for the setSceneLive field.
 func (r *mutationResolver) SetSceneLive(ctx context.Context, sceneID string) (bool, error) {
+	// Auto-pause any playing cue lists since a scene is being activated outside cue context
+	r.PlaybackService.PausePlayingCueLists()
+
 	// Load scene with fixture values
 	var scene models.Scene
 	result := r.db.Preload("FixtureValues").First(&scene, "id = ?", sceneID)
@@ -2732,6 +2738,15 @@ func (r *mutationResolver) GoToCue(ctx context.Context, cueListID string, cueInd
 // StopCueList is the resolver for the stopCueList field.
 func (r *mutationResolver) StopCueList(ctx context.Context, cueListID string) (bool, error) {
 	r.PlaybackService.StopCueList(cueListID)
+	return true, nil
+}
+
+// ResumeCueList is the resolver for the resumeCueList field.
+func (r *mutationResolver) ResumeCueList(ctx context.Context, cueListID string) (bool, error) {
+	err := r.PlaybackService.ResumeCueList(ctx, cueListID)
+	if err != nil {
+		return false, err
+	}
 	return true, nil
 }
 
@@ -4112,6 +4127,7 @@ func (r *queryResolver) CueListPlaybackStatus(ctx context.Context, cueListID str
 		CueListID:       status.CueListID,
 		CurrentCueIndex: status.CurrentCueIndex,
 		IsPlaying:       status.IsPlaying,
+		IsPaused:        status.IsPaused,
 		IsFading:        status.IsFading,
 		FadeProgress:    &fadeProgress,
 		LastUpdated:     status.LastUpdated,
@@ -4139,6 +4155,7 @@ func (r *queryResolver) GlobalPlaybackStatus(ctx context.Context) (*generated.Gl
 	fadeProgress := status.FadeProgress
 	return &generated.GlobalPlaybackStatus{
 		IsPlaying:       status.IsPlaying,
+		IsPaused:        status.IsPaused,
 		IsFading:        status.IsFading,
 		CueListID:       status.CueListID,
 		CueListName:     status.CueListName,

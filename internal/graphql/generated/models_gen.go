@@ -253,6 +253,8 @@ type CueListPlaybackStatus struct {
 	CurrentCueIndex *int   `json:"currentCueIndex,omitempty"`
 	// True when a scene's values are currently active on DMX fixtures (stays true after fade completes until stopped)
 	IsPlaying bool `json:"isPlaying"`
+	// True when the cue list is paused (scene activated outside cue context, cue index preserved)
+	IsPaused bool `json:"isPaused"`
 	// True when a fade-in transition is in progress
 	IsFading     bool        `json:"isFading"`
 	CurrentCue   *models.Cue `json:"currentCue,omitempty"`
@@ -423,10 +425,12 @@ type FixtureValueInput struct {
 	SceneOrder graphql.Omittable[*int] `json:"sceneOrder,omitempty"`
 }
 
-// Global playback status - returns which cue list is currently playing (if any)
+// Global playback status - returns which cue list is currently playing or paused (if any)
 type GlobalPlaybackStatus struct {
 	// True if any cue list is currently playing
 	IsPlaying bool `json:"isPlaying"`
+	// True if a cue list is paused (scene activated outside cue context)
+	IsPaused bool `json:"isPaused"`
 	// True if a fade transition is in progress
 	IsFading bool `json:"isFading"`
 	// ID of the currently playing cue list (null if not playing)

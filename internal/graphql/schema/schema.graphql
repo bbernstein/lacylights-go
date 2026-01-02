@@ -310,6 +310,8 @@ type CueListPlaybackStatus {
   currentCueIndex: Int
   "True when a scene's values are currently active on DMX fixtures (stays true after fade completes until stopped)"
   isPlaying: Boolean!
+  "True when the cue list is paused (scene activated outside cue context, cue index preserved)"
+  isPaused: Boolean!
   "True when a fade-in transition is in progress"
   isFading: Boolean!
   currentCue: Cue
@@ -319,10 +321,12 @@ type CueListPlaybackStatus {
   lastUpdated: String!
 }
 
-"Global playback status - returns which cue list is currently playing (if any)"
+"Global playback status - returns which cue list is currently playing or paused (if any)"
 type GlobalPlaybackStatus {
   "True if any cue list is currently playing"
   isPlaying: Boolean!
+  "True if a cue list is paused (scene activated outside cue context)"
+  isPaused: Boolean!
   "True if a fade transition is in progress"
   isFading: Boolean!
   "ID of the currently playing cue list (null if not playing)"
@@ -1518,6 +1522,8 @@ type Mutation {
   previousCue(cueListId: ID!, fadeInTime: Float): Boolean!
   goToCue(cueListId: ID!, cueIndex: Int!, fadeInTime: Float): Boolean!
   stopCueList(cueListId: ID!): Boolean!
+  "Resume a paused cue list by snapping to the current cue's scene values instantly"
+  resumeCueList(cueListId: ID!): Boolean!
 
   # Native LacyLights Import/Export
   exportProject(projectId: ID!, options: ExportOptionsInput): ExportResult!

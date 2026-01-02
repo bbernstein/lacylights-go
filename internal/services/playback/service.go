@@ -32,6 +32,7 @@ type PlaybackState struct {
 	CueCount        int    // Cached count of cues in the list (avoids DB query on status updates)
 	CurrentCueIndex *int
 	IsPlaying       bool // True when scene values are active on DMX (stays true after fade until stopped)
+	IsPaused        bool // True when paused by external scene activation (cue index preserved)
 	IsFading        bool // True when a fade transition is in progress
 	CurrentCue      *CueForPlayback
 	FadeProgress    float64
@@ -44,6 +45,7 @@ type CueListPlaybackStatus struct {
 	CueListID       string
 	CurrentCueIndex *int
 	IsPlaying       bool // True when scene values are active on DMX (stays true after fade until stopped)
+	IsPaused        bool // True when paused by external scene activation (cue index preserved)
 	IsFading        bool // True when a fade transition is in progress
 	CurrentCue      *CueForPlayback
 	FadeProgress    float64
@@ -53,6 +55,7 @@ type CueListPlaybackStatus struct {
 // GlobalPlaybackStatus represents the global playback state across all cue lists.
 type GlobalPlaybackStatus struct {
 	IsPlaying       bool
+	IsPaused        bool
 	IsFading        bool
 	CueListID       *string
 	CueListName     *string
@@ -151,6 +154,7 @@ func (s *Service) GetFormattedStatus(cueListID string) *CueListPlaybackStatus {
 			CueListID:       cueListID,
 			CurrentCueIndex: nil,
 			IsPlaying:       false,
+			IsPaused:        false,
 			IsFading:        false,
 			CurrentCue:      nil,
 			FadeProgress:    0,
@@ -162,6 +166,7 @@ func (s *Service) GetFormattedStatus(cueListID string) *CueListPlaybackStatus {
 		CueListID:       state.CueListID,
 		CurrentCueIndex: state.CurrentCueIndex,
 		IsPlaying:       state.IsPlaying,
+		IsPaused:        state.IsPaused,
 		IsFading:        state.IsFading,
 		CurrentCue:      state.CurrentCue,
 		FadeProgress:    state.FadeProgress,
@@ -170,52 +175,54 @@ func (s *Service) GetFormattedStatus(cueListID string) *CueListPlaybackStatus {
 }
 
 // GetGlobalPlaybackStatus returns the global playback status across all cue lists.
-// It finds the currently playing cue list (if any) and returns its status with cue list details.
+// It finds the currently playing or paused cue list (if any) and returns its status with cue list details.
 //
-// Note: This implementation assumes only one cue list is playing at a time. While the system
+// Note: This implementation assumes only one cue list is playing/paused at a time. While the system
 // doesn't enforce this constraint at the architecture level, the typical usage pattern is
-// sequential playback. If multiple cue lists are playing simultaneously, this method returns
+// sequential playback. If multiple cue lists are playing/paused simultaneously, this method returns
 // the first one found (map iteration order is non-deterministic in Go).
 func (s *Service) GetGlobalPlaybackStatus(ctx context.Context) *GlobalPlaybackStatus {
 	s.mu.RLock()
 
-	// Find the currently playing cue list
-	var playingState *PlaybackState
+	// Find the currently playing or paused cue list
+	var activeState *PlaybackState
 	for _, state := range s.states {
-		if state.IsPlaying {
-			playingState = state
+		if state.IsPlaying || state.IsPaused {
+			activeState = state
 			break
 		}
 	}
 
-	// If nothing is playing, return empty status
-	if playingState == nil {
+	// If nothing is playing or paused, return empty status
+	if activeState == nil {
 		s.mu.RUnlock()
 		return &GlobalPlaybackStatus{
 			IsPlaying:   false,
+			IsPaused:    false,
 			IsFading:    false,
 			LastUpdated: time.Now().Format(time.RFC3339),
 		}
 	}
 
 	// Copy the state data while holding the lock (no DB query needed - all cached)
-	cueListID := playingState.CueListID
-	cueListName := playingState.CueListName
-	cueCount := playingState.CueCount
-	isPlaying := playingState.IsPlaying
-	isFading := playingState.IsFading
-	fadeProgress := playingState.FadeProgress
-	lastUpdated := playingState.LastUpdated.Format(time.RFC3339)
+	cueListID := activeState.CueListID
+	cueListName := activeState.CueListName
+	cueCount := activeState.CueCount
+	isPlaying := activeState.IsPlaying
+	isPaused := activeState.IsPaused
+	isFading := activeState.IsFading
+	fadeProgress := activeState.FadeProgress
+	lastUpdated := activeState.LastUpdated.Format(time.RFC3339)
 
 	var currentCueIndex *int
-	if playingState.CurrentCueIndex != nil {
-		idx := *playingState.CurrentCueIndex
+	if activeState.CurrentCueIndex != nil {
+		idx := *activeState.CurrentCueIndex
 		currentCueIndex = &idx
 	}
 
 	var currentCueName *string
-	if playingState.CurrentCue != nil {
-		name := playingState.CurrentCue.Name
+	if activeState.CurrentCue != nil {
+		name := activeState.CurrentCue.Name
 		currentCueName = &name
 	}
 
@@ -223,6 +230,7 @@ func (s *Service) GetGlobalPlaybackStatus(ctx context.Context) *GlobalPlaybackSt
 
 	return &GlobalPlaybackStatus{
 		IsPlaying:       isPlaying,
+		IsPaused:        isPaused,
 		IsFading:        isFading,
 		CueListID:       &cueListID,
 		CueListName:     &cueListName,
@@ -248,6 +256,7 @@ func (s *Service) StartCue(cueListID string, cueListName string, cueCount int, c
 		CueCount:        cueCount,
 		CurrentCueIndex: &cueIndex,
 		IsPlaying:       true,  // Scene is now active on DMX
+		IsPaused:        false, // Explicitly clear paused state
 		IsFading:        true,  // Fade transition is starting
 		CurrentCue: &CueForPlayback{
 			ID:          cue.ID,
@@ -503,6 +512,7 @@ func (s *Service) StopCueList(cueListID string) {
 	state := s.states[cueListID]
 	if state != nil {
 		state.IsPlaying = false  // Scene no longer active on DMX
+		state.IsPaused = false   // Clear paused state
 		state.IsFading = false   // No fade in progress
 		state.FadeProgress = 0
 		state.LastUpdated = time.Now()
@@ -511,6 +521,83 @@ func (s *Service) StopCueList(cueListID string) {
 	s.mu.Unlock()
 
 	s.emitUpdate(cueListID)
+}
+
+// PauseCueList pauses the cue list playback, preserving the current cue position.
+// Called automatically when a scene is activated outside cue list context.
+func (s *Service) PauseCueList(cueListID string) {
+	s.mu.Lock()
+
+	state := s.states[cueListID]
+	if state == nil || !state.IsPlaying {
+		s.mu.Unlock()
+		return // Nothing to pause
+	}
+
+	// Stop fade progress ticker
+	if ticker := s.fadeProgressTickers[cueListID]; ticker != nil {
+		ticker.Stop()
+		delete(s.fadeProgressTickers, cueListID)
+	}
+
+	// Stop follow timer
+	if timer := s.followTimers[cueListID]; timer != nil {
+		timer.Stop()
+		delete(s.followTimers, cueListID)
+	}
+
+	// Stop fade completion timer
+	if timer := s.fadeCompleteTimers[cueListID]; timer != nil {
+		timer.Stop()
+		delete(s.fadeCompleteTimers, cueListID)
+	}
+
+	// Set paused state (preserve currentCueIndex)
+	state.IsPlaying = false
+	state.IsPaused = true
+	state.IsFading = false
+	state.FadeProgress = 0
+	state.LastUpdated = time.Now()
+
+	s.mu.Unlock()
+
+	s.emitUpdate(cueListID)
+}
+
+// PausePlayingCueLists pauses any currently playing cue lists.
+// Called when a scene is activated outside cue list context.
+func (s *Service) PausePlayingCueLists() {
+	s.mu.RLock()
+	var playingCueListIDs []string
+	for id, state := range s.states {
+		if state.IsPlaying {
+			playingCueListIDs = append(playingCueListIDs, id)
+		}
+	}
+	s.mu.RUnlock()
+
+	for _, id := range playingCueListIDs {
+		s.PauseCueList(id)
+	}
+}
+
+// ResumeCueList resumes a paused cue list by snapping to the current cue's scene values instantly.
+func (s *Service) ResumeCueList(ctx context.Context, cueListID string) error {
+	s.mu.RLock()
+	state := s.states[cueListID]
+	s.mu.RUnlock()
+
+	if state == nil || !state.IsPaused {
+		return fmt.Errorf("cue list is not paused")
+	}
+
+	if state.CurrentCueIndex == nil {
+		return fmt.Errorf("no current cue to resume")
+	}
+
+	// Execute the current cue's DMX values instantly (zero fade time)
+	zeroFade := float64(0)
+	return s.JumpToCue(ctx, cueListID, *state.CurrentCueIndex, &zeroFade)
 }
 
 // StopAllCueLists stops all cue list playback.

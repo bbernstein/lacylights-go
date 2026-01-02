@@ -172,6 +172,7 @@ type ComplexityRoot struct {
 		CurrentCueIndex func(childComplexity int) int
 		FadeProgress    func(childComplexity int) int
 		IsFading        func(childComplexity int) int
+		IsPaused        func(childComplexity int) int
 		IsPlaying       func(childComplexity int) int
 		LastUpdated     func(childComplexity int) int
 		NextCue         func(childComplexity int) int
@@ -308,6 +309,7 @@ type ComplexityRoot struct {
 		CurrentCueName  func(childComplexity int) int
 		FadeProgress    func(childComplexity int) int
 		IsFading        func(childComplexity int) int
+		IsPaused        func(childComplexity int) int
 		IsPlaying       func(childComplexity int) int
 		LastUpdated     func(childComplexity int) int
 	}
@@ -418,6 +420,7 @@ type ComplexityRoot struct {
 		ReorderProjectFixtures                 func(childComplexity int, projectID string, fixtureOrders []*FixtureOrderInput) int
 		ReorderSceneFixtures                   func(childComplexity int, sceneID string, fixtureOrders []*FixtureOrderInput) int
 		ResetAPTimeout                         func(childComplexity int) int
+		ResumeCueList                          func(childComplexity int, cueListID string) int
 		SetArtNetEnabled                       func(childComplexity int, enabled bool, fadeTime *float64) int
 		SetChannelValue                        func(childComplexity int, universe int, channel int, value int) int
 		SetSceneLive                           func(childComplexity int, sceneID string) int
@@ -960,6 +963,7 @@ type MutationResolver interface {
 	PreviousCue(ctx context.Context, cueListID string, fadeInTime *float64) (bool, error)
 	GoToCue(ctx context.Context, cueListID string, cueIndex int, fadeInTime *float64) (bool, error)
 	StopCueList(ctx context.Context, cueListID string) (bool, error)
+	ResumeCueList(ctx context.Context, cueListID string) (bool, error)
 	ExportProject(ctx context.Context, projectID string, options *ExportOptionsInput) (*ExportResult, error)
 	ImportProject(ctx context.Context, jsonContent string, options ImportOptionsInput) (*ImportResult, error)
 	ImportProjectFromQlc(ctx context.Context, xmlContent string, originalFileName string) (*QLCImportResult, error)
@@ -1539,6 +1543,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.CueListPlaybackStatus.IsFading(childComplexity), true
+	case "CueListPlaybackStatus.isPaused":
+		if e.complexity.CueListPlaybackStatus.IsPaused == nil {
+			break
+		}
+
+		return e.complexity.CueListPlaybackStatus.IsPaused(childComplexity), true
 	case "CueListPlaybackStatus.isPlaying":
 		if e.complexity.CueListPlaybackStatus.IsPlaying == nil {
 			break
@@ -2100,6 +2110,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.GlobalPlaybackStatus.IsFading(childComplexity), true
+	case "GlobalPlaybackStatus.isPaused":
+		if e.complexity.GlobalPlaybackStatus.IsPaused == nil {
+			break
+		}
+
+		return e.complexity.GlobalPlaybackStatus.IsPaused(childComplexity), true
 	case "GlobalPlaybackStatus.isPlaying":
 		if e.complexity.GlobalPlaybackStatus.IsPlaying == nil {
 			break
@@ -2978,6 +2994,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.ResetAPTimeout(childComplexity), true
+	case "Mutation.resumeCueList":
+		if e.complexity.Mutation.ResumeCueList == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_resumeCueList_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.ResumeCueList(childComplexity, args["cueListId"].(string)), true
 	case "Mutation.setArtNetEnabled":
 		if e.complexity.Mutation.SetArtNetEnabled == nil {
 			break
@@ -5595,6 +5622,8 @@ type CueListPlaybackStatus {
   currentCueIndex: Int
   "True when a scene's values are currently active on DMX fixtures (stays true after fade completes until stopped)"
   isPlaying: Boolean!
+  "True when the cue list is paused (scene activated outside cue context, cue index preserved)"
+  isPaused: Boolean!
   "True when a fade-in transition is in progress"
   isFading: Boolean!
   currentCue: Cue
@@ -5604,10 +5633,12 @@ type CueListPlaybackStatus {
   lastUpdated: String!
 }
 
-"Global playback status - returns which cue list is currently playing (if any)"
+"Global playback status - returns which cue list is currently playing or paused (if any)"
 type GlobalPlaybackStatus {
   "True if any cue list is currently playing"
   isPlaying: Boolean!
+  "True if a cue list is paused (scene activated outside cue context)"
+  isPaused: Boolean!
   "True if a fade transition is in progress"
   isFading: Boolean!
   "ID of the currently playing cue list (null if not playing)"
@@ -6803,6 +6834,8 @@ type Mutation {
   previousCue(cueListId: ID!, fadeInTime: Float): Boolean!
   goToCue(cueListId: ID!, cueIndex: Int!, fadeInTime: Float): Boolean!
   stopCueList(cueListId: ID!): Boolean!
+  "Resume a paused cue list by snapping to the current cue's scene values instantly"
+  resumeCueList(cueListId: ID!): Boolean!
 
   # Native LacyLights Import/Export
   exportProject(projectId: ID!, options: ExportOptionsInput): ExportResult!
@@ -7671,6 +7704,17 @@ func (ec *executionContext) field_Mutation_reorderSceneFixtures_args(ctx context
 		return nil, err
 	}
 	args["fixtureOrders"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_resumeCueList_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "cueListId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["cueListId"] = arg0
 	return args, nil
 }
 
@@ -10719,6 +10763,35 @@ func (ec *executionContext) fieldContext_CueListPlaybackStatus_isPlaying(_ conte
 	return fc, nil
 }
 
+func (ec *executionContext) _CueListPlaybackStatus_isPaused(ctx context.Context, field graphql.CollectedField, obj *CueListPlaybackStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CueListPlaybackStatus_isPaused,
+		func(ctx context.Context) (any, error) {
+			return obj.IsPaused, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CueListPlaybackStatus_isPaused(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CueListPlaybackStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _CueListPlaybackStatus_isFading(ctx context.Context, field graphql.CollectedField, obj *CueListPlaybackStatus) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13572,6 +13645,35 @@ func (ec *executionContext) _GlobalPlaybackStatus_isPlaying(ctx context.Context,
 }
 
 func (ec *executionContext) fieldContext_GlobalPlaybackStatus_isPlaying(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GlobalPlaybackStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GlobalPlaybackStatus_isPaused(ctx context.Context, field graphql.CollectedField, obj *GlobalPlaybackStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GlobalPlaybackStatus_isPaused,
+		func(ctx context.Context) (any, error) {
+			return obj.IsPaused, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GlobalPlaybackStatus_isPaused(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "GlobalPlaybackStatus",
 		Field:      field,
@@ -18603,6 +18705,47 @@ func (ec *executionContext) fieldContext_Mutation_stopCueList(ctx context.Contex
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_stopCueList_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_resumeCueList(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_resumeCueList,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().ResumeCueList(ctx, fc.Args["cueListId"].(string))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_resumeCueList(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_resumeCueList_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -23731,6 +23874,8 @@ func (ec *executionContext) fieldContext_Query_cueListPlaybackStatus(ctx context
 				return ec.fieldContext_CueListPlaybackStatus_currentCueIndex(ctx, field)
 			case "isPlaying":
 				return ec.fieldContext_CueListPlaybackStatus_isPlaying(ctx, field)
+			case "isPaused":
+				return ec.fieldContext_CueListPlaybackStatus_isPaused(ctx, field)
 			case "isFading":
 				return ec.fieldContext_CueListPlaybackStatus_isFading(ctx, field)
 			case "currentCue":
@@ -23787,6 +23932,8 @@ func (ec *executionContext) fieldContext_Query_globalPlaybackStatus(_ context.Co
 			switch field.Name {
 			case "isPlaying":
 				return ec.fieldContext_GlobalPlaybackStatus_isPlaying(ctx, field)
+			case "isPaused":
+				return ec.fieldContext_GlobalPlaybackStatus_isPaused(ctx, field)
 			case "isFading":
 				return ec.fieldContext_GlobalPlaybackStatus_isFading(ctx, field)
 			case "cueListId":
@@ -27612,6 +27759,8 @@ func (ec *executionContext) fieldContext_Subscription_cueListPlaybackUpdated(ctx
 				return ec.fieldContext_CueListPlaybackStatus_currentCueIndex(ctx, field)
 			case "isPlaying":
 				return ec.fieldContext_CueListPlaybackStatus_isPlaying(ctx, field)
+			case "isPaused":
+				return ec.fieldContext_CueListPlaybackStatus_isPaused(ctx, field)
 			case "isFading":
 				return ec.fieldContext_CueListPlaybackStatus_isFading(ctx, field)
 			case "currentCue":
@@ -27668,6 +27817,8 @@ func (ec *executionContext) fieldContext_Subscription_globalPlaybackStatusUpdate
 			switch field.Name {
 			case "isPlaying":
 				return ec.fieldContext_GlobalPlaybackStatus_isPlaying(ctx, field)
+			case "isPaused":
+				return ec.fieldContext_GlobalPlaybackStatus_isPaused(ctx, field)
 			case "isFading":
 				return ec.fieldContext_GlobalPlaybackStatus_isFading(ctx, field)
 			case "cueListId":
@@ -34395,6 +34546,11 @@ func (ec *executionContext) _CueListPlaybackStatus(ctx context.Context, sel ast.
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "isPaused":
+			out.Values[i] = ec._CueListPlaybackStatus_isPaused(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "isFading":
 			out.Values[i] = ec._CueListPlaybackStatus_isFading(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -35797,6 +35953,11 @@ func (ec *executionContext) _GlobalPlaybackStatus(ctx context.Context, sel ast.S
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "isPaused":
+			out.Values[i] = ec._GlobalPlaybackStatus_isPaused(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "isFading":
 			out.Values[i] = ec._GlobalPlaybackStatus_isFading(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -36767,6 +36928,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "stopCueList":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_stopCueList(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "resumeCueList":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_resumeCueList(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
