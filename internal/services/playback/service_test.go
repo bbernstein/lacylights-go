@@ -1,6 +1,7 @@
 package playback
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -1298,5 +1299,81 @@ func TestGlobalPlaybackStatus_IsPausedField(t *testing.T) {
 	}
 	if !status.IsPaused {
 		t.Error("Expected IsPaused to be true")
+	}
+}
+
+func TestResumeCueList_NotFound(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	ctx := context.Background()
+	err := service.ResumeCueList(ctx, "non-existent-cue-list")
+
+	if err == nil {
+		t.Error("Expected error for non-existent cue list")
+	}
+	if err.Error() != "cue list not found" {
+		t.Errorf("Expected 'cue list not found' error, got: %v", err)
+	}
+}
+
+func TestResumeCueList_NotPaused(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	// Set up a playing (not paused) state
+	cueIndex := 0
+	service.states["test-cue-list"] = &PlaybackState{
+		CueListID:       "test-cue-list",
+		CurrentCueIndex: &cueIndex,
+		IsPlaying:       true,
+		IsPaused:        false,
+		LastUpdated:     time.Now(),
+	}
+
+	ctx := context.Background()
+	err := service.ResumeCueList(ctx, "test-cue-list")
+
+	if err == nil {
+		t.Error("Expected error for non-paused cue list")
+	}
+	if err.Error() != "cue list is not paused" {
+		t.Errorf("Expected 'cue list is not paused' error, got: %v", err)
+	}
+}
+
+func TestResumeCueList_NilCurrentCueIndex(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	// Set up a paused state without a current cue index
+	service.states["test-cue-list"] = &PlaybackState{
+		CueListID:       "test-cue-list",
+		CurrentCueIndex: nil, // No cue index
+		IsPlaying:       false,
+		IsPaused:        true,
+		LastUpdated:     time.Now(),
+	}
+
+	ctx := context.Background()
+	err := service.ResumeCueList(ctx, "test-cue-list")
+
+	if err == nil {
+		t.Error("Expected error for nil current cue index")
+	}
+	if err.Error() != "no current cue to resume" {
+		t.Errorf("Expected 'no current cue to resume' error, got: %v", err)
 	}
 }
