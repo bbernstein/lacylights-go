@@ -112,6 +112,9 @@ type BulkSceneCreateInput struct {
 	Scenes []*CreateSceneInput `json:"scenes"`
 }
 
+// Updates multiple scenes with partial fixture value merging support.
+// Each scene can independently specify name, description, fixtureValues, and mergeFixtures.
+// Operations are applied in order and fail on first error.
 type BulkScenePartialUpdateInput struct {
 	Scenes []*ScenePartialUpdateItem `json:"scenes"`
 }
@@ -719,12 +722,16 @@ type ScenePage struct {
 	Pagination PaginationInfo  `json:"pagination"`
 }
 
+// Partial update for a single scene in a bulk operation.
+// When mergeFixtures is true (default), only specified fixtures are updated.
+// When false, all existing fixtures are replaced with the provided list.
 type ScenePartialUpdateItem struct {
 	SceneID       string                                  `json:"sceneId"`
 	Name          graphql.Omittable[*string]              `json:"name,omitempty"`
 	Description   graphql.Omittable[*string]              `json:"description,omitempty"`
 	FixtureValues graphql.Omittable[[]*FixtureValueInput] `json:"fixtureValues,omitempty"`
-	MergeFixtures graphql.Omittable[*bool]                `json:"mergeFixtures,omitempty"`
+	// When true (default), only specified fixtures are updated. When false, replaces all fixtures.
+	MergeFixtures graphql.Omittable[*bool] `json:"mergeFixtures,omitempty"`
 }
 
 type SceneSummary struct {

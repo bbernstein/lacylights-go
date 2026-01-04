@@ -1658,10 +1658,13 @@ func (r *mutationResolver) UpdateScenePartial(ctx context.Context, sceneID strin
 // Updates multiple scenes with partial fixture value merging support.
 // Each scene can independently specify name, description, fixtureValues, and mergeFixtures.
 // This is useful for batch operations like changing a channel value across many scenes.
+// Note: Like other bulk operations, this doesn't use transactions yet - partial failures
+// may leave the database in an inconsistent state. Transaction support should be added
+// project-wide as a separate refactoring effort.
 func (r *mutationResolver) BulkUpdateScenesPartial(ctx context.Context, input generated.BulkScenePartialUpdateInput) ([]*models.Scene, error) {
-	var updatedScenes []*models.Scene
+	updatedScenes := make([]*models.Scene, 0, len(input.Scenes))
 
-	for _, item := range input.Scenes {
+	for i, item := range input.Scenes {
 		// Extract optional fields from the input
 		var name *string
 		if item.Name.IsSet() {
@@ -1686,7 +1689,7 @@ func (r *mutationResolver) BulkUpdateScenesPartial(ctx context.Context, input ge
 		// Call the existing UpdateScenePartial resolver for each scene
 		scene, err := r.UpdateScenePartial(ctx, item.SceneID, name, description, fixtureValues, mergeFixtures)
 		if err != nil {
-			return nil, fmt.Errorf("failed to update scene %s: %w", item.SceneID, err)
+			return nil, fmt.Errorf("failed to update scene %s (item %d of %d): %w", item.SceneID, i+1, len(input.Scenes), err)
 		}
 
 		updatedScenes = append(updatedScenes, scene)

@@ -6442,16 +6442,26 @@ input SceneUpdateItem {
   description: String
 }
 
-# Bulk Partial Scene Update (with fixture merge support)
+"""
+Updates multiple scenes with partial fixture value merging support.
+Each scene can independently specify name, description, fixtureValues, and mergeFixtures.
+Operations are applied in order and fail on first error.
+"""
 input BulkScenePartialUpdateInput {
   scenes: [ScenePartialUpdateItem!]!
 }
 
+"""
+Partial update for a single scene in a bulk operation.
+When mergeFixtures is true (default), only specified fixtures are updated.
+When false, all existing fixtures are replaced with the provided list.
+"""
 input ScenePartialUpdateItem {
   sceneId: ID!
   name: String
   description: String
   fixtureValues: [FixtureValueInput!]
+  """When true (default), only specified fixtures are updated. When false, replaces all fixtures."""
   mergeFixtures: Boolean = true
 }
 
