@@ -112,6 +112,10 @@ type BulkSceneCreateInput struct {
 	Scenes []*CreateSceneInput `json:"scenes"`
 }
 
+type BulkScenePartialUpdateInput struct {
+	Scenes []*ScenePartialUpdateItem `json:"scenes"`
+}
+
 type BulkSceneUpdateInput struct {
 	Scenes []*SceneUpdateItem `json:"scenes"`
 }
@@ -713,6 +717,14 @@ type SceneFixtureSummary struct {
 type ScenePage struct {
 	Scenes     []*SceneSummary `json:"scenes"`
 	Pagination PaginationInfo  `json:"pagination"`
+}
+
+type ScenePartialUpdateItem struct {
+	SceneID       string                                  `json:"sceneId"`
+	Name          graphql.Omittable[*string]              `json:"name,omitempty"`
+	Description   graphql.Omittable[*string]              `json:"description,omitempty"`
+	FixtureValues graphql.Omittable[[]*FixtureValueInput] `json:"fixtureValues,omitempty"`
+	MergeFixtures graphql.Omittable[*bool]                `json:"mergeFixtures,omitempty"`
 }
 
 type SceneSummary struct {

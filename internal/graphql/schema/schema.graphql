@@ -1115,6 +1115,19 @@ input SceneUpdateItem {
   description: String
 }
 
+# Bulk Partial Scene Update (with fixture merge support)
+input BulkScenePartialUpdateInput {
+  scenes: [ScenePartialUpdateItem!]!
+}
+
+input ScenePartialUpdateItem {
+  sceneId: ID!
+  name: String
+  description: String
+  fixtureValues: [FixtureValueInput!]
+  mergeFixtures: Boolean = true
+}
+
 input BulkCueListUpdateInput {
   cueLists: [CueListUpdateItem!]!
 }
@@ -1451,6 +1464,7 @@ type Mutation {
     fixtureValues: [FixtureValueInput!]
     mergeFixtures: Boolean = true
   ): Scene!
+  bulkUpdateScenesPartial(input: BulkScenePartialUpdateInput!): [Scene!]!
 
   # Scene Boards
   createSceneBoard(input: CreateSceneBoardInput!): SceneBoard!
