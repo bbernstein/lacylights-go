@@ -1654,6 +1654,50 @@ func (r *mutationResolver) UpdateScenePartial(ctx context.Context, sceneID strin
 	return scene, nil
 }
 
+// BulkUpdateScenesPartial is the resolver for the bulkUpdateScenesPartial field.
+// Updates multiple scenes with partial fixture value merging support.
+// Each scene can independently specify name, description, fixtureValues, and mergeFixtures.
+// This is useful for batch operations like changing a channel value across many scenes.
+// Note: Like other bulk operations, this doesn't use transactions yet - partial failures
+// may leave the database in an inconsistent state. Transaction support should be added
+// project-wide as a separate refactoring effort.
+func (r *mutationResolver) BulkUpdateScenesPartial(ctx context.Context, input generated.BulkScenePartialUpdateInput) ([]*models.Scene, error) {
+	updatedScenes := make([]*models.Scene, 0, len(input.Scenes))
+
+	for i, item := range input.Scenes {
+		// Extract optional fields from the input
+		var name *string
+		if item.Name.IsSet() {
+			name = item.Name.Value()
+		}
+
+		var description *string
+		if item.Description.IsSet() {
+			description = item.Description.Value()
+		}
+
+		var fixtureValues []*generated.FixtureValueInput
+		if item.FixtureValues.IsSet() {
+			fixtureValues = item.FixtureValues.Value()
+		}
+
+		var mergeFixtures *bool
+		if item.MergeFixtures.IsSet() {
+			mergeFixtures = item.MergeFixtures.Value()
+		}
+
+		// Call the existing UpdateScenePartial resolver for each scene
+		scene, err := r.UpdateScenePartial(ctx, item.SceneID, name, description, fixtureValues, mergeFixtures)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update scene %s (item %d of %d): %w", item.SceneID, i+1, len(input.Scenes), err)
+		}
+
+		updatedScenes = append(updatedScenes, scene)
+	}
+
+	return updatedScenes, nil
+}
+
 // CreateSceneBoard is the resolver for the createSceneBoard field.
 func (r *mutationResolver) CreateSceneBoard(ctx context.Context, input generated.CreateSceneBoardInput) (*models.SceneBoard, error) {
 	// Verify project exists

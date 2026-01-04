@@ -750,3 +750,260 @@ func TestSparseChannels_EmptyChannelsArray(t *testing.T) {
 		t.Errorf("Channel 2 should remain 150, got %d", resolver.DMXService.GetChannelValue(1, 2))
 	}
 }
+
+// TestSparseChannels_BulkUpdateScenesPartial tests bulk partial scene updates with sparse channels
+func TestSparseChannels_BulkUpdateScenesPartial(t *testing.T) {
+	c, resolver, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Create project and fixture
+	project := &models.Project{
+		ID:   "test-project-bulk-partial",
+		Name: "Test Project",
+	}
+	resolver.db.Create(project)
+
+	fixtureDef := &models.FixtureDefinition{
+		ID:           "test-fixture-def-bulk-partial",
+		Manufacturer: "Test",
+		Model:        "TestPar",
+		Type:         "LED_PAR",
+	}
+	resolver.db.Create(fixtureDef)
+
+	fixture := &models.FixtureInstance{
+		ID:           "test-fixture-bulk-partial",
+		Name:         "Test Par",
+		ProjectID:    project.ID,
+		DefinitionID: fixtureDef.ID,
+		Universe:     1,
+		StartChannel: 1,
+	}
+	resolver.db.Create(fixture)
+
+	// Create two scenes with initial values
+	scene1 := &models.Scene{
+		ID:        "test-scene-bulk-partial-1",
+		Name:      "Scene 1",
+		ProjectID: project.ID,
+	}
+	scene2 := &models.Scene{
+		ID:        "test-scene-bulk-partial-2",
+		Name:      "Scene 2",
+		ProjectID: project.ID,
+	}
+	resolver.db.Create(scene1)
+	resolver.db.Create(scene2)
+
+	// Initial fixture values for both scenes: offset 0=255, offset 1=128
+	fixtureValue1 := &models.FixtureValue{
+		ID:        "fv-bulk-partial-1",
+		SceneID:   scene1.ID,
+		FixtureID: fixture.ID,
+		Channels:  `[{"offset":0,"value":255},{"offset":1,"value":128}]`,
+	}
+	fixtureValue2 := &models.FixtureValue{
+		ID:        "fv-bulk-partial-2",
+		SceneID:   scene2.ID,
+		FixtureID: fixture.ID,
+		Channels:  `[{"offset":0,"value":255},{"offset":1,"value":128}]`,
+	}
+	resolver.db.Create(fixtureValue1)
+	resolver.db.Create(fixtureValue2)
+
+	// Bulk update - change offset 1 value to 64 in both scenes
+	var updateResp struct {
+		BulkUpdateScenesPartial []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"bulkUpdateScenesPartial"`
+	}
+	err := c.Post(`mutation($scene1Id: ID!, $scene2Id: ID!, $fixtureId: ID!) {
+		bulkUpdateScenesPartial(input: {
+			scenes: [
+				{
+					sceneId: $scene1Id
+					name: "Scene 1 Updated"
+					fixtureValues: [
+						{
+							fixtureId: $fixtureId
+							channels: [
+								{ offset: 1, value: 64 }
+							]
+						}
+					]
+				}
+				{
+					sceneId: $scene2Id
+					name: "Scene 2 Updated"
+					fixtureValues: [
+						{
+							fixtureId: $fixtureId
+							channels: [
+								{ offset: 1, value: 32 }
+							]
+						}
+					]
+				}
+			]
+		}) {
+			id
+			name
+		}
+	}`, &updateResp,
+		client.Var("scene1Id", scene1.ID),
+		client.Var("scene2Id", scene2.ID),
+		client.Var("fixtureId", fixture.ID))
+
+	if err != nil {
+		t.Fatalf("BulkUpdateScenesPartial mutation failed: %v", err)
+	}
+
+	// Verify both scenes were updated
+	if len(updateResp.BulkUpdateScenesPartial) != 2 {
+		t.Fatalf("Expected 2 scenes updated, got %d", len(updateResp.BulkUpdateScenesPartial))
+	}
+
+	if updateResp.BulkUpdateScenesPartial[0].Name != "Scene 1 Updated" {
+		t.Errorf("Expected 'Scene 1 Updated', got '%s'", updateResp.BulkUpdateScenesPartial[0].Name)
+	}
+	if updateResp.BulkUpdateScenesPartial[1].Name != "Scene 2 Updated" {
+		t.Errorf("Expected 'Scene 2 Updated', got '%s'", updateResp.BulkUpdateScenesPartial[1].Name)
+	}
+
+	// Verify fixture values were updated (channels array is replaced, not merged at channel level)
+	// mergeFixtures=true means: keep fixtures not mentioned, update fixtures that are mentioned
+	// When updating a fixture, the channels array provided replaces the old one
+	var updatedFV1 models.FixtureValue
+	resolver.db.First(&updatedFV1, "scene_id = ? AND fixture_id = ?", scene1.ID, fixture.ID)
+
+	// Scene 1: channels should be the new value [offset 1 = 64]
+	expectedChannels1 := `[{"offset":1,"value":64}]`
+	if !sparseChannelsEqual(updatedFV1.Channels, expectedChannels1) {
+		t.Errorf("Scene 1 channels should be %s, got %s", expectedChannels1, updatedFV1.Channels)
+	}
+
+	var updatedFV2 models.FixtureValue
+	resolver.db.First(&updatedFV2, "scene_id = ? AND fixture_id = ?", scene2.ID, fixture.ID)
+
+	// Scene 2: channels should be the new value [offset 1 = 32]
+	expectedChannels2 := `[{"offset":1,"value":32}]`
+	if !sparseChannelsEqual(updatedFV2.Channels, expectedChannels2) {
+		t.Errorf("Scene 2 channels should be %s, got %s", expectedChannels2, updatedFV2.Channels)
+	}
+}
+
+// TestSparseChannels_BulkUpdateScenesPartial_MergeFixturesFalse tests bulk partial scene updates with replace mode
+func TestSparseChannels_BulkUpdateScenesPartial_MergeFixturesFalse(t *testing.T) {
+	c, resolver, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Create project and fixtures
+	project := &models.Project{
+		ID:   "test-project-bulk-replace",
+		Name: "Test Project",
+	}
+	resolver.db.Create(project)
+
+	fixtureDef := &models.FixtureDefinition{
+		ID:           "test-fixture-def-bulk-replace",
+		Manufacturer: "Test",
+		Model:        "TestPar",
+		Type:         "LED_PAR",
+	}
+	resolver.db.Create(fixtureDef)
+
+	fixture1 := &models.FixtureInstance{
+		ID:           "test-fixture-bulk-replace-1",
+		Name:         "Test Par 1",
+		ProjectID:    project.ID,
+		DefinitionID: fixtureDef.ID,
+		Universe:     1,
+		StartChannel: 1,
+	}
+	fixture2 := &models.FixtureInstance{
+		ID:           "test-fixture-bulk-replace-2",
+		Name:         "Test Par 2",
+		ProjectID:    project.ID,
+		DefinitionID: fixtureDef.ID,
+		Universe:     1,
+		StartChannel: 10,
+	}
+	resolver.db.Create(fixture1)
+	resolver.db.Create(fixture2)
+
+	// Create scene with two fixtures
+	scene := &models.Scene{
+		ID:        "test-scene-bulk-replace",
+		Name:      "Original Scene",
+		ProjectID: project.ID,
+	}
+	resolver.db.Create(scene)
+
+	// Both fixtures have values
+	fv1 := &models.FixtureValue{
+		ID:        "fv-bulk-replace-1",
+		SceneID:   scene.ID,
+		FixtureID: fixture1.ID,
+		Channels:  `[{"offset":0,"value":255}]`,
+	}
+	fv2 := &models.FixtureValue{
+		ID:        "fv-bulk-replace-2",
+		SceneID:   scene.ID,
+		FixtureID: fixture2.ID,
+		Channels:  `[{"offset":0,"value":128}]`,
+	}
+	resolver.db.Create(fv1)
+	resolver.db.Create(fv2)
+
+	// Bulk update with mergeFixtures=false - should replace all fixtures with only fixture1
+	var updateResp struct {
+		BulkUpdateScenesPartial []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"bulkUpdateScenesPartial"`
+	}
+	err := c.Post(`mutation($sceneId: ID!, $fixtureId: ID!) {
+		bulkUpdateScenesPartial(input: {
+			scenes: [
+				{
+					sceneId: $sceneId
+					fixtureValues: [
+						{
+							fixtureId: $fixtureId
+							channels: [
+								{ offset: 0, value: 100 }
+							]
+						}
+					]
+					mergeFixtures: false
+				}
+			]
+		}) {
+			id
+			name
+		}
+	}`, &updateResp,
+		client.Var("sceneId", scene.ID),
+		client.Var("fixtureId", fixture1.ID))
+
+	if err != nil {
+		t.Fatalf("BulkUpdateScenesPartial with mergeFixtures=false failed: %v", err)
+	}
+
+	// Verify fixture2 was removed (mergeFixtures=false deletes all and replaces)
+	var count int64
+	resolver.db.Model(&models.FixtureValue{}).Where("scene_id = ?", scene.ID).Count(&count)
+	if count != 1 {
+		t.Errorf("Expected 1 fixture value (fixture2 should be removed), got %d", count)
+	}
+
+	// Verify fixture1 has the new value
+	var updatedFV models.FixtureValue
+	resolver.db.First(&updatedFV, "scene_id = ? AND fixture_id = ?", scene.ID, fixture1.ID)
+
+	expectedChannels := `[{"offset":0,"value":100}]`
+	if !sparseChannelsEqual(updatedFV.Channels, expectedChannels) {
+		t.Errorf("Fixture 1 channels should be %s, got %s", expectedChannels, updatedFV.Channels)
+	}
+}

@@ -381,6 +381,7 @@ type ComplexityRoot struct {
 		BulkUpdateSceneBoardButtons            func(childComplexity int, input BulkSceneBoardButtonUpdateInput) int
 		BulkUpdateSceneBoards                  func(childComplexity int, input BulkSceneBoardUpdateInput) int
 		BulkUpdateScenes                       func(childComplexity int, input BulkSceneUpdateInput) int
+		BulkUpdateScenesPartial                func(childComplexity int, input BulkScenePartialUpdateInput) int
 		CancelOFLImport                        func(childComplexity int) int
 		CancelPreviewSession                   func(childComplexity int, sessionID string) int
 		CloneScene                             func(childComplexity int, sceneID string, newName string) int
@@ -922,6 +923,7 @@ type MutationResolver interface {
 	AddFixturesToScene(ctx context.Context, sceneID string, fixtureValues []*FixtureValueInput, overwriteExisting *bool) (*models.Scene, error)
 	RemoveFixturesFromScene(ctx context.Context, sceneID string, fixtureIds []string) (*models.Scene, error)
 	UpdateScenePartial(ctx context.Context, sceneID string, name *string, description *string, fixtureValues []*FixtureValueInput, mergeFixtures *bool) (*models.Scene, error)
+	BulkUpdateScenesPartial(ctx context.Context, input BulkScenePartialUpdateInput) ([]*models.Scene, error)
 	CreateSceneBoard(ctx context.Context, input CreateSceneBoardInput) (*models.SceneBoard, error)
 	UpdateSceneBoard(ctx context.Context, id string, input UpdateSceneBoardInput) (*models.SceneBoard, error)
 	DeleteSceneBoard(ctx context.Context, id string) (bool, error)
@@ -2580,6 +2582,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.BulkUpdateScenes(childComplexity, args["input"].(BulkSceneUpdateInput)), true
+	case "Mutation.bulkUpdateScenesPartial":
+		if e.complexity.Mutation.BulkUpdateScenesPartial == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkUpdateScenesPartial_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkUpdateScenesPartial(childComplexity, args["input"].(BulkScenePartialUpdateInput)), true
 	case "Mutation.cancelOFLImport":
 		if e.complexity.Mutation.CancelOFLImport == nil {
 			break
@@ -5156,6 +5169,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputBulkSceneBoardCreateInput,
 		ec.unmarshalInputBulkSceneBoardUpdateInput,
 		ec.unmarshalInputBulkSceneCreateInput,
+		ec.unmarshalInputBulkScenePartialUpdateInput,
 		ec.unmarshalInputBulkSceneUpdateInput,
 		ec.unmarshalInputChannelAssignmentInput,
 		ec.unmarshalInputChannelFadeBehaviorInput,
@@ -5190,6 +5204,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSceneBoardButtonUpdateItem,
 		ec.unmarshalInputSceneBoardUpdateItem,
 		ec.unmarshalInputSceneFilterInput,
+		ec.unmarshalInputScenePartialUpdateItem,
 		ec.unmarshalInputSceneUpdateItem,
 		ec.unmarshalInputUpdateFixtureInstanceInput,
 		ec.unmarshalInputUpdateSceneBoardButtonInput,
@@ -6427,6 +6442,29 @@ input SceneUpdateItem {
   description: String
 }
 
+"""
+Updates multiple scenes with partial fixture value merging support.
+Each scene can independently specify name, description, fixtureValues, and mergeFixtures.
+Operations are applied in order and fail on first error.
+"""
+input BulkScenePartialUpdateInput {
+  scenes: [ScenePartialUpdateItem!]!
+}
+
+"""
+Partial update for a single scene in a bulk operation.
+When mergeFixtures is true (default), only specified fixtures are updated.
+When false, all existing fixtures are replaced with the provided list.
+"""
+input ScenePartialUpdateItem {
+  sceneId: ID!
+  name: String
+  description: String
+  fixtureValues: [FixtureValueInput!]
+  """When true (default), only specified fixtures are updated. When false, replaces all fixtures."""
+  mergeFixtures: Boolean = true
+}
+
 input BulkCueListUpdateInput {
   cueLists: [CueListUpdateItem!]!
 }
@@ -6763,6 +6801,7 @@ type Mutation {
     fixtureValues: [FixtureValueInput!]
     mergeFixtures: Boolean = true
   ): Scene!
+  bulkUpdateScenesPartial(input: BulkScenePartialUpdateInput!): [Scene!]!
 
   # Scene Boards
   createSceneBoard(input: CreateSceneBoardInput!): SceneBoard!
@@ -7213,6 +7252,17 @@ func (ec *executionContext) field_Mutation_bulkUpdateSceneBoards_args(ctx contex
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkSceneBoardUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkSceneBoardUpdateInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkUpdateScenesPartial_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBulkScenePartialUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkScenePartialUpdateInput)
 	if err != nil {
 		return nil, err
 	}
@@ -16618,6 +16668,63 @@ func (ec *executionContext) fieldContext_Mutation_updateScenePartial(ctx context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_updateScenePartial_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkUpdateScenesPartial(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkUpdateScenesPartial,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkUpdateScenesPartial(ctx, fc.Args["input"].(BulkScenePartialUpdateInput))
+		},
+		nil,
+		ec.marshalNScene2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐSceneᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkUpdateScenesPartial(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Scene_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Scene_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Scene_description(ctx, field)
+			case "project":
+				return ec.fieldContext_Scene_project(ctx, field)
+			case "fixtureValues":
+				return ec.fieldContext_Scene_fixtureValues(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Scene_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Scene_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Scene", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkUpdateScenesPartial_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -31320,6 +31427,33 @@ func (ec *executionContext) unmarshalInputBulkSceneCreateInput(ctx context.Conte
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputBulkScenePartialUpdateInput(ctx context.Context, obj any) (BulkScenePartialUpdateInput, error) {
+	var it BulkScenePartialUpdateInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"scenes"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "scenes":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scenes"))
+			data, err := ec.unmarshalNScenePartialUpdateItem2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐScenePartialUpdateItemᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Scenes = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputBulkSceneUpdateInput(ctx context.Context, obj any) (BulkSceneUpdateInput, error) {
 	var it BulkSceneUpdateInput
 	asMap := map[string]any{}
@@ -33095,6 +33229,65 @@ func (ec *executionContext) unmarshalInputSceneFilterInput(ctx context.Context, 
 				return it, err
 			}
 			it.UsesFixture = graphql.OmittableOf(data)
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputScenePartialUpdateItem(ctx context.Context, obj any) (ScenePartialUpdateItem, error) {
+	var it ScenePartialUpdateItem
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	if _, present := asMap["mergeFixtures"]; !present {
+		asMap["mergeFixtures"] = true
+	}
+
+	fieldsInOrder := [...]string{"sceneId", "name", "description", "fixtureValues", "mergeFixtures"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sceneId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sceneId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SceneID = data
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = graphql.OmittableOf(data)
+		case "description":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Description = graphql.OmittableOf(data)
+		case "fixtureValues":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("fixtureValues"))
+			data, err := ec.unmarshalOFixtureValueInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureValueInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FixtureValues = graphql.OmittableOf(data)
+		case "mergeFixtures":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mergeFixtures"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MergeFixtures = graphql.OmittableOf(data)
 		}
 	}
 
@@ -36641,6 +36834,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "updateScenePartial":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateScenePartial(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkUpdateScenesPartial":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkUpdateScenesPartial(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -42030,6 +42230,11 @@ func (ec *executionContext) unmarshalNBulkSceneCreateInput2githubᚗcomᚋbberns
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNBulkScenePartialUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkScenePartialUpdateInput(ctx context.Context, v any) (BulkScenePartialUpdateInput, error) {
+	res, err := ec.unmarshalInputBulkScenePartialUpdateInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNBulkSceneUpdateInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐBulkSceneUpdateInput(ctx context.Context, v any) (BulkSceneUpdateInput, error) {
 	res, err := ec.unmarshalInputBulkSceneUpdateInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -44662,6 +44867,26 @@ func (ec *executionContext) marshalNScenePage2ᚖgithubᚗcomᚋbbernsteinᚋlac
 		return graphql.Null
 	}
 	return ec._ScenePage(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNScenePartialUpdateItem2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐScenePartialUpdateItemᚄ(ctx context.Context, v any) ([]*ScenePartialUpdateItem, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*ScenePartialUpdateItem, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNScenePartialUpdateItem2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐScenePartialUpdateItem(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNScenePartialUpdateItem2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐScenePartialUpdateItem(ctx context.Context, v any) (*ScenePartialUpdateItem, error) {
+	res, err := ec.unmarshalInputScenePartialUpdateItem(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNSceneSummary2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐSceneSummary(ctx context.Context, sel ast.SelectionSet, v SceneSummary) graphql.Marshaler {
