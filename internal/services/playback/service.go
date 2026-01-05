@@ -12,6 +12,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/services/dmx"
 	"github.com/bbernstein/lacylights-go/internal/services/fade"
+	"github.com/bbernstein/lacylights-go/internal/services/preview"
 	"gorm.io/gorm"
 )
 
@@ -74,6 +75,9 @@ type Service struct {
 	dmxService *dmx.Service
 	fadeEngine *fade.Engine
 
+	// Preview service for canceling preview sessions when cues are executed
+	previewService *preview.Service
+
 	// Playback states by cue list ID
 	states map[string]*PlaybackState
 
@@ -114,6 +118,18 @@ func (s *Service) SetGlobalUpdateCallback(callback func(status *GlobalPlaybackSt
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onGlobalUpdate = callback
+}
+
+// SetPreviewService sets the preview service for canceling preview sessions.
+// This is used to ensure preview mode overrides don't interfere with cue playback.
+//
+// Note: This method is called once during server initialization (in resolver.go)
+// and is not expected to be called again. The mutex protection ensures safe
+// concurrent access if needed, but the typical usage pattern is single initialization.
+func (s *Service) SetPreviewService(previewService *preview.Service) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.previewService = previewService
 }
 
 // GetPlaybackState returns a copy of the current playback state for a cue list.
@@ -328,6 +344,16 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 
 	if cue.Scene == nil {
 		return fmt.Errorf("cue has no scene")
+	}
+
+	// Cancel any active preview sessions for this project to ensure preview overrides
+	// don't interfere with cue playback. Preview mode uses DMX channel overrides that
+	// take precedence over base scene values.
+	s.mu.RLock()
+	ps := s.previewService
+	s.mu.RUnlock()
+	if ps != nil {
+		ps.CancelAllProjectSessions(ctx, cue.Scene.ProjectID)
 	}
 
 	// Load fixtures for the scene's fixture values

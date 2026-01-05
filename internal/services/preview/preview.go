@@ -306,28 +306,60 @@ func (s *Service) GetDMXOutput(sessionID string) []DMXOutput {
 	return s.getCurrentDMXOutputLocked(sessionID)
 }
 
+// CancelAllProjectSessions cancels all active preview sessions for a project.
+// This should be called when activating scenes or starting cue playback to ensure
+// preview overrides don't interfere with scene output. Preview mode uses channel
+// overrides that take precedence over base scene values, so if not cleared,
+// stale preview values would override the newly activated scene.
+//
+// The ctx parameter is included for API consistency and future cancellation support,
+// but is currently unused as the operation completes synchronously.
+func (s *Service) CancelAllProjectSessions(ctx context.Context, projectID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cancelExistingProjectSessionsLocked(projectID)
+}
+
 // cancelExistingProjectSessionsLocked cancels all sessions for a project.
-// Must be called with lock held.
+// Must be called with lock held. Notifies subscribers of each cancelled session.
 func (s *Service) cancelExistingProjectSessionsLocked(projectID string) {
+	// Collect session IDs to cancel first to avoid modifying map during iteration
+	var sessionIDsToCancel []string
 	for sessionID, session := range s.sessions {
 		if session.ProjectID == projectID && session.IsActive {
-			// Clear timeout timer
-			if timer, exists := s.sessionTimers[sessionID]; exists {
-				timer.Stop()
-				delete(s.sessionTimers, sessionID)
-			}
+			sessionIDsToCancel = append(sessionIDsToCancel, sessionID)
+		}
+	}
 
-			// Remove channel overrides
-			for channelKey := range session.ChannelOverrides {
-				var universe, channel int
-				_, _ = fmt.Sscanf(channelKey, "%d:%d", &universe, &channel)
-				if s.dmxService != nil {
-					s.dmxService.ClearChannelOverride(universe, channel)
-				}
-			}
+	// Now cancel each session
+	for _, sessionID := range sessionIDsToCancel {
+		session := s.sessions[sessionID]
+		if session == nil {
+			continue
+		}
 
-			session.IsActive = false
-			delete(s.sessions, sessionID)
+		// Clear timeout timer
+		if timer, exists := s.sessionTimers[sessionID]; exists {
+			timer.Stop()
+			delete(s.sessionTimers, sessionID)
+		}
+
+		// Remove channel overrides
+		for channelKey := range session.ChannelOverrides {
+			var universe, channel int
+			_, _ = fmt.Sscanf(channelKey, "%d:%d", &universe, &channel)
+			if s.dmxService != nil {
+				s.dmxService.ClearChannelOverride(universe, channel)
+			}
+		}
+
+		session.IsActive = false
+		delete(s.sessions, sessionID)
+
+		// Notify subscribers that the session was cancelled.
+		// Pass empty DMXOutput for consistency with CancelSession behavior.
+		if s.onSessionUpdate != nil {
+			go s.onSessionUpdate(session, []DMXOutput{})
 		}
 	}
 }

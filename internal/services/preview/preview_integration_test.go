@@ -711,4 +711,152 @@ func TestInitializeWithScene_MultipleFixtures(t *testing.T) {
 	}
 }
 
+// TestCancelAllProjectSessions_Integration tests cancelling all sessions for a project.
+func TestCancelAllProjectSessions_Integration(t *testing.T) {
+	testDB, service, cleanup := setupPreviewTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	project, fixture := createTestProjectWithFixture(t, testDB)
+
+	// Create multiple sessions by manually adding them (simulating multiple tabs/windows)
+	// Note: In practice, StartSession cancels existing sessions, so we manually add them
+	session1 := &Session{
+		ID:               "session-1",
+		ProjectID:        project.ID,
+		IsActive:         true,
+		ChannelOverrides: make(map[string]int),
+	}
+	session2 := &Session{
+		ID:               "session-2",
+		ProjectID:        project.ID,
+		IsActive:         true,
+		ChannelOverrides: make(map[string]int),
+	}
+
+	// Add channel overrides to both sessions
+	session1.ChannelOverrides["1:1"] = 100
+	session1.ChannelOverrides["1:2"] = 150
+	session2.ChannelOverrides["1:3"] = 200
+
+	service.mu.Lock()
+	service.sessions["session-1"] = session1
+	service.sessions["session-2"] = session2
+	service.mu.Unlock()
+
+	// Set up a callback to track notifications (set AFTER adding sessions)
+	var mu sync.Mutex
+	var callbackCount int
+	var cancelledSessions []*Session
+	var wg sync.WaitGroup
+	wg.Add(2) // Expecting exactly 2 cancellation callbacks
+
+	service.SetSessionUpdateCallback(func(session *Session, dmxOutput []DMXOutput) {
+		mu.Lock()
+		callbackCount++
+		cancelledSessions = append(cancelledSessions, session)
+		mu.Unlock()
+		wg.Done()
+	})
+
+	// Cancel all sessions for the project
+	service.CancelAllProjectSessions(ctx, project.ID)
+
+	// Wait for async callbacks
+	wg.Wait()
+
+	// Verify all sessions were cancelled
+	if service.GetSession("session-1") != nil {
+		t.Error("Expected session-1 to be cancelled")
+	}
+	if service.GetSession("session-2") != nil {
+		t.Error("Expected session-2 to be cancelled")
+	}
+
+	// Verify callbacks were triggered
+	mu.Lock()
+	if callbackCount != 2 {
+		t.Errorf("Expected 2 callbacks, got %d", callbackCount)
+	}
+	for _, sess := range cancelledSessions {
+		if sess.IsActive {
+			t.Errorf("Expected session %s to be inactive in callback", sess.ID)
+		}
+	}
+	mu.Unlock()
+
+	// Verify no active sessions for project
+	if service.GetProjectSession(project.ID) != nil {
+		t.Error("Expected no active sessions for project")
+	}
+
+	// Clear callback for next part of test
+	service.SetSessionUpdateCallback(nil)
+
+	// Test with actual session that has set DMX overrides through the service
+	session, err := service.StartSession(ctx, project.ID, nil)
+	if err != nil {
+		t.Fatalf("Failed to start session: %v", err)
+	}
+
+	// Update channel values through the service (this sets DMX overrides)
+	_, _ = service.UpdateChannelValue(ctx, session.ID, fixture.ID, 0, 255)
+	_, _ = service.UpdateChannelValue(ctx, session.ID, fixture.ID, 1, 128)
+
+	// Verify the overrides are set
+	session = service.GetSession(session.ID)
+	if len(session.ChannelOverrides) == 0 {
+		t.Error("Expected channel overrides to be set")
+	}
+
+	// Cancel all sessions
+	service.CancelAllProjectSessions(ctx, project.ID)
+
+	// Verify session is gone
+	if service.GetSession(session.ID) != nil {
+		t.Error("Expected session to be cancelled after CancelAllProjectSessions")
+	}
+}
+
+// TestCancelAllProjectSessions_DoesNotAffectOtherProjects tests that cancelling
+// sessions for one project doesn't affect sessions for other projects.
+func TestCancelAllProjectSessions_DoesNotAffectOtherProjects(t *testing.T) {
+	testDB, service, cleanup := setupPreviewTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create two projects
+	project1 := &models.Project{
+		ID:   cuid.New(),
+		Name: testutil.UniqueProjectName("project1"),
+	}
+	project2 := &models.Project{
+		ID:   cuid.New(),
+		Name: testutil.UniqueProjectName("project2"),
+	}
+	testDB.DB.Create(project1)
+	testDB.DB.Create(project2)
+
+	// Create sessions for both projects
+	session1, _ := service.StartSession(ctx, project1.ID, nil)
+	session2, _ := service.StartSession(ctx, project2.ID, nil)
+
+	session1ID := session1.ID
+	session2ID := session2.ID
+
+	// Cancel sessions for project1 only
+	service.CancelAllProjectSessions(ctx, project1.ID)
+
+	// Project1 session should be gone
+	if service.GetSession(session1ID) != nil {
+		t.Error("Expected project1 session to be cancelled")
+	}
+
+	// Project2 session should still exist
+	if service.GetSession(session2ID) == nil {
+		t.Error("Expected project2 session to still exist")
+	}
+}
+
 // Helper is unused, fmt is imported at top

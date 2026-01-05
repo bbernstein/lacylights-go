@@ -2107,6 +2107,11 @@ func (r *mutationResolver) ActivateSceneFromBoard(ctx context.Context, sceneBoar
 		return false, fmt.Errorf("scene not found: %s", sceneID)
 	}
 
+	// Cancel any active preview sessions for this project to ensure preview overrides
+	// don't interfere with scene playback. Preview mode uses DMX channel overrides that
+	// take precedence over base scene values.
+	r.PreviewService.CancelAllProjectSessions(ctx, scene.ProjectID)
+
 	// Use fade time override if provided, otherwise use board default
 	fadeTime := board.DefaultFadeTime
 	if fadeTimeOverride != nil {
@@ -2647,6 +2652,11 @@ func (r *mutationResolver) SetSceneLive(ctx context.Context, sceneID string) (bo
 	if result.Error != nil {
 		return false, fmt.Errorf("scene not found: %w", result.Error)
 	}
+
+	// Cancel any active preview sessions for this project to ensure preview overrides
+	// don't interfere with scene playback. Preview mode uses DMX channel overrides that
+	// take precedence over base scene values.
+	r.PreviewService.CancelAllProjectSessions(ctx, scene.ProjectID)
 
 	// Load fixtures for the scene's fixture values
 	var fixtureIDs []string
