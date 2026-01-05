@@ -10,6 +10,82 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 )
 
+// Canvas dimension validation constants
+const (
+	MinCanvasSize = 100    // Minimum canvas dimension in pixels
+	MaxCanvasSize = 100000 // Maximum canvas dimension in pixels
+)
+
+// validateCanvasDimension validates that a canvas dimension is within valid bounds.
+// Returns an error if the value is invalid, nil if valid.
+func validateCanvasDimension(value int, fieldName string) error {
+	if value < MinCanvasSize {
+		return fmt.Errorf("%s must be at least %d pixels, got %d", fieldName, MinCanvasSize, value)
+	}
+	if value > MaxCanvasSize {
+		return fmt.Errorf("%s must be at most %d pixels, got %d", fieldName, MaxCanvasSize, value)
+	}
+	return nil
+}
+
+// Default canvas size for coordinate conversion
+const DefaultCanvasSize = 2000
+
+// isNormalizedCoordinate checks if a value appears to be a normalized 0-1 coordinate.
+// Returns true if the value is strictly between 0 and 1 (exclusive of exactly 0 and 1
+// to avoid false positives for pixel values of 0 or 1).
+//
+// EDGE CASE: Fixtures legitimately positioned at exactly 0.0 or 1.0 in normalized
+// coordinates will NOT be detected as normalized. This is an accepted trade-off to
+// prevent false positives with fixtures already at pixel positions 0 or 1. In practice,
+// fixtures at exact edge positions are rare.
+func isNormalizedCoordinate(val *float64) bool {
+	if val == nil {
+		return false
+	}
+	// Use > 0 and < 1 to avoid false positives for pixel coords at exactly 0 or 1
+	return *val > 0 && *val < 1
+}
+
+// convertNormalizedToPixels converts normalized 0-1 coordinates to pixel coordinates.
+// This function modifies the fixture in place if coordinates appear to be normalized.
+// Returns true if conversion was performed, false otherwise.
+//
+// WARNING: This function modifies the fixture pointer in-place. The modified fixture
+// should NOT be persisted back to the database without explicit user intent, as this
+// conversion is meant only for GraphQL query responses. The database retains the
+// original values until the user explicitly saves the fixture with new coordinates.
+//
+// DEPRECATED: This is a backward-compatibility shim for fixtures created before
+// the pixel coordinate migration. This code can be removed once all existing
+// fixtures have been migrated to pixel coordinates.
+func convertNormalizedToPixels(fixture *models.FixtureInstance, canvasWidth, canvasHeight int) bool {
+	if fixture == nil {
+		return false
+	}
+
+	// Both coordinates must be in normalized range for conversion
+	if !isNormalizedCoordinate(fixture.LayoutX) || !isNormalizedCoordinate(fixture.LayoutY) {
+		return false
+	}
+
+	// Use defaults if canvas dimensions are invalid
+	if canvasWidth <= 0 {
+		canvasWidth = DefaultCanvasSize
+	}
+	if canvasHeight <= 0 {
+		canvasHeight = DefaultCanvasSize
+	}
+
+	// Convert normalized to pixel coordinates
+	newX := *fixture.LayoutX * float64(canvasWidth)
+	newY := *fixture.LayoutY * float64(canvasHeight)
+	fixture.LayoutX = &newX
+	fixture.LayoutY = &newY
+
+	return true
+}
+
 // Helper function to convert int to *int
 func intPtr(i int) *int {
 	return &i

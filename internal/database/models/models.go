@@ -28,6 +28,10 @@ type Project struct {
 	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime"`
 
+	// 2D Layout Canvas Configuration (for fixture layout editor)
+	LayoutCanvasWidth  int `gorm:"column:layout_canvas_width;default:2000"`
+	LayoutCanvasHeight int `gorm:"column:layout_canvas_height;default:2000"`
+
 	// Relations (loaded separately)
 	Fixtures  []FixtureInstance `gorm:"foreignKey:ProjectID"`
 	Scenes    []Scene           `gorm:"foreignKey:ProjectID"`
