@@ -122,6 +122,10 @@ func (s *Service) SetGlobalUpdateCallback(callback func(status *GlobalPlaybackSt
 
 // SetPreviewService sets the preview service for canceling preview sessions.
 // This is used to ensure preview mode overrides don't interfere with cue playback.
+//
+// Note: This method is called once during server initialization (in resolver.go)
+// and is not expected to be called again. The mutex protection ensures safe
+// concurrent access if needed, but the typical usage pattern is single initialization.
 func (s *Service) SetPreviewService(previewService *preview.Service) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -311,6 +311,9 @@ func (s *Service) GetDMXOutput(sessionID string) []DMXOutput {
 // preview overrides don't interfere with scene output. Preview mode uses channel
 // overrides that take precedence over base scene values, so if not cleared,
 // stale preview values would override the newly activated scene.
+//
+// The ctx parameter is included for API consistency and future cancellation support,
+// but is currently unused as the operation completes synchronously.
 func (s *Service) CancelAllProjectSessions(ctx context.Context, projectID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -341,12 +344,6 @@ func (s *Service) cancelExistingProjectSessionsLocked(projectID string) {
 			delete(s.sessionTimers, sessionID)
 		}
 
-		// Capture final DMX state before deletion so subscribers can know what was cancelled
-		var dmxOutput []DMXOutput
-		if s.onSessionUpdate != nil {
-			dmxOutput = s.getCurrentDMXOutputLocked(sessionID)
-		}
-
 		// Remove channel overrides
 		for channelKey := range session.ChannelOverrides {
 			var universe, channel int
@@ -359,9 +356,10 @@ func (s *Service) cancelExistingProjectSessionsLocked(projectID string) {
 		session.IsActive = false
 		delete(s.sessions, sessionID)
 
-		// Notify subscribers that the session was cancelled (with final state captured above)
+		// Notify subscribers that the session was cancelled.
+		// Pass empty DMXOutput for consistency with CancelSession behavior.
 		if s.onSessionUpdate != nil {
-			go s.onSessionUpdate(session, dmxOutput)
+			go s.onSessionUpdate(session, []DMXOutput{})
 		}
 	}
 }

@@ -478,6 +478,14 @@ func TestService_CancelAllProjectSessions_NotifiesSubscriber(t *testing.T) {
 	wg.Add(2) // Expecting 2 callbacks
 
 	service.SetSessionUpdateCallback(func(session *Session, dmxOutput []DMXOutput) {
+		// Verify session is marked inactive before callback
+		if session.IsActive {
+			t.Error("Session should be marked IsActive=false before callback")
+		}
+		// Verify empty DMXOutput for consistency with CancelSession
+		if len(dmxOutput) != 0 {
+			t.Errorf("Expected empty DMXOutput, got %d entries", len(dmxOutput))
+		}
 		mu.Lock()
 		callbackCount++
 		cancelledSessionIDs = append(cancelledSessionIDs, session.ID)
