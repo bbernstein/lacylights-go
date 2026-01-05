@@ -306,6 +306,17 @@ func (s *Service) GetDMXOutput(sessionID string) []DMXOutput {
 	return s.getCurrentDMXOutputLocked(sessionID)
 }
 
+// CancelAllProjectSessions cancels all active preview sessions for a project.
+// This should be called when activating scenes or starting cue playback to ensure
+// preview overrides don't interfere with scene output. Preview mode uses channel
+// overrides that take precedence over base scene values, so if not cleared,
+// stale preview values would override the newly activated scene.
+func (s *Service) CancelAllProjectSessions(ctx context.Context, projectID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cancelExistingProjectSessionsLocked(projectID)
+}
+
 // cancelExistingProjectSessionsLocked cancels all sessions for a project.
 // Must be called with lock held.
 func (s *Service) cancelExistingProjectSessionsLocked(projectID string) {

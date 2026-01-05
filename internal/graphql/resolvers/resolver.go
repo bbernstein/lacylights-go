@@ -142,6 +142,9 @@ func (r *Resolver) wirePubSub() {
 		r.PubSub.Publish(pubsub.TopicGlobalPlaybackStatus, "", gqlStatus)
 	})
 
+	// Wire up PlaybackService with PreviewService to cancel preview sessions during cue execution
+	r.PlaybackService.SetPreviewService(r.PreviewService)
+
 	// Wire up PreviewService to publish preview session updates
 	r.PreviewService.SetSessionUpdateCallback(func(session *preview.Session, dmxOutput []preview.DMXOutput) {
 		// Convert to models.PreviewSession for the subscription

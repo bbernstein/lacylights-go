@@ -1,6 +1,7 @@
 package preview
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -376,9 +377,9 @@ func TestService_SessionWithChannelOverridesCleanup(t *testing.T) {
 		ProjectID:        "test-project",
 		IsActive:         true,
 		ChannelOverrides: map[string]int{
-			"1:10":  255,
-			"1:20":  128,
-			"2:5":   64,
+			"1:10": 255,
+			"1:20": 128,
+			"2:5":  64,
 		},
 	}
 	service.sessions["test-session"] = session
@@ -389,5 +390,78 @@ func TestService_SessionWithChannelOverridesCleanup(t *testing.T) {
 	// Verify the session was removed
 	if len(service.sessions) != 0 {
 		t.Errorf("Expected 0 sessions after cancel, got %d", len(service.sessions))
+	}
+}
+
+func TestService_CancelAllProjectSessions(t *testing.T) {
+	service := NewService(nil, nil, nil)
+
+	// Create multiple sessions for different projects
+	session1 := &Session{
+		ID:               "session-1",
+		ProjectID:        "project-a",
+		IsActive:         true,
+		ChannelOverrides: make(map[string]int),
+	}
+	session2 := &Session{
+		ID:               "session-2",
+		ProjectID:        "project-a",
+		IsActive:         true,
+		ChannelOverrides: make(map[string]int),
+	}
+	session3 := &Session{
+		ID:               "session-3",
+		ProjectID:        "project-b",
+		IsActive:         true,
+		ChannelOverrides: make(map[string]int),
+	}
+
+	service.sessions["session-1"] = session1
+	service.sessions["session-2"] = session2
+	service.sessions["session-3"] = session3
+
+	// Add timers for all sessions
+	service.sessionTimers["session-1"] = time.NewTimer(time.Hour)
+	service.sessionTimers["session-2"] = time.NewTimer(time.Hour)
+	service.sessionTimers["session-3"] = time.NewTimer(time.Hour)
+
+	// Cancel all sessions for project-a
+	service.CancelAllProjectSessions(context.Background(), "project-a")
+
+	// Verify only project-b session remains
+	if len(service.sessions) != 1 {
+		t.Errorf("Expected 1 session after cancel, got %d", len(service.sessions))
+	}
+	if _, exists := service.sessions["session-3"]; !exists {
+		t.Error("Expected session-3 (project-b) to still exist")
+	}
+
+	// Verify timers for project-a were removed
+	if len(service.sessionTimers) != 1 {
+		t.Errorf("Expected 1 timer after cancel, got %d", len(service.sessionTimers))
+	}
+	if _, exists := service.sessionTimers["session-3"]; !exists {
+		t.Error("Expected timer for session-3 (project-b) to still exist")
+	}
+}
+
+func TestService_CancelAllProjectSessions_NonExistentProject(t *testing.T) {
+	service := NewService(nil, nil, nil)
+
+	// Create a session for a different project
+	session := &Session{
+		ID:               "test-session",
+		ProjectID:        "existing-project",
+		IsActive:         true,
+		ChannelOverrides: make(map[string]int),
+	}
+	service.sessions["test-session"] = session
+
+	// Cancel sessions for non-existent project - should not panic or affect existing sessions
+	service.CancelAllProjectSessions(context.Background(), "non-existent-project")
+
+	// Verify the existing session is still there
+	if len(service.sessions) != 1 {
+		t.Errorf("Expected 1 session (unchanged), got %d", len(service.sessions))
 	}
 }
