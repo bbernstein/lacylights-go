@@ -34,6 +34,11 @@ const DefaultCanvasSize = 2000
 // isNormalizedCoordinate checks if a value appears to be a normalized 0-1 coordinate.
 // Returns true if the value is strictly between 0 and 1 (exclusive of exactly 0 and 1
 // to avoid false positives for pixel values of 0 or 1).
+//
+// EDGE CASE: Fixtures legitimately positioned at exactly 0.0 or 1.0 in normalized
+// coordinates will NOT be detected as normalized. This is an accepted trade-off to
+// prevent false positives with fixtures already at pixel positions 0 or 1. In practice,
+// fixtures at exact edge positions are rare.
 func isNormalizedCoordinate(val *float64) bool {
 	if val == nil {
 		return false

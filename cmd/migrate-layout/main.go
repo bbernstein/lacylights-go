@@ -12,6 +12,13 @@
 // normalized (strictly between 0 and 1, exclusive). Values exactly at 0 or 1
 // are treated as pixel coordinates to avoid false positives for fixtures at
 // canvas edges. This matches the resolver's backward-compatibility logic.
+//
+// EDGE CASE NOTE: Fixtures legitimately positioned at exactly 0.0 or 1.0 in
+// normalized coordinates will NOT be converted by this migration. Such fixtures
+// would remain at 0 or 1 pixels instead of being scaled to canvas dimensions.
+// This is an accepted trade-off to prevent false positives with fixtures that
+// are already at pixel positions 0 or 1. In practice, fixtures at exact edge
+// positions are rare, and users can manually adjust them if needed.
 package main
 
 import (
@@ -120,11 +127,12 @@ func main() {
 		newX := oldX * float64(canvas.width)
 		newY := oldY * float64(canvas.height)
 
-		fixture.LayoutX = &newX
-		fixture.LayoutY = &newY
-
-		// Save the updated fixture
-		if err := db.Save(&fixture).Error; err != nil {
+		// Use Updates() instead of Save() for explicit, targeted field updates.
+		// Save() updates all fields which could have unintended side effects.
+		if err := db.Model(&fixture).Updates(map[string]interface{}{
+			"layout_x": newX,
+			"layout_y": newY,
+		}).Error; err != nil {
 			log.Printf("Error updating fixture %s: %v", fixture.ID, err)
 			errored++
 			erroredFixtures = append(erroredFixtures, fixture.ID)

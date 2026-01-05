@@ -213,7 +213,12 @@ type FixtureInstance {
   tags: [String!]!
   projectOrder: Int
 
-  # 2D Layout Position (pixel coordinates, 0 to project canvasWidth/Height)
+  # 2D Layout Position.
+  # These fields are exposed in query responses as pixel coordinates
+  # (0 to project canvasWidth/Height). During the migration period,
+  # stored values may still be in normalized 0-1 coordinates, but are
+  # transparently converted to pixels in API responses for backward
+  # compatibility. New values should always be provided in pixels.
   layoutX: Float
   layoutY: Float
   layoutRotation: Float
