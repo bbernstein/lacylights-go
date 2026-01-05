@@ -3500,8 +3500,12 @@ func (r *queryResolver) FixtureInstances(ctx context.Context, projectID string, 
 		return nil, err
 	}
 
-	// Get project canvas dimensions for coordinate conversion (backward compatibility)
-	project, _ := r.ProjectRepo.FindByID(ctx, projectID)
+	// Get project canvas dimensions for coordinate conversion (backward compatibility).
+	// Intentionally do not fail the query if project lookup fails; fall back to defaults.
+	project, projErr := r.ProjectRepo.FindByID(ctx, projectID)
+	if projErr != nil {
+		log.Printf("Warning: failed to look up project %s for coordinate conversion: %v", projectID, projErr)
+	}
 	canvasWidth, canvasHeight := DefaultCanvasSize, DefaultCanvasSize
 	if project != nil {
 		canvasWidth = project.LayoutCanvasWidth
@@ -3554,8 +3558,12 @@ func (r *queryResolver) FixtureInstance(ctx context.Context, id string) (*models
 		return fixture, err
 	}
 
-	// DEPRECATED: Convert normalized coordinates to pixels for backward compatibility
-	project, _ := r.ProjectRepo.FindByID(ctx, fixture.ProjectID)
+	// DEPRECATED: Convert normalized coordinates to pixels for backward compatibility.
+	// Intentionally do not fail the query if project lookup fails; fall back to defaults.
+	project, projErr := r.ProjectRepo.FindByID(ctx, fixture.ProjectID)
+	if projErr != nil {
+		log.Printf("Warning: failed to look up project %s for coordinate conversion: %v", fixture.ProjectID, projErr)
+	}
 	canvasWidth, canvasHeight := DefaultCanvasSize, DefaultCanvasSize
 	if project != nil {
 		canvasWidth = project.LayoutCanvasWidth
@@ -3573,8 +3581,12 @@ func (r *queryResolver) SearchFixtures(ctx context.Context, projectID string, qu
 		return nil, err
 	}
 
-	// Get project canvas dimensions for coordinate conversion (backward compatibility)
-	project, _ := r.ProjectRepo.FindByID(ctx, projectID)
+	// Get project canvas dimensions for coordinate conversion (backward compatibility).
+	// Intentionally do not fail the query if project lookup fails; fall back to defaults.
+	project, projErr := r.ProjectRepo.FindByID(ctx, projectID)
+	if projErr != nil {
+		log.Printf("Warning: failed to look up project %s for coordinate conversion: %v", projectID, projErr)
+	}
 	canvasWidth, canvasHeight := DefaultCanvasSize, DefaultCanvasSize
 	if project != nil {
 		canvasWidth = project.LayoutCanvasWidth
@@ -4696,10 +4708,15 @@ func (r *queryResolver) FixturesByIds(ctx context.Context, ids []string) ([]*mod
 			return nil, err
 		}
 		if fixture != nil {
-			// DEPRECATED: Convert normalized coordinates to pixels for backward compatibility
+			// DEPRECATED: Convert normalized coordinates to pixels for backward compatibility.
+			// Intentionally do not fail the query if project lookup fails; fall back to defaults.
 			project, ok := projectCache[fixture.ProjectID]
 			if !ok {
-				project, _ = r.ProjectRepo.FindByID(ctx, fixture.ProjectID)
+				var projErr error
+				project, projErr = r.ProjectRepo.FindByID(ctx, fixture.ProjectID)
+				if projErr != nil {
+					log.Printf("Warning: failed to look up project %s for coordinate conversion: %v", fixture.ProjectID, projErr)
+				}
 				projectCache[fixture.ProjectID] = project
 			}
 			canvasWidth, canvasHeight := DefaultCanvasSize, DefaultCanvasSize

@@ -46,6 +46,11 @@ func isNormalizedCoordinate(val *float64) bool {
 // This function modifies the fixture in place if coordinates appear to be normalized.
 // Returns true if conversion was performed, false otherwise.
 //
+// WARNING: This function modifies the fixture pointer in-place. The modified fixture
+// should NOT be persisted back to the database without explicit user intent, as this
+// conversion is meant only for GraphQL query responses. The database retains the
+// original values until the user explicitly saves the fixture with new coordinates.
+//
 // DEPRECATED: This is a backward-compatibility shim for fixtures created before
 // the pixel coordinate migration. This code can be removed once all existing
 // fixtures have been migrated to pixel coordinates.

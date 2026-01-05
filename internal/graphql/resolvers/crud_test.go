@@ -1,6 +1,8 @@
 package resolvers
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/99designs/gqlgen/client"
@@ -109,6 +111,148 @@ func TestProject_CreateWithCanvasDimensions(t *testing.T) {
 	}
 	if customResp.CreateProject.LayoutCanvasHeight != 3000 {
 		t.Errorf("Expected layoutCanvasHeight 3000, got %d", customResp.CreateProject.LayoutCanvasHeight)
+	}
+}
+
+func TestProject_CreateWithInvalidCanvasDimensions(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	testCases := []struct {
+		name          string
+		width         int
+		height        int
+		expectedError string
+	}{
+		{"too small width", 50, 2000, "layoutCanvasWidth must be at least 100"},
+		{"too small height", 2000, 50, "layoutCanvasHeight must be at least 100"},
+		{"zero width", 0, 2000, "layoutCanvasWidth must be at least 100"},
+		{"negative width", -100, 2000, "layoutCanvasWidth must be at least 100"},
+		{"too large width", 200000, 2000, "layoutCanvasWidth must be at most 100000"},
+		{"too large height", 2000, 200000, "layoutCanvasHeight must be at most 100000"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var resp struct {
+				CreateProject struct {
+					ID string `json:"id"`
+				} `json:"createProject"`
+			}
+
+			query := fmt.Sprintf(`mutation {
+				createProject(input: { name: "Test Project", layoutCanvasWidth: %d, layoutCanvasHeight: %d }) {
+					id
+				}
+			}`, tc.width, tc.height)
+
+			err := c.Post(query, &resp)
+
+			if err == nil {
+				t.Errorf("Expected error for %s, got nil", tc.name)
+			} else if !strings.Contains(err.Error(), tc.expectedError) {
+				t.Errorf("Expected error containing '%s', got: %v", tc.expectedError, err)
+			}
+		})
+	}
+}
+
+func TestProject_UpdateCanvasDimensions(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// First create a project
+	var createResp struct {
+		CreateProject struct {
+			ID string `json:"id"`
+		} `json:"createProject"`
+	}
+
+	err := c.Post(`mutation {
+		createProject(input: { name: "Test Project" }) {
+			id
+		}
+	}`, &createResp)
+
+	if err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+
+	projectID := createResp.CreateProject.ID
+
+	// Update canvas dimensions
+	var updateResp struct {
+		UpdateProject struct {
+			ID                 string `json:"id"`
+			LayoutCanvasWidth  int    `json:"layoutCanvasWidth"`
+			LayoutCanvasHeight int    `json:"layoutCanvasHeight"`
+		} `json:"updateProject"`
+	}
+
+	query := fmt.Sprintf(`mutation {
+		updateProject(id: "%s", input: { name: "Test Project", layoutCanvasWidth: 5000, layoutCanvasHeight: 4000 }) {
+			id
+			layoutCanvasWidth
+			layoutCanvasHeight
+		}
+	}`, projectID)
+
+	err = c.Post(query, &updateResp)
+
+	if err != nil {
+		t.Fatalf("Failed to update project: %v", err)
+	}
+
+	if updateResp.UpdateProject.LayoutCanvasWidth != 5000 {
+		t.Errorf("Expected layoutCanvasWidth 5000, got %d", updateResp.UpdateProject.LayoutCanvasWidth)
+	}
+	if updateResp.UpdateProject.LayoutCanvasHeight != 4000 {
+		t.Errorf("Expected layoutCanvasHeight 4000, got %d", updateResp.UpdateProject.LayoutCanvasHeight)
+	}
+}
+
+func TestProject_UpdateWithInvalidCanvasDimensions(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// First create a project
+	var createResp struct {
+		CreateProject struct {
+			ID string `json:"id"`
+		} `json:"createProject"`
+	}
+
+	err := c.Post(`mutation {
+		createProject(input: { name: "Test Project" }) {
+			id
+		}
+	}`, &createResp)
+
+	if err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+
+	projectID := createResp.CreateProject.ID
+
+	// Try to update with invalid dimensions
+	var updateResp struct {
+		UpdateProject struct {
+			ID string `json:"id"`
+		} `json:"updateProject"`
+	}
+
+	query := fmt.Sprintf(`mutation {
+		updateProject(id: "%s", input: { name: "Test Project", layoutCanvasWidth: 50 }) {
+			id
+		}
+	}`, projectID)
+
+	err = c.Post(query, &updateResp)
+
+	if err == nil {
+		t.Error("Expected error for invalid canvas width, got nil")
+	} else if !strings.Contains(err.Error(), "layoutCanvasWidth must be at least 100") {
+		t.Errorf("Expected validation error, got: %v", err)
 	}
 }
 

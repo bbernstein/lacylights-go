@@ -406,10 +406,10 @@ func migrateChannelValuesToSparse(db *gorm.DB) error {
 func backfillLayoutCanvasDimensions(db *gorm.DB) error {
 	const defaultCanvasSize = 2000
 
-	// Check if any projects need backfilling
+	// Check if any projects need backfilling (0 or NULL values)
 	var count int64
 	if err := db.Model(&models.Project{}).
-		Where("layout_canvas_width = 0 OR layout_canvas_height = 0").
+		Where("layout_canvas_width IS NULL OR layout_canvas_width = 0 OR layout_canvas_height IS NULL OR layout_canvas_height = 0").
 		Count(&count).Error; err != nil {
 		return fmt.Errorf("failed to count projects: %w", err)
 	}
@@ -420,16 +420,16 @@ func backfillLayoutCanvasDimensions(db *gorm.DB) error {
 
 	log.Printf("🔄 Backfilling layout canvas dimensions for %d projects...", count)
 
-	// Update projects with 0 width
+	// Update projects with 0 or NULL width
 	if err := db.Model(&models.Project{}).
-		Where("layout_canvas_width = 0").
+		Where("layout_canvas_width IS NULL OR layout_canvas_width = 0").
 		Update("layout_canvas_width", defaultCanvasSize).Error; err != nil {
 		return fmt.Errorf("failed to backfill canvas width: %w", err)
 	}
 
-	// Update projects with 0 height
+	// Update projects with 0 or NULL height
 	if err := db.Model(&models.Project{}).
-		Where("layout_canvas_height = 0").
+		Where("layout_canvas_height IS NULL OR layout_canvas_height = 0").
 		Update("layout_canvas_height", defaultCanvasSize).Error; err != nil {
 		return fmt.Errorf("failed to backfill canvas height: %w", err)
 	}

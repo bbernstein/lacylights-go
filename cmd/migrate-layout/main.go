@@ -4,12 +4,14 @@
 // Usage: go run ./cmd/migrate-layout
 //
 // This script:
-// 1. Finds all fixtures with layoutX/layoutY values in the 0-1 range
+// 1. Finds all fixtures with layoutX/layoutY values strictly between 0 and 1
 // 2. Converts them to pixel coordinates (normalized * canvasSize)
 // 3. Uses the project's layoutCanvasWidth/Height (defaults to 2000x2000)
 //
-// The script is idempotent - it will only convert values that appear to be
-// normalized (both x and y are between 0 and 1 inclusive).
+// The script is idempotent - it only converts values that appear to be
+// normalized (strictly between 0 and 1, exclusive). Values exactly at 0 or 1
+// are treated as pixel coordinates to avoid false positives for fixtures at
+// canvas edges. This matches the resolver's backward-compatibility logic.
 package main
 
 import (
@@ -27,12 +29,15 @@ const (
 	defaultCanvasHeight = 2000
 )
 
-// isNormalized checks if a value appears to be a normalized 0-1 coordinate
+// isNormalized checks if a value appears to be a normalized 0-1 coordinate.
+// Uses strict inequality (> 0 and < 1) to avoid false positives for pixel
+// coordinates at exactly 0 or 1. This matches the resolver's logic in
+// internal/graphql/resolvers/helpers.go:isNormalizedCoordinate().
 func isNormalized(val *float64) bool {
 	if val == nil {
 		return false
 	}
-	return *val >= 0 && *val <= 1
+	return *val > 0 && *val < 1
 }
 
 func main() {
