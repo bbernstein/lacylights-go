@@ -2566,6 +2566,11 @@ func (r *mutationResolver) BulkDeleteCues(ctx context.Context, cueIds []string) 
 
 // StartPreviewSession is the resolver for the startPreviewSession field.
 func (r *mutationResolver) StartPreviewSession(ctx context.Context, projectID string) (*models.PreviewSession, error) {
+	// Auto-pause any playing cue lists since a preview session is being started.
+	// This ensures the user can edit scenes without the cue list continuing to play
+	// in the background, and allows them to resume when returning to the cue list.
+	r.PlaybackService.PausePlayingCueLists()
+
 	session, err := r.PreviewService.StartSession(ctx, projectID, nil)
 	if err != nil {
 		return nil, err
@@ -2624,6 +2629,10 @@ func (r *mutationResolver) UpdatePreviewChannel(ctx context.Context, sessionID s
 
 // InitializePreviewWithScene is the resolver for the initializePreviewWithScene field.
 func (r *mutationResolver) InitializePreviewWithScene(ctx context.Context, sessionID string, sceneID string) (bool, error) {
+	// Auto-pause any playing cue lists since a scene is being loaded into preview.
+	// This ensures consistent behavior when editing scenes during cue list playback.
+	r.PlaybackService.PausePlayingCueLists()
+
 	return r.PreviewService.InitializeWithScene(ctx, sessionID, sceneID)
 }
 
