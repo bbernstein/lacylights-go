@@ -318,27 +318,45 @@ func (s *Service) CancelAllProjectSessions(ctx context.Context, projectID string
 }
 
 // cancelExistingProjectSessionsLocked cancels all sessions for a project.
-// Must be called with lock held.
+// Must be called with lock held. Notifies subscribers of each cancelled session.
 func (s *Service) cancelExistingProjectSessionsLocked(projectID string) {
+	// Collect session IDs to cancel first to avoid modifying map during iteration
+	var sessionIDsToCancel []string
 	for sessionID, session := range s.sessions {
 		if session.ProjectID == projectID && session.IsActive {
-			// Clear timeout timer
-			if timer, exists := s.sessionTimers[sessionID]; exists {
-				timer.Stop()
-				delete(s.sessionTimers, sessionID)
-			}
+			sessionIDsToCancel = append(sessionIDsToCancel, sessionID)
+		}
+	}
 
-			// Remove channel overrides
-			for channelKey := range session.ChannelOverrides {
-				var universe, channel int
-				_, _ = fmt.Sscanf(channelKey, "%d:%d", &universe, &channel)
-				if s.dmxService != nil {
-					s.dmxService.ClearChannelOverride(universe, channel)
-				}
-			}
+	// Now cancel each session
+	for _, sessionID := range sessionIDsToCancel {
+		session := s.sessions[sessionID]
+		if session == nil {
+			continue
+		}
 
-			session.IsActive = false
-			delete(s.sessions, sessionID)
+		// Clear timeout timer
+		if timer, exists := s.sessionTimers[sessionID]; exists {
+			timer.Stop()
+			delete(s.sessionTimers, sessionID)
+		}
+
+		// Remove channel overrides
+		for channelKey := range session.ChannelOverrides {
+			var universe, channel int
+			_, _ = fmt.Sscanf(channelKey, "%d:%d", &universe, &channel)
+			if s.dmxService != nil {
+				s.dmxService.ClearChannelOverride(universe, channel)
+			}
+		}
+
+		session.IsActive = false
+		delete(s.sessions, sessionID)
+
+		// Notify subscribers that the session was cancelled
+		if s.onSessionUpdate != nil {
+			dmxOutput := s.getCurrentDMXOutputLocked(sessionID)
+			s.onSessionUpdate(session, dmxOutput)
 		}
 	}
 }

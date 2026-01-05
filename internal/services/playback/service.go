@@ -345,8 +345,11 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 	// Cancel any active preview sessions for this project to ensure preview overrides
 	// don't interfere with cue playback. Preview mode uses DMX channel overrides that
 	// take precedence over base scene values.
-	if s.previewService != nil {
-		s.previewService.CancelAllProjectSessions(ctx, cue.Scene.ProjectID)
+	s.mu.RLock()
+	ps := s.previewService
+	s.mu.RUnlock()
+	if ps != nil {
+		ps.CancelAllProjectSessions(ctx, cue.Scene.ProjectID)
 	}
 
 	// Load fixtures for the scene's fixture values
