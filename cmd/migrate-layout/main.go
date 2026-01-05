@@ -92,6 +92,8 @@ func main() {
 	// Count statistics
 	converted := 0
 	skipped := 0
+	errored := 0
+	var erroredFixtures []string
 
 	for _, fixture := range fixtures {
 		// Check if both coordinates appear to be normalized (0-1 range)
@@ -119,6 +121,8 @@ func main() {
 		// Save the updated fixture
 		if err := db.Save(&fixture).Error; err != nil {
 			log.Printf("Error updating fixture %s: %v", fixture.ID, err)
+			errored++
+			erroredFixtures = append(erroredFixtures, fixture.ID)
 			continue
 		}
 
@@ -131,10 +135,23 @@ func main() {
 	fmt.Printf("  Total fixtures with positions: %d\n", len(fixtures))
 	fmt.Printf("  Converted (normalized -> pixels): %d\n", converted)
 	fmt.Printf("  Skipped (already pixels or invalid): %d\n", skipped)
+	fmt.Printf("  Errors: %d\n", errored)
+
+	if errored > 0 {
+		fmt.Printf("\nFailed fixture IDs:\n")
+		for _, id := range erroredFixtures {
+			fmt.Printf("  - %s\n", id)
+		}
+	}
 
 	if converted > 0 {
 		fmt.Println("\nNote: Fixture positions have been converted from 0-1 normalized")
 		fmt.Println("coordinates to pixel-based coordinates using the project's canvas size")
 		fmt.Println("(default 2000x2000 if not set).")
+	}
+
+	// Exit with non-zero status if there were errors
+	if errored > 0 {
+		os.Exit(1)
 	}
 }

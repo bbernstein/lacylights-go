@@ -10,6 +10,24 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 )
 
+// Canvas dimension validation constants
+const (
+	MinCanvasSize = 100    // Minimum canvas dimension in pixels
+	MaxCanvasSize = 100000 // Maximum canvas dimension in pixels
+)
+
+// validateCanvasDimension validates that a canvas dimension is within valid bounds.
+// Returns an error if the value is invalid, nil if valid.
+func validateCanvasDimension(value int, fieldName string) error {
+	if value < MinCanvasSize {
+		return fmt.Errorf("%s must be at least %d pixels, got %d", fieldName, MinCanvasSize, value)
+	}
+	if value > MaxCanvasSize {
+		return fmt.Errorf("%s must be at most %d pixels, got %d", fieldName, MaxCanvasSize, value)
+	}
+	return nil
+}
+
 // Helper function to convert int to *int
 func intPtr(i int) *int {
 	return &i

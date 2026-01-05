@@ -294,9 +294,15 @@ func (r *mutationResolver) CreateProject(ctx context.Context, input generated.Cr
 		project.Description = input.Description.Value()
 	}
 	if input.LayoutCanvasWidth.IsSet() && input.LayoutCanvasWidth.Value() != nil {
+		if err := validateCanvasDimension(*input.LayoutCanvasWidth.Value(), "layoutCanvasWidth"); err != nil {
+			return nil, err
+		}
 		project.LayoutCanvasWidth = *input.LayoutCanvasWidth.Value()
 	}
 	if input.LayoutCanvasHeight.IsSet() && input.LayoutCanvasHeight.Value() != nil {
+		if err := validateCanvasDimension(*input.LayoutCanvasHeight.Value(), "layoutCanvasHeight"); err != nil {
+			return nil, err
+		}
 		project.LayoutCanvasHeight = *input.LayoutCanvasHeight.Value()
 	}
 	if err := r.ProjectRepo.Create(ctx, project); err != nil {
@@ -319,9 +325,15 @@ func (r *mutationResolver) UpdateProject(ctx context.Context, id string, input g
 		project.Description = input.Description.Value()
 	}
 	if input.LayoutCanvasWidth.IsSet() && input.LayoutCanvasWidth.Value() != nil {
+		if err := validateCanvasDimension(*input.LayoutCanvasWidth.Value(), "layoutCanvasWidth"); err != nil {
+			return nil, err
+		}
 		project.LayoutCanvasWidth = *input.LayoutCanvasWidth.Value()
 	}
 	if input.LayoutCanvasHeight.IsSet() && input.LayoutCanvasHeight.Value() != nil {
+		if err := validateCanvasDimension(*input.LayoutCanvasHeight.Value(), "layoutCanvasHeight"); err != nil {
+			return nil, err
+		}
 		project.LayoutCanvasHeight = *input.LayoutCanvasHeight.Value()
 	}
 	if err := r.ProjectRepo.Update(ctx, project); err != nil {
@@ -375,10 +387,16 @@ func (r *mutationResolver) BulkUpdateProjects(ctx context.Context, input generat
 		}
 
 		if item.LayoutCanvasWidth.IsSet() && item.LayoutCanvasWidth.Value() != nil {
+			if err := validateCanvasDimension(*item.LayoutCanvasWidth.Value(), "layoutCanvasWidth"); err != nil {
+				return nil, fmt.Errorf("project %s: %w", item.ProjectID, err)
+			}
 			project.LayoutCanvasWidth = *item.LayoutCanvasWidth.Value()
 		}
 
 		if item.LayoutCanvasHeight.IsSet() && item.LayoutCanvasHeight.Value() != nil {
+			if err := validateCanvasDimension(*item.LayoutCanvasHeight.Value(), "layoutCanvasHeight"); err != nil {
+				return nil, fmt.Errorf("project %s: %w", item.ProjectID, err)
+			}
 			project.LayoutCanvasHeight = *item.LayoutCanvasHeight.Value()
 		}
 

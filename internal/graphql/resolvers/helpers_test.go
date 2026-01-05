@@ -2,10 +2,104 @@ package resolvers
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 )
+
+func TestValidateCanvasDimension_ValidValues(t *testing.T) {
+	tests := []struct {
+		name      string
+		value     int
+		fieldName string
+	}{
+		{"minimum value", MinCanvasSize, "testField"},
+		{"maximum value", MaxCanvasSize, "testField"},
+		{"default value (2000)", 2000, "layoutCanvasWidth"},
+		{"mid-range value", 5000, "layoutCanvasHeight"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateCanvasDimension(tt.value, tt.fieldName)
+			if err != nil {
+				t.Errorf("validateCanvasDimension(%d, %q) returned unexpected error: %v", tt.value, tt.fieldName, err)
+			}
+		})
+	}
+}
+
+func TestValidateCanvasDimension_TooSmall(t *testing.T) {
+	tests := []struct {
+		name      string
+		value     int
+		fieldName string
+	}{
+		{"zero", 0, "layoutCanvasWidth"},
+		{"negative", -100, "layoutCanvasHeight"},
+		{"just below minimum", MinCanvasSize - 1, "testField"},
+		{"very small", 10, "testField"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateCanvasDimension(tt.value, tt.fieldName)
+			if err == nil {
+				t.Errorf("validateCanvasDimension(%d, %q) should return error for value below minimum", tt.value, tt.fieldName)
+			}
+		})
+	}
+}
+
+func TestValidateCanvasDimension_TooLarge(t *testing.T) {
+	tests := []struct {
+		name      string
+		value     int
+		fieldName string
+	}{
+		{"just above maximum", MaxCanvasSize + 1, "layoutCanvasWidth"},
+		{"very large", 1000000, "layoutCanvasHeight"},
+		{"extreme", 999999999, "testField"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateCanvasDimension(tt.value, tt.fieldName)
+			if err == nil {
+				t.Errorf("validateCanvasDimension(%d, %q) should return error for value above maximum", tt.value, tt.fieldName)
+			}
+		})
+	}
+}
+
+func TestValidateCanvasDimension_ErrorMessage(t *testing.T) {
+	// Test that error messages contain the field name and value
+	err := validateCanvasDimension(50, "layoutCanvasWidth")
+	if err == nil {
+		t.Fatal("Expected error for value 50")
+	}
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "layoutCanvasWidth") {
+		t.Errorf("Error message should contain field name, got: %s", errMsg)
+	}
+	if !strings.Contains(errMsg, "50") {
+		t.Errorf("Error message should contain the value, got: %s", errMsg)
+	}
+
+	// Test too large error message
+	err = validateCanvasDimension(200000, "layoutCanvasHeight")
+	if err == nil {
+		t.Fatal("Expected error for value 200000")
+	}
+	errMsg = err.Error()
+	if !strings.Contains(errMsg, "layoutCanvasHeight") {
+		t.Errorf("Error message should contain field name, got: %s", errMsg)
+	}
+	if !strings.Contains(errMsg, "200000") {
+		t.Errorf("Error message should contain the value, got: %s", errMsg)
+	}
+}
 
 func TestIntPtr(t *testing.T) {
 	tests := []struct {
