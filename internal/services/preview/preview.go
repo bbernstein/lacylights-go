@@ -341,6 +341,12 @@ func (s *Service) cancelExistingProjectSessionsLocked(projectID string) {
 			delete(s.sessionTimers, sessionID)
 		}
 
+		// Capture final DMX state before deletion so subscribers can know what was cancelled
+		var dmxOutput []DMXOutput
+		if s.onSessionUpdate != nil {
+			dmxOutput = s.getCurrentDMXOutputLocked(sessionID)
+		}
+
 		// Remove channel overrides
 		for channelKey := range session.ChannelOverrides {
 			var universe, channel int
@@ -353,9 +359,8 @@ func (s *Service) cancelExistingProjectSessionsLocked(projectID string) {
 		session.IsActive = false
 		delete(s.sessions, sessionID)
 
-		// Notify subscribers that the session was cancelled
+		// Notify subscribers that the session was cancelled (with final state captured above)
 		if s.onSessionUpdate != nil {
-			dmxOutput := s.getCurrentDMXOutputLocked(sessionID)
 			s.onSessionUpdate(session, dmxOutput)
 		}
 	}
