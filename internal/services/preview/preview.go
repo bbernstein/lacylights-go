@@ -361,7 +361,7 @@ func (s *Service) cancelExistingProjectSessionsLocked(projectID string) {
 
 		// Notify subscribers that the session was cancelled (with final state captured above)
 		if s.onSessionUpdate != nil {
-			s.onSessionUpdate(session, dmxOutput)
+			go s.onSessionUpdate(session, dmxOutput)
 		}
 	}
 }

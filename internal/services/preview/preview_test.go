@@ -2,6 +2,7 @@ package preview
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 )
@@ -469,12 +470,19 @@ func TestService_CancelAllProjectSessions_NonExistentProject(t *testing.T) {
 func TestService_CancelAllProjectSessions_NotifiesSubscriber(t *testing.T) {
 	service := NewService(nil, nil, nil)
 
-	// Track callback invocations
+	// Track callback invocations with synchronization (callbacks are async)
+	var mu sync.Mutex
 	var callbackCount int
 	var cancelledSessionIDs []string
+	var wg sync.WaitGroup
+	wg.Add(2) // Expecting 2 callbacks
+
 	service.SetSessionUpdateCallback(func(session *Session, dmxOutput []DMXOutput) {
+		mu.Lock()
 		callbackCount++
 		cancelledSessionIDs = append(cancelledSessionIDs, session.ID)
+		mu.Unlock()
+		wg.Done()
 	})
 
 	// Create multiple sessions for the same project
@@ -497,7 +505,12 @@ func TestService_CancelAllProjectSessions_NotifiesSubscriber(t *testing.T) {
 	// Cancel all sessions for project-a
 	service.CancelAllProjectSessions(context.Background(), "project-a")
 
+	// Wait for async callbacks to complete
+	wg.Wait()
+
 	// Verify subscriber was notified for each cancelled session
+	mu.Lock()
+	defer mu.Unlock()
 	if callbackCount != 2 {
 		t.Errorf("Expected 2 callback invocations, got %d", callbackCount)
 	}
