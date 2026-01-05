@@ -47,6 +47,71 @@ func TestProject_Create(t *testing.T) {
 	}
 }
 
+func TestProject_CreateWithCanvasDimensions(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Test with default canvas dimensions
+	var defaultResp struct {
+		CreateProject struct {
+			ID                 string `json:"id"`
+			Name               string `json:"name"`
+			LayoutCanvasWidth  int    `json:"layoutCanvasWidth"`
+			LayoutCanvasHeight int    `json:"layoutCanvasHeight"`
+		} `json:"createProject"`
+	}
+
+	err := c.Post(`mutation {
+		createProject(input: { name: "Default Canvas Project" }) {
+			id
+			name
+			layoutCanvasWidth
+			layoutCanvasHeight
+		}
+	}`, &defaultResp)
+
+	if err != nil {
+		t.Fatalf("CreateProject mutation failed: %v", err)
+	}
+
+	if defaultResp.CreateProject.LayoutCanvasWidth != 2000 {
+		t.Errorf("Expected default layoutCanvasWidth 2000, got %d", defaultResp.CreateProject.LayoutCanvasWidth)
+	}
+	if defaultResp.CreateProject.LayoutCanvasHeight != 2000 {
+		t.Errorf("Expected default layoutCanvasHeight 2000, got %d", defaultResp.CreateProject.LayoutCanvasHeight)
+	}
+
+	// Test with custom canvas dimensions
+	var customResp struct {
+		CreateProject struct {
+			ID                 string `json:"id"`
+			Name               string `json:"name"`
+			LayoutCanvasWidth  int    `json:"layoutCanvasWidth"`
+			LayoutCanvasHeight int    `json:"layoutCanvasHeight"`
+		} `json:"createProject"`
+	}
+
+	err = c.Post(`mutation {
+		createProject(input: { name: "Custom Canvas Project", layoutCanvasWidth: 4000, layoutCanvasHeight: 3000 }) {
+			id
+			name
+			layoutCanvasWidth
+			layoutCanvasHeight
+		}
+	}`, &customResp)
+
+	if err != nil {
+		t.Fatalf("CreateProject with custom canvas failed: %v", err)
+	}
+
+	if customResp.CreateProject.LayoutCanvasWidth != 4000 {
+		t.Errorf("Expected layoutCanvasWidth 4000, got %d", customResp.CreateProject.LayoutCanvasWidth)
+	}
+	if customResp.CreateProject.LayoutCanvasHeight != 3000 {
+		t.Errorf("Expected layoutCanvasHeight 3000, got %d", customResp.CreateProject.LayoutCanvasHeight)
+	}
+}
+
 func TestProject_Read(t *testing.T) {
 	c, _, cleanup := testSetup(t)
 	defer cleanup()

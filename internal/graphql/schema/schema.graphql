@@ -147,6 +147,10 @@ type Project {
   cueLists: [CueList!]!
   sceneBoards: [SceneBoard!]!
   users: [ProjectUser!]!
+
+  # 2D Layout Canvas Configuration (for fixture layout editor)
+  layoutCanvasWidth: Int!
+  layoutCanvasHeight: Int!
 }
 
 type FixtureDefinition {
@@ -209,7 +213,7 @@ type FixtureInstance {
   tags: [String!]!
   projectOrder: Int
 
-  # 2D Layout Position (normalized 0-1 coordinates)
+  # 2D Layout Position (pixel coordinates, 0 to project canvasWidth/Height)
   layoutX: Float
   layoutY: Float
   layoutRotation: Float
@@ -848,6 +852,8 @@ type QLCFixtureMappingResult {
 input CreateProjectInput {
   name: String!
   description: String
+  layoutCanvasWidth: Int = 2000
+  layoutCanvasHeight: Int = 2000
 }
 
 input CreateFixtureDefinitionInput {
@@ -1196,6 +1202,8 @@ input ProjectUpdateItem {
   projectId: ID!
   name: String
   description: String
+  layoutCanvasWidth: Int
+  layoutCanvasHeight: Int
 }
 
 input FixtureMappingInput {

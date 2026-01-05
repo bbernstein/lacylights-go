@@ -223,8 +223,10 @@ type CreateModeInput struct {
 }
 
 type CreateProjectInput struct {
-	Name        string                     `json:"name"`
-	Description graphql.Omittable[*string] `json:"description,omitempty"`
+	Name               string                     `json:"name"`
+	Description        graphql.Omittable[*string] `json:"description,omitempty"`
+	LayoutCanvasWidth  graphql.Omittable[*int]    `json:"layoutCanvasWidth,omitempty"`
+	LayoutCanvasHeight graphql.Omittable[*int]    `json:"layoutCanvasHeight,omitempty"`
 }
 
 type CreateSceneBoardButtonInput struct {
@@ -613,9 +615,11 @@ type PaginationInfo struct {
 }
 
 type ProjectUpdateItem struct {
-	ProjectID   string                     `json:"projectId"`
-	Name        graphql.Omittable[*string] `json:"name,omitempty"`
-	Description graphql.Omittable[*string] `json:"description,omitempty"`
+	ProjectID          string                     `json:"projectId"`
+	Name               graphql.Omittable[*string] `json:"name,omitempty"`
+	Description        graphql.Omittable[*string] `json:"description,omitempty"`
+	LayoutCanvasWidth  graphql.Omittable[*int]    `json:"layoutCanvasWidth,omitempty"`
+	LayoutCanvasHeight graphql.Omittable[*int]    `json:"layoutCanvasHeight,omitempty"`
 }
 
 type QLCExportResult struct {

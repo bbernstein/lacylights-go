@@ -533,19 +533,21 @@ type ComplexityRoot struct {
 	}
 
 	Project struct {
-		CreatedAt    func(childComplexity int) int
-		CueListCount func(childComplexity int) int
-		CueLists     func(childComplexity int) int
-		Description  func(childComplexity int) int
-		FixtureCount func(childComplexity int) int
-		Fixtures     func(childComplexity int) int
-		ID           func(childComplexity int) int
-		Name         func(childComplexity int) int
-		SceneBoards  func(childComplexity int) int
-		SceneCount   func(childComplexity int) int
-		Scenes       func(childComplexity int) int
-		UpdatedAt    func(childComplexity int) int
-		Users        func(childComplexity int) int
+		CreatedAt          func(childComplexity int) int
+		CueListCount       func(childComplexity int) int
+		CueLists           func(childComplexity int) int
+		Description        func(childComplexity int) int
+		FixtureCount       func(childComplexity int) int
+		Fixtures           func(childComplexity int) int
+		ID                 func(childComplexity int) int
+		LayoutCanvasHeight func(childComplexity int) int
+		LayoutCanvasWidth  func(childComplexity int) int
+		Name               func(childComplexity int) int
+		SceneBoards        func(childComplexity int) int
+		SceneCount         func(childComplexity int) int
+		Scenes             func(childComplexity int) int
+		UpdatedAt          func(childComplexity int) int
+		Users              func(childComplexity int) int
 	}
 
 	ProjectUser struct {
@@ -3698,6 +3700,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Project.ID(childComplexity), true
+	case "Project.layoutCanvasHeight":
+		if e.complexity.Project.LayoutCanvasHeight == nil {
+			break
+		}
+
+		return e.complexity.Project.LayoutCanvasHeight(childComplexity), true
+	case "Project.layoutCanvasWidth":
+		if e.complexity.Project.LayoutCanvasWidth == nil {
+			break
+		}
+
+		return e.complexity.Project.LayoutCanvasWidth(childComplexity), true
 	case "Project.name":
 		if e.complexity.Project.Name == nil {
 			break
@@ -5474,6 +5488,10 @@ type Project {
   cueLists: [CueList!]!
   sceneBoards: [SceneBoard!]!
   users: [ProjectUser!]!
+
+  # 2D Layout Canvas Configuration (for fixture layout editor)
+  layoutCanvasWidth: Int!
+  layoutCanvasHeight: Int!
 }
 
 type FixtureDefinition {
@@ -5536,7 +5554,7 @@ type FixtureInstance {
   tags: [String!]!
   projectOrder: Int
 
-  # 2D Layout Position (normalized 0-1 coordinates)
+  # 2D Layout Position (pixel coordinates, 0 to project canvasWidth/Height)
   layoutX: Float
   layoutY: Float
   layoutRotation: Float
@@ -6175,6 +6193,8 @@ type QLCFixtureMappingResult {
 input CreateProjectInput {
   name: String!
   description: String
+  layoutCanvasWidth: Int = 2000
+  layoutCanvasHeight: Int = 2000
 }
 
 input CreateFixtureDefinitionInput {
@@ -6523,6 +6543,8 @@ input ProjectUpdateItem {
   projectId: ID!
   name: String
   description: String
+  layoutCanvasWidth: Int
+  layoutCanvasHeight: Int
 }
 
 input FixtureMappingInput {
@@ -10552,6 +10574,10 @@ func (ec *executionContext) fieldContext_CueList_project(_ context.Context, fiel
 				return ec.fieldContext_Project_sceneBoards(ctx, field)
 			case "users":
 				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
@@ -12682,6 +12708,10 @@ func (ec *executionContext) fieldContext_FixtureInstance_project(_ context.Conte
 				return ec.fieldContext_Project_sceneBoards(ctx, field)
 			case "users":
 				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
@@ -14720,6 +14750,10 @@ func (ec *executionContext) fieldContext_Mutation_createProject(ctx context.Cont
 				return ec.fieldContext_Project_sceneBoards(ctx, field)
 			case "users":
 				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
@@ -14789,6 +14823,10 @@ func (ec *executionContext) fieldContext_Mutation_updateProject(ctx context.Cont
 				return ec.fieldContext_Project_sceneBoards(ctx, field)
 			case "users":
 				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
@@ -14899,6 +14937,10 @@ func (ec *executionContext) fieldContext_Mutation_bulkCreateProjects(ctx context
 				return ec.fieldContext_Project_sceneBoards(ctx, field)
 			case "users":
 				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
@@ -14968,6 +15010,10 @@ func (ec *executionContext) fieldContext_Mutation_bulkUpdateProjects(ctx context
 				return ec.fieldContext_Project_sceneBoards(ctx, field)
 			case "users":
 				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
@@ -21283,6 +21329,10 @@ func (ec *executionContext) fieldContext_PreviewSession_project(_ context.Contex
 				return ec.fieldContext_Project_sceneBoards(ctx, field)
 			case "users":
 				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
@@ -21915,6 +21965,64 @@ func (ec *executionContext) fieldContext_Project_users(_ context.Context, field 
 	return fc, nil
 }
 
+func (ec *executionContext) _Project_layoutCanvasWidth(ctx context.Context, field graphql.CollectedField, obj *models.Project) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Project_layoutCanvasWidth,
+		func(ctx context.Context) (any, error) {
+			return obj.LayoutCanvasWidth, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Project_layoutCanvasWidth(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Project",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Project_layoutCanvasHeight(ctx context.Context, field graphql.CollectedField, obj *models.Project) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Project_layoutCanvasHeight,
+		func(ctx context.Context) (any, error) {
+			return obj.LayoutCanvasHeight, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Project_layoutCanvasHeight(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Project",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ProjectUser_id(ctx context.Context, field graphql.CollectedField, obj *models.ProjectUser) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -22035,6 +22143,10 @@ func (ec *executionContext) fieldContext_ProjectUser_project(_ context.Context, 
 				return ec.fieldContext_Project_sceneBoards(ctx, field)
 			case "users":
 				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
@@ -22613,6 +22725,10 @@ func (ec *executionContext) fieldContext_QLCImportResult_project(_ context.Conte
 				return ec.fieldContext_Project_sceneBoards(ctx, field)
 			case "users":
 				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
@@ -22815,6 +22931,10 @@ func (ec *executionContext) fieldContext_Query_projects(_ context.Context, field
 				return ec.fieldContext_Project_sceneBoards(ctx, field)
 			case "users":
 				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
@@ -22873,6 +22993,10 @@ func (ec *executionContext) fieldContext_Query_project(ctx context.Context, fiel
 				return ec.fieldContext_Project_sceneBoards(ctx, field)
 			case "users":
 				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
@@ -25532,6 +25656,10 @@ func (ec *executionContext) fieldContext_Query_projectsByIds(ctx context.Context
 				return ec.fieldContext_Project_sceneBoards(ctx, field)
 			case "users":
 				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
@@ -25911,6 +26039,10 @@ func (ec *executionContext) fieldContext_Scene_project(_ context.Context, field 
 				return ec.fieldContext_Project_sceneBoards(ctx, field)
 			case "users":
 				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
@@ -26152,6 +26284,10 @@ func (ec *executionContext) fieldContext_SceneBoard_project(_ context.Context, f
 				return ec.fieldContext_Project_sceneBoards(ctx, field)
 			case "users":
 				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
@@ -27762,6 +27898,10 @@ func (ec *executionContext) fieldContext_Subscription_projectUpdated(ctx context
 				return ec.fieldContext_Project_sceneBoards(ctx, field)
 			case "users":
 				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
@@ -31990,7 +32130,14 @@ func (ec *executionContext) unmarshalInputCreateProjectInput(ctx context.Context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "description"}
+	if _, present := asMap["layoutCanvasWidth"]; !present {
+		asMap["layoutCanvasWidth"] = 2000
+	}
+	if _, present := asMap["layoutCanvasHeight"]; !present {
+		asMap["layoutCanvasHeight"] = 2000
+	}
+
+	fieldsInOrder := [...]string{"name", "description", "layoutCanvasWidth", "layoutCanvasHeight"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -32011,6 +32158,20 @@ func (ec *executionContext) unmarshalInputCreateProjectInput(ctx context.Context
 				return it, err
 			}
 			it.Description = graphql.OmittableOf(data)
+		case "layoutCanvasWidth":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("layoutCanvasWidth"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LayoutCanvasWidth = graphql.OmittableOf(data)
+		case "layoutCanvasHeight":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("layoutCanvasHeight"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LayoutCanvasHeight = graphql.OmittableOf(data)
 		}
 	}
 
@@ -32988,7 +33149,7 @@ func (ec *executionContext) unmarshalInputProjectUpdateItem(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"projectId", "name", "description"}
+	fieldsInOrder := [...]string{"projectId", "name", "description", "layoutCanvasWidth", "layoutCanvasHeight"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -33016,6 +33177,20 @@ func (ec *executionContext) unmarshalInputProjectUpdateItem(ctx context.Context,
 				return it, err
 			}
 			it.Description = graphql.OmittableOf(data)
+		case "layoutCanvasWidth":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("layoutCanvasWidth"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LayoutCanvasWidth = graphql.OmittableOf(data)
+		case "layoutCanvasHeight":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("layoutCanvasHeight"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LayoutCanvasHeight = graphql.OmittableOf(data)
 		}
 	}
 
@@ -38325,6 +38500,16 @@ func (ec *executionContext) _Project(ctx context.Context, sel ast.SelectionSet, 
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "layoutCanvasWidth":
+			out.Values[i] = ec._Project_layoutCanvasWidth(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "layoutCanvasHeight":
+			out.Values[i] = ec._Project_layoutCanvasHeight(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

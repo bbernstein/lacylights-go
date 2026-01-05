@@ -286,10 +286,18 @@ func (r *modeChannelResolver) Channel(ctx context.Context, obj *models.ModeChann
 // CreateProject is the resolver for the createProject field.
 func (r *mutationResolver) CreateProject(ctx context.Context, input generated.CreateProjectInput) (*models.Project, error) {
 	project := &models.Project{
-		Name: input.Name,
+		Name:               input.Name,
+		LayoutCanvasWidth:  2000, // Default
+		LayoutCanvasHeight: 2000, // Default
 	}
 	if input.Description.IsSet() {
 		project.Description = input.Description.Value()
+	}
+	if input.LayoutCanvasWidth.IsSet() && input.LayoutCanvasWidth.Value() != nil {
+		project.LayoutCanvasWidth = *input.LayoutCanvasWidth.Value()
+	}
+	if input.LayoutCanvasHeight.IsSet() && input.LayoutCanvasHeight.Value() != nil {
+		project.LayoutCanvasHeight = *input.LayoutCanvasHeight.Value()
 	}
 	if err := r.ProjectRepo.Create(ctx, project); err != nil {
 		return nil, err
@@ -309,6 +317,12 @@ func (r *mutationResolver) UpdateProject(ctx context.Context, id string, input g
 	project.Name = input.Name
 	if input.Description.IsSet() {
 		project.Description = input.Description.Value()
+	}
+	if input.LayoutCanvasWidth.IsSet() && input.LayoutCanvasWidth.Value() != nil {
+		project.LayoutCanvasWidth = *input.LayoutCanvasWidth.Value()
+	}
+	if input.LayoutCanvasHeight.IsSet() && input.LayoutCanvasHeight.Value() != nil {
+		project.LayoutCanvasHeight = *input.LayoutCanvasHeight.Value()
 	}
 	if err := r.ProjectRepo.Update(ctx, project); err != nil {
 		return nil, err
@@ -358,6 +372,14 @@ func (r *mutationResolver) BulkUpdateProjects(ctx context.Context, input generat
 
 		if item.Description.IsSet() {
 			project.Description = item.Description.Value()
+		}
+
+		if item.LayoutCanvasWidth.IsSet() && item.LayoutCanvasWidth.Value() != nil {
+			project.LayoutCanvasWidth = *item.LayoutCanvasWidth.Value()
+		}
+
+		if item.LayoutCanvasHeight.IsSet() && item.LayoutCanvasHeight.Value() != nil {
+			project.LayoutCanvasHeight = *item.LayoutCanvasHeight.Value()
 		}
 
 		if err := r.ProjectRepo.Update(ctx, project); err != nil {
