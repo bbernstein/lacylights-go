@@ -465,3 +465,45 @@ func TestService_CancelAllProjectSessions_NonExistentProject(t *testing.T) {
 		t.Errorf("Expected 1 session (unchanged), got %d", len(service.sessions))
 	}
 }
+
+func TestService_CancelAllProjectSessions_NotifiesSubscriber(t *testing.T) {
+	service := NewService(nil, nil, nil)
+
+	// Track callback invocations
+	var callbackCount int
+	var cancelledSessionIDs []string
+	service.SetSessionUpdateCallback(func(session *Session, dmxOutput []DMXOutput) {
+		callbackCount++
+		cancelledSessionIDs = append(cancelledSessionIDs, session.ID)
+	})
+
+	// Create multiple sessions for the same project
+	session1 := &Session{
+		ID:               "session-1",
+		ProjectID:        "project-a",
+		IsActive:         true,
+		ChannelOverrides: make(map[string]int),
+	}
+	session2 := &Session{
+		ID:               "session-2",
+		ProjectID:        "project-a",
+		IsActive:         true,
+		ChannelOverrides: make(map[string]int),
+	}
+
+	service.sessions["session-1"] = session1
+	service.sessions["session-2"] = session2
+
+	// Cancel all sessions for project-a
+	service.CancelAllProjectSessions(context.Background(), "project-a")
+
+	// Verify subscriber was notified for each cancelled session
+	if callbackCount != 2 {
+		t.Errorf("Expected 2 callback invocations, got %d", callbackCount)
+	}
+
+	// Verify both sessions were reported
+	if len(cancelledSessionIDs) != 2 {
+		t.Errorf("Expected 2 cancelled session IDs, got %d", len(cancelledSessionIDs))
+	}
+}
