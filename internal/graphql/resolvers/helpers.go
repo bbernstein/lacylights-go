@@ -28,6 +28,54 @@ func validateCanvasDimension(value int, fieldName string) error {
 	return nil
 }
 
+// Default canvas size for coordinate conversion
+const DefaultCanvasSize = 2000
+
+// isNormalizedCoordinate checks if a value appears to be a normalized 0-1 coordinate.
+// Returns true if the value is strictly between 0 and 1 (exclusive of exactly 0 and 1
+// to avoid false positives for pixel values of 0 or 1).
+func isNormalizedCoordinate(val *float64) bool {
+	if val == nil {
+		return false
+	}
+	// Use > 0 and < 1 to avoid false positives for pixel coords at exactly 0 or 1
+	return *val > 0 && *val < 1
+}
+
+// convertNormalizedToPixels converts normalized 0-1 coordinates to pixel coordinates.
+// This function modifies the fixture in place if coordinates appear to be normalized.
+// Returns true if conversion was performed, false otherwise.
+//
+// DEPRECATED: This is a backward-compatibility shim for fixtures created before
+// the pixel coordinate migration. This code can be removed once all existing
+// fixtures have been migrated to pixel coordinates.
+func convertNormalizedToPixels(fixture *models.FixtureInstance, canvasWidth, canvasHeight int) bool {
+	if fixture == nil {
+		return false
+	}
+
+	// Both coordinates must be in normalized range for conversion
+	if !isNormalizedCoordinate(fixture.LayoutX) || !isNormalizedCoordinate(fixture.LayoutY) {
+		return false
+	}
+
+	// Use defaults if canvas dimensions are invalid
+	if canvasWidth <= 0 {
+		canvasWidth = DefaultCanvasSize
+	}
+	if canvasHeight <= 0 {
+		canvasHeight = DefaultCanvasSize
+	}
+
+	// Convert normalized to pixel coordinates
+	newX := *fixture.LayoutX * float64(canvasWidth)
+	newY := *fixture.LayoutY * float64(canvasHeight)
+	fixture.LayoutX = &newX
+	fixture.LayoutY = &newY
+
+	return true
+}
+
 // Helper function to convert int to *int
 func intPtr(i int) *int {
 	return &i

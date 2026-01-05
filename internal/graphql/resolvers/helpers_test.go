@@ -101,6 +101,148 @@ func TestValidateCanvasDimension_ErrorMessage(t *testing.T) {
 	}
 }
 
+func TestIsNormalizedCoordinate(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    *float64
+		expected bool
+	}{
+		{"nil value", nil, false},
+		{"zero (edge case - not normalized)", floatPtr(0.0), false},
+		{"one (edge case - not normalized)", floatPtr(1.0), false},
+		{"mid-range normalized", floatPtr(0.5), true},
+		{"low normalized", floatPtr(0.1), true},
+		{"high normalized", floatPtr(0.9), true},
+		{"pixel value", floatPtr(500.0), false},
+		{"negative", floatPtr(-0.5), false},
+		{"greater than one", floatPtr(1.5), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isNormalizedCoordinate(tt.value)
+			if result != tt.expected {
+				if tt.value != nil {
+					t.Errorf("isNormalizedCoordinate(%f) = %v, want %v", *tt.value, result, tt.expected)
+				} else {
+					t.Errorf("isNormalizedCoordinate(nil) = %v, want %v", result, tt.expected)
+				}
+			}
+		})
+	}
+}
+
+func TestConvertNormalizedToPixels(t *testing.T) {
+	t.Run("converts normalized coordinates", func(t *testing.T) {
+		fixture := &models.FixtureInstance{
+			LayoutX: floatPtr(0.5),
+			LayoutY: floatPtr(0.25),
+		}
+
+		converted := convertNormalizedToPixels(fixture, 2000, 2000)
+
+		if !converted {
+			t.Error("Expected conversion to occur")
+		}
+		if *fixture.LayoutX != 1000.0 {
+			t.Errorf("LayoutX = %f, want 1000.0", *fixture.LayoutX)
+		}
+		if *fixture.LayoutY != 500.0 {
+			t.Errorf("LayoutY = %f, want 500.0", *fixture.LayoutY)
+		}
+	})
+
+	t.Run("skips pixel coordinates", func(t *testing.T) {
+		fixture := &models.FixtureInstance{
+			LayoutX: floatPtr(500.0),
+			LayoutY: floatPtr(300.0),
+		}
+
+		converted := convertNormalizedToPixels(fixture, 2000, 2000)
+
+		if converted {
+			t.Error("Expected no conversion for pixel coordinates")
+		}
+		if *fixture.LayoutX != 500.0 {
+			t.Errorf("LayoutX should be unchanged, got %f", *fixture.LayoutX)
+		}
+	})
+
+	t.Run("skips nil fixture", func(t *testing.T) {
+		converted := convertNormalizedToPixels(nil, 2000, 2000)
+		if converted {
+			t.Error("Expected no conversion for nil fixture")
+		}
+	})
+
+	t.Run("skips nil coordinates", func(t *testing.T) {
+		fixture := &models.FixtureInstance{
+			LayoutX: nil,
+			LayoutY: nil,
+		}
+
+		converted := convertNormalizedToPixels(fixture, 2000, 2000)
+
+		if converted {
+			t.Error("Expected no conversion for nil coordinates")
+		}
+	})
+
+	t.Run("uses default canvas size for invalid dimensions", func(t *testing.T) {
+		fixture := &models.FixtureInstance{
+			LayoutX: floatPtr(0.5),
+			LayoutY: floatPtr(0.5),
+		}
+
+		converted := convertNormalizedToPixels(fixture, 0, 0)
+
+		if !converted {
+			t.Error("Expected conversion to occur")
+		}
+		// Should use DefaultCanvasSize (2000)
+		if *fixture.LayoutX != 1000.0 {
+			t.Errorf("LayoutX = %f, want 1000.0 (using default canvas)", *fixture.LayoutX)
+		}
+	})
+
+	t.Run("uses custom canvas dimensions", func(t *testing.T) {
+		fixture := &models.FixtureInstance{
+			LayoutX: floatPtr(0.5),
+			LayoutY: floatPtr(0.5),
+		}
+
+		converted := convertNormalizedToPixels(fixture, 4000, 3000)
+
+		if !converted {
+			t.Error("Expected conversion to occur")
+		}
+		if *fixture.LayoutX != 2000.0 {
+			t.Errorf("LayoutX = %f, want 2000.0", *fixture.LayoutX)
+		}
+		if *fixture.LayoutY != 1500.0 {
+			t.Errorf("LayoutY = %f, want 1500.0", *fixture.LayoutY)
+		}
+	})
+
+	t.Run("skips when only X is normalized", func(t *testing.T) {
+		fixture := &models.FixtureInstance{
+			LayoutX: floatPtr(0.5),
+			LayoutY: floatPtr(500.0), // pixel value
+		}
+
+		converted := convertNormalizedToPixels(fixture, 2000, 2000)
+
+		if converted {
+			t.Error("Expected no conversion when only X is normalized")
+		}
+	})
+}
+
+// Helper function to create float64 pointer
+func floatPtr(f float64) *float64 {
+	return &f
+}
+
 func TestIntPtr(t *testing.T) {
 	tests := []struct {
 		input    int
