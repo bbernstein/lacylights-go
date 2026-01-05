@@ -392,6 +392,131 @@ func TestProject_Delete(t *testing.T) {
 	}
 }
 
+func TestProject_BulkUpdateCanvasDimensions(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Create two projects
+	var createResp1, createResp2 struct {
+		CreateProject struct {
+			ID string `json:"id"`
+		} `json:"createProject"`
+	}
+
+	err := c.Post(`mutation {
+		createProject(input: { name: "Project 1" }) {
+			id
+		}
+	}`, &createResp1)
+	if err != nil {
+		t.Fatalf("Failed to create project 1: %v", err)
+	}
+
+	err = c.Post(`mutation {
+		createProject(input: { name: "Project 2" }) {
+			id
+		}
+	}`, &createResp2)
+	if err != nil {
+		t.Fatalf("Failed to create project 2: %v", err)
+	}
+
+	// Bulk update canvas dimensions
+	var updateResp struct {
+		BulkUpdateProjects []struct {
+			ID                 string `json:"id"`
+			LayoutCanvasWidth  int    `json:"layoutCanvasWidth"`
+			LayoutCanvasHeight int    `json:"layoutCanvasHeight"`
+		} `json:"bulkUpdateProjects"`
+	}
+
+	query := fmt.Sprintf(`mutation {
+		bulkUpdateProjects(input: {
+			projects: [
+				{ projectId: "%s", layoutCanvasWidth: 3000, layoutCanvasHeight: 2500 }
+				{ projectId: "%s", layoutCanvasWidth: 4000, layoutCanvasHeight: 3500 }
+			]
+		}) {
+			id
+			layoutCanvasWidth
+			layoutCanvasHeight
+		}
+	}`, createResp1.CreateProject.ID, createResp2.CreateProject.ID)
+
+	err = c.Post(query, &updateResp)
+
+	if err != nil {
+		t.Fatalf("BulkUpdateProjects failed: %v", err)
+	}
+
+	if len(updateResp.BulkUpdateProjects) != 2 {
+		t.Fatalf("Expected 2 projects, got %d", len(updateResp.BulkUpdateProjects))
+	}
+
+	// Check first project
+	found1 := false
+	for _, p := range updateResp.BulkUpdateProjects {
+		if p.ID == createResp1.CreateProject.ID {
+			found1 = true
+			if p.LayoutCanvasWidth != 3000 {
+				t.Errorf("Project 1: expected layoutCanvasWidth 3000, got %d", p.LayoutCanvasWidth)
+			}
+			if p.LayoutCanvasHeight != 2500 {
+				t.Errorf("Project 1: expected layoutCanvasHeight 2500, got %d", p.LayoutCanvasHeight)
+			}
+		}
+	}
+	if !found1 {
+		t.Error("Project 1 not found in bulk update response")
+	}
+}
+
+func TestProject_BulkUpdateWithInvalidCanvasDimensions(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Create a project
+	var createResp struct {
+		CreateProject struct {
+			ID string `json:"id"`
+		} `json:"createProject"`
+	}
+
+	err := c.Post(`mutation {
+		createProject(input: { name: "Test Project" }) {
+			id
+		}
+	}`, &createResp)
+	if err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+
+	// Try bulk update with invalid dimensions
+	var updateResp struct {
+		BulkUpdateProjects []struct {
+			ID string `json:"id"`
+		} `json:"bulkUpdateProjects"`
+	}
+
+	query := fmt.Sprintf(`mutation {
+		bulkUpdateProjects(input: {
+			projects: [
+				{ projectId: "%s", layoutCanvasWidth: 50 }
+			]
+		}) {
+			id
+		}
+	}`, createResp.CreateProject.ID)
+
+	err = c.Post(query, &updateResp)
+
+	if err == nil {
+		t.Error("Expected error for invalid canvas width, got nil")
+	} else if !strings.Contains(err.Error(), "layoutCanvasWidth must be at least 100") {
+		t.Errorf("Expected validation error, got: %v", err)
+	}
+}
+
 func TestProject_List(t *testing.T) {
 	c, _, cleanup := testSetup(t)
 	defer cleanup()
