@@ -788,10 +788,17 @@ func (s *Service) startRetryLoopLocked(address string) {
 
 // stopRetryLoopLocked stops any active retry loop.
 // Must be called with mutex held.
+// Safe to call multiple times - uses select to avoid double-close panic.
 func (s *Service) stopRetryLoopLocked() {
 	if s.retryInProgress {
 		if s.retryStopChan != nil {
-			close(s.retryStopChan)
+			// Use select to check if channel is already closed to avoid panic
+			select {
+			case <-s.retryStopChan:
+				// Already closed
+			default:
+				close(s.retryStopChan)
+			}
 		}
 		s.retryStopChan = nil
 		s.retryInProgress = false
@@ -848,32 +855,33 @@ func (s *Service) retryLoop() {
 			addr, err := net.ResolveUDPAddr("udp4", address+":"+strconv.Itoa(s.port))
 			if err != nil {
 				log.Printf("⚠️ Retry failed: address resolution error: %v", err)
-				s.mu.Unlock()
 				if retryCount >= maxRetries {
 					log.Printf("❌ Giving up on Art-Net connection after %d retries", maxRetries)
-					s.mu.Lock()
 					s.retryInProgress = false
 					s.mu.Unlock()
 					return
 				}
+				s.mu.Unlock()
 				continue
 			}
 
 			conn, err := net.DialUDP("udp4", nil, addr)
 			if err != nil {
 				log.Printf("⚠️ Retry failed: dial error: %v", err)
-				s.mu.Unlock()
 				if retryCount >= maxRetries {
 					log.Printf("❌ Giving up on Art-Net connection after %d retries", maxRetries)
-					s.mu.Lock()
 					s.retryInProgress = false
 					s.mu.Unlock()
 					return
 				}
+				s.mu.Unlock()
 				continue
 			}
 
-			// Success!
+			// Success! Close any existing connection before replacing
+			if s.conn != nil {
+				_ = s.conn.Close()
+			}
 			s.addr = addr
 			s.conn = conn
 			s.enabled = true

@@ -666,14 +666,20 @@ func TestRetryLoop_StopsOnRetryStopChan(t *testing.T) {
 
 	// Manually set up retry state
 	service.mu.Lock()
-	service.pendingBroadcastAddr = "127.0.0.1" // Valid address that will succeed
+	service.pendingBroadcastAddr = "999.999.999.999" // Invalid address to prevent quick success
 	service.retryStopChan = make(chan struct{})
 	service.retryInProgress = true
 	stopChan := service.retryStopChan
 	service.mu.Unlock()
 
+	// Create a done channel to track when the goroutine exits
+	done := make(chan struct{})
+
 	// Start the retry loop
-	go service.retryLoop()
+	go func() {
+		service.retryLoop()
+		close(done)
+	}()
 
 	// Give it a moment to start
 	time.Sleep(50 * time.Millisecond)
@@ -681,14 +687,13 @@ func TestRetryLoop_StopsOnRetryStopChan(t *testing.T) {
 	// Stop the retry loop via the stop channel
 	close(stopChan)
 
-	// Mark retry as done (since we manually closed the channel)
-	service.mu.Lock()
-	service.retryInProgress = false
-	service.retryStopChan = nil
-	service.mu.Unlock()
-
-	// Wait for the loop to exit
-	time.Sleep(100 * time.Millisecond)
+	// Wait for the goroutine to exit before proceeding
+	select {
+	case <-done:
+		// Good - goroutine has exited
+	case <-time.After(5 * time.Second):
+		t.Fatal("Retry loop did not exit after stop channel was closed")
+	}
 
 	// Now safe to stop the service
 	service.Stop()
