@@ -25,6 +25,11 @@ const (
 	RunUpdateScriptPath = "/opt/lacylights/scripts/run-update.sh"
 	// UpdateLogPath is the path to the update log file
 	UpdateLogPath = "/opt/lacylights/logs/update.log"
+
+	// Version file paths for detecting installed repositories
+	frontendVersionFile = "/opt/lacylights/frontend-src/.lacylights-version"
+	backendVersionFile  = "/opt/lacylights/backend/.lacylights-version"
+	mcpVersionFile      = "/opt/lacylights/mcp/.lacylights-version"
 )
 
 // Build information - set at build time via ldflags or by calling SetBuildInfo
@@ -89,27 +94,65 @@ func ResetBuildInfoForTesting() {
 }
 
 var (
-	// repositoryNames is the canonical list of managed repositories
-	repositoryNames = []string{"lacylights-fe", "lacylights-go", "lacylights-mcp"}
-
-	// validRepositories defines the allowed repository names to prevent command injection
-	// Derived from repositoryNames to avoid duplication
-	validRepositories = func() map[string]bool {
-		m := make(map[string]bool)
-		for _, name := range repositoryNames {
-			m[name] = true
-		}
-		return m
-	}()
-
 	// semverPattern validates version strings to prevent command injection
 	semverPattern = regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$`)
+
+	// testInstalledRepos allows tests to override repository detection.
+	// When nil (default), detectInstalledRepositories() checks actual files.
+	// When set, it returns this slice directly.
+	testInstalledRepos []string
 )
 
-// validateRepository checks if the repository name is valid
+// SetTestInstalledRepos allows tests to override which repositories are "installed".
+// Pass nil to reset to default behavior (check actual files).
+// This is only intended for testing purposes.
+func SetTestInstalledRepos(repos []string) {
+	testInstalledRepos = repos
+}
+
+// detectInstalledRepositories returns the list of repositories that are actually installed.
+// This allows the system to dynamically adjust to different deployment configurations
+// (e.g., RPi without MCP vs Mac with MCP).
+func detectInstalledRepositories() []string {
+	// Allow tests to override detection
+	if testInstalledRepos != nil {
+		return testInstalledRepos
+	}
+
+	repos := []string{}
+
+	// Check for frontend
+	if _, err := os.Stat(frontendVersionFile); err == nil {
+		repos = append(repos, "lacylights-fe")
+	}
+	// Check for backend
+	if _, err := os.Stat(backendVersionFile); err == nil {
+		repos = append(repos, "lacylights-go")
+	}
+	// Only include MCP if it's installed
+	if _, err := os.Stat(mcpVersionFile); err == nil {
+		repos = append(repos, "lacylights-mcp")
+	}
+
+	return repos
+}
+
+// isValidRepository checks if a repository name is in the list of installed repositories
+func isValidRepository(repository string) bool {
+	installedRepos := detectInstalledRepositories()
+	for _, repo := range installedRepos {
+		if repo == repository {
+			return true
+		}
+	}
+	return false
+}
+
+// validateRepository checks if the repository name is valid (must be an installed repository)
 func validateRepository(repository string) error {
-	if !validRepositories[repository] {
-		return fmt.Errorf("invalid repository name: %s (must be one of: lacylights-fe, lacylights-go, lacylights-mcp)", repository)
+	if !isValidRepository(repository) {
+		installedRepos := detectInstalledRepositories()
+		return fmt.Errorf("invalid repository name: %s (must be one of: %s)", repository, strings.Join(installedRepos, ", "))
 	}
 	return nil
 }
@@ -195,9 +238,10 @@ func (s *Service) GetSystemVersions() (*SystemVersionInfo, error) {
 		return nil, fmt.Errorf("failed to parse versions JSON: %w", err)
 	}
 
-	// Build repository list from the shared repositoryNames constant
-	repos := make([]*RepositoryVersion, 0, len(repositoryNames))
-	for _, repoName := range repositoryNames {
+	// Build repository list from detected installed repositories
+	installedRepos := detectInstalledRepositories()
+	repos := make([]*RepositoryVersion, 0, len(installedRepos))
+	for _, repoName := range installedRepos {
 		v, exists := versions[repoName]
 		if !exists {
 			log.Printf("Warning: repository %s not found in version data", repoName)
@@ -308,11 +352,11 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 	var cmd *exec.Cmd
 	var output []byte
 
-	// Both lacylights-go and lacylights-mcp updates require systemd-run because they stop the backend
-	if repository == "lacylights-go" || repository == "lacylights-mcp" {
+	// lacylights-go self-updates require systemd-run because they stop the backend
+	if repository == "lacylights-go" {
 		// Use systemd-run directly to avoid deadlock where:
 		// 1. Backend waits to send GraphQL response
-		// 2. Update script stops the backend (for go self-update or mcp update)
+		// 2. Update script stops the backend (for go self-update)
 		// 3. Stopping backend kills the update script (child process)
 		// Solution: systemd-run schedules update with delay, returns immediately
 		//
@@ -336,16 +380,10 @@ func (s *Service) UpdateRepository(repository string, version *string) (*UpdateR
 		}
 
 		// Build systemd-run command with static unit name
-		// Note: Static unit names mean only one update can run at a time per type.
+		// Note: Static unit names mean only one update can run at a time.
 		// This is intentional - concurrent updates would cause conflicts anyway.
-		var unitName, description string
-		if repository == "lacylights-go" {
-			unitName = "lacylights-self-update"
-			description = "LacyLights Self-Update to " + targetVersion
-		} else {
-			unitName = "lacylights-mcp-update"
-			description = "LacyLights MCP Update to " + targetVersion
-		}
+		unitName := "lacylights-self-update"
+		description := "LacyLights Self-Update to " + targetVersion
 
 		// Build arguments for systemd-run
 		// The run-update.sh script handles logging internally
@@ -464,12 +502,13 @@ func (s *Service) UpdateAllRepositories() ([]*UpdateResult, error) {
 		}, nil
 	}
 
-	// Update repositories in order: frontend, MCP, then backend
+	// Update installed repositories in order: frontend first, then backend
 	// This ensures that if backend (self) update is triggered, other updates complete first
 	// The backend update uses systemd-run with delay to avoid connection issues
 	var results []*UpdateResult
+	installedRepos := detectInstalledRepositories()
 
-	for _, repo := range repositoryNames {
+	for _, repo := range installedRepos {
 		log.Printf("UpdateAll: updating %s to latest", repo)
 		result, err := s.UpdateRepository(repo, nil) // nil = latest version
 		if err != nil {

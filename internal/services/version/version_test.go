@@ -101,6 +101,10 @@ func TestUpdateAllRepositories_NotSupported(t *testing.T) {
 }
 
 func TestValidateRepository(t *testing.T) {
+	// Set up test repos - simulates all repos being installed
+	SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go", "lacylights-mcp"})
+	defer SetTestInstalledRepos(nil) // Reset after test
+
 	tests := []struct {
 		name       string
 		repository string
@@ -123,6 +127,51 @@ func TestValidateRepository(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateRepository_WithoutMCP(t *testing.T) {
+	// Set up test repos - simulates RPi without MCP
+	SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go"})
+	defer SetTestInstalledRepos(nil) // Reset after test
+
+	tests := []struct {
+		name       string
+		repository string
+		wantErr    bool
+	}{
+		{"valid lacylights-fe", "lacylights-fe", false},
+		{"valid lacylights-go", "lacylights-go", false},
+		{"mcp not installed", "lacylights-mcp", true}, // MCP should be invalid when not installed
+		{"invalid repo", "invalid-repo", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateRepository(tt.repository)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateRepository(%q) error = %v, wantErr %v", tt.repository, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestDetectInstalledRepositories(t *testing.T) {
+	// Test with all repos
+	SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go", "lacylights-mcp"})
+	repos := detectInstalledRepositories()
+	if len(repos) != 3 {
+		t.Errorf("Expected 3 repos when all installed, got %d", len(repos))
+	}
+
+	// Test with only fe and go (RPi mode)
+	SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go"})
+	repos = detectInstalledRepositories()
+	if len(repos) != 2 {
+		t.Errorf("Expected 2 repos when MCP not installed, got %d", len(repos))
+	}
+
+	// Reset
+	SetTestInstalledRepos(nil)
 }
 
 func TestValidateVersion(t *testing.T) {
