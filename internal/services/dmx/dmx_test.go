@@ -651,6 +651,350 @@ func TestReloadBroadcastAddress_StopsRetryOnSuccess(t *testing.T) {
 	}
 }
 
+func TestRetryLoop_StopsOnRetryStopChan(t *testing.T) {
+	// Create a service with a valid broadcast address
+	service := NewService(Config{
+		Enabled:       false,
+		BroadcastAddr: "",
+		Port:          6454,
+	})
+
+	err := service.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize() error: %v", err)
+	}
+
+	// Manually set up retry state
+	service.mu.Lock()
+	service.pendingBroadcastAddr = "127.0.0.1" // Valid address that will succeed
+	service.retryStopChan = make(chan struct{})
+	service.retryInProgress = true
+	stopChan := service.retryStopChan
+	service.mu.Unlock()
+
+	// Start the retry loop
+	go service.retryLoop()
+
+	// Give it a moment to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Stop the retry loop via the stop channel
+	close(stopChan)
+
+	// Mark retry as done (since we manually closed the channel)
+	service.mu.Lock()
+	service.retryInProgress = false
+	service.retryStopChan = nil
+	service.mu.Unlock()
+
+	// Wait for the loop to exit
+	time.Sleep(100 * time.Millisecond)
+
+	// Now safe to stop the service
+	service.Stop()
+
+	// The retry loop should have exited (we can't directly verify this, but we can check
+	// that the service state is accessible without deadlock)
+	service.mu.RLock()
+	_ = service.retryInProgress
+	service.mu.RUnlock()
+}
+
+func TestRetryLoop_StopsOnServiceStopChan(t *testing.T) {
+	// Create a service
+	service := NewService(Config{
+		Enabled:       false,
+		BroadcastAddr: "",
+		Port:          6454,
+	})
+
+	err := service.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize() error: %v", err)
+	}
+
+	// Manually set up retry state
+	service.mu.Lock()
+	service.pendingBroadcastAddr = "999.999.999.999" // Invalid address
+	service.retryStopChan = make(chan struct{})
+	service.retryInProgress = true
+	service.mu.Unlock()
+
+	// Start the retry loop
+	go service.retryLoop()
+
+	// Give it a moment to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Stop the entire service - this should also stop the retry loop
+	service.Stop()
+
+	// Wait for cleanup
+	time.Sleep(100 * time.Millisecond)
+
+	// The service should be stopped
+	service.mu.RLock()
+	running := service.running
+	service.mu.RUnlock()
+
+	if running {
+		t.Error("Expected service to be stopped")
+	}
+}
+
+func TestRetryLoop_ExitsOnEmptyPendingAddress(t *testing.T) {
+	// Create a service
+	service := NewService(Config{
+		Enabled:       false,
+		BroadcastAddr: "",
+		Port:          6454,
+	})
+
+	err := service.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize() error: %v", err)
+	}
+	defer service.Stop()
+
+	// Set up retry state with empty pending address
+	service.mu.Lock()
+	service.pendingBroadcastAddr = "" // Empty - should cause loop to exit
+	service.retryStopChan = make(chan struct{})
+	service.retryInProgress = true
+	service.mu.Unlock()
+
+	// Create a done channel to track loop exit
+	done := make(chan struct{})
+	go func() {
+		service.retryLoop()
+		close(done)
+	}()
+
+	// The loop should exit quickly when it finds empty address
+	select {
+	case <-done:
+		// Good - loop exited
+	case <-time.After(10 * time.Second):
+		t.Error("Retry loop did not exit when pending address was empty")
+	}
+
+	// Verify retry is no longer in progress
+	service.mu.RLock()
+	retryInProgress := service.retryInProgress
+	service.mu.RUnlock()
+
+	if retryInProgress {
+		t.Error("Expected retryInProgress to be false after loop exit")
+	}
+}
+
+func TestStartRetryLoopLocked_DoesNotStartIfAlreadyRetrying(t *testing.T) {
+	// Create a service
+	service := NewService(Config{
+		Enabled:       false,
+		BroadcastAddr: "",
+		Port:          6454,
+	})
+
+	err := service.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize() error: %v", err)
+	}
+	defer service.Stop()
+
+	// Set up initial retry state
+	service.mu.Lock()
+	service.retryInProgress = true
+	service.pendingBroadcastAddr = "192.168.1.255"
+	service.retryStopChan = make(chan struct{})
+	originalStopChan := service.retryStopChan
+
+	// Try to start another retry loop
+	service.startRetryLoopLocked("192.168.1.100")
+
+	// Verify the pending address and stop channel weren't changed
+	if service.pendingBroadcastAddr != "192.168.1.255" {
+		t.Errorf("Expected pending address to remain 192.168.1.255, got %s", service.pendingBroadcastAddr)
+	}
+	if service.retryStopChan != originalStopChan {
+		t.Error("Expected retryStopChan to remain unchanged")
+	}
+	service.mu.Unlock()
+}
+
+func TestStopRetryLoopLocked_HandlesNilChannel(t *testing.T) {
+	// Create a service
+	service := NewService(Config{
+		Enabled:       false,
+		BroadcastAddr: "",
+		Port:          6454,
+	})
+
+	err := service.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize() error: %v", err)
+	}
+	defer service.Stop()
+
+	// Set up state with nil stop channel
+	service.mu.Lock()
+	service.retryInProgress = true
+	service.retryStopChan = nil
+
+	// This should not panic and should still mark retry as stopped
+	service.stopRetryLoopLocked()
+
+	// Verify retry is marked as stopped (even though channel was nil)
+	if service.retryInProgress {
+		t.Error("Expected retryInProgress to be false after stopRetryLoopLocked")
+	}
+	service.mu.Unlock()
+}
+
+func TestReloadBroadcastAddressLocked_HandlesResolveError(t *testing.T) {
+	// Create a service
+	service := NewService(Config{
+		Enabled:       false,
+		BroadcastAddr: "",
+		Port:          6454,
+	})
+
+	err := service.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize() error: %v", err)
+	}
+	defer service.Stop()
+
+	// Try to reload with an address that will fail resolution
+	service.mu.Lock()
+	err = service.reloadBroadcastAddressLocked("999.999.999.999")
+	service.mu.Unlock()
+
+	// Should return an error
+	if err == nil {
+		t.Error("Expected error for invalid address")
+	}
+
+	// Retry should have been started
+	service.mu.RLock()
+	if !service.retryInProgress {
+		t.Error("Expected retryInProgress to be true after failed resolution")
+	}
+	service.mu.RUnlock()
+}
+
+// TestRetryLoop_SuccessfulRetry tests that the retry loop successfully connects
+// after the first tick when given a valid address. Note: this test takes ~5 seconds
+// because it waits for the retry interval.
+func TestRetryLoop_SuccessfulRetry(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping test in short mode - takes 5+ seconds")
+	}
+
+	// Create a service
+	service := NewService(Config{
+		Enabled:       false,
+		BroadcastAddr: "",
+		Port:          6454,
+	})
+
+	err := service.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize() error: %v", err)
+	}
+	defer service.Stop()
+
+	// Set up retry state with a valid address that will succeed on first retry
+	service.mu.Lock()
+	service.pendingBroadcastAddr = "127.0.0.1" // Valid address
+	service.retryStopChan = make(chan struct{})
+	service.retryInProgress = true
+	service.mu.Unlock()
+
+	// Start the retry loop
+	done := make(chan struct{})
+	go func() {
+		service.retryLoop()
+		close(done)
+	}()
+
+	// Wait for the retry to succeed (should happen within 6 seconds - one retry interval + buffer)
+	select {
+	case <-done:
+		// Good - loop exited
+	case <-time.After(10 * time.Second):
+		t.Fatal("Retry loop did not complete in time")
+	}
+
+	// Verify connection was established
+	service.mu.RLock()
+	enabled := service.enabled
+	conn := service.conn
+	retryInProgress := service.retryInProgress
+	pendingAddr := service.pendingBroadcastAddr
+	service.mu.RUnlock()
+
+	if !enabled {
+		t.Error("Expected service to be enabled after successful retry")
+	}
+	if conn == nil {
+		t.Error("Expected connection to be established")
+	}
+	if retryInProgress {
+		t.Error("Expected retryInProgress to be false after successful retry")
+	}
+	if pendingAddr != "" {
+		t.Errorf("Expected pendingBroadcastAddr to be empty, got '%s'", pendingAddr)
+	}
+}
+
+// TestRetryLoop_RetryInProgressClearedMidLoop tests that the retry loop exits
+// when retryInProgress is cleared externally.
+func TestRetryLoop_RetryInProgressClearedMidLoop(t *testing.T) {
+	// Create a service
+	service := NewService(Config{
+		Enabled:       false,
+		BroadcastAddr: "",
+		Port:          6454,
+	})
+
+	err := service.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize() error: %v", err)
+	}
+	defer service.Stop()
+
+	// Set up retry state
+	service.mu.Lock()
+	service.pendingBroadcastAddr = "127.0.0.1"
+	service.retryStopChan = make(chan struct{})
+	service.retryInProgress = true
+	service.mu.Unlock()
+
+	// Start the retry loop
+	done := make(chan struct{})
+	go func() {
+		service.retryLoop()
+		close(done)
+	}()
+
+	// Give it a moment to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Clear retryInProgress externally (simulating another code path clearing it)
+	service.mu.Lock()
+	service.retryInProgress = false
+	service.mu.Unlock()
+
+	// The loop should exit on the next iteration
+	select {
+	case <-done:
+		// Good - loop exited
+	case <-time.After(10 * time.Second):
+		t.Fatal("Retry loop did not exit when retryInProgress was cleared")
+	}
+}
+
 // TestArtNetBroadcast_UDPReceive verifies that Art-Net packets are actually being
 // transmitted over UDP by listening on the Art-Net port.
 func TestArtNetBroadcast_UDPReceive(t *testing.T) {

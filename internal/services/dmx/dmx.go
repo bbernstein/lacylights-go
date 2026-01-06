@@ -764,8 +764,10 @@ func (s *Service) startRetryLoopLocked(address string) {
 // stopRetryLoopLocked stops any active retry loop.
 // Must be called with mutex held.
 func (s *Service) stopRetryLoopLocked() {
-	if s.retryInProgress && s.retryStopChan != nil {
-		close(s.retryStopChan)
+	if s.retryInProgress {
+		if s.retryStopChan != nil {
+			close(s.retryStopChan)
+		}
 		s.retryStopChan = nil
 		s.retryInProgress = false
 	}
