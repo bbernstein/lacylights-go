@@ -100,13 +100,17 @@ var (
 	// testInstalledRepos allows tests to override repository detection.
 	// When nil (default), detectInstalledRepositories() checks actual files.
 	// When set, it returns this slice directly.
-	testInstalledRepos []string
+	testInstalledRepos   []string
+	testInstalledReposMu sync.RWMutex
 )
 
 // SetTestInstalledRepos allows tests to override which repositories are "installed".
 // Pass nil to reset to default behavior (check actual files).
-// This is only intended for testing purposes.
+// This function is thread-safe and can be called from concurrent tests.
+// WARNING: This should only be called from test code.
 func SetTestInstalledRepos(repos []string) {
+	testInstalledReposMu.Lock()
+	defer testInstalledReposMu.Unlock()
 	testInstalledRepos = repos
 }
 
@@ -114,9 +118,13 @@ func SetTestInstalledRepos(repos []string) {
 // This allows the system to dynamically adjust to different deployment configurations
 // (e.g., RPi without MCP vs Mac with MCP).
 func detectInstalledRepositories() []string {
-	// Allow tests to override detection
-	if testInstalledRepos != nil {
-		return testInstalledRepos
+	// Allow tests to override detection (thread-safe read)
+	testInstalledReposMu.RLock()
+	testOverride := testInstalledRepos
+	testInstalledReposMu.RUnlock()
+
+	if testOverride != nil {
+		return testOverride
 	}
 
 	repos := []string{}
@@ -137,24 +145,23 @@ func detectInstalledRepositories() []string {
 	return repos
 }
 
-// isValidRepository checks if a repository name is in the list of installed repositories
-func isValidRepository(repository string) bool {
+// validateRepository checks if the repository name is valid (must be an installed repository)
+// This is more efficient than calling isValidRepository + detectInstalledRepositories separately.
+func validateRepository(repository string) error {
 	installedRepos := detectInstalledRepositories()
+
+	// Handle edge case where no repositories are installed
+	if len(installedRepos) == 0 {
+		return fmt.Errorf("no repositories are installed or version management is not properly configured")
+	}
+
 	for _, repo := range installedRepos {
 		if repo == repository {
-			return true
+			return nil
 		}
 	}
-	return false
-}
 
-// validateRepository checks if the repository name is valid (must be an installed repository)
-func validateRepository(repository string) error {
-	if !isValidRepository(repository) {
-		installedRepos := detectInstalledRepositories()
-		return fmt.Errorf("invalid repository name: %s (must be one of: %s)", repository, strings.Join(installedRepos, ", "))
-	}
-	return nil
+	return fmt.Errorf("invalid repository name: %s (must be one of: %s)", repository, strings.Join(installedRepos, ", "))
 }
 
 // validateVersion checks if the version string is valid semver format

@@ -156,22 +156,66 @@ func TestValidateRepository_WithoutMCP(t *testing.T) {
 }
 
 func TestDetectInstalledRepositories(t *testing.T) {
-	// Test with all repos
-	SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go", "lacylights-mcp"})
-	repos := detectInstalledRepositories()
-	if len(repos) != 3 {
-		t.Errorf("Expected 3 repos when all installed, got %d", len(repos))
-	}
+	defer SetTestInstalledRepos(nil) // Always reset after test
+
+	// Test with all repos installed (Mac mode)
+	t.Run("all repos installed", func(t *testing.T) {
+		SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go", "lacylights-mcp"})
+		repos := detectInstalledRepositories()
+
+		if len(repos) != 3 {
+			t.Errorf("Expected 3 repos when all installed, got %d", len(repos))
+		}
+
+		// Verify actual repository names
+		expected := map[string]bool{"lacylights-fe": true, "lacylights-go": true, "lacylights-mcp": true}
+		for _, repo := range repos {
+			if !expected[repo] {
+				t.Errorf("Unexpected repository in results: %s", repo)
+			}
+		}
+	})
 
 	// Test with only fe and go (RPi mode)
-	SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go"})
-	repos = detectInstalledRepositories()
-	if len(repos) != 2 {
-		t.Errorf("Expected 2 repos when MCP not installed, got %d", len(repos))
+	t.Run("without MCP (RPi mode)", func(t *testing.T) {
+		SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go"})
+		repos := detectInstalledRepositories()
+
+		if len(repos) != 2 {
+			t.Errorf("Expected 2 repos when MCP not installed, got %d", len(repos))
+		}
+
+		// Verify MCP is not in the list
+		for _, repo := range repos {
+			if repo == "lacylights-mcp" {
+				t.Error("MCP should not be in repository list when not installed")
+			}
+		}
+
+		// Verify expected repos are present
+		expected := map[string]bool{"lacylights-fe": true, "lacylights-go": true}
+		for _, repo := range repos {
+			if !expected[repo] {
+				t.Errorf("Unexpected repository in results: %s", repo)
+			}
+		}
+	})
+}
+
+func TestValidateRepository_NoReposInstalled(t *testing.T) {
+	// Test edge case where no repositories are installed
+	SetTestInstalledRepos([]string{})
+	defer SetTestInstalledRepos(nil)
+
+	err := validateRepository("lacylights-go")
+	if err == nil {
+		t.Error("Expected error when no repositories are installed")
 	}
 
-	// Reset
-	SetTestInstalledRepos(nil)
+	expectedMsg := "no repositories are installed or version management is not properly configured"
+	if err.Error() != expectedMsg {
+		t.Errorf("Expected error message %q, got %q", expectedMsg, err.Error())
+	}
 }
 
 func TestValidateVersion(t *testing.T) {
