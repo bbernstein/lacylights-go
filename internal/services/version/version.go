@@ -117,6 +117,11 @@ func SetTestInstalledRepos(repos []string) {
 // detectInstalledRepositories returns the list of repositories that are actually installed.
 // This allows the system to dynamically adjust to different deployment configurations
 // (e.g., RPi without MCP vs Mac with MCP).
+//
+// The repositories are returned in the correct update order:
+// frontend first, then MCP (if installed), then backend last.
+// Backend must be last because self-updates use systemd-run with a delay
+// to avoid connection issues when the backend restarts itself.
 func detectInstalledRepositories() []string {
 	// Allow tests to override detection (thread-safe read)
 	testInstalledReposMu.RLock()
@@ -129,17 +134,17 @@ func detectInstalledRepositories() []string {
 
 	repos := []string{}
 
-	// Check for frontend
+	// Check for frontend (update first)
 	if _, err := os.Stat(frontendVersionFile); err == nil {
 		repos = append(repos, "lacylights-fe")
 	}
-	// Check for backend
-	if _, err := os.Stat(backendVersionFile); err == nil {
-		repos = append(repos, "lacylights-go")
-	}
-	// Only include MCP if it's installed
+	// Only include MCP if it's installed (update second)
 	if _, err := os.Stat(mcpVersionFile); err == nil {
 		repos = append(repos, "lacylights-mcp")
+	}
+	// Check for backend (update last - self-updates use systemd-run with delay)
+	if _, err := os.Stat(backendVersionFile); err == nil {
+		repos = append(repos, "lacylights-go")
 	}
 
 	return repos

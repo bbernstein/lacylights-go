@@ -102,7 +102,8 @@ func TestUpdateAllRepositories_NotSupported(t *testing.T) {
 
 func TestValidateRepository(t *testing.T) {
 	// Set up test repos - simulates all repos being installed
-	SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go", "lacylights-mcp"})
+	// Order: frontend, MCP, backend (backend last for correct update order)
+	SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-mcp", "lacylights-go"})
 	defer SetTestInstalledRepos(nil) // Reset after test
 
 	tests := []struct {
@@ -160,7 +161,8 @@ func TestDetectInstalledRepositories(t *testing.T) {
 
 	// Test with all repos installed (Mac mode)
 	t.Run("all repos installed", func(t *testing.T) {
-		SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go", "lacylights-mcp"})
+		// Order: frontend, MCP, backend (backend last for correct update order)
+		SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-mcp", "lacylights-go"})
 		repos := detectInstalledRepositories()
 
 		if len(repos) != 3 {
@@ -168,7 +170,7 @@ func TestDetectInstalledRepositories(t *testing.T) {
 		}
 
 		// Verify actual repository names
-		expected := map[string]bool{"lacylights-fe": true, "lacylights-go": true, "lacylights-mcp": true}
+		expected := map[string]bool{"lacylights-fe": true, "lacylights-mcp": true, "lacylights-go": true}
 		for _, repo := range repos {
 			if !expected[repo] {
 				t.Errorf("Unexpected repository in results: %s", repo)
@@ -461,7 +463,8 @@ func TestDetectInstalledRepositories_Integration(t *testing.T) {
 
 	// Test Mac mode (all repos)
 	t.Run("all repos available in Mac mode", func(t *testing.T) {
-		SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go", "lacylights-mcp"})
+		// Order: frontend, MCP, backend (backend last for correct update order)
+		SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-mcp", "lacylights-go"})
 
 		repos := detectInstalledRepositories()
 
@@ -500,7 +503,8 @@ func TestSetTestInstalledRepos_ConcurrentAccess(t *testing.T) {
 			if n%2 == 0 {
 				SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go"})
 			} else {
-				SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go", "lacylights-mcp"})
+				// Order: frontend, MCP, backend (backend last for correct update order)
+				SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-mcp", "lacylights-go"})
 			}
 		}(i)
 
