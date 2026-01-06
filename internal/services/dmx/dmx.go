@@ -63,6 +63,11 @@ type Service struct {
 	stopChan       chan struct{}
 	resetTickerChan chan struct{} // Signal to reset ticker immediately when rate changes
 	running        bool
+
+	// Network retry state for handling startup when network isn't ready
+	pendingBroadcastAddr string         // Address to retry connecting to
+	retryStopChan        chan struct{}  // Signal to stop retry loop
+	retryInProgress      bool           // Flag to track if retry is active
 }
 
 // Config holds DMX service configuration.
@@ -660,6 +665,9 @@ func (s *Service) Stop() {
 		return
 	}
 
+	// Stop any active retry loop
+	s.stopRetryLoopLocked()
+
 	// Signal the transmission loop to stop
 	close(s.stopChan)
 	s.running = false
@@ -682,12 +690,23 @@ func (s *Service) Stop() {
 
 // ReloadBroadcastAddress updates the broadcast address and reconnects.
 // If Art-Net was disabled, this will enable it.
+// If the connection fails (e.g., network not ready), it starts a background
+// retry loop that will keep trying until successful.
 func (s *Service) ReloadBroadcastAddress(newAddress string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	return s.reloadBroadcastAddressLocked(newAddress)
+}
+
+// reloadBroadcastAddressLocked performs the actual reload (must hold mutex).
+// Returns nil on success, error on failure.
+func (s *Service) reloadBroadcastAddressLocked(newAddress string) error {
 	wasEnabled := s.enabled
 	log.Printf("🔄 Reloading Art-Net broadcast address from %s to %s (was enabled: %v)", s.broadcastAddr, newAddress, wasEnabled)
+
+	// Stop any existing retry loop since we're trying a new address
+	s.stopRetryLoopLocked()
 
 	// Close existing connection
 	if s.conn != nil {
@@ -701,15 +720,22 @@ func (s *Service) ReloadBroadcastAddress(newAddress string) error {
 	// Create new connection
 	addr, err := net.ResolveUDPAddr("udp4", s.broadcastAddr+":"+strconv.Itoa(s.port))
 	if err != nil {
+		// Start retry loop for this address
+		s.startRetryLoopLocked(newAddress)
 		return err
 	}
 	s.addr = addr
 
 	conn, err := net.DialUDP("udp4", nil, addr)
 	if err != nil {
+		// Start retry loop for this address
+		s.startRetryLoopLocked(newAddress)
 		return err
 	}
 	s.conn = conn
+
+	// Clear pending address since we connected successfully
+	s.pendingBroadcastAddr = ""
 
 	// Enable Art-Net output now that we have a valid broadcast address
 	if !wasEnabled {
@@ -719,6 +745,113 @@ func (s *Service) ReloadBroadcastAddress(newAddress string) error {
 		log.Printf("✅ Art-Net broadcast address updated to %s:%d", s.broadcastAddr, s.port)
 	}
 	return nil
+}
+
+// startRetryLoopLocked starts a background retry loop for connecting to the broadcast address.
+// Must be called with mutex held.
+func (s *Service) startRetryLoopLocked(address string) {
+	if s.retryInProgress {
+		return // Already retrying
+	}
+
+	s.pendingBroadcastAddr = address
+	s.retryStopChan = make(chan struct{})
+	s.retryInProgress = true
+
+	go s.retryLoop()
+}
+
+// stopRetryLoopLocked stops any active retry loop.
+// Must be called with mutex held.
+func (s *Service) stopRetryLoopLocked() {
+	if s.retryInProgress && s.retryStopChan != nil {
+		close(s.retryStopChan)
+		s.retryStopChan = nil
+		s.retryInProgress = false
+	}
+}
+
+// retryLoop periodically attempts to connect to the pending broadcast address.
+func (s *Service) retryLoop() {
+	const retryInterval = 5 * time.Second
+	const maxRetries = 60 // 5 minutes of retries
+
+	log.Printf("🔄 Starting network retry loop for Art-Net broadcast address (will retry every %v)", retryInterval)
+
+	ticker := time.NewTicker(retryInterval)
+	defer ticker.Stop()
+
+	retryCount := 0
+
+	for {
+		select {
+		case <-s.retryStopChan:
+			log.Printf("🛑 Art-Net network retry loop stopped")
+			return
+		case <-s.stopChan:
+			log.Printf("🛑 Art-Net network retry loop stopped (service shutdown)")
+			return
+		case <-ticker.C:
+			retryCount++
+			s.mu.Lock()
+
+			// Check if we should still retry
+			if !s.retryInProgress {
+				s.mu.Unlock()
+				return
+			}
+
+			address := s.pendingBroadcastAddr
+			if address == "" {
+				log.Printf("⚠️ No pending broadcast address to retry")
+				s.retryInProgress = false
+				s.mu.Unlock()
+				return
+			}
+
+			log.Printf("🔄 Retry %d/%d: Attempting to connect to Art-Net broadcast address %s", retryCount, maxRetries, address)
+
+			// Try to connect
+			addr, err := net.ResolveUDPAddr("udp4", address+":"+strconv.Itoa(s.port))
+			if err != nil {
+				log.Printf("⚠️ Retry failed: address resolution error: %v", err)
+				s.mu.Unlock()
+				if retryCount >= maxRetries {
+					log.Printf("❌ Giving up on Art-Net connection after %d retries", maxRetries)
+					s.mu.Lock()
+					s.retryInProgress = false
+					s.mu.Unlock()
+					return
+				}
+				continue
+			}
+
+			conn, err := net.DialUDP("udp4", nil, addr)
+			if err != nil {
+				log.Printf("⚠️ Retry failed: dial error: %v", err)
+				s.mu.Unlock()
+				if retryCount >= maxRetries {
+					log.Printf("❌ Giving up on Art-Net connection after %d retries", maxRetries)
+					s.mu.Lock()
+					s.retryInProgress = false
+					s.mu.Unlock()
+					return
+				}
+				continue
+			}
+
+			// Success!
+			s.addr = addr
+			s.conn = conn
+			s.enabled = true
+			s.retryInProgress = false
+			s.pendingBroadcastAddr = ""
+
+			log.Printf("✅ Art-Net connection established after %d retries: broadcasting to %s:%d", retryCount, address, s.port)
+			s.mu.Unlock()
+			return
+		}
+	}
 }
 
 // DisableArtNet disables Art-Net output and closes the connection.

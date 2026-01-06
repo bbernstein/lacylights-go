@@ -553,6 +553,104 @@ func TestArtNetEnableDisableCycle(t *testing.T) {
 	}
 }
 
+func TestReloadBroadcastAddress_StartsRetryOnFailure(t *testing.T) {
+	// Create a service in disabled/simulation mode
+	service := NewService(Config{
+		Enabled:       false,
+		BroadcastAddr: "",
+		Port:          6454,
+	})
+
+	err := service.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize() error: %v", err)
+	}
+	defer service.Stop()
+
+	// Try to reload with an invalid address that will fail
+	// Note: Most addresses will actually succeed on local machine, so we use an address
+	// format that should fail resolution
+	err = service.ReloadBroadcastAddress("999.999.999.999")
+
+	// The error should be returned
+	if err == nil {
+		t.Error("Expected error for invalid address")
+	}
+
+	// Check that retry state is set
+	service.mu.RLock()
+	retryInProgress := service.retryInProgress
+	pendingAddr := service.pendingBroadcastAddr
+	service.mu.RUnlock()
+
+	if !retryInProgress {
+		t.Error("Expected retryInProgress to be true after failed connection")
+	}
+
+	if pendingAddr != "999.999.999.999" {
+		t.Errorf("Expected pendingBroadcastAddr to be '999.999.999.999', got '%s'", pendingAddr)
+	}
+
+	// Stop the service which should clean up the retry loop
+	service.Stop()
+
+	// Verify retry loop was stopped
+	service.mu.RLock()
+	retryInProgressAfterStop := service.retryInProgress
+	service.mu.RUnlock()
+
+	if retryInProgressAfterStop {
+		t.Error("Expected retryInProgress to be false after Stop()")
+	}
+}
+
+func TestReloadBroadcastAddress_StopsRetryOnSuccess(t *testing.T) {
+	// Create a service in disabled/simulation mode
+	service := NewService(Config{
+		Enabled:       false,
+		BroadcastAddr: "",
+		Port:          6454,
+	})
+
+	err := service.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize() error: %v", err)
+	}
+	defer service.Stop()
+
+	// First, simulate a failed connection that would start retry
+	service.mu.Lock()
+	service.pendingBroadcastAddr = "192.168.1.255"
+	service.retryStopChan = make(chan struct{})
+	service.retryInProgress = true
+	service.mu.Unlock()
+
+	// Now do a successful reload - this should stop the retry
+	err = service.ReloadBroadcastAddress("127.0.0.1")
+	if err != nil {
+		t.Fatalf("ReloadBroadcastAddress() error: %v", err)
+	}
+
+	// Verify retry loop was stopped
+	service.mu.RLock()
+	retryInProgress := service.retryInProgress
+	pendingAddr := service.pendingBroadcastAddr
+	service.mu.RUnlock()
+
+	if retryInProgress {
+		t.Error("Expected retryInProgress to be false after successful reload")
+	}
+
+	if pendingAddr != "" {
+		t.Errorf("Expected pendingBroadcastAddr to be empty, got '%s'", pendingAddr)
+	}
+
+	// Verify connection is established
+	if !service.IsEnabled() {
+		t.Error("Expected service to be enabled after successful reload")
+	}
+}
+
 // TestArtNetBroadcast_UDPReceive verifies that Art-Net packets are actually being
 // transmitted over UDP by listening on the Art-Net port.
 func TestArtNetBroadcast_UDPReceive(t *testing.T) {
