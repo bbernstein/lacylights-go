@@ -804,6 +804,11 @@ func (s *Service) retryLoop() {
 	retryInterval := s.retryInterval
 	maxRetries := s.maxRetries
 
+	// Capture the stop channel while holding the lock to avoid race conditions
+	s.mu.RLock()
+	retryStopChan := s.retryStopChan
+	s.mu.RUnlock()
+
 	log.Printf("🔄 Starting network retry loop for Art-Net broadcast address (will retry every %v, max %d attempts)", retryInterval, maxRetries)
 
 	ticker := time.NewTicker(retryInterval)
@@ -813,7 +818,7 @@ func (s *Service) retryLoop() {
 
 	for {
 		select {
-		case <-s.retryStopChan:
+		case <-retryStopChan:
 			log.Printf("🛑 Art-Net network retry loop stopped")
 			return
 		case <-s.stopChan:
