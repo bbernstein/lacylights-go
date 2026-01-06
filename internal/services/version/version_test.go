@@ -483,12 +483,18 @@ func TestDetectInstalledRepositories_Integration(t *testing.T) {
 func TestSetTestInstalledRepos_ConcurrentAccess(t *testing.T) {
 	defer SetTestInstalledRepos(nil) // Always reset after test
 
+	// Set an initial value before starting concurrent operations
+	// This ensures reads won't see nil (which would fall back to checking real files)
+	SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go"})
+
 	var wg sync.WaitGroup
 	const numGoroutines = 50
 
-	// Concurrent writes
+	// Concurrent writes and reads mixed together
 	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
+		wg.Add(2) // One for write, one for read
+
+		// Write goroutine
 		go func(n int) {
 			defer wg.Done()
 			if n%2 == 0 {
@@ -497,15 +503,13 @@ func TestSetTestInstalledRepos_ConcurrentAccess(t *testing.T) {
 				SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go", "lacylights-mcp"})
 			}
 		}(i)
-	}
 
-	// Concurrent reads
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
+		// Read goroutine
 		go func() {
 			defer wg.Done()
 			repos := detectInstalledRepositories()
-			// Should have either 2 or 3 repos, never panic
+			// Should have either 2 or 3 repos, never panic or race
+			// Since we always set to 2 or 3 repos, we should never see 0
 			if len(repos) < 2 || len(repos) > 3 {
 				t.Errorf("Unexpected repo count: %d", len(repos))
 			}
