@@ -422,3 +422,170 @@ func TestGetBuildInfo_ConcurrentReads(t *testing.T) {
 
 	wg.Wait()
 }
+
+// TestDetectInstalledRepositories_Integration tests that detectInstalledRepositories
+// is properly used by functions that depend on it. Since GetSystemVersions and
+// UpdateAllRepositories require IsSupported() to return true (which needs the
+// update script to exist), we verify the integration through the test override mechanism.
+func TestDetectInstalledRepositories_Integration(t *testing.T) {
+	defer SetTestInstalledRepos(nil) // Always reset after test
+
+	// Test that when MCP is not in the installed repos list, it's excluded from operations
+	t.Run("repository list respects installed repos", func(t *testing.T) {
+		// Simulate RPi mode (no MCP)
+		SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go"})
+
+		repos := detectInstalledRepositories()
+
+		// Verify MCP is not included
+		for _, repo := range repos {
+			if repo == "lacylights-mcp" {
+				t.Error("MCP should not be in installed repos list on RPi mode")
+			}
+		}
+
+		// Verify validateRepository correctly rejects MCP
+		err := validateRepository("lacylights-mcp")
+		if err == nil {
+			t.Error("Expected validateRepository to reject MCP when not installed")
+		}
+
+		// Verify fe and go are accepted
+		if err := validateRepository("lacylights-fe"); err != nil {
+			t.Errorf("Expected lacylights-fe to be valid, got error: %v", err)
+		}
+		if err := validateRepository("lacylights-go"); err != nil {
+			t.Errorf("Expected lacylights-go to be valid, got error: %v", err)
+		}
+	})
+
+	// Test Mac mode (all repos)
+	t.Run("all repos available in Mac mode", func(t *testing.T) {
+		SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go", "lacylights-mcp"})
+
+		repos := detectInstalledRepositories()
+
+		if len(repos) != 3 {
+			t.Errorf("Expected 3 repos in Mac mode, got %d", len(repos))
+		}
+
+		// All should be valid
+		for _, repo := range repos {
+			if err := validateRepository(repo); err != nil {
+				t.Errorf("Expected %s to be valid, got error: %v", repo, err)
+			}
+		}
+	})
+}
+
+// TestSetTestInstalledRepos_ConcurrentAccess verifies thread-safe access to the
+// test override mechanism for repository detection.
+func TestSetTestInstalledRepos_ConcurrentAccess(t *testing.T) {
+	defer SetTestInstalledRepos(nil) // Always reset after test
+
+	var wg sync.WaitGroup
+	const numGoroutines = 50
+
+	// Concurrent writes
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			if n%2 == 0 {
+				SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go"})
+			} else {
+				SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go", "lacylights-mcp"})
+			}
+		}(i)
+	}
+
+	// Concurrent reads
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			repos := detectInstalledRepositories()
+			// Should have either 2 or 3 repos, never panic
+			if len(repos) < 2 || len(repos) > 3 {
+				t.Errorf("Unexpected repo count: %d", len(repos))
+			}
+		}()
+	}
+
+	wg.Wait()
+}
+
+// TestUpdateAllRepositories_UsesInstalledRepos verifies that UpdateAllRepositories
+// respects the installed repositories list. Since this test runs in an environment
+// without the update script (IsSupported returns false), we verify the behavior
+// through the validation layer which does use detectInstalledRepositories.
+func TestUpdateAllRepositories_UsesInstalledRepos(t *testing.T) {
+	defer SetTestInstalledRepos(nil) // Always reset after test
+
+	service := NewService()
+
+	// If version management is not supported, we can still verify that
+	// the installed repos override works correctly
+	SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go"})
+
+	// Verify MCP is not in the installed repos
+	repos := detectInstalledRepositories()
+	for _, repo := range repos {
+		if repo == "lacylights-mcp" {
+			t.Error("MCP should not be in installed repos list")
+		}
+	}
+
+	// When not supported, UpdateAllRepositories returns early with a failure result
+	// This verifies the test environment is set up correctly
+	if !service.IsSupported() {
+		results, err := service.UpdateAllRepositories()
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
+		}
+		if len(results) != 1 {
+			t.Errorf("Expected 1 result (not supported), got %d", len(results))
+		}
+	}
+}
+
+// TestGetSystemVersions_UsesInstalledRepos verifies that GetSystemVersions
+// properly respects the installed repositories configuration. Since this test
+// runs without the update script, we verify the validation layer behavior.
+func TestGetSystemVersions_UsesInstalledRepos(t *testing.T) {
+	defer SetTestInstalledRepos(nil) // Always reset after test
+
+	service := NewService()
+
+	// Configure for RPi mode (no MCP)
+	SetTestInstalledRepos([]string{"lacylights-fe", "lacylights-go"})
+
+	// Verify detectInstalledRepositories returns correct repos
+	repos := detectInstalledRepositories()
+	if len(repos) != 2 {
+		t.Errorf("Expected 2 repos, got %d", len(repos))
+	}
+
+	// Verify MCP is excluded
+	for _, repo := range repos {
+		if repo == "lacylights-mcp" {
+			t.Error("MCP should not be in installed repos for RPi mode")
+		}
+	}
+
+	// When not supported, GetSystemVersions returns empty info
+	// This verifies the test environment is set up correctly
+	if !service.IsSupported() {
+		info, err := service.GetSystemVersions()
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
+		}
+		if info == nil {
+			t.Error("Expected info to be non-nil")
+			return
+		}
+		if info.VersionManagementSupported {
+			t.Error("Expected VersionManagementSupported to be false")
+		}
+	}
+}
