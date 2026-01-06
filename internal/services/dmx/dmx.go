@@ -68,6 +68,10 @@ type Service struct {
 	pendingBroadcastAddr string         // Address to retry connecting to
 	retryStopChan        chan struct{}  // Signal to stop retry loop
 	retryInProgress      bool           // Flag to track if retry is active
+
+	// Retry configuration (for testability)
+	retryInterval time.Duration
+	maxRetries    int
 }
 
 // Config holds DMX service configuration.
@@ -78,7 +82,16 @@ type Config struct {
 	RefreshRateHz    int
 	IdleRateHz       int
 	HighRateDuration time.Duration
+	// Retry configuration for network connection attempts
+	RetryInterval time.Duration // How often to retry (default: 5s)
+	MaxRetries    int           // Maximum retry attempts (default: 60)
 }
+
+// Default retry configuration
+const (
+	DefaultRetryInterval = 5 * time.Second
+	DefaultMaxRetries    = 60 // 5 minutes of retries at 5s intervals
+)
 
 // DefaultConfig returns a configuration with default values.
 func DefaultConfig() Config {
@@ -89,6 +102,8 @@ func DefaultConfig() Config {
 		RefreshRateHz:    60, // Match fade engine default (60Hz)
 		IdleRateHz:       1,
 		HighRateDuration: 2 * time.Second,
+		RetryInterval:    DefaultRetryInterval,
+		MaxRetries:       DefaultMaxRetries,
 	}
 }
 
@@ -150,6 +165,14 @@ func NewService(cfg Config) *Service {
 	if port <= 0 {
 		port = 6454 // Default Art-Net port
 	}
+	retryInterval := cfg.RetryInterval
+	if retryInterval <= 0 {
+		retryInterval = DefaultRetryInterval
+	}
+	maxRetries := cfg.MaxRetries
+	if maxRetries <= 0 {
+		maxRetries = DefaultMaxRetries
+	}
 
 	s := &Service{
 		universes:        make(map[int][]byte),
@@ -165,6 +188,8 @@ func NewService(cfg Config) *Service {
 		isInHighRateMode: false,
 		stopChan:         make(chan struct{}),
 		resetTickerChan:  make(chan struct{}, 1), // Buffered to avoid blocking
+		retryInterval:    retryInterval,
+		maxRetries:       maxRetries,
 	}
 
 	// Initialize universes with 512 channels each, all set to 0
@@ -775,10 +800,11 @@ func (s *Service) stopRetryLoopLocked() {
 
 // retryLoop periodically attempts to connect to the pending broadcast address.
 func (s *Service) retryLoop() {
-	const retryInterval = 5 * time.Second
-	const maxRetries = 60 // 5 minutes of retries
+	// Get retry config from service (set at initialization, thread-safe to read)
+	retryInterval := s.retryInterval
+	maxRetries := s.maxRetries
 
-	log.Printf("🔄 Starting network retry loop for Art-Net broadcast address (will retry every %v)", retryInterval)
+	log.Printf("🔄 Starting network retry loop for Art-Net broadcast address (will retry every %v, max %d attempts)", retryInterval, maxRetries)
 
 	ticker := time.NewTicker(retryInterval)
 	defer ticker.Stop()

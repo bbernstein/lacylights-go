@@ -884,18 +884,15 @@ func TestReloadBroadcastAddressLocked_HandlesResolveError(t *testing.T) {
 }
 
 // TestRetryLoop_SuccessfulRetry tests that the retry loop successfully connects
-// after the first tick when given a valid address. Note: this test takes ~5 seconds
-// because it waits for the retry interval.
+// after the first tick when given a valid address.
 func TestRetryLoop_SuccessfulRetry(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping test in short mode - takes 5+ seconds")
-	}
-
-	// Create a service
+	// Create a service with short retry interval for fast testing
 	service := NewService(Config{
 		Enabled:       false,
 		BroadcastAddr: "",
 		Port:          6454,
+		RetryInterval: 50 * time.Millisecond, // Short interval for testing
+		MaxRetries:    10,
 	})
 
 	err := service.Initialize()
@@ -918,11 +915,11 @@ func TestRetryLoop_SuccessfulRetry(t *testing.T) {
 		close(done)
 	}()
 
-	// Wait for the retry to succeed (should happen within 6 seconds - one retry interval + buffer)
+	// Wait for the retry to succeed (should happen within 200ms with 50ms interval)
 	select {
 	case <-done:
 		// Good - loop exited
-	case <-time.After(10 * time.Second):
+	case <-time.After(2 * time.Second):
 		t.Fatal("Retry loop did not complete in time")
 	}
 
@@ -951,11 +948,13 @@ func TestRetryLoop_SuccessfulRetry(t *testing.T) {
 // TestRetryLoop_RetryInProgressClearedMidLoop tests that the retry loop exits
 // when retryInProgress is cleared externally.
 func TestRetryLoop_RetryInProgressClearedMidLoop(t *testing.T) {
-	// Create a service
+	// Create a service with short retry interval
 	service := NewService(Config{
 		Enabled:       false,
 		BroadcastAddr: "",
 		Port:          6454,
+		RetryInterval: 50 * time.Millisecond,
+		MaxRetries:    10,
 	})
 
 	err := service.Initialize()
@@ -979,7 +978,7 @@ func TestRetryLoop_RetryInProgressClearedMidLoop(t *testing.T) {
 	}()
 
 	// Give it a moment to start
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 
 	// Clear retryInProgress externally (simulating another code path clearing it)
 	service.mu.Lock()
@@ -990,8 +989,140 @@ func TestRetryLoop_RetryInProgressClearedMidLoop(t *testing.T) {
 	select {
 	case <-done:
 		// Good - loop exited
-	case <-time.After(10 * time.Second):
+	case <-time.After(2 * time.Second):
 		t.Fatal("Retry loop did not exit when retryInProgress was cleared")
+	}
+}
+
+// TestRetryLoop_MaxRetriesReached tests that the retry loop gives up after max retries
+// when the address consistently fails.
+func TestRetryLoop_MaxRetriesReached(t *testing.T) {
+	// Create a service with short retry interval and low max retries
+	service := NewService(Config{
+		Enabled:       false,
+		BroadcastAddr: "",
+		Port:          6454,
+		RetryInterval: 10 * time.Millisecond, // Very short for testing
+		MaxRetries:    3,                      // Low max for fast testing
+	})
+
+	err := service.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize() error: %v", err)
+	}
+	defer service.Stop()
+
+	// Set up retry state with an invalid address that will always fail
+	service.mu.Lock()
+	service.pendingBroadcastAddr = "999.999.999.999" // Invalid address
+	service.retryStopChan = make(chan struct{})
+	service.retryInProgress = true
+	service.mu.Unlock()
+
+	// Start the retry loop
+	done := make(chan struct{})
+	go func() {
+		service.retryLoop()
+		close(done)
+	}()
+
+	// Wait for max retries to be reached (3 retries * 10ms + buffer)
+	select {
+	case <-done:
+		// Good - loop exited after max retries
+	case <-time.After(2 * time.Second):
+		t.Fatal("Retry loop did not exit after max retries")
+	}
+
+	// Verify retry was marked as stopped
+	service.mu.RLock()
+	retryInProgress := service.retryInProgress
+	service.mu.RUnlock()
+
+	if retryInProgress {
+		t.Error("Expected retryInProgress to be false after max retries")
+	}
+}
+
+// TestRetryLoop_DialErrorMaxRetries tests the dial error path with max retries.
+// This is different from resolve error - dial can fail even with valid address format.
+func TestRetryLoop_DialErrorMaxRetries(t *testing.T) {
+	// Create a service with short retry interval
+	service := NewService(Config{
+		Enabled:       false,
+		BroadcastAddr: "",
+		Port:          6454,
+		RetryInterval: 10 * time.Millisecond,
+		MaxRetries:    2,
+	})
+
+	err := service.Initialize()
+	if err != nil {
+		t.Fatalf("Initialize() error: %v", err)
+	}
+	defer service.Stop()
+
+	// Use an address that resolves but can't be dialed (unreachable network)
+	// Note: 192.0.2.1 is TEST-NET-1, reserved for documentation, should fail to dial
+	service.mu.Lock()
+	service.pendingBroadcastAddr = "192.0.2.1"
+	service.retryStopChan = make(chan struct{})
+	service.retryInProgress = true
+	service.mu.Unlock()
+
+	// Start the retry loop
+	done := make(chan struct{})
+	go func() {
+		service.retryLoop()
+		close(done)
+	}()
+
+	// Wait for completion - either max retries or success (depending on network config)
+	select {
+	case <-done:
+		// Good - loop exited
+	case <-time.After(2 * time.Second):
+		t.Fatal("Retry loop did not exit in time")
+	}
+}
+
+// TestRetryConfigDefaults tests that default retry config values are applied.
+func TestRetryConfigDefaults(t *testing.T) {
+	// Create service with zero retry config - should use defaults
+	service := NewService(Config{
+		Enabled:       false,
+		BroadcastAddr: "",
+		Port:          6454,
+		RetryInterval: 0, // Should default
+		MaxRetries:    0, // Should default
+	})
+
+	if service.retryInterval != DefaultRetryInterval {
+		t.Errorf("Expected default retry interval %v, got %v", DefaultRetryInterval, service.retryInterval)
+	}
+	if service.maxRetries != DefaultMaxRetries {
+		t.Errorf("Expected default max retries %d, got %d", DefaultMaxRetries, service.maxRetries)
+	}
+}
+
+// TestRetryConfigCustom tests that custom retry config values are used.
+func TestRetryConfigCustom(t *testing.T) {
+	customInterval := 100 * time.Millisecond
+	customMaxRetries := 5
+
+	service := NewService(Config{
+		Enabled:       false,
+		BroadcastAddr: "",
+		Port:          6454,
+		RetryInterval: customInterval,
+		MaxRetries:    customMaxRetries,
+	})
+
+	if service.retryInterval != customInterval {
+		t.Errorf("Expected retry interval %v, got %v", customInterval, service.retryInterval)
+	}
+	if service.maxRetries != customMaxRetries {
+		t.Errorf("Expected max retries %d, got %d", customMaxRetries, service.maxRetries)
 	}
 }
 
