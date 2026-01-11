@@ -230,6 +230,7 @@ type Cue struct {
 	FollowTime  *float64  `gorm:"column:follow_time"`
 	EasingType  *string   `gorm:"column:easing_type"`
 	Notes       *string   `gorm:"column:notes"`
+	Skip        bool      `gorm:"column:skip;default:false"`
 	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime"`
 

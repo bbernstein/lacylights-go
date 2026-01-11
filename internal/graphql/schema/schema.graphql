@@ -312,6 +312,8 @@ type Cue {
   followTime: Float
   easingType: EasingType
   notes: String
+  "When true, this cue is skipped during playback but remains visible in the UI"
+  skip: Boolean!
 }
 
 type CueListPlaybackStatus {
@@ -1046,6 +1048,8 @@ input CreateCueInput {
   followTime: Float
   easingType: EasingType
   notes: String
+  "When true, this cue is skipped during playback (default: false)"
+  skip: Boolean
 }
 
 input BulkCueUpdateInput {
@@ -1054,6 +1058,8 @@ input BulkCueUpdateInput {
   fadeOutTime: Float
   followTime: Float
   easingType: EasingType
+  "When set, updates the skip status of all selected cues"
+  skip: Boolean
 }
 
 input FixtureUpdateItem {
@@ -1534,6 +1540,8 @@ type Mutation {
   bulkCreateCues(input: BulkCueCreateInput!): [Cue!]!
   bulkUpdateCues(input: BulkCueUpdateInput!): [Cue!]!
   bulkDeleteCues(cueIds: [ID!]!): BulkDeleteResult!
+  "Toggle the skip status of a cue (skip=true means the cue is bypassed during playback)"
+  toggleCueSkip(cueId: ID!): Cue!
 
   # Preview System
   startPreviewSession(projectId: ID!): PreviewSession!

@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/bbernstein/lacylights-go/internal/database/models"
 )
 
 func TestCueForPlayback(t *testing.T) {
@@ -1375,5 +1377,281 @@ func TestResumeCueList_NilCurrentCueIndex(t *testing.T) {
 	}
 	if err.Error() != "no current cue to resume" {
 		t.Errorf("Expected 'no current cue to resume' error, got: %v", err)
+	}
+}
+
+// Tests for findNextNonSkippedCue helper function
+
+func TestFindNextNonSkippedCue_EmptyCues(t *testing.T) {
+	cues := []models.Cue{}
+	result := findNextNonSkippedCue(cues, 0, false)
+	if result != -1 {
+		t.Errorf("Expected -1 for empty cues, got %d", result)
+	}
+}
+
+func TestFindNextNonSkippedCue_AllSkipped(t *testing.T) {
+	cues := []models.Cue{
+		{ID: "1", Skip: true},
+		{ID: "2", Skip: true},
+		{ID: "3", Skip: true},
+	}
+
+	// Without loop
+	result := findNextNonSkippedCue(cues, 0, false)
+	if result != -1 {
+		t.Errorf("Expected -1 when all cues are skipped (no loop), got %d", result)
+	}
+
+	// With loop
+	result = findNextNonSkippedCue(cues, 0, true)
+	if result != -1 {
+		t.Errorf("Expected -1 when all cues are skipped (loop), got %d", result)
+	}
+}
+
+func TestFindNextNonSkippedCue_NoneSkipped(t *testing.T) {
+	cues := []models.Cue{
+		{ID: "1", Skip: false},
+		{ID: "2", Skip: false},
+		{ID: "3", Skip: false},
+	}
+
+	result := findNextNonSkippedCue(cues, 0, false)
+	if result != 0 {
+		t.Errorf("Expected 0 when first cue is not skipped, got %d", result)
+	}
+
+	result = findNextNonSkippedCue(cues, 1, false)
+	if result != 1 {
+		t.Errorf("Expected 1 when starting from index 1, got %d", result)
+	}
+}
+
+func TestFindNextNonSkippedCue_SkipFirst(t *testing.T) {
+	cues := []models.Cue{
+		{ID: "1", Skip: true},
+		{ID: "2", Skip: false},
+		{ID: "3", Skip: false},
+	}
+
+	result := findNextNonSkippedCue(cues, 0, false)
+	if result != 1 {
+		t.Errorf("Expected 1 when first cue is skipped, got %d", result)
+	}
+}
+
+func TestFindNextNonSkippedCue_SkipMiddle(t *testing.T) {
+	cues := []models.Cue{
+		{ID: "1", Skip: false},
+		{ID: "2", Skip: true},
+		{ID: "3", Skip: false},
+	}
+
+	result := findNextNonSkippedCue(cues, 1, false)
+	if result != 2 {
+		t.Errorf("Expected 2 when middle cue is skipped, got %d", result)
+	}
+}
+
+func TestFindNextNonSkippedCue_SkipEnd_NoLoop(t *testing.T) {
+	cues := []models.Cue{
+		{ID: "1", Skip: false},
+		{ID: "2", Skip: false},
+		{ID: "3", Skip: true},
+	}
+
+	// Starting from index 2 (skipped), no non-skipped cues after
+	result := findNextNonSkippedCue(cues, 2, false)
+	if result != -1 {
+		t.Errorf("Expected -1 when last cue is skipped (no loop), got %d", result)
+	}
+}
+
+func TestFindNextNonSkippedCue_SkipEnd_Loop(t *testing.T) {
+	cues := []models.Cue{
+		{ID: "1", Skip: false},
+		{ID: "2", Skip: false},
+		{ID: "3", Skip: true},
+	}
+
+	// Starting from index 2 (skipped), should loop to find cue at index 0
+	result := findNextNonSkippedCue(cues, 2, true)
+	if result != 0 {
+		t.Errorf("Expected 0 when last cue is skipped (with loop), got %d", result)
+	}
+}
+
+func TestFindNextNonSkippedCue_WrapAround(t *testing.T) {
+	cues := []models.Cue{
+		{ID: "1", Skip: false},
+		{ID: "2", Skip: true},
+		{ID: "3", Skip: true},
+	}
+
+	// Starting from index 1, need to wrap around to find cue at 0
+	result := findNextNonSkippedCue(cues, 1, true)
+	if result != 0 {
+		t.Errorf("Expected 0 when wrap around is needed (with loop), got %d", result)
+	}
+
+	// Without loop, should return -1
+	result = findNextNonSkippedCue(cues, 1, false)
+	if result != -1 {
+		t.Errorf("Expected -1 when wrap around is needed (no loop), got %d", result)
+	}
+}
+
+func TestFindNextNonSkippedCue_SingleCue(t *testing.T) {
+	// Single non-skipped cue
+	cues := []models.Cue{{ID: "1", Skip: false}}
+	result := findNextNonSkippedCue(cues, 0, false)
+	if result != 0 {
+		t.Errorf("Expected 0 for single non-skipped cue, got %d", result)
+	}
+
+	// Single skipped cue
+	cues = []models.Cue{{ID: "1", Skip: true}}
+	result = findNextNonSkippedCue(cues, 0, false)
+	if result != -1 {
+		t.Errorf("Expected -1 for single skipped cue, got %d", result)
+	}
+}
+
+// Tests for findPreviousNonSkippedCue helper function
+
+func TestFindPreviousNonSkippedCue_EmptyCues(t *testing.T) {
+	cues := []models.Cue{}
+	result := findPreviousNonSkippedCue(cues, 0, false)
+	if result != -1 {
+		t.Errorf("Expected -1 for empty cues, got %d", result)
+	}
+}
+
+func TestFindPreviousNonSkippedCue_AllSkipped(t *testing.T) {
+	cues := []models.Cue{
+		{ID: "1", Skip: true},
+		{ID: "2", Skip: true},
+		{ID: "3", Skip: true},
+	}
+
+	// Without loop
+	result := findPreviousNonSkippedCue(cues, 2, false)
+	if result != -1 {
+		t.Errorf("Expected -1 when all cues are skipped (no loop), got %d", result)
+	}
+
+	// With loop
+	result = findPreviousNonSkippedCue(cues, 2, true)
+	if result != -1 {
+		t.Errorf("Expected -1 when all cues are skipped (loop), got %d", result)
+	}
+}
+
+func TestFindPreviousNonSkippedCue_NoneSkipped(t *testing.T) {
+	cues := []models.Cue{
+		{ID: "1", Skip: false},
+		{ID: "2", Skip: false},
+		{ID: "3", Skip: false},
+	}
+
+	result := findPreviousNonSkippedCue(cues, 2, false)
+	if result != 2 {
+		t.Errorf("Expected 2 when last cue is not skipped, got %d", result)
+	}
+
+	result = findPreviousNonSkippedCue(cues, 1, false)
+	if result != 1 {
+		t.Errorf("Expected 1 when starting from index 1, got %d", result)
+	}
+}
+
+func TestFindPreviousNonSkippedCue_SkipLast(t *testing.T) {
+	cues := []models.Cue{
+		{ID: "1", Skip: false},
+		{ID: "2", Skip: false},
+		{ID: "3", Skip: true},
+	}
+
+	result := findPreviousNonSkippedCue(cues, 2, false)
+	if result != 1 {
+		t.Errorf("Expected 1 when last cue is skipped, got %d", result)
+	}
+}
+
+func TestFindPreviousNonSkippedCue_SkipMiddle(t *testing.T) {
+	cues := []models.Cue{
+		{ID: "1", Skip: false},
+		{ID: "2", Skip: true},
+		{ID: "3", Skip: false},
+	}
+
+	result := findPreviousNonSkippedCue(cues, 1, false)
+	if result != 0 {
+		t.Errorf("Expected 0 when middle cue is skipped, got %d", result)
+	}
+}
+
+func TestFindPreviousNonSkippedCue_SkipFirst_NoLoop(t *testing.T) {
+	cues := []models.Cue{
+		{ID: "1", Skip: true},
+		{ID: "2", Skip: false},
+		{ID: "3", Skip: false},
+	}
+
+	// Starting from index 0 (skipped), no non-skipped cues before
+	result := findPreviousNonSkippedCue(cues, 0, false)
+	if result != -1 {
+		t.Errorf("Expected -1 when first cue is skipped (no loop), got %d", result)
+	}
+}
+
+func TestFindPreviousNonSkippedCue_SkipFirst_Loop(t *testing.T) {
+	cues := []models.Cue{
+		{ID: "1", Skip: true},
+		{ID: "2", Skip: false},
+		{ID: "3", Skip: false},
+	}
+
+	// Starting from index 0 (skipped), should loop to find cue at index 2
+	result := findPreviousNonSkippedCue(cues, 0, true)
+	if result != 2 {
+		t.Errorf("Expected 2 when first cue is skipped (with loop), got %d", result)
+	}
+}
+
+func TestFindPreviousNonSkippedCue_WrapAround(t *testing.T) {
+	cues := []models.Cue{
+		{ID: "1", Skip: true},
+		{ID: "2", Skip: true},
+		{ID: "3", Skip: false},
+	}
+
+	// Starting from index 1, need to wrap around to find cue at 2
+	result := findPreviousNonSkippedCue(cues, 1, true)
+	if result != 2 {
+		t.Errorf("Expected 2 when wrap around is needed (with loop), got %d", result)
+	}
+
+	// Without loop, should return -1
+	result = findPreviousNonSkippedCue(cues, 1, false)
+	if result != -1 {
+		t.Errorf("Expected -1 when wrap around is needed (no loop), got %d", result)
+	}
+}
+
+func TestFindPreviousNonSkippedCue_SingleCue(t *testing.T) {
+	// Single non-skipped cue
+	cues := []models.Cue{{ID: "1", Skip: false}}
+	result := findPreviousNonSkippedCue(cues, 0, false)
+	if result != 0 {
+		t.Errorf("Expected 0 for single non-skipped cue, got %d", result)
+	}
+
+	// Single skipped cue
+	cues = []models.Cue{{ID: "1", Skip: true}}
+	result = findPreviousNonSkippedCue(cues, 0, false)
+	if result != -1 {
+		t.Errorf("Expected -1 for single skipped cue, got %d", result)
 	}
 }

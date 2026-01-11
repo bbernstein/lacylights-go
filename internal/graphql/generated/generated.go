@@ -151,6 +151,7 @@ type ComplexityRoot struct {
 		Name        func(childComplexity int) int
 		Notes       func(childComplexity int) int
 		Scene       func(childComplexity int) int
+		Skip        func(childComplexity int) int
 	}
 
 	CueList struct {
@@ -431,6 +432,7 @@ type ComplexityRoot struct {
 		StartPreviewSession                    func(childComplexity int, projectID string) int
 		StopAPMode                             func(childComplexity int, connectToSsid *string) int
 		StopCueList                            func(childComplexity int, cueListID string) int
+		ToggleCueSkip                          func(childComplexity int, cueID string) int
 		TriggerOFLImport                       func(childComplexity int, options *OFLImportOptionsInput) int
 		UpdateAllRepositories                  func(childComplexity int) int
 		UpdateCue                              func(childComplexity int, id string, input CreateCueInput) int
@@ -953,6 +955,7 @@ type MutationResolver interface {
 	BulkCreateCues(ctx context.Context, input BulkCueCreateInput) ([]*models.Cue, error)
 	BulkUpdateCues(ctx context.Context, input BulkCueUpdateInput) ([]*models.Cue, error)
 	BulkDeleteCues(ctx context.Context, cueIds []string) (*BulkDeleteResult, error)
+	ToggleCueSkip(ctx context.Context, cueID string) (*models.Cue, error)
 	StartPreviewSession(ctx context.Context, projectID string) (*models.PreviewSession, error)
 	CommitPreviewSession(ctx context.Context, sessionID string) (bool, error)
 	CancelPreviewSession(ctx context.Context, sessionID string) (bool, error)
@@ -1455,6 +1458,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Cue.Scene(childComplexity), true
+	case "Cue.skip":
+		if e.complexity.Cue.Skip == nil {
+			break
+		}
+
+		return e.complexity.Cue.Skip(childComplexity), true
 
 	case "CueList.createdAt":
 		if e.complexity.CueList.CreatedAt == nil {
@@ -3114,6 +3123,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.StopCueList(childComplexity, args["cueListId"].(string)), true
+	case "Mutation.toggleCueSkip":
+		if e.complexity.Mutation.ToggleCueSkip == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_toggleCueSkip_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.ToggleCueSkip(childComplexity, args["cueId"].(string)), true
 	case "Mutation.triggerOFLImport":
 		if e.complexity.Mutation.TriggerOFLImport == nil {
 			break
@@ -5554,7 +5574,12 @@ type FixtureInstance {
   tags: [String!]!
   projectOrder: Int
 
-  # 2D Layout Position (pixel coordinates, 0 to project canvasWidth/Height)
+  # 2D Layout Position.
+  # These fields are exposed in query responses as pixel coordinates
+  # (0 to project canvasWidth/Height). During the migration period,
+  # stored values may still be in normalized 0-1 coordinates, but are
+  # transparently converted to pixels in API responses for backward
+  # compatibility. New values should always be provided in pixels.
   layoutX: Float
   layoutY: Float
   layoutRotation: Float
@@ -5648,6 +5673,8 @@ type Cue {
   followTime: Float
   easingType: EasingType
   notes: String
+  "When true, this cue is skipped during playback but remains visible in the UI"
+  skip: Boolean!
 }
 
 type CueListPlaybackStatus {
@@ -6382,6 +6409,8 @@ input CreateCueInput {
   followTime: Float
   easingType: EasingType
   notes: String
+  "When true, this cue is skipped during playback (default: false)"
+  skip: Boolean
 }
 
 input BulkCueUpdateInput {
@@ -6390,6 +6419,8 @@ input BulkCueUpdateInput {
   fadeOutTime: Float
   followTime: Float
   easingType: EasingType
+  "When set, updates the skip status of all selected cues"
+  skip: Boolean
 }
 
 input FixtureUpdateItem {
@@ -6870,6 +6901,8 @@ type Mutation {
   bulkCreateCues(input: BulkCueCreateInput!): [Cue!]!
   bulkUpdateCues(input: BulkCueUpdateInput!): [Cue!]!
   bulkDeleteCues(cueIds: [ID!]!): BulkDeleteResult!
+  "Toggle the skip status of a cue (skip=true means the cue is bypassed during playback)"
+  toggleCueSkip(cueId: ID!): Cue!
 
   # Preview System
   startPreviewSession(projectId: ID!): PreviewSession!
@@ -7900,6 +7933,17 @@ func (ec *executionContext) field_Mutation_stopCueList_args(ctx context.Context,
 		return nil, err
 	}
 	args["cueListId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_toggleCueSkip_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "cueId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["cueId"] = arg0
 	return args, nil
 }
 
@@ -10408,6 +10452,35 @@ func (ec *executionContext) fieldContext_Cue_notes(_ context.Context, field grap
 	return fc, nil
 }
 
+func (ec *executionContext) _Cue_skip(ctx context.Context, field graphql.CollectedField, obj *models.Cue) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Cue_skip,
+		func(ctx context.Context) (any, error) {
+			return obj.Skip, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Cue_skip(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Cue",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _CueList_id(ctx context.Context, field graphql.CollectedField, obj *models.CueList) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10629,6 +10702,8 @@ func (ec *executionContext) fieldContext_CueList_cues(_ context.Context, field g
 				return ec.fieldContext_Cue_easingType(ctx, field)
 			case "notes":
 				return ec.fieldContext_Cue_notes(ctx, field)
+			case "skip":
+				return ec.fieldContext_Cue_skip(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -10941,6 +11016,8 @@ func (ec *executionContext) fieldContext_CueListPlaybackStatus_currentCue(_ cont
 				return ec.fieldContext_Cue_easingType(ctx, field)
 			case "notes":
 				return ec.fieldContext_Cue_notes(ctx, field)
+			case "skip":
+				return ec.fieldContext_Cue_skip(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -10992,6 +11069,8 @@ func (ec *executionContext) fieldContext_CueListPlaybackStatus_nextCue(_ context
 				return ec.fieldContext_Cue_easingType(ctx, field)
 			case "notes":
 				return ec.fieldContext_Cue_notes(ctx, field)
+			case "skip":
+				return ec.fieldContext_Cue_skip(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -11043,6 +11122,8 @@ func (ec *executionContext) fieldContext_CueListPlaybackStatus_previousCue(_ con
 				return ec.fieldContext_Cue_easingType(ctx, field)
 			case "notes":
 				return ec.fieldContext_Cue_notes(ctx, field)
+			case "skip":
+				return ec.fieldContext_Cue_skip(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -11355,6 +11436,8 @@ func (ec *executionContext) fieldContext_CuePage_cues(_ context.Context, field g
 				return ec.fieldContext_Cue_easingType(ctx, field)
 			case "notes":
 				return ec.fieldContext_Cue_notes(ctx, field)
+			case "skip":
+				return ec.fieldContext_Cue_skip(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -17940,6 +18023,8 @@ func (ec *executionContext) fieldContext_Mutation_createCue(ctx context.Context,
 				return ec.fieldContext_Cue_easingType(ctx, field)
 			case "notes":
 				return ec.fieldContext_Cue_notes(ctx, field)
+			case "skip":
+				return ec.fieldContext_Cue_skip(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -18003,6 +18088,8 @@ func (ec *executionContext) fieldContext_Mutation_updateCue(ctx context.Context,
 				return ec.fieldContext_Cue_easingType(ctx, field)
 			case "notes":
 				return ec.fieldContext_Cue_notes(ctx, field)
+			case "skip":
+				return ec.fieldContext_Cue_skip(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -18148,6 +18235,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkCreateCues(ctx context.Con
 				return ec.fieldContext_Cue_easingType(ctx, field)
 			case "notes":
 				return ec.fieldContext_Cue_notes(ctx, field)
+			case "skip":
+				return ec.fieldContext_Cue_skip(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -18211,6 +18300,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkUpdateCues(ctx context.Con
 				return ec.fieldContext_Cue_easingType(ctx, field)
 			case "notes":
 				return ec.fieldContext_Cue_notes(ctx, field)
+			case "skip":
+				return ec.fieldContext_Cue_skip(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -18270,6 +18361,71 @@ func (ec *executionContext) fieldContext_Mutation_bulkDeleteCues(ctx context.Con
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_bulkDeleteCues_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_toggleCueSkip(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_toggleCueSkip,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().ToggleCueSkip(ctx, fc.Args["cueId"].(string))
+		},
+		nil,
+		ec.marshalNCue2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐCue,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_toggleCueSkip(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Cue_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Cue_name(ctx, field)
+			case "cueNumber":
+				return ec.fieldContext_Cue_cueNumber(ctx, field)
+			case "scene":
+				return ec.fieldContext_Cue_scene(ctx, field)
+			case "cueList":
+				return ec.fieldContext_Cue_cueList(ctx, field)
+			case "fadeInTime":
+				return ec.fieldContext_Cue_fadeInTime(ctx, field)
+			case "fadeOutTime":
+				return ec.fieldContext_Cue_fadeOutTime(ctx, field)
+			case "followTime":
+				return ec.fieldContext_Cue_followTime(ctx, field)
+			case "easingType":
+				return ec.fieldContext_Cue_easingType(ctx, field)
+			case "notes":
+				return ec.fieldContext_Cue_notes(ctx, field)
+			case "skip":
+				return ec.fieldContext_Cue_skip(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_toggleCueSkip_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -24233,6 +24389,8 @@ func (ec *executionContext) fieldContext_Query_cue(ctx context.Context, field gr
 				return ec.fieldContext_Cue_easingType(ctx, field)
 			case "notes":
 				return ec.fieldContext_Cue_notes(ctx, field)
+			case "skip":
+				return ec.fieldContext_Cue_skip(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -25400,6 +25558,8 @@ func (ec *executionContext) fieldContext_Query_cuesByIds(ctx context.Context, fi
 				return ec.fieldContext_Cue_easingType(ctx, field)
 			case "notes":
 				return ec.fieldContext_Cue_notes(ctx, field)
+			case "skip":
+				return ec.fieldContext_Cue_skip(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -31222,7 +31382,7 @@ func (ec *executionContext) unmarshalInputBulkCueUpdateInput(ctx context.Context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"cueIds", "fadeInTime", "fadeOutTime", "followTime", "easingType"}
+	fieldsInOrder := [...]string{"cueIds", "fadeInTime", "fadeOutTime", "followTime", "easingType", "skip"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -31264,6 +31424,13 @@ func (ec *executionContext) unmarshalInputBulkCueUpdateInput(ctx context.Context
 				return it, err
 			}
 			it.EasingType = graphql.OmittableOf(data)
+		case "skip":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("skip"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Skip = graphql.OmittableOf(data)
 		}
 	}
 
@@ -31827,7 +31994,7 @@ func (ec *executionContext) unmarshalInputCreateCueInput(ctx context.Context, ob
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "cueNumber", "cueListId", "sceneId", "fadeInTime", "fadeOutTime", "followTime", "easingType", "notes"}
+	fieldsInOrder := [...]string{"name", "cueNumber", "cueListId", "sceneId", "fadeInTime", "fadeOutTime", "followTime", "easingType", "notes", "skip"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -31897,6 +32064,13 @@ func (ec *executionContext) unmarshalInputCreateCueInput(ctx context.Context, ob
 				return it, err
 			}
 			it.Notes = graphql.OmittableOf(data)
+		case "skip":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("skip"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Skip = graphql.OmittableOf(data)
 		}
 	}
 
@@ -34601,6 +34775,11 @@ func (ec *executionContext) _Cue(ctx context.Context, sel ast.SelectionSet, obj 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "notes":
 			out.Values[i] = ec._Cue_notes(ctx, field, obj)
+		case "skip":
+			out.Values[i] = ec._Cue_skip(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -37205,6 +37384,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "bulkDeleteCues":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_bulkDeleteCues(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "toggleCueSkip":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_toggleCueSkip(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
