@@ -1336,14 +1336,7 @@ func (r *mutationResolver) UpdateScene(ctx context.Context, id string, input gen
 
 	// If name changed, notify all cue lists using this scene
 	if nameChanged {
-		cueListIDs, err := r.CueRepo.FindCueListIDsBySceneID(ctx, id)
-		if err != nil {
-			log.Printf("Warning: failed to find cue lists for scene notification: %v", err)
-		} else {
-			for _, cueListID := range cueListIDs {
-				r.publishCueListDataChanged(cueListID, generated.CueListDataChangeTypeSceneNameChanged, nil, &id, &scene.Name)
-			}
-		}
+		r.notifySceneNameChange(ctx, id, scene.Name)
 	}
 
 	return scene, nil
@@ -1508,15 +1501,7 @@ func (r *mutationResolver) BulkUpdateScenes(ctx context.Context, input generated
 
 	// Notify cue lists about scene name changes
 	for sceneID, newName := range nameChangedScenes {
-		cueListIDs, err := r.CueRepo.FindCueListIDsBySceneID(ctx, sceneID)
-		if err != nil {
-			log.Printf("Warning: failed to find cue lists for scene notification: %v", err)
-			continue
-		}
-		for _, cueListID := range cueListIDs {
-			sceneName := newName
-			r.publishCueListDataChanged(cueListID, generated.CueListDataChangeTypeSceneNameChanged, nil, &sceneID, &sceneName)
-		}
+		r.notifySceneNameChange(ctx, sceneID, newName)
 	}
 
 	return updatedScenes, nil
@@ -1737,14 +1722,7 @@ func (r *mutationResolver) UpdateScenePartial(ctx context.Context, sceneID strin
 
 	// If name changed, notify all cue lists using this scene
 	if nameChanged {
-		cueListIDs, err := r.CueRepo.FindCueListIDsBySceneID(ctx, sceneID)
-		if err != nil {
-			log.Printf("Warning: failed to find cue lists for scene notification: %v", err)
-		} else {
-			for _, cueListID := range cueListIDs {
-				r.publishCueListDataChanged(cueListID, generated.CueListDataChangeTypeSceneNameChanged, nil, &sceneID, &scene.Name)
-			}
-		}
+		r.notifySceneNameChange(ctx, sceneID, scene.Name)
 	}
 
 	return scene, nil
