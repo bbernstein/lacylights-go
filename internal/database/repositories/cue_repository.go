@@ -134,3 +134,14 @@ func (r *CueRepository) FindByCueListID(ctx context.Context, cueListID string) (
 		Find(&cues)
 	return cues, result.Error
 }
+
+// FindCueListIDsBySceneID returns all unique cue list IDs that have cues using the given scene.
+func (r *CueRepository) FindCueListIDsBySceneID(ctx context.Context, sceneID string) ([]string, error) {
+	var cueListIDs []string
+	result := r.db.WithContext(ctx).
+		Model(&models.Cue{}).
+		Where("scene_id = ?", sceneID).
+		Distinct("cue_list_id").
+		Pluck("cue_list_id", &cueListIDs)
+	return cueListIDs, result.Error
+}

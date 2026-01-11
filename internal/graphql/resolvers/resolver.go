@@ -3,6 +3,7 @@ package resolvers
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
@@ -246,4 +247,17 @@ func convertWiFiStatus(status *wifi.Status) *generated.WiFiStatus {
 	}
 
 	return gqlStatus
+}
+
+// publishCueListDataChanged publishes a cue list data change event to subscribers.
+func (r *Resolver) publishCueListDataChanged(cueListID string, changeType generated.CueListDataChangeType, affectedCueIds []string, affectedSceneID *string, newSceneName *string) {
+	payload := &generated.CueListDataChangedPayload{
+		CueListID:       cueListID,
+		ChangeType:      changeType,
+		AffectedCueIds:  affectedCueIds,
+		AffectedSceneID: affectedSceneID,
+		NewSceneName:    newSceneName,
+		Timestamp:       time.Now().UTC().Format(time.RFC3339),
+	}
+	r.PubSub.Publish(pubsub.TopicCueListDataChanged, cueListID, payload)
 }

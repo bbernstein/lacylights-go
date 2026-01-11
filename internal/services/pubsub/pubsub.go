@@ -13,6 +13,7 @@ const (
 	TopicProjectUpdated          Topic = "PROJECT_UPDATED"
 	TopicPreviewSession          Topic = "PREVIEW_SESSION_UPDATED"
 	TopicCueListPlayback         Topic = "CUE_LIST_PLAYBACK_UPDATED"
+	TopicCueListDataChanged      Topic = "CUE_LIST_DATA_CHANGED"
 	TopicGlobalPlaybackStatus    Topic = "GLOBAL_PLAYBACK_STATUS_UPDATED"
 	TopicSystemInfo              Topic = "SYSTEM_INFO_UPDATED"
 	TopicWiFiStatus              Topic = "WIFI_STATUS_UPDATED"

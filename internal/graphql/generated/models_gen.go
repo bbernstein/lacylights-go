@@ -261,6 +261,20 @@ type CreateSceneInput struct {
 	FixtureValues []*FixtureValueInput       `json:"fixtureValues"`
 }
 
+// Payload for cue list data change notifications
+type CueListDataChangedPayload struct {
+	CueListID  string                `json:"cueListId"`
+	ChangeType CueListDataChangeType `json:"changeType"`
+	// Affected cue IDs (for cue changes)
+	AffectedCueIds []string `json:"affectedCueIds,omitempty"`
+	// Affected scene ID (for scene name changes)
+	AffectedSceneID *string `json:"affectedSceneId,omitempty"`
+	// New scene name if this is a SCENE_NAME_CHANGED event
+	NewSceneName *string `json:"newSceneName,omitempty"`
+	// Timestamp of the change
+	Timestamp string `json:"timestamp"`
+}
+
 type CueListPlaybackStatus struct {
 	CueListID       string `json:"cueListId"`
 	CurrentCueIndex *int   `json:"currentCueIndex,omitempty"`
@@ -974,6 +988,69 @@ func (e *ChannelType) UnmarshalJSON(b []byte) error {
 }
 
 func (e ChannelType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type CueListDataChangeType string
+
+const (
+	CueListDataChangeTypeCueAdded               CueListDataChangeType = "CUE_ADDED"
+	CueListDataChangeTypeCueUpdated             CueListDataChangeType = "CUE_UPDATED"
+	CueListDataChangeTypeCueRemoved             CueListDataChangeType = "CUE_REMOVED"
+	CueListDataChangeTypeCueReordered           CueListDataChangeType = "CUE_REORDERED"
+	CueListDataChangeTypeCueListMetadataChanged CueListDataChangeType = "CUE_LIST_METADATA_CHANGED"
+	CueListDataChangeTypeSceneNameChanged       CueListDataChangeType = "SCENE_NAME_CHANGED"
+)
+
+var AllCueListDataChangeType = []CueListDataChangeType{
+	CueListDataChangeTypeCueAdded,
+	CueListDataChangeTypeCueUpdated,
+	CueListDataChangeTypeCueRemoved,
+	CueListDataChangeTypeCueReordered,
+	CueListDataChangeTypeCueListMetadataChanged,
+	CueListDataChangeTypeSceneNameChanged,
+}
+
+func (e CueListDataChangeType) IsValid() bool {
+	switch e {
+	case CueListDataChangeTypeCueAdded, CueListDataChangeTypeCueUpdated, CueListDataChangeTypeCueRemoved, CueListDataChangeTypeCueReordered, CueListDataChangeTypeCueListMetadataChanged, CueListDataChangeTypeSceneNameChanged:
+		return true
+	}
+	return false
+}
+
+func (e CueListDataChangeType) String() string {
+	return string(e)
+}
+
+func (e *CueListDataChangeType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = CueListDataChangeType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid CueListDataChangeType", str)
+	}
+	return nil
+}
+
+func (e CueListDataChangeType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *CueListDataChangeType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e CueListDataChangeType) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

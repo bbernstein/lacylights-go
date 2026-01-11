@@ -129,6 +129,29 @@ enum FixtureConflictStrategy {
   ERROR
 }
 
+enum CueListDataChangeType {
+  CUE_ADDED
+  CUE_UPDATED
+  CUE_REMOVED
+  CUE_REORDERED
+  CUE_LIST_METADATA_CHANGED
+  SCENE_NAME_CHANGED
+}
+
+"Payload for cue list data change notifications"
+type CueListDataChangedPayload {
+  cueListId: ID!
+  changeType: CueListDataChangeType!
+  "Affected cue IDs (for cue changes)"
+  affectedCueIds: [ID!]
+  "Affected scene ID (for scene name changes)"
+  affectedSceneId: ID
+  "New scene name if this is a SCENE_NAME_CHANGED event"
+  newSceneName: String
+  "Timestamp of the change"
+  timestamp: String!
+}
+
 # =============================================================================
 # CORE TYPES
 # =============================================================================
@@ -1620,6 +1643,8 @@ type Subscription {
   projectUpdated(projectId: ID!): Project!
   previewSessionUpdated(projectId: ID!): PreviewSession!
   cueListPlaybackUpdated(cueListId: ID!): CueListPlaybackStatus!
+  "Real-time updates when cue list data changes (cue added/updated/removed, reordering, metadata changes, scene name changes)"
+  cueListDataChanged(cueListId: ID!): CueListDataChangedPayload!
   "Global playback status updates - triggered when any cue list starts/stops/changes cue"
   globalPlaybackStatusUpdated: GlobalPlaybackStatus!
   systemInfoUpdated: SystemInfo!
