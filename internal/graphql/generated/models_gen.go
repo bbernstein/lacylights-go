@@ -61,6 +61,8 @@ type BulkCueUpdateInput struct {
 	FadeOutTime graphql.Omittable[*float64]    `json:"fadeOutTime,omitempty"`
 	FollowTime  graphql.Omittable[*float64]    `json:"followTime,omitempty"`
 	EasingType  graphql.Omittable[*EasingType] `json:"easingType,omitempty"`
+	// When set, updates the skip status of all selected cues
+	Skip graphql.Omittable[*bool] `json:"skip,omitempty"`
 }
 
 type BulkDeleteResult struct {
@@ -188,6 +190,8 @@ type CreateCueInput struct {
 	FollowTime  graphql.Omittable[*float64]    `json:"followTime,omitempty"`
 	EasingType  graphql.Omittable[*EasingType] `json:"easingType,omitempty"`
 	Notes       graphql.Omittable[*string]     `json:"notes,omitempty"`
+	// When true, this cue is skipped during playback (default: false)
+	Skip graphql.Omittable[*bool] `json:"skip,omitempty"`
 }
 
 type CreateCueListInput struct {

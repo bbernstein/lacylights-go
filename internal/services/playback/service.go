@@ -445,7 +445,7 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 	return nil
 }
 
-// handleFollowTime handles automatic follow to the next cue.
+// handleFollowTime handles automatic follow to the next cue, skipping any cues marked as skip=true.
 func (s *Service) handleFollowTime(cueListID string, currentCueIndex int) {
 	ctx := context.Background()
 
@@ -469,26 +469,21 @@ func (s *Service) handleFollowTime(cueListID string, currentCueIndex int) {
 		return
 	}
 
-	// Determine next cue index
-	nextCueIndex := currentCueIndex + 1
+	// Find the next non-skipped cue
+	nextCueIndex := findNextNonSkippedCue(cueList.Cues, currentCueIndex+1, cueList.Loop)
 
-	// Check if we've reached the end
-	if nextCueIndex >= len(cueList.Cues) {
-		if cueList.Loop && len(cueList.Cues) > 0 {
-			// Loop back to the first cue
-			nextCueIndex = 0
-		} else {
-			// No loop, mark as stopped
-			s.mu.Lock()
-			state := s.states[cueListID]
-			if state != nil {
-				state.IsPlaying = false
-				state.LastUpdated = time.Now()
-			}
-			s.mu.Unlock()
-			s.emitUpdate(cueListID)
-			return
+	// Check if we found a non-skipped cue
+	if nextCueIndex == -1 {
+		// All remaining cues are skipped, stop playback
+		s.mu.Lock()
+		state := s.states[cueListID]
+		if state != nil {
+			state.IsPlaying = false
+			state.LastUpdated = time.Now()
 		}
+		s.mu.Unlock()
+		s.emitUpdate(cueListID)
+		return
 	}
 
 	// Get the next cue
@@ -696,7 +691,7 @@ func (s *Service) JumpToCue(ctx context.Context, cueListID string, cueIndex int,
 	return nil
 }
 
-// NextCue advances to the next cue.
+// NextCue advances to the next cue, skipping over any cues marked as skip=true.
 func (s *Service) NextCue(ctx context.Context, cueListID string, fadeInTimeOverride *float64) error {
 	s.mu.RLock()
 	state := s.states[cueListID]
@@ -719,13 +714,10 @@ func (s *Service) NextCue(ctx context.Context, cueListID string, fadeInTimeOverr
 		return fmt.Errorf("cue list not found: %w", result.Error)
 	}
 
-	nextIndex := currentIndex + 1
-	if nextIndex >= len(cueList.Cues) {
-		if cueList.Loop && len(cueList.Cues) > 0 {
-			nextIndex = 0
-		} else {
-			return fmt.Errorf("no more cues in the list")
-		}
+	// Find the next non-skipped cue
+	nextIndex := findNextNonSkippedCue(cueList.Cues, currentIndex+1, cueList.Loop)
+	if nextIndex == -1 {
+		return fmt.Errorf("no more non-skipped cues in the list")
 	}
 
 	cue := cueList.Cues[nextIndex]
@@ -749,7 +741,7 @@ func (s *Service) NextCue(ctx context.Context, cueListID string, fadeInTimeOverr
 	return nil
 }
 
-// PreviousCue goes back to the previous cue.
+// PreviousCue goes back to the previous cue, skipping over any cues marked as skip=true.
 func (s *Service) PreviousCue(ctx context.Context, cueListID string, fadeInTimeOverride *float64) error {
 	s.mu.RLock()
 	state := s.states[cueListID]
@@ -772,13 +764,10 @@ func (s *Service) PreviousCue(ctx context.Context, cueListID string, fadeInTimeO
 		return fmt.Errorf("cue list not found: %w", result.Error)
 	}
 
-	prevIndex := currentIndex - 1
-	if prevIndex < 0 {
-		if cueList.Loop && len(cueList.Cues) > 0 {
-			prevIndex = len(cueList.Cues) - 1
-		} else {
-			return fmt.Errorf("already at first cue")
-		}
+	// Find the previous non-skipped cue
+	prevIndex := findPreviousNonSkippedCue(cueList.Cues, currentIndex-1, cueList.Loop)
+	if prevIndex == -1 {
+		return fmt.Errorf("no previous non-skipped cues")
 	}
 
 	cue := cueList.Cues[prevIndex]
@@ -1022,6 +1011,56 @@ func (s *Service) emitUpdate(cueListID string) {
 		globalStatus := s.GetGlobalPlaybackStatus(context.Background())
 		globalCallback(globalStatus)
 	}
+}
+
+// findNextNonSkippedCue finds the next non-skipped cue starting from startIndex.
+// Returns -1 if no non-skipped cue is found.
+func findNextNonSkippedCue(cues []models.Cue, startIndex int, loop bool) int {
+	n := len(cues)
+	if n == 0 {
+		return -1
+	}
+
+	// Check up to n cues (full loop)
+	for i := 0; i < n; i++ {
+		idx := startIndex + i
+		if idx >= n {
+			if loop {
+				idx = idx % n
+			} else {
+				return -1 // No more cues and not looping
+			}
+		}
+		if !cues[idx].Skip {
+			return idx
+		}
+	}
+	return -1 // All cues are skipped
+}
+
+// findPreviousNonSkippedCue finds the previous non-skipped cue starting from startIndex.
+// Returns -1 if no non-skipped cue is found.
+func findPreviousNonSkippedCue(cues []models.Cue, startIndex int, loop bool) int {
+	n := len(cues)
+	if n == 0 {
+		return -1
+	}
+
+	// Check up to n cues (full loop)
+	for i := 0; i < n; i++ {
+		idx := startIndex - i
+		if idx < 0 {
+			if loop {
+				idx = n + idx
+			} else {
+				return -1 // No more cues and not looping
+			}
+		}
+		if !cues[idx].Skip {
+			return idx
+		}
+	}
+	return -1 // All cues are skipped
 }
 
 // Cleanup cleans up all resources.

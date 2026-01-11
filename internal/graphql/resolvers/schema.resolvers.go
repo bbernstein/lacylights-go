@@ -2425,6 +2425,10 @@ func (r *mutationResolver) CreateCue(ctx context.Context, input generated.Create
 		cue.Notes = input.Notes.Value()
 	}
 
+	if input.Skip.IsSet() && input.Skip.Value() != nil {
+		cue.Skip = *input.Skip.Value()
+	}
+
 	if err := r.CueRepo.Create(ctx, cue); err != nil {
 		return nil, err
 	}
@@ -2471,6 +2475,10 @@ func (r *mutationResolver) UpdateCue(ctx context.Context, id string, input gener
 
 	if input.Notes.IsSet() {
 		cue.Notes = input.Notes.Value()
+	}
+
+	if input.Skip.IsSet() && input.Skip.Value() != nil {
+		cue.Skip = *input.Skip.Value()
 	}
 
 	if err := r.CueRepo.Update(ctx, cue); err != nil {
@@ -2576,6 +2584,11 @@ func (r *mutationResolver) BulkUpdateCues(ctx context.Context, input generated.B
 			cue.EasingType = &easingStr
 		}
 
+		// Update skip status if provided
+		if input.Skip.IsSet() && input.Skip.Value() != nil {
+			cue.Skip = *input.Skip.Value()
+		}
+
 		if err := r.CueRepo.Update(ctx, cue); err != nil {
 			return nil, err
 		}
@@ -2602,6 +2615,26 @@ func (r *mutationResolver) BulkDeleteCues(ctx context.Context, cueIds []string) 
 		DeletedCount: len(deletedIds),
 		DeletedIds:   deletedIds,
 	}, nil
+}
+
+// ToggleCueSkip is the resolver for the toggleCueSkip field.
+func (r *mutationResolver) ToggleCueSkip(ctx context.Context, cueID string) (*models.Cue, error) {
+	cue, err := r.CueRepo.FindByID(ctx, cueID)
+	if err != nil {
+		return nil, err
+	}
+	if cue == nil {
+		return nil, fmt.Errorf("cue not found: %s", cueID)
+	}
+
+	// Toggle the skip status
+	cue.Skip = !cue.Skip
+
+	if err := r.CueRepo.Update(ctx, cue); err != nil {
+		return nil, err
+	}
+
+	return cue, nil
 }
 
 // StartPreviewSession is the resolver for the startPreviewSession field.
