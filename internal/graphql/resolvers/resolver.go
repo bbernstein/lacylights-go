@@ -2,7 +2,10 @@
 package resolvers
 
 import (
+	"context"
 	"fmt"
+	"log"
+	"time"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
@@ -246,4 +249,32 @@ func convertWiFiStatus(status *wifi.Status) *generated.WiFiStatus {
 	}
 
 	return gqlStatus
+}
+
+// publishCueListDataChanged publishes a cue list data change event to subscribers.
+func (r *Resolver) publishCueListDataChanged(cueListID string, changeType generated.CueListDataChangeType, affectedCueIds []string, affectedSceneID *string, newSceneName *string) {
+	payload := &generated.CueListDataChangedPayload{
+		CueListID:       cueListID,
+		ChangeType:      changeType,
+		AffectedCueIds:  affectedCueIds,
+		AffectedSceneID: affectedSceneID,
+		NewSceneName:    newSceneName,
+		Timestamp:       time.Now().UTC().Format(time.RFC3339),
+	}
+	r.PubSub.Publish(pubsub.TopicCueListDataChanged, cueListID, payload)
+}
+
+// notifySceneNameChange finds all cue lists using a scene and publishes SCENE_NAME_CHANGED events.
+// This is called when a scene is renamed to keep cue list displays in sync.
+func (r *Resolver) notifySceneNameChange(ctx context.Context, sceneID, newName string) {
+	cueListIDs, err := r.CueRepo.FindCueListIDsBySceneID(ctx, sceneID)
+	if err != nil {
+		log.Printf("Warning: failed to find cue lists for scene notification: %v", err)
+		return
+	}
+	for _, cueListID := range cueListIDs {
+		sceneIDCopy := sceneID
+		newNameCopy := newName
+		r.publishCueListDataChanged(cueListID, generated.CueListDataChangeTypeSceneNameChanged, nil, &sceneIDCopy, &newNameCopy)
+	}
 }

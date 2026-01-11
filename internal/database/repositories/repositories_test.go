@@ -950,6 +950,90 @@ func TestNewCueRepository(t *testing.T) {
 	}
 }
 
+// TestCueRepository_FindCueListIDsBySceneID tests finding cue lists that use a given scene.
+func TestCueRepository_FindCueListIDsBySceneID(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewCueRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create project
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+
+	// Create two scenes
+	scene1 := &models.Scene{ID: cuid.New(), Name: "Scene 1", ProjectID: project.ID}
+	scene2 := &models.Scene{ID: cuid.New(), Name: "Scene 2", ProjectID: project.ID}
+	testDB.DB.Create(scene1)
+	testDB.DB.Create(scene2)
+
+	// Create three cue lists
+	cueList1 := &models.CueList{ID: cuid.New(), Name: "Cue List 1", ProjectID: project.ID}
+	cueList2 := &models.CueList{ID: cuid.New(), Name: "Cue List 2", ProjectID: project.ID}
+	cueList3 := &models.CueList{ID: cuid.New(), Name: "Cue List 3", ProjectID: project.ID}
+	testDB.DB.Create(cueList1)
+	testDB.DB.Create(cueList2)
+	testDB.DB.Create(cueList3)
+
+	// Create cues: scene1 is used in cueList1 and cueList2, scene2 only in cueList3
+	cue1 := &models.Cue{ID: cuid.New(), Name: "Cue 1", CueNumber: 1.0, CueListID: cueList1.ID, SceneID: scene1.ID}
+	cue2 := &models.Cue{ID: cuid.New(), Name: "Cue 2", CueNumber: 2.0, CueListID: cueList1.ID, SceneID: scene1.ID} // scene1 used twice in same cue list
+	cue3 := &models.Cue{ID: cuid.New(), Name: "Cue 3", CueNumber: 1.0, CueListID: cueList2.ID, SceneID: scene1.ID}
+	cue4 := &models.Cue{ID: cuid.New(), Name: "Cue 4", CueNumber: 1.0, CueListID: cueList3.ID, SceneID: scene2.ID}
+	testDB.DB.Create(cue1)
+	testDB.DB.Create(cue2)
+	testDB.DB.Create(cue3)
+	testDB.DB.Create(cue4)
+
+	// Test: Find cue lists using scene1 - should return cueList1 and cueList2 (distinct)
+	cueListIDs, err := repo.FindCueListIDsBySceneID(ctx, scene1.ID)
+	if err != nil {
+		t.Fatalf("FindCueListIDsBySceneID failed: %v", err)
+	}
+	if len(cueListIDs) != 2 {
+		t.Errorf("Expected 2 cue list IDs for scene1, got %d", len(cueListIDs))
+	}
+	// Check that both cueList1 and cueList2 are in the result
+	foundCueList1, foundCueList2 := false, false
+	for _, id := range cueListIDs {
+		if id == cueList1.ID {
+			foundCueList1 = true
+		}
+		if id == cueList2.ID {
+			foundCueList2 = true
+		}
+	}
+	if !foundCueList1 {
+		t.Error("Expected cueList1.ID in results for scene1")
+	}
+	if !foundCueList2 {
+		t.Error("Expected cueList2.ID in results for scene1")
+	}
+
+	// Test: Find cue lists using scene2 - should return only cueList3
+	cueListIDs, err = repo.FindCueListIDsBySceneID(ctx, scene2.ID)
+	if err != nil {
+		t.Fatalf("FindCueListIDsBySceneID failed: %v", err)
+	}
+	if len(cueListIDs) != 1 {
+		t.Errorf("Expected 1 cue list ID for scene2, got %d", len(cueListIDs))
+	}
+	if len(cueListIDs) > 0 && cueListIDs[0] != cueList3.ID {
+		t.Errorf("Expected cueList3.ID for scene2, got %s", cueListIDs[0])
+	}
+
+	// Test: Find cue lists for non-existent scene - should return empty slice
+	nonExistentSceneID := cuid.New()
+	cueListIDs, err = repo.FindCueListIDsBySceneID(ctx, nonExistentSceneID)
+	if err != nil {
+		t.Fatalf("FindCueListIDsBySceneID failed for non-existent scene: %v", err)
+	}
+	if len(cueListIDs) != 0 {
+		t.Errorf("Expected 0 cue list IDs for non-existent scene, got %d", len(cueListIDs))
+	}
+}
+
 // TestFixtureRepository_CRUD tests basic CRUD operations.
 func TestFixtureRepository_CRUD(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)

@@ -1275,9 +1275,17 @@ func (r *mutationResolver) UpdateScene(ctx context.Context, id string, input gen
 		return nil, fmt.Errorf("scene not found: %s", id)
 	}
 
+	// Track if name changed for notification
+	oldName := scene.Name
+	nameChanged := false
+
 	// Update fields if provided
 	if input.Name.IsSet() && input.Name.Value() != nil {
-		scene.Name = *input.Name.Value()
+		newName := *input.Name.Value()
+		if newName != oldName {
+			scene.Name = newName
+			nameChanged = true
+		}
 	}
 
 	if input.Description.IsSet() {
@@ -1324,6 +1332,11 @@ func (r *mutationResolver) UpdateScene(ctx context.Context, id string, input gen
 	if err := r.reapplyActiveSceneIfNeeded(ctx, id); err != nil {
 		// Log the error but don't fail the update - the scene was saved successfully
 		log.Printf("Warning: failed to re-apply active scene after update: %v", err)
+	}
+
+	// If name changed, notify all cue lists using this scene
+	if nameChanged {
+		r.notifySceneNameChange(ctx, id, scene.Name)
 	}
 
 	return scene, nil
@@ -1455,6 +1468,8 @@ func (r *mutationResolver) BulkCreateScenes(ctx context.Context, input generated
 // BulkUpdateScenes is the resolver for the bulkUpdateScenes field.
 func (r *mutationResolver) BulkUpdateScenes(ctx context.Context, input generated.BulkSceneUpdateInput) ([]*models.Scene, error) {
 	var updatedScenes []*models.Scene
+	// Track scenes with name changes for notification
+	nameChangedScenes := make(map[string]string) // sceneID -> newName
 
 	for _, item := range input.Scenes {
 		scene, err := r.SceneRepo.FindByID(ctx, item.SceneID)
@@ -1466,7 +1481,11 @@ func (r *mutationResolver) BulkUpdateScenes(ctx context.Context, input generated
 		}
 
 		if item.Name.IsSet() && item.Name.Value() != nil {
-			scene.Name = *item.Name.Value()
+			newName := *item.Name.Value()
+			if newName != scene.Name {
+				scene.Name = newName
+				nameChangedScenes[item.SceneID] = newName
+			}
 		}
 
 		if item.Description.IsSet() {
@@ -1478,6 +1497,11 @@ func (r *mutationResolver) BulkUpdateScenes(ctx context.Context, input generated
 		}
 
 		updatedScenes = append(updatedScenes, scene)
+	}
+
+	// Notify cue lists about scene name changes
+	for sceneID, newName := range nameChangedScenes {
+		r.notifySceneNameChange(ctx, sceneID, newName)
 	}
 
 	return updatedScenes, nil
@@ -1602,9 +1626,14 @@ func (r *mutationResolver) UpdateScenePartial(ctx context.Context, sceneID strin
 		return nil, fmt.Errorf("scene not found: %s", sceneID)
 	}
 
+	// Track if name changed for notification
+	oldName := scene.Name
+	nameChanged := false
+
 	// Update name if provided
-	if name != nil {
+	if name != nil && *name != oldName {
 		scene.Name = *name
+		nameChanged = true
 	}
 
 	// Update description if provided
@@ -1689,6 +1718,11 @@ func (r *mutationResolver) UpdateScenePartial(ctx context.Context, sceneID strin
 	if err := r.reapplyActiveSceneIfNeeded(ctx, sceneID); err != nil {
 		// Log the error but don't fail the update - the scene was saved successfully
 		log.Printf("Warning: failed to re-apply active scene after update: %v", err)
+	}
+
+	// If name changed, notify all cue lists using this scene
+	if nameChanged {
+		r.notifySceneNameChange(ctx, sceneID, scene.Name)
 	}
 
 	return scene, nil
@@ -2289,6 +2323,9 @@ func (r *mutationResolver) UpdateCueList(ctx context.Context, id string, input g
 		return nil, err
 	}
 
+	// Publish cue list data change event
+	r.publishCueListDataChanged(id, generated.CueListDataChangeTypeCueListMetadataChanged, nil, nil, nil)
+
 	return cueList, nil
 }
 
@@ -2360,6 +2397,9 @@ func (r *mutationResolver) BulkUpdateCueLists(ctx context.Context, input generat
 		}
 
 		updatedCueLists = append(updatedCueLists, cueList)
+
+		// Publish cue list data change event
+		r.publishCueListDataChanged(item.CueListID, generated.CueListDataChangeTypeCueListMetadataChanged, nil, nil, nil)
 	}
 
 	return updatedCueLists, nil
@@ -2433,6 +2473,9 @@ func (r *mutationResolver) CreateCue(ctx context.Context, input generated.Create
 		return nil, err
 	}
 
+	// Publish cue list data change event
+	r.publishCueListDataChanged(input.CueListID, generated.CueListDataChangeTypeCueAdded, []string{cue.ID}, nil, nil)
+
 	return cue, nil
 }
 
@@ -2485,6 +2528,9 @@ func (r *mutationResolver) UpdateCue(ctx context.Context, id string, input gener
 		return nil, err
 	}
 
+	// Publish cue list data change event
+	r.publishCueListDataChanged(cue.CueListID, generated.CueListDataChangeTypeCueUpdated, []string{cue.ID}, nil, nil)
+
 	return cue, nil
 }
 
@@ -2498,9 +2544,15 @@ func (r *mutationResolver) DeleteCue(ctx context.Context, id string) (bool, erro
 		return false, fmt.Errorf("cue not found: %s", id)
 	}
 
+	// Capture cue list ID before deletion
+	cueListID := cue.CueListID
+
 	if err := r.CueRepo.Delete(ctx, id); err != nil {
 		return false, err
 	}
+
+	// Publish cue list data change event
+	r.publishCueListDataChanged(cueListID, generated.CueListDataChangeTypeCueRemoved, []string{id}, nil, nil)
 
 	return true, nil
 }
@@ -2516,6 +2568,9 @@ func (r *mutationResolver) ReorderCues(ctx context.Context, cueListID string, cu
 		return false, fmt.Errorf("cue list not found: %s", cueListID)
 	}
 
+	// Collect cue IDs for the event
+	var reorderedCueIDs []string
+
 	// Update each cue's number
 	for _, order := range cueOrders {
 		cue, err := r.CueRepo.FindByID(ctx, order.CueID)
@@ -2530,7 +2585,11 @@ func (r *mutationResolver) ReorderCues(ctx context.Context, cueListID string, cu
 		if err := r.CueRepo.Update(ctx, cue); err != nil {
 			return false, err
 		}
+		reorderedCueIDs = append(reorderedCueIDs, order.CueID)
 	}
+
+	// Publish cue list data change event
+	r.publishCueListDataChanged(cueListID, generated.CueListDataChangeTypeCueReordered, reorderedCueIDs, nil, nil)
 
 	return true, nil
 }
@@ -2553,6 +2612,8 @@ func (r *mutationResolver) BulkCreateCues(ctx context.Context, input generated.B
 // BulkUpdateCues is the resolver for the bulkUpdateCues field.
 func (r *mutationResolver) BulkUpdateCues(ctx context.Context, input generated.BulkCueUpdateInput) ([]*models.Cue, error) {
 	var updatedCues []*models.Cue
+	// Track affected cue lists and their cue IDs
+	affectedCueLists := make(map[string][]string)
 
 	for _, cueID := range input.CueIds {
 		cue, err := r.CueRepo.FindByID(ctx, cueID)
@@ -2594,6 +2655,12 @@ func (r *mutationResolver) BulkUpdateCues(ctx context.Context, input generated.B
 		}
 
 		updatedCues = append(updatedCues, cue)
+		affectedCueLists[cue.CueListID] = append(affectedCueLists[cue.CueListID], cueID)
+	}
+
+	// Publish cue list data change events for each affected cue list
+	for cueListID, cueIDs := range affectedCueLists {
+		r.publishCueListDataChanged(cueListID, generated.CueListDataChangeTypeCueUpdated, cueIDs, nil, nil)
 	}
 
 	return updatedCues, nil
@@ -2633,6 +2700,9 @@ func (r *mutationResolver) ToggleCueSkip(ctx context.Context, cueID string) (*mo
 	if err := r.CueRepo.Update(ctx, cue); err != nil {
 		return nil, err
 	}
+
+	// Publish cue list data change event
+	r.publishCueListDataChanged(cue.CueListID, generated.CueListDataChangeTypeCueUpdated, []string{cueID}, nil, nil)
 
 	return cue, nil
 }
@@ -5092,6 +5162,41 @@ func (r *subscriptionResolver) CueListPlaybackUpdated(ctx context.Context, cueLi
 				if status, valid := msg.(*generated.CueListPlaybackStatus); valid {
 					select {
 					case outputChan <- status:
+					case <-ctx.Done():
+						r.PubSub.Unsubscribe(sub)
+						return
+					}
+				}
+			}
+		}
+	}()
+
+	return outputChan, nil
+}
+
+// CueListDataChanged is the resolver for the cueListDataChanged field.
+func (r *subscriptionResolver) CueListDataChanged(ctx context.Context, cueListID string) (<-chan *generated.CueListDataChangedPayload, error) {
+	// Subscribe to cue list data changes filtered by cueListID
+	sub := r.PubSub.Subscribe(pubsub.TopicCueListDataChanged, cueListID, 10)
+
+	// Create the output channel
+	outputChan := make(chan *generated.CueListDataChangedPayload, 10)
+
+	// Start a goroutine to forward messages
+	go func() {
+		defer close(outputChan)
+		for {
+			select {
+			case <-ctx.Done():
+				r.PubSub.Unsubscribe(sub)
+				return
+			case msg, ok := <-sub.Channel:
+				if !ok {
+					return
+				}
+				if payload, valid := msg.(*generated.CueListDataChangedPayload); valid {
+					select {
+					case outputChan <- payload:
 					case <-ctx.Done():
 						r.PubSub.Unsubscribe(sub)
 						return

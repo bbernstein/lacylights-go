@@ -167,6 +167,15 @@ type ComplexityRoot struct {
 		UpdatedAt     func(childComplexity int) int
 	}
 
+	CueListDataChangedPayload struct {
+		AffectedCueIds  func(childComplexity int) int
+		AffectedSceneID func(childComplexity int) int
+		ChangeType      func(childComplexity int) int
+		CueListID       func(childComplexity int) int
+		NewSceneName    func(childComplexity int) int
+		Timestamp       func(childComplexity int) int
+	}
+
 	CueListPlaybackStatus struct {
 		CueListID       func(childComplexity int) int
 		CurrentCue      func(childComplexity int) int
@@ -748,6 +757,7 @@ type ComplexityRoot struct {
 	}
 
 	Subscription struct {
+		CueListDataChanged          func(childComplexity int, cueListID string) int
 		CueListPlaybackUpdated      func(childComplexity int, cueListID string) int
 		DmxOutputChanged            func(childComplexity int, universe *int) int
 		GlobalPlaybackStatusUpdated func(childComplexity int) int
@@ -1099,6 +1109,7 @@ type SubscriptionResolver interface {
 	ProjectUpdated(ctx context.Context, projectID string) (<-chan *models.Project, error)
 	PreviewSessionUpdated(ctx context.Context, projectID string) (<-chan *models.PreviewSession, error)
 	CueListPlaybackUpdated(ctx context.Context, cueListID string) (<-chan *CueListPlaybackStatus, error)
+	CueListDataChanged(ctx context.Context, cueListID string) (<-chan *CueListDataChangedPayload, error)
 	GlobalPlaybackStatusUpdated(ctx context.Context) (<-chan *GlobalPlaybackStatus, error)
 	SystemInfoUpdated(ctx context.Context) (<-chan *SystemInfo, error)
 	WifiStatusUpdated(ctx context.Context) (<-chan *WiFiStatus, error)
@@ -1525,6 +1536,43 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.CueList.UpdatedAt(childComplexity), true
+
+	case "CueListDataChangedPayload.affectedCueIds":
+		if e.complexity.CueListDataChangedPayload.AffectedCueIds == nil {
+			break
+		}
+
+		return e.complexity.CueListDataChangedPayload.AffectedCueIds(childComplexity), true
+	case "CueListDataChangedPayload.affectedSceneId":
+		if e.complexity.CueListDataChangedPayload.AffectedSceneID == nil {
+			break
+		}
+
+		return e.complexity.CueListDataChangedPayload.AffectedSceneID(childComplexity), true
+	case "CueListDataChangedPayload.changeType":
+		if e.complexity.CueListDataChangedPayload.ChangeType == nil {
+			break
+		}
+
+		return e.complexity.CueListDataChangedPayload.ChangeType(childComplexity), true
+	case "CueListDataChangedPayload.cueListId":
+		if e.complexity.CueListDataChangedPayload.CueListID == nil {
+			break
+		}
+
+		return e.complexity.CueListDataChangedPayload.CueListID(childComplexity), true
+	case "CueListDataChangedPayload.newSceneName":
+		if e.complexity.CueListDataChangedPayload.NewSceneName == nil {
+			break
+		}
+
+		return e.complexity.CueListDataChangedPayload.NewSceneName(childComplexity), true
+	case "CueListDataChangedPayload.timestamp":
+		if e.complexity.CueListDataChangedPayload.Timestamp == nil {
+			break
+		}
+
+		return e.complexity.CueListDataChangedPayload.Timestamp(childComplexity), true
 
 	case "CueListPlaybackStatus.cueListId":
 		if e.complexity.CueListPlaybackStatus.CueListID == nil {
@@ -4813,6 +4861,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.Setting.Value(childComplexity), true
 
+	case "Subscription.cueListDataChanged":
+		if e.complexity.Subscription.CueListDataChanged == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_cueListDataChanged_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Subscription.CueListDataChanged(childComplexity, args["cueListId"].(string)), true
 	case "Subscription.cueListPlaybackUpdated":
 		if e.complexity.Subscription.CueListPlaybackUpdated == nil {
 			break
@@ -5488,6 +5547,29 @@ enum FixtureConflictStrategy {
   SKIP
   REPLACE
   ERROR
+}
+
+enum CueListDataChangeType {
+  CUE_ADDED
+  CUE_UPDATED
+  CUE_REMOVED
+  CUE_REORDERED
+  CUE_LIST_METADATA_CHANGED
+  SCENE_NAME_CHANGED
+}
+
+"Payload for cue list data change notifications"
+type CueListDataChangedPayload {
+  cueListId: ID!
+  changeType: CueListDataChangeType!
+  "Affected cue IDs (for cue changes)"
+  affectedCueIds: [ID!]
+  "Affected scene ID (for scene name changes)"
+  affectedSceneId: ID
+  "New scene name if this is a SCENE_NAME_CHANGED event"
+  newSceneName: String
+  "Timestamp of the change"
+  timestamp: String!
 }
 
 # =============================================================================
@@ -6981,6 +7063,8 @@ type Subscription {
   projectUpdated(projectId: ID!): Project!
   previewSessionUpdated(projectId: ID!): PreviewSession!
   cueListPlaybackUpdated(cueListId: ID!): CueListPlaybackStatus!
+  "Real-time updates when cue list data changes (cue added/updated/removed, reordering, metadata changes, scene name changes)"
+  cueListDataChanged(cueListId: ID!): CueListDataChangedPayload!
   "Global playback status updates - triggered when any cue list starts/stops/changes cue"
   globalPlaybackStatusUpdated: GlobalPlaybackStatus!
   systemInfoUpdated: SystemInfo!
@@ -8748,6 +8832,17 @@ func (ec *executionContext) field_Query_wifiNetworks_args(ctx context.Context, r
 		return nil, err
 	}
 	args["deduplicate"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_cueListDataChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "cueListId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["cueListId"] = arg0
 	return args, nil
 }
 
@@ -10820,6 +10915,180 @@ func (ec *executionContext) fieldContext_CueList_updatedAt(_ context.Context, fi
 		Field:      field,
 		IsMethod:   true,
 		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CueListDataChangedPayload_cueListId(ctx context.Context, field graphql.CollectedField, obj *CueListDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CueListDataChangedPayload_cueListId,
+		func(ctx context.Context) (any, error) {
+			return obj.CueListID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CueListDataChangedPayload_cueListId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CueListDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CueListDataChangedPayload_changeType(ctx context.Context, field graphql.CollectedField, obj *CueListDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CueListDataChangedPayload_changeType,
+		func(ctx context.Context) (any, error) {
+			return obj.ChangeType, nil
+		},
+		nil,
+		ec.marshalNCueListDataChangeType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCueListDataChangeType,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CueListDataChangedPayload_changeType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CueListDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type CueListDataChangeType does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CueListDataChangedPayload_affectedCueIds(ctx context.Context, field graphql.CollectedField, obj *CueListDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CueListDataChangedPayload_affectedCueIds,
+		func(ctx context.Context) (any, error) {
+			return obj.AffectedCueIds, nil
+		},
+		nil,
+		ec.marshalOID2ᚕstringᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CueListDataChangedPayload_affectedCueIds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CueListDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CueListDataChangedPayload_affectedSceneId(ctx context.Context, field graphql.CollectedField, obj *CueListDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CueListDataChangedPayload_affectedSceneId,
+		func(ctx context.Context) (any, error) {
+			return obj.AffectedSceneID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CueListDataChangedPayload_affectedSceneId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CueListDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CueListDataChangedPayload_newSceneName(ctx context.Context, field graphql.CollectedField, obj *CueListDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CueListDataChangedPayload_newSceneName,
+		func(ctx context.Context) (any, error) {
+			return obj.NewSceneName, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_CueListDataChangedPayload_newSceneName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CueListDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CueListDataChangedPayload_timestamp(ctx context.Context, field graphql.CollectedField, obj *CueListDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CueListDataChangedPayload_timestamp,
+		func(ctx context.Context) (any, error) {
+			return obj.Timestamp, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CueListDataChangedPayload_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CueListDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
 		},
@@ -28198,6 +28467,61 @@ func (ec *executionContext) fieldContext_Subscription_cueListPlaybackUpdated(ctx
 	return fc, nil
 }
 
+func (ec *executionContext) _Subscription_cueListDataChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_cueListDataChanged,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Subscription().CueListDataChanged(ctx, fc.Args["cueListId"].(string))
+		},
+		nil,
+		ec.marshalNCueListDataChangedPayload2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCueListDataChangedPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_cueListDataChanged(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "cueListId":
+				return ec.fieldContext_CueListDataChangedPayload_cueListId(ctx, field)
+			case "changeType":
+				return ec.fieldContext_CueListDataChangedPayload_changeType(ctx, field)
+			case "affectedCueIds":
+				return ec.fieldContext_CueListDataChangedPayload_affectedCueIds(ctx, field)
+			case "affectedSceneId":
+				return ec.fieldContext_CueListDataChangedPayload_affectedSceneId(ctx, field)
+			case "newSceneName":
+				return ec.fieldContext_CueListDataChangedPayload_newSceneName(ctx, field)
+			case "timestamp":
+				return ec.fieldContext_CueListDataChangedPayload_timestamp(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CueListDataChangedPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_cueListDataChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Subscription_globalPlaybackStatusUpdated(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
 	return graphql.ResolveFieldStream(
 		ctx,
@@ -35070,6 +35394,61 @@ func (ec *executionContext) _CueList(ctx context.Context, sel ast.SelectionSet, 
 	return out
 }
 
+var cueListDataChangedPayloadImplementors = []string{"CueListDataChangedPayload"}
+
+func (ec *executionContext) _CueListDataChangedPayload(ctx context.Context, sel ast.SelectionSet, obj *CueListDataChangedPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, cueListDataChangedPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CueListDataChangedPayload")
+		case "cueListId":
+			out.Values[i] = ec._CueListDataChangedPayload_cueListId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "changeType":
+			out.Values[i] = ec._CueListDataChangedPayload_changeType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "affectedCueIds":
+			out.Values[i] = ec._CueListDataChangedPayload_affectedCueIds(ctx, field, obj)
+		case "affectedSceneId":
+			out.Values[i] = ec._CueListDataChangedPayload_affectedSceneId(ctx, field, obj)
+		case "newSceneName":
+			out.Values[i] = ec._CueListDataChangedPayload_newSceneName(ctx, field, obj)
+		case "timestamp":
+			out.Values[i] = ec._CueListDataChangedPayload_timestamp(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var cueListPlaybackStatusImplementors = []string{"CueListPlaybackStatus"}
 
 func (ec *executionContext) _CueListPlaybackStatus(ctx context.Context, sel ast.SelectionSet, obj *CueListPlaybackStatus) graphql.Marshaler {
@@ -41463,6 +41842,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_previewSessionUpdated(ctx, fields[0])
 	case "cueListPlaybackUpdated":
 		return ec._Subscription_cueListPlaybackUpdated(ctx, fields[0])
+	case "cueListDataChanged":
+		return ec._Subscription_cueListDataChanged(ctx, fields[0])
 	case "globalPlaybackStatusUpdated":
 		return ec._Subscription_globalPlaybackStatusUpdated(ctx, fields[0])
 	case "systemInfoUpdated":
@@ -43237,6 +43618,30 @@ func (ec *executionContext) marshalNCueList2ᚖgithubᚗcomᚋbbernsteinᚋlacyl
 		return graphql.Null
 	}
 	return ec._CueList(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNCueListDataChangeType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCueListDataChangeType(ctx context.Context, v any) (CueListDataChangeType, error) {
+	var res CueListDataChangeType
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNCueListDataChangeType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCueListDataChangeType(ctx context.Context, sel ast.SelectionSet, v CueListDataChangeType) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNCueListDataChangedPayload2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCueListDataChangedPayload(ctx context.Context, sel ast.SelectionSet, v CueListDataChangedPayload) graphql.Marshaler {
+	return ec._CueListDataChangedPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNCueListDataChangedPayload2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCueListDataChangedPayload(ctx context.Context, sel ast.SelectionSet, v *CueListDataChangedPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._CueListDataChangedPayload(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNCueListPlaybackStatus2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCueListPlaybackStatus(ctx context.Context, sel ast.SelectionSet, v CueListPlaybackStatus) graphql.Marshaler {
@@ -46421,6 +46826,42 @@ func (ec *executionContext) marshalOFloat2ᚖfloat64(ctx context.Context, sel as
 	_ = ctx
 	res := graphql.MarshalFloat(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]string, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNID2string(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOID2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNID2string(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalOID2ᚖstring(ctx context.Context, v any) (*string, error) {
