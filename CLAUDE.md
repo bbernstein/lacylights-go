@@ -146,8 +146,9 @@ The fade engine (`internal/fade/`) handles smooth DMX transitions:
 | [lacylights-fe](https://github.com/bbernstein/lacylights-fe) | Frontend consumes this GraphQL API |
 | [lacylights-mcp](https://github.com/bbernstein/lacylights-mcp) | MCP server calls this API for AI features |
 | [lacylights-test](https://github.com/bbernstein/lacylights-test) | Integration tests validate API contracts |
-| [lacylights-rpi](https://github.com/bbernstein/lacylights-rpi) | Deploys this backend to Raspberry Pi |
-| [lacylights-mac](https://github.com/bbernstein/lacylights-mac) | macOS app embeds and manages this server |
+| [lacylights-terraform](https://github.com/bbernstein/lacylights-terraform) | Distribution infrastructure - releases uploaded here |
+| [lacylights-rpi](https://github.com/bbernstein/lacylights-rpi) | Production platform - hosts this backend on Raspberry Pi |
+| [lacylights-mac](https://github.com/bbernstein/lacylights-mac) | Production platform - hosts this backend on macOS |
 
 ## Important Notes
 
