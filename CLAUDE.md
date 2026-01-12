@@ -167,6 +167,7 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 ## Project Documentation
 
 Key planning documents in the parent directory (e.g., `../RASPBERRY_PI_PRODUCT_PLAN.md`):
+- **LACYLIGHTS_GO_REWRITE_PLAN.md** - Go backend rewrite and architecture plan
 - **RASPBERRY_PI_PRODUCT_PLAN.md** - Hardware product architecture
 - **GO_DISTRIBUTION_PLAN.md** - Binary distribution and releases
 - **CONTRACT_TESTING_PLAN.md** - API contract testing strategy
