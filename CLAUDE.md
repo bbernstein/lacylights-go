@@ -88,7 +88,7 @@ The GraphQL schema at `internal/graphql/schema/schema.graphql` is the **source o
 ### Database Operations
 - All database access goes through `internal/database/`
 - Use transactions for multi-step operations
-- Migrations are in `internal/database/migrations/`
+- Database schema is managed via GORM AutoMigrate (in server startup and test setup code), not separate migration files
 
 ### Error Handling
 - Return structured GraphQL errors for client-facing issues
@@ -141,7 +141,7 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 
 | Service | Port | Protocol |
 |---------|------|----------|
-| GraphQL API | 4000 (dev) / 4001 (test) | HTTP |
+| GraphQL API | 4000 (configurable via `PORT` env var) | HTTP |
 | WebSocket | 4000 | WS |
 | Art-Net | 6454 | UDP |
 
@@ -166,7 +166,7 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 
 ## Project Documentation
 
-Key planning documents in the parent `lacylights/docs/` directory:
+Key planning documents in the parent directory (e.g., `../RASPBERRY_PI_PRODUCT_PLAN.md`):
 - **RASPBERRY_PI_PRODUCT_PLAN.md** - Hardware product architecture
 - **GO_DISTRIBUTION_PLAN.md** - Binary distribution and releases
 - **CONTRACT_TESTING_PLAN.md** - API contract testing strategy
