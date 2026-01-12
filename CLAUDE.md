@@ -41,7 +41,7 @@ make generate                 # Generate GraphQL resolver code
 go generate ./...             # Direct generate command
 ```
 
-**Important:** After modifying `internal/graph/schema.graphqls`, always run `make generate` to update resolver stubs.
+**Important:** After modifying `internal/graphql/schema/schema.graphql`, always run `make generate` to update resolver stubs.
 
 ## Architecture
 
@@ -53,14 +53,19 @@ lacylights-go/
 ├── internal/
 │   ├── config/               # Configuration via environment variables
 │   ├── database/             # SQLite database layer with migrations
-│   ├── graph/                # GraphQL schema, resolvers, generated code
-│   │   ├── schema.graphqls   # GraphQL schema definition (source of truth)
-│   │   ├── resolver.go       # Resolver implementations
+│   │   ├── models/           # Domain models and business logic
+│   │   └── repositories/     # Database access layer
+│   ├── graphql/              # GraphQL schema, resolvers, generated code
+│   │   ├── schema/           # GraphQL schema definition (source of truth)
+│   │   ├── resolvers/        # Resolver implementations
 │   │   └── generated/        # Auto-generated GraphQL code
-│   ├── models/               # Domain models and business logic
-│   ├── artnet/               # Art-Net protocol implementation for DMX
-│   └── fade/                 # Fade engine for smooth transitions
-├── pkg/                      # Public packages for external use
+│   └── services/             # Business logic services
+│       ├── fade/             # Fade engine for smooth transitions
+│       ├── dmx/              # DMX output management
+│       ├── ofl/              # Open Fixture Library integration
+│       └── playback/         # Cue playback engine
+├── pkg/
+│   └── artnet/               # Art-Net protocol implementation for DMX
 └── test/                     # Integration and end-to-end tests
 ```
 
@@ -74,11 +79,11 @@ lacylights-go/
 ## Important Patterns
 
 ### GraphQL Schema
-The GraphQL schema at `internal/graph/schema.graphqls` is the **source of truth** for API contracts. When making schema changes:
-1. Edit `schema.graphqls`
+The GraphQL schema at `internal/graphql/schema/schema.graphql` is the **source of truth** for API contracts. When making schema changes:
+1. Edit `internal/graphql/schema/schema.graphql`
 2. Run `make generate`
-3. Implement new resolvers in `internal/graph/resolver.go`
-4. Update any affected types in `internal/models/`
+3. Implement new resolvers in `internal/graphql/resolvers/`
+4. Update any affected types in `internal/database/models/`
 
 ### Database Operations
 - All database access goes through `internal/database/`
@@ -91,7 +96,7 @@ The GraphQL schema at `internal/graph/schema.graphqls` is the **source of truth*
 - Use `fmt.Errorf("context: %w", err)` for error wrapping
 
 ### Fade Engine
-The fade engine (`internal/fade/`) handles smooth DMX transitions:
+The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 - Supports per-channel fade behavior (fade vs. snap)
 - Configurable update rate (default 60Hz)
 - Handles concurrent scene activations
@@ -129,6 +134,7 @@ The fade engine (`internal/fade/`) handles smooth DMX transitions:
 | `FADE_UPDATE_RATE` | `60` | Fade engine update rate (Hz) |
 | `CORS_ORIGIN` | `http://localhost:3000` | Allowed CORS origin |
 | `OFL_IMPORT_ENABLED` | `true` | Auto-import OFL fixtures on startup |
+| `OFL_CACHE_PATH` | `./.ofl-cache` | Path to the OFL fixture cache directory |
 | `NON_INTERACTIVE` | `false` | Disable interactive prompts (CI/Docker) |
 
 ### Services and Ports
