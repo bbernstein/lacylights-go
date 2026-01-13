@@ -3419,6 +3419,19 @@ func (r *projectResolver) CueLists(ctx context.Context, obj *models.Project) ([]
 	return pointers, nil
 }
 
+// Looks is the resolver for the looks field.
+func (r *projectResolver) Looks(ctx context.Context, obj *models.Project) ([]*models.Look, error) {
+	looks, err := r.LookRepo.FindByProjectID(ctx, obj.ID)
+	if err != nil {
+		return nil, err
+	}
+	pointers := make([]*models.Look, len(looks))
+	for i := range looks {
+		pointers[i] = &looks[i]
+	}
+	return pointers, nil
+}
+
 // Users is the resolver for the users field.
 func (r *projectResolver) Users(ctx context.Context, obj *models.Project) ([]*models.ProjectUser, error) {
 	var users []models.ProjectUser
