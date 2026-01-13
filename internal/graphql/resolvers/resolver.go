@@ -32,10 +32,10 @@ type Resolver struct {
 	ProjectRepo    *repositories.ProjectRepository
 	SettingRepo    *repositories.SettingRepository
 	FixtureRepo    *repositories.FixtureRepository
-	SceneRepo      *repositories.SceneRepository
-	CueListRepo    *repositories.CueListRepository
-	CueRepo        *repositories.CueRepository
-	SceneBoardRepo *repositories.SceneBoardRepository
+	LookRepo      *repositories.LookRepository
+	CueListRepo   *repositories.CueListRepository
+	CueRepo       *repositories.CueRepository
+	LookBoardRepo *repositories.LookBoardRepository
 
 	// Services
 	DMXService      *dmx.Service
@@ -55,10 +55,10 @@ type Resolver struct {
 func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *fade.Engine, playbackService *playback.Service, oflCachePath string) *Resolver {
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
-	sceneRepo := repositories.NewSceneRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
-	sceneBoardRepo := repositories.NewSceneBoardRepository(db)
+	lookBoardRepo := repositories.NewLookBoardRepository(db)
 
 	ps := pubsub.New()
 
@@ -70,18 +70,18 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *fade.Engine, 
 		ProjectRepo:     projectRepo,
 		SettingRepo:     repositories.NewSettingRepository(db),
 		FixtureRepo:     fixtureRepo,
-		SceneRepo:       sceneRepo,
+		LookRepo:        lookRepo,
 		CueListRepo:     cueListRepo,
 		CueRepo:         cueRepo,
-		SceneBoardRepo:  sceneBoardRepo,
+		LookBoardRepo:   lookBoardRepo,
 		DMXService:      dmxService,
 		FadeEngine:      fadeEngine,
 		PlaybackService: playbackService,
-		ExportService:   export.NewServiceWithSceneBoards(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo, sceneBoardRepo),
-		ImportService:   importservice.NewServiceWithSceneBoards(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo, sceneBoardRepo),
+		ExportService:   export.NewServiceWithLookBoards(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo),
+		ImportService:   importservice.NewServiceWithLookBoards(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo),
 		OFLService:      ofl.NewService(db, fixtureRepo),
 		OFLManager:      oflManager,
-		PreviewService:  preview.NewService(fixtureRepo, sceneRepo, dmxService),
+		PreviewService:  preview.NewService(fixtureRepo, lookRepo, dmxService),
 		VersionService:  version.NewService(),
 		WiFiService:     wifi.NewService(),
 		PubSub:          ps,
@@ -252,29 +252,29 @@ func convertWiFiStatus(status *wifi.Status) *generated.WiFiStatus {
 }
 
 // publishCueListDataChanged publishes a cue list data change event to subscribers.
-func (r *Resolver) publishCueListDataChanged(cueListID string, changeType generated.CueListDataChangeType, affectedCueIds []string, affectedSceneID *string, newSceneName *string) {
+func (r *Resolver) publishCueListDataChanged(cueListID string, changeType generated.CueListDataChangeType, affectedCueIds []string, affectedLookID *string, newLookName *string) {
 	payload := &generated.CueListDataChangedPayload{
-		CueListID:       cueListID,
-		ChangeType:      changeType,
-		AffectedCueIds:  affectedCueIds,
-		AffectedSceneID: affectedSceneID,
-		NewSceneName:    newSceneName,
-		Timestamp:       time.Now().UTC().Format(time.RFC3339),
+		CueListID:      cueListID,
+		ChangeType:     changeType,
+		AffectedCueIds: affectedCueIds,
+		AffectedLookID: affectedLookID,
+		NewLookName:    newLookName,
+		Timestamp:      time.Now().UTC().Format(time.RFC3339),
 	}
 	r.PubSub.Publish(pubsub.TopicCueListDataChanged, cueListID, payload)
 }
 
-// notifySceneNameChange finds all cue lists using a scene and publishes SCENE_NAME_CHANGED events.
-// This is called when a scene is renamed to keep cue list displays in sync.
-func (r *Resolver) notifySceneNameChange(ctx context.Context, sceneID, newName string) {
-	cueListIDs, err := r.CueRepo.FindCueListIDsBySceneID(ctx, sceneID)
+// notifyLookNameChange finds all cue lists using a look and publishes LOOK_NAME_CHANGED events.
+// This is called when a look is renamed to keep cue list displays in sync.
+func (r *Resolver) notifyLookNameChange(ctx context.Context, lookID, newName string) {
+	cueListIDs, err := r.CueRepo.FindCueListIDsByLookID(ctx, lookID)
 	if err != nil {
-		log.Printf("Warning: failed to find cue lists for scene notification: %v", err)
+		log.Printf("Warning: failed to find cue lists for look notification: %v", err)
 		return
 	}
 	for _, cueListID := range cueListIDs {
-		sceneIDCopy := sceneID
+		lookIDCopy := lookID
 		newNameCopy := newName
-		r.publishCueListDataChanged(cueListID, generated.CueListDataChangeTypeSceneNameChanged, nil, &sceneIDCopy, &newNameCopy)
+		r.publishCueListDataChanged(cueListID, generated.CueListDataChangeTypeLookNameChanged, nil, &lookIDCopy, &newNameCopy)
 	}
 }

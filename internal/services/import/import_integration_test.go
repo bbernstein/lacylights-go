@@ -15,7 +15,7 @@ func TestImportProject_CreateMode_EmptyProject(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -29,7 +29,7 @@ func TestImportProject_CreateMode_EmptyProject(t *testing.T) {
 		},
 		FixtureDefinitions: []export.ExportedFixtureDefinition{},
 		FixtureInstances:   []export.ExportedFixtureInstance{},
-		Scenes:             []export.ExportedScene{},
+		Looks:             []export.ExportedLook{},
 		CueLists:           []export.ExportedCueList{},
 	}
 
@@ -79,7 +79,7 @@ func TestImportProject_CreateMode_WithCustomProjectName(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -127,7 +127,7 @@ func TestImportProject_CreateMode_WithFixtureDefinition(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -183,7 +183,7 @@ func TestImportProject_CreateMode_WithFixtureInstance(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -257,19 +257,19 @@ func TestImportProject_CreateMode_WithFixtureInstance(t *testing.T) {
 	}
 }
 
-func TestImportProject_CreateMode_WithScene(t *testing.T) {
+func TestImportProject_CreateMode_WithLook(t *testing.T) {
 	testDB, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
 
-	projectName := testutil.UniqueProjectName("TestImportScenes")
+	projectName := testutil.UniqueProjectName("TestImportLooks")
 	modelName := testutil.UniqueFixtureName("Model")
 
 	exported := &export.ExportedProject{
@@ -299,10 +299,10 @@ func TestImportProject_CreateMode_WithScene(t *testing.T) {
 				StartChannel:    1,
 			},
 		},
-		Scenes: []export.ExportedScene{
+		Looks: []export.ExportedLook{
 			{
-				RefID: "scene-1",
-				Name:  "Test Scene",
+				RefID: "look-1",
+				Name:  "Test Look",
 				FixtureValues: []export.ExportedFixtureValue{
 					{
 						FixtureRefID: "inst-1",
@@ -328,17 +328,17 @@ func TestImportProject_CreateMode_WithScene(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ImportProject failed: %v", err)
 	}
-	if stats.ScenesCreated != 1 {
-		t.Errorf("Expected 1 scene, got %d", stats.ScenesCreated)
+	if stats.LooksCreated != 1 {
+		t.Errorf("Expected 1 look, got %d", stats.LooksCreated)
 	}
 
-	// Verify scene was created in database
-	scenes, err := testDB.SceneRepo.FindByProjectID(ctx, projectID)
+	// Verify look was created in database
+	looks, err := testDB.LookRepo.FindByProjectID(ctx, projectID)
 	if err != nil {
-		t.Fatalf("Failed to find scenes: %v", err)
+		t.Fatalf("Failed to find looks: %v", err)
 	}
-	if len(scenes) != 1 {
-		t.Errorf("Expected 1 scene in database, got %d", len(scenes))
+	if len(looks) != 1 {
+		t.Errorf("Expected 1 look in database, got %d", len(looks))
 	}
 }
 
@@ -349,7 +349,7 @@ func TestImportProject_CreateMode_WithCueList(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -384,10 +384,10 @@ func TestImportProject_CreateMode_WithCueList(t *testing.T) {
 				StartChannel:    1,
 			},
 		},
-		Scenes: []export.ExportedScene{
+		Looks: []export.ExportedLook{
 			{
-				RefID: "scene-1",
-				Name:  "Test Scene",
+				RefID: "look-1",
+				Name:  "Test Look",
 				FixtureValues: []export.ExportedFixtureValue{
 					{
 						FixtureRefID: "inst-1",
@@ -407,14 +407,14 @@ func TestImportProject_CreateMode_WithCueList(t *testing.T) {
 					{
 						Name:        "Cue 1",
 						CueNumber:   1.0,
-						SceneRefID:  "scene-1",
+						LookRefID:  "look-1",
 						FadeInTime:  2.0,
 						FadeOutTime: 1.0,
 					},
 					{
 						Name:        "Cue 2",
 						CueNumber:   2.0,
-						SceneRefID:  "scene-1",
+						LookRefID:  "look-1",
 						FadeInTime:  1.0,
 						FadeOutTime: 0.5,
 					},
@@ -460,7 +460,7 @@ func TestImportProject_CreateMode_CompleteProject(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -512,9 +512,9 @@ func TestImportProject_CreateMode_CompleteProject(t *testing.T) {
 				Tags:            []string{"back"},
 			},
 		},
-		Scenes: []export.ExportedScene{
+		Looks: []export.ExportedLook{
 			{
-				RefID: "scene-1",
+				RefID: "look-1",
 				Name:  "Full Red",
 				FixtureValues: []export.ExportedFixtureValue{
 					{
@@ -536,7 +536,7 @@ func TestImportProject_CreateMode_CompleteProject(t *testing.T) {
 				},
 			},
 			{
-				RefID: "scene-2",
+				RefID: "look-2",
 				Name:  "Full Green",
 				FixtureValues: []export.ExportedFixtureValue{
 					{
@@ -564,8 +564,8 @@ func TestImportProject_CreateMode_CompleteProject(t *testing.T) {
 				Name:  "Color Chase",
 				Loop:  true,
 				Cues: []export.ExportedCue{
-					{Name: "Red", CueNumber: 1.0, SceneRefID: "scene-1", FadeInTime: 1.0, FadeOutTime: 0.5},
-					{Name: "Green", CueNumber: 2.0, SceneRefID: "scene-2", FadeInTime: 1.0, FadeOutTime: 0.5},
+					{Name: "Red", CueNumber: 1.0, LookRefID: "look-1", FadeInTime: 1.0, FadeOutTime: 0.5},
+					{Name: "Green", CueNumber: 2.0, LookRefID: "look-2", FadeInTime: 1.0, FadeOutTime: 0.5},
 				},
 			},
 		},
@@ -595,8 +595,8 @@ func TestImportProject_CreateMode_CompleteProject(t *testing.T) {
 	if stats.FixtureInstancesCreated != 2 {
 		t.Errorf("Expected 2 fixture instances, got %d", stats.FixtureInstancesCreated)
 	}
-	if stats.ScenesCreated != 2 {
-		t.Errorf("Expected 2 scenes, got %d", stats.ScenesCreated)
+	if stats.LooksCreated != 2 {
+		t.Errorf("Expected 2 looks, got %d", stats.LooksCreated)
 	}
 	if stats.CueListsCreated != 1 {
 		t.Errorf("Expected 1 cue list, got %d", stats.CueListsCreated)
@@ -622,7 +622,7 @@ func TestImportProject_MergeMode_NoTargetProject(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -668,7 +668,7 @@ func TestImportProject_MergeMode_ProjectNotFound(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -715,7 +715,7 @@ func TestImportProject_FixtureConflict_Skip(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -801,7 +801,7 @@ func TestImportProject_UnknownFixtureReference_Warning(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -855,7 +855,7 @@ func TestImportProject_Integration_WithInstanceChannels(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)

@@ -33,9 +33,10 @@ type Project struct {
 	LayoutCanvasHeight int `gorm:"column:layout_canvas_height;default:2000"`
 
 	// Relations (loaded separately)
-	Fixtures  []FixtureInstance `gorm:"foreignKey:ProjectID"`
-	Scenes    []Scene           `gorm:"foreignKey:ProjectID"`
-	CueLists  []CueList         `gorm:"foreignKey:ProjectID"`
+	Fixtures   []FixtureInstance `gorm:"foreignKey:ProjectID"`
+	Looks      []Look            `gorm:"foreignKey:ProjectID"`
+	CueLists   []CueList         `gorm:"foreignKey:ProjectID"`
+	LookBoards []LookBoard       `gorm:"foreignKey:ProjectID"`
 }
 
 func (Project) TableName() string { return "projects" }
@@ -166,9 +167,10 @@ type InstanceChannel struct {
 
 func (InstanceChannel) TableName() string { return "instance_channels" }
 
-// Scene represents a lighting scene.
-// Table: scenes
-type Scene struct {
+// Look represents a lighting look (formerly known as "scene").
+// A look captures a snapshot of fixture channel values that can be recalled.
+// Table: looks
+type Look struct {
 	ID          string    `gorm:"column:id;primaryKey"`
 	Name        string    `gorm:"column:name"`
 	Description *string   `gorm:"column:description"`
@@ -177,25 +179,25 @@ type Scene struct {
 	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime"`
 
 	// Relations
-	FixtureValues []FixtureValue `gorm:"foreignKey:SceneID"`
+	FixtureValues []FixtureValue `gorm:"foreignKey:LookID"`
 }
 
-func (Scene) TableName() string { return "scenes" }
+func (Look) TableName() string { return "looks" }
 
-// ChannelValue represents a single channel's value in a scene
+// ChannelValue represents a single channel's value in a look
 type ChannelValue struct {
 	Offset int `json:"offset"`
 	Value  int `json:"value"`
 }
 
-// FixtureValue represents fixture channel values within a scene.
+// FixtureValue represents fixture channel values within a look.
 // Table: fixture_values
 type FixtureValue struct {
-	ID         string `gorm:"column:id;primaryKey"`
-	SceneID    string `gorm:"column:scene_id;index"`
-	FixtureID  string `gorm:"column:fixture_id;index"`
-	Channels   string `gorm:"column:channels;default:[]"` // JSON array of ChannelValue
-	SceneOrder *int   `gorm:"column:scene_order"`
+	ID        string `gorm:"column:id;primaryKey"`
+	LookID    string `gorm:"column:look_id;index"`
+	FixtureID string `gorm:"column:fixture_id;index"`
+	Channels  string `gorm:"column:channels;default:[]"` // JSON array of ChannelValue
+	LookOrder *int   `gorm:"column:look_order"`
 }
 
 func (FixtureValue) TableName() string { return "fixture_values" }
@@ -224,7 +226,7 @@ type Cue struct {
 	Name        string    `gorm:"column:name"`
 	CueNumber   float64   `gorm:"column:cue_number"`
 	CueListID   string    `gorm:"column:cue_list_id;index"`
-	SceneID     string    `gorm:"column:scene_id;index"`
+	LookID      string    `gorm:"column:look_id;index"`
 	FadeInTime  float64   `gorm:"column:fade_in_time;default:0"`
 	FadeOutTime float64   `gorm:"column:fade_out_time;default:0"`
 	FollowTime  *float64  `gorm:"column:follow_time"`
@@ -235,7 +237,7 @@ type Cue struct {
 	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime"`
 
 	// Relations
-	Scene *Scene `gorm:"foreignKey:SceneID"`
+	Look *Look `gorm:"foreignKey:LookID"`
 }
 
 func (Cue) TableName() string { return "cues" }
@@ -265,9 +267,9 @@ type Setting struct {
 
 func (Setting) TableName() string { return "settings" }
 
-// SceneBoard represents a scene board for organizing scenes.
-// Table: scene_boards
-type SceneBoard struct {
+// LookBoard represents a look board for organizing looks (formerly SceneBoard).
+// Table: look_boards
+type LookBoard struct {
 	ID              string    `gorm:"column:id;primaryKey"`
 	Name            string    `gorm:"column:name"`
 	Description     *string   `gorm:"column:description"`
@@ -280,31 +282,31 @@ type SceneBoard struct {
 	UpdatedAt       time.Time `gorm:"column:updated_at;autoUpdateTime"`
 
 	// Relations
-	Buttons []SceneBoardButton `gorm:"foreignKey:SceneBoardID"`
+	Buttons []LookBoardButton `gorm:"foreignKey:LookBoardID"`
 }
 
-func (SceneBoard) TableName() string { return "scene_boards" }
+func (LookBoard) TableName() string { return "look_boards" }
 
-// SceneBoardButton represents a button on a scene board.
-// Table: scene_board_buttons
-type SceneBoardButton struct {
-	ID           string    `gorm:"column:id;primaryKey"`
-	SceneBoardID string    `gorm:"column:scene_board_id;index"`
-	SceneID      string    `gorm:"column:scene_id;index"`
-	LayoutX      int       `gorm:"column:layout_x"`
-	LayoutY      int       `gorm:"column:layout_y"`
-	Width        *int      `gorm:"column:width;default:200"`
-	Height       *int      `gorm:"column:height;default:120"`
-	Color        *string   `gorm:"column:color"`
-	Label        *string   `gorm:"column:label"`
-	CreatedAt    time.Time `gorm:"column:created_at;autoCreateTime"`
-	UpdatedAt    time.Time `gorm:"column:updated_at;autoUpdateTime"`
+// LookBoardButton represents a button on a look board (formerly SceneBoardButton).
+// Table: look_board_buttons
+type LookBoardButton struct {
+	ID          string    `gorm:"column:id;primaryKey"`
+	LookBoardID string    `gorm:"column:look_board_id;index"`
+	LookID      string    `gorm:"column:look_id;index"`
+	LayoutX     int       `gorm:"column:layout_x"`
+	LayoutY     int       `gorm:"column:layout_y"`
+	Width       *int      `gorm:"column:width;default:200"`
+	Height      *int      `gorm:"column:height;default:120"`
+	Color       *string   `gorm:"column:color"`
+	Label       *string   `gorm:"column:label"`
+	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime"`
 
 	// Relations
-	Scene *Scene `gorm:"foreignKey:SceneID"`
+	Look *Look `gorm:"foreignKey:LookID"`
 }
 
-func (SceneBoardButton) TableName() string { return "scene_board_buttons" }
+func (LookBoardButton) TableName() string { return "look_board_buttons" }
 
 // OFLImportMeta tracks the history of OFL imports.
 // Table: ofl_import_meta

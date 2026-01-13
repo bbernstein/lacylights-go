@@ -52,9 +52,9 @@ func TestExportedProject_ToJSON(t *testing.T) {
 				Tags:            []string{"front", "stage"},
 			},
 		},
-		Scenes: []ExportedScene{
+		Looks: []ExportedLook{
 			{
-				RefID: "scene-1",
+				RefID: "look-1",
 				Name:  "Opening",
 				FixtureValues: []ExportedFixtureValue{
 					{
@@ -76,7 +76,7 @@ func TestExportedProject_ToJSON(t *testing.T) {
 						OriginalID:  "cue-1",
 						Name:        "Cue 1",
 						CueNumber:   1.0,
-						SceneRefID:  "scene-1",
+						LookRefID:  "look-1",
 						FadeInTime:  2.0,
 						FadeOutTime: 1.0,
 					},
@@ -248,12 +248,12 @@ func TestParseExportedProject(t *testing.T) {
 		t.Errorf("Expected 2 tags, got %d", len(project.FixtureInstances[0].Tags))
 	}
 
-	// Check scenes
-	if len(project.Scenes) != 1 {
-		t.Fatalf("Expected 1 scene, got %d", len(project.Scenes))
+	// Check looks
+	if len(project.Looks) != 1 {
+		t.Fatalf("Expected 1 look, got %d", len(project.Looks))
 	}
-	if project.Scenes[0].Name != "Full" {
-		t.Errorf("Expected scene name 'Full', got '%s'", project.Scenes[0].Name)
+	if project.Looks[0].Name != "Full" {
+		t.Errorf("Expected look name 'Full', got '%s'", project.Looks[0].Name)
 	}
 
 	// Check cue lists
@@ -296,7 +296,7 @@ func TestRoundTrip_ToJSON_ParseExportedProject(t *testing.T) {
 	followTime := 1.5
 	easingType := "EASE_IN_OUT"
 	notes := "Test notes"
-	sceneOrder := 0
+	lookOrder := 0
 
 	original := &ExportedProject{
 		Version: "1.0",
@@ -330,10 +330,10 @@ func TestRoundTrip_ToJSON_ParseExportedProject(t *testing.T) {
 				Tags:            []string{"a", "b", "c"},
 			},
 		},
-		Scenes: []ExportedScene{
+		Looks: []ExportedLook{
 			{
-				RefID:       "scene-1",
-				Name:        "Test Scene",
+				RefID:       "look-1",
+				Name:        "Test Look",
 				Description: &desc,
 				FixtureValues: []ExportedFixtureValue{
 					{
@@ -343,7 +343,7 @@ func TestRoundTrip_ToJSON_ParseExportedProject(t *testing.T) {
 							{Offset: 1, Value: 128},
 							{Offset: 2, Value: 64},
 						},
-						SceneOrder: &sceneOrder,
+						LookOrder: &lookOrder,
 					},
 				},
 			},
@@ -359,7 +359,7 @@ func TestRoundTrip_ToJSON_ParseExportedProject(t *testing.T) {
 						OriginalID:  "cue-1",
 						Name:        "Test Cue",
 						CueNumber:   1.5,
-						SceneRefID:  "scene-1",
+						LookRefID:  "look-1",
 						FadeInTime:  2.5,
 						FadeOutTime: 1.25,
 						FollowTime:  &followTime,
@@ -410,15 +410,15 @@ func TestRoundTrip_ToJSON_ParseExportedProject(t *testing.T) {
 		t.Errorf("Expected 3 tags, got %d", len(parsed.FixtureInstances[0].Tags))
 	}
 
-	// Check scenes
-	if len(parsed.Scenes) != 1 {
-		t.Fatalf("Scenes count mismatch")
+	// Check looks
+	if len(parsed.Looks) != 1 {
+		t.Fatalf("Looks count mismatch")
 	}
-	if len(parsed.Scenes[0].FixtureValues) != 1 {
+	if len(parsed.Looks[0].FixtureValues) != 1 {
 		t.Fatalf("FixtureValues count mismatch")
 	}
-	if len(parsed.Scenes[0].FixtureValues[0].Channels) != 3 {
-		t.Errorf("Expected 3 channel values, got %d", len(parsed.Scenes[0].FixtureValues[0].Channels))
+	if len(parsed.Looks[0].FixtureValues[0].Channels) != 3 {
+		t.Errorf("Expected 3 channel values, got %d", len(parsed.Looks[0].FixtureValues[0].Channels))
 	}
 
 	// Check cue lists
@@ -440,7 +440,7 @@ func TestExportStats(t *testing.T) {
 	stats := ExportStats{
 		FixtureDefinitionsCount: 5,
 		FixtureInstancesCount:   10,
-		ScenesCount:             8,
+		LooksCount:             8,
 		CueListsCount:           2,
 		CuesCount:               20,
 	}
@@ -451,8 +451,8 @@ func TestExportStats(t *testing.T) {
 	if stats.FixtureInstancesCount != 10 {
 		t.Errorf("Expected 10, got %d", stats.FixtureInstancesCount)
 	}
-	if stats.ScenesCount != 8 {
-		t.Errorf("Expected 8, got %d", stats.ScenesCount)
+	if stats.LooksCount != 8 {
+		t.Errorf("Expected 8, got %d", stats.LooksCount)
 	}
 	if stats.CueListsCount != 2 {
 		t.Errorf("Expected 2, got %d", stats.CueListsCount)
@@ -521,7 +521,7 @@ func TestService_Structure(t *testing.T) {
 	service := &Service{}
 	_ = service.projectRepo
 	_ = service.fixtureRepo
-	_ = service.sceneRepo
+	_ = service.lookRepo
 	_ = service.cueListRepo
 	_ = service.cueRepo
 }
@@ -611,7 +611,7 @@ func TestExportedProject_AllFields(t *testing.T) {
 	followTime := 1.5
 	easingType := "LINEAR"
 	notes := "Test notes"
-	sceneOrder := 1
+	lookOrder := 1
 	channelCount := 4
 	projectOrder := 2
 	shortName := "4CH"
@@ -673,11 +673,11 @@ func TestExportedProject_AllFields(t *testing.T) {
 				UpdatedAt: "2025-01-02T00:00:00Z",
 			},
 		},
-		Scenes: []ExportedScene{
+		Looks: []ExportedLook{
 			{
-				RefID:       "scene-1",
-				OriginalID:  "orig-scene-1",
-				Name:        "Test Scene",
+				RefID:       "look-1",
+				OriginalID:  "orig-look-1",
+				Name:        "Test Look",
 				Description: &desc,
 				FixtureValues: []ExportedFixtureValue{
 					{
@@ -688,7 +688,7 @@ func TestExportedProject_AllFields(t *testing.T) {
 							{Offset: 2, Value: 0},
 							{Offset: 3, Value: 0},
 						},
-						SceneOrder: &sceneOrder,
+						LookOrder: &lookOrder,
 					},
 				},
 				CreatedAt: "2025-01-01T00:00:00Z",
@@ -707,7 +707,7 @@ func TestExportedProject_AllFields(t *testing.T) {
 						OriginalID:  "cue-1",
 						Name:        "Cue 1",
 						CueNumber:   1.0,
-						SceneRefID:  "scene-1",
+						LookRefID:  "look-1",
 						FadeInTime:  2.0,
 						FadeOutTime: 1.0,
 						FollowTime:  &followTime,
@@ -781,7 +781,7 @@ func TestExportStats_AllFields(t *testing.T) {
 	stats := &ExportStats{
 		FixtureDefinitionsCount: 5,
 		FixtureInstancesCount:   10,
-		ScenesCount:             3,
+		LooksCount:             3,
 		CueListsCount:           2,
 		CuesCount:               15,
 	}
@@ -792,8 +792,8 @@ func TestExportStats_AllFields(t *testing.T) {
 	if stats.FixtureInstancesCount != 10 {
 		t.Errorf("Expected 10, got %d", stats.FixtureInstancesCount)
 	}
-	if stats.ScenesCount != 3 {
-		t.Errorf("Expected 3, got %d", stats.ScenesCount)
+	if stats.LooksCount != 3 {
+		t.Errorf("Expected 3, got %d", stats.LooksCount)
 	}
 	if stats.CueListsCount != 2 {
 		t.Errorf("Expected 2, got %d", stats.CueListsCount)
@@ -812,8 +812,8 @@ func TestExportStats_ZeroValues(t *testing.T) {
 	if stats.FixtureInstancesCount != 0 {
 		t.Errorf("Expected 0, got %d", stats.FixtureInstancesCount)
 	}
-	if stats.ScenesCount != 0 {
-		t.Errorf("Expected 0, got %d", stats.ScenesCount)
+	if stats.LooksCount != 0 {
+		t.Errorf("Expected 0, got %d", stats.LooksCount)
 	}
 	if stats.CueListsCount != 0 {
 		t.Errorf("Expected 0, got %d", stats.CueListsCount)
@@ -924,13 +924,13 @@ func TestExportedFixtureInstance_AllFields(t *testing.T) {
 	}
 }
 
-func TestExportedScene_AllFields(t *testing.T) {
-	desc := "Test scene"
-	sceneOrder := 1
+func TestExportedLook_AllFields(t *testing.T) {
+	desc := "Test look"
+	lookOrder := 1
 
-	scene := ExportedScene{
-		RefID:       "scene-1",
-		OriginalID:  "orig-scene-1",
+	look := ExportedLook{
+		RefID:       "look-1",
+		OriginalID:  "orig-look-1",
 		Name:        "Opening",
 		Description: &desc,
 		FixtureValues: []ExportedFixtureValue{
@@ -941,24 +941,24 @@ func TestExportedScene_AllFields(t *testing.T) {
 					{Offset: 1, Value: 128},
 					{Offset: 2, Value: 64},
 				},
-				SceneOrder: &sceneOrder,
+				LookOrder: &lookOrder,
 			},
 		},
 		CreatedAt: "2025-01-01T00:00:00Z",
 		UpdatedAt: "2025-01-02T00:00:00Z",
 	}
 
-	if scene.RefID != "scene-1" {
-		t.Errorf("Expected 'scene-1', got '%s'", scene.RefID)
+	if look.RefID != "look-1" {
+		t.Errorf("Expected 'look-1', got '%s'", look.RefID)
 	}
-	if scene.Name != "Opening" {
-		t.Errorf("Expected 'Opening', got '%s'", scene.Name)
+	if look.Name != "Opening" {
+		t.Errorf("Expected 'Opening', got '%s'", look.Name)
 	}
-	if len(scene.FixtureValues) != 1 {
-		t.Errorf("Expected 1 fixture value, got %d", len(scene.FixtureValues))
+	if len(look.FixtureValues) != 1 {
+		t.Errorf("Expected 1 fixture value, got %d", len(look.FixtureValues))
 	}
-	if len(scene.FixtureValues[0].Channels) != 3 {
-		t.Errorf("Expected 3 channel values, got %d", len(scene.FixtureValues[0].Channels))
+	if len(look.FixtureValues[0].Channels) != 3 {
+		t.Errorf("Expected 3 channel values, got %d", len(look.FixtureValues[0].Channels))
 	}
 }
 
@@ -979,7 +979,7 @@ func TestExportedCueList_AllFields(t *testing.T) {
 				OriginalID:  "cue-1",
 				Name:        "Cue 1",
 				CueNumber:   1.0,
-				SceneRefID:  "scene-1",
+				LookRefID:  "look-1",
 				FadeInTime:  2.0,
 				FadeOutTime: 1.0,
 				FollowTime:  &followTime,
@@ -1039,7 +1039,7 @@ func TestExportedChannelDefinition_Fields(t *testing.T) {
 }
 
 func TestExportedFixtureValue_Fields(t *testing.T) {
-	sceneOrder := 2
+	lookOrder := 2
 	fv := ExportedFixtureValue{
 		FixtureRefID: "inst-1",
 		Channels: []ExportedChannelValue{
@@ -1048,7 +1048,7 @@ func TestExportedFixtureValue_Fields(t *testing.T) {
 			{Offset: 2, Value: 64},
 			{Offset: 3, Value: 32},
 		},
-		SceneOrder: &sceneOrder,
+		LookOrder: &lookOrder,
 	}
 
 	if fv.FixtureRefID != "inst-1" {
@@ -1057,8 +1057,8 @@ func TestExportedFixtureValue_Fields(t *testing.T) {
 	if len(fv.Channels) != 4 {
 		t.Errorf("Expected 4 channel values, got %d", len(fv.Channels))
 	}
-	if fv.SceneOrder == nil || *fv.SceneOrder != 2 {
-		t.Error("Expected SceneOrder 2")
+	if fv.LookOrder == nil || *fv.LookOrder != 2 {
+		t.Error("Expected LookOrder 2")
 	}
 }
 
@@ -1067,7 +1067,7 @@ func TestExportedCue_AllOptionalFields(t *testing.T) {
 	cue := ExportedCue{
 		Name:        "Cue 1",
 		CueNumber:   1.0,
-		SceneRefID:  "scene-1",
+		LookRefID:  "look-1",
 		FadeInTime:  2.0,
 		FadeOutTime: 1.0,
 	}
@@ -1092,7 +1092,7 @@ func TestExportedCue_WithOptionalFields(t *testing.T) {
 		OriginalID:  "cue-123",
 		Name:        "Cue 1",
 		CueNumber:   1.5,
-		SceneRefID:  "scene-1",
+		LookRefID:  "look-1",
 		FadeInTime:  2.0,
 		FadeOutTime: 1.0,
 		FollowTime:  &followTime,
@@ -1128,7 +1128,7 @@ func TestExportedProject_EmptyArrays(t *testing.T) {
 		},
 		FixtureDefinitions: []ExportedFixtureDefinition{},
 		FixtureInstances:   []ExportedFixtureInstance{},
-		Scenes:             []ExportedScene{},
+		Looks:             []ExportedLook{},
 		CueLists:           []ExportedCueList{},
 	}
 
@@ -1148,8 +1148,8 @@ func TestExportedProject_EmptyArrays(t *testing.T) {
 	if len(parsed.FixtureInstances) != 0 {
 		t.Errorf("Expected 0 fixture instances, got %d", len(parsed.FixtureInstances))
 	}
-	if len(parsed.Scenes) != 0 {
-		t.Errorf("Expected 0 scenes, got %d", len(parsed.Scenes))
+	if len(parsed.Looks) != 0 {
+		t.Errorf("Expected 0 scenes, got %d", len(parsed.Looks))
 	}
 	if len(parsed.CueLists) != 0 {
 		t.Errorf("Expected 0 cue lists, got %d", len(parsed.CueLists))
@@ -1445,16 +1445,16 @@ func TestExportedFixtureInstance_WithDescription(t *testing.T) {
 	}
 }
 
-func TestExportedScene_WithMultipleFixtureValues(t *testing.T) {
-	desc := "Test scene"
-	sceneOrder1 := 0
-	sceneOrder2 := 1
-	sceneOrder3 := 2
+func TestExportedLook_WithMultipleFixtureValues(t *testing.T) {
+	desc := "Test look"
+	lookOrder1 := 0
+	lookOrder2 := 1
+	lookOrder3 := 2
 
-	scene := ExportedScene{
-		RefID:       "scene-1",
-		OriginalID:  "orig-scene-1",
-		Name:        "Multi-Fixture Scene",
+	look := ExportedLook{
+		RefID:       "look-1",
+		OriginalID:  "orig-look-1",
+		Name:        "Multi-Fixture Look",
 		Description: &desc,
 		FixtureValues: []ExportedFixtureValue{
 			{
@@ -1464,7 +1464,7 @@ func TestExportedScene_WithMultipleFixtureValues(t *testing.T) {
 					{Offset: 1, Value: 0},
 					{Offset: 2, Value: 0},
 				},
-				SceneOrder: &sceneOrder1,
+				LookOrder: &lookOrder1,
 			},
 			{
 				FixtureRefID: "inst-2",
@@ -1473,7 +1473,7 @@ func TestExportedScene_WithMultipleFixtureValues(t *testing.T) {
 					{Offset: 1, Value: 255},
 					{Offset: 2, Value: 0},
 				},
-				SceneOrder: &sceneOrder2,
+				LookOrder: &lookOrder2,
 			},
 			{
 				FixtureRefID: "inst-3",
@@ -1482,21 +1482,21 @@ func TestExportedScene_WithMultipleFixtureValues(t *testing.T) {
 					{Offset: 1, Value: 0},
 					{Offset: 2, Value: 255},
 				},
-				SceneOrder: &sceneOrder3,
+				LookOrder: &lookOrder3,
 			},
 		},
 		CreatedAt: "2025-01-01T00:00:00Z",
 		UpdatedAt: "2025-01-02T00:00:00Z",
 	}
 
-	if len(scene.FixtureValues) != 3 {
-		t.Errorf("Expected 3 fixture values, got %d", len(scene.FixtureValues))
+	if len(look.FixtureValues) != 3 {
+		t.Errorf("Expected 3 fixture values, got %d", len(look.FixtureValues))
 	}
 
-	// Verify scene orders
-	for i, fv := range scene.FixtureValues {
-		if fv.SceneOrder == nil || *fv.SceneOrder != i {
-			t.Errorf("Fixture value %d: expected scene order %d", i, i)
+	// Verify look orders
+	for i, fv := range look.FixtureValues {
+		if fv.LookOrder == nil || *fv.LookOrder != i {
+			t.Errorf("Fixture value %d: expected look order %d", i, i)
 		}
 	}
 }
@@ -1519,7 +1519,7 @@ func TestExportedCueList_WithMultipleCues(t *testing.T) {
 				OriginalID:  "cue-1",
 				Name:        "Blackout",
 				CueNumber:   0,
-				SceneRefID:  "scene-blackout",
+				LookRefID:  "scene-blackout",
 				FadeInTime:  0,
 				FadeOutTime: 0,
 			},
@@ -1527,7 +1527,7 @@ func TestExportedCueList_WithMultipleCues(t *testing.T) {
 				OriginalID:  "cue-2",
 				Name:        "Opening",
 				CueNumber:   1,
-				SceneRefID:  "scene-opening",
+				LookRefID:  "scene-opening",
 				FadeInTime:  2.0,
 				FadeOutTime: 1.0,
 				FollowTime:  &followTime1,
@@ -1536,7 +1536,7 @@ func TestExportedCueList_WithMultipleCues(t *testing.T) {
 				OriginalID:  "cue-3",
 				Name:        "Transition",
 				CueNumber:   2,
-				SceneRefID:  "scene-transition",
+				LookRefID:  "scene-transition",
 				FadeInTime:  1.5,
 				FadeOutTime: 0.5,
 				FollowTime:  &followTime2,
@@ -1590,7 +1590,7 @@ func TestExportStats_Increment(t *testing.T) {
 
 	stats.FixtureDefinitionsCount++
 	stats.FixtureInstancesCount += 5
-	stats.ScenesCount = 10
+	stats.LooksCount = 10
 	stats.CueListsCount++
 	stats.CuesCount = 25
 
@@ -1600,8 +1600,8 @@ func TestExportStats_Increment(t *testing.T) {
 	if stats.FixtureInstancesCount != 5 {
 		t.Errorf("Expected 5, got %d", stats.FixtureInstancesCount)
 	}
-	if stats.ScenesCount != 10 {
-		t.Errorf("Expected 10, got %d", stats.ScenesCount)
+	if stats.LooksCount != 10 {
+		t.Errorf("Expected 10, got %d", stats.LooksCount)
 	}
 	if stats.CueListsCount != 1 {
 		t.Errorf("Expected 1, got %d", stats.CueListsCount)
@@ -1623,7 +1623,7 @@ func TestService_NilRepos(t *testing.T) {
 	if service.fixtureRepo != nil {
 		t.Error("Expected nil fixtureRepo")
 	}
-	if service.sceneRepo != nil {
+	if service.lookRepo != nil {
 		t.Error("Expected nil sceneRepo")
 	}
 	if service.cueListRepo != nil {
@@ -1740,12 +1740,12 @@ func setupTestDB(t *testing.T) (*gorm.DB, func()) {
 		&models.ModeChannel{},
 		&models.FixtureInstance{},
 		&models.InstanceChannel{},
-		&models.Scene{},
+		&models.Look{},
 		&models.FixtureValue{},
 		&models.CueList{},
 		&models.Cue{},
-		&models.SceneBoard{},
-		&models.SceneBoardButton{},
+		&models.LookBoard{},
+		&models.LookBoardButton{},
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)
@@ -1767,11 +1767,11 @@ func TestExportProject_Integration_EmptyProject(t *testing.T) {
 
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
-	sceneRepo := repositories.NewSceneRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
 
-	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	service := NewService(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo)
 	ctx := context.Background()
 
 	// Create project
@@ -1804,11 +1804,11 @@ func TestExportProject_Integration_NotFound(t *testing.T) {
 
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
-	sceneRepo := repositories.NewSceneRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
 
-	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	service := NewService(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo)
 	ctx := context.Background()
 
 	// Export non-existent project
@@ -1830,11 +1830,11 @@ func TestExportProject_Integration_WithFixtures(t *testing.T) {
 
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
-	sceneRepo := repositories.NewSceneRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
 
-	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	service := NewService(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo)
 	ctx := context.Background()
 
 	// Create project
@@ -1943,21 +1943,21 @@ func TestExportProject_Integration_WithFixtures(t *testing.T) {
 	}
 }
 
-func TestExportProject_Integration_WithScenes(t *testing.T) {
+func TestExportProject_Integration_WithLooks(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
-	sceneRepo := repositories.NewSceneRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
 
-	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	service := NewService(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo)
 	ctx := context.Background()
 
 	// Create project
-	project := &models.Project{ID: cuid.New(), Name: "Scene Export Test"}
+	project := &models.Project{ID: cuid.New(), Name: "Look Export Test"}
 	_ = projectRepo.Create(ctx, project)
 
 	// Create definition and fixture
@@ -1973,24 +1973,24 @@ func TestExportProject_Integration_WithScenes(t *testing.T) {
 	}
 	_ = fixtureRepo.Create(ctx, fixture)
 
-	// Create scene with fixture values
-	sceneDesc := "Test scene description"
-	scene := &models.Scene{
+	// Create look with fixture values
+	lookDesc := "Test look description"
+	look := &models.Look{
 		ID:          cuid.New(),
-		Name:        "Test Scene",
-		Description: &sceneDesc,
+		Name:        "Test Look",
+		Description: &lookDesc,
 		ProjectID:   project.ID,
 	}
-	_ = sceneRepo.Create(ctx, scene)
+	_ = lookRepo.Create(ctx, look)
 
-	sceneOrder := 0
+	lookOrder := 0
 	fv := &models.FixtureValue{
-		SceneID:    scene.ID,
+		LookID:     look.ID,
 		FixtureID:  fixture.ID,
 		Channels:   `[{"offset":0,"value":255},{"offset":1,"value":128}]`,
-		SceneOrder: &sceneOrder,
+		LookOrder: &lookOrder,
 	}
-	_ = sceneRepo.CreateFixtureValue(ctx, fv)
+	_ = lookRepo.CreateFixtureValue(ctx, fv)
 
 	// Export with scenes
 	exported, stats, err := service.ExportProject(ctx, project.ID, true, true, false)
@@ -1998,19 +1998,19 @@ func TestExportProject_Integration_WithScenes(t *testing.T) {
 		t.Fatalf("ExportProject failed: %v", err)
 	}
 
-	if stats.ScenesCount != 1 {
-		t.Errorf("Expected 1 scene, got %d", stats.ScenesCount)
+	if stats.LooksCount != 1 {
+		t.Errorf("Expected 1 look, got %d", stats.LooksCount)
 	}
 
-	if len(exported.Scenes) != 1 {
-		t.Fatalf("Expected 1 scene in export, got %d", len(exported.Scenes))
+	if len(exported.Looks) != 1 {
+		t.Fatalf("Expected 1 look in export, got %d", len(exported.Looks))
 	}
-	expScene := exported.Scenes[0]
-	if expScene.Name != "Test Scene" {
-		t.Errorf("Expected scene name 'Test Scene', got '%s'", expScene.Name)
+	expLook := exported.Looks[0]
+	if expLook.Name != "Test Look" {
+		t.Errorf("Expected look name 'Test Look', got '%s'", expLook.Name)
 	}
-	if len(expScene.FixtureValues) != 1 {
-		t.Errorf("Expected 1 fixture value, got %d", len(expScene.FixtureValues))
+	if len(expLook.FixtureValues) != 1 {
+		t.Errorf("Expected 1 fixture value, got %d", len(expLook.FixtureValues))
 	}
 }
 
@@ -2020,20 +2020,20 @@ func TestExportProject_Integration_WithCueLists(t *testing.T) {
 
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
-	sceneRepo := repositories.NewSceneRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
 
-	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	service := NewService(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo)
 	ctx := context.Background()
 
 	// Create project
 	project := &models.Project{ID: cuid.New(), Name: "CueList Export Test"}
 	_ = projectRepo.Create(ctx, project)
 
-	// Create scene
-	scene := &models.Scene{ID: cuid.New(), Name: "Scene 1", ProjectID: project.ID}
-	_ = sceneRepo.Create(ctx, scene)
+	// Create look
+	look := &models.Look{ID: cuid.New(), Name: "Look 1", ProjectID: project.ID}
+	_ = lookRepo.Create(ctx, look)
 
 	// Create cue list
 	cueListDesc := "Main show"
@@ -2055,7 +2055,7 @@ func TestExportProject_Integration_WithCueLists(t *testing.T) {
 		Name:        "Cue 1",
 		CueNumber:   1.0,
 		CueListID:   cueList.ID,
-		SceneID:     scene.ID,
+		LookID:      look.ID,
 		FadeInTime:  2.0,
 		FadeOutTime: 1.0,
 		FollowTime:  &followTime,
@@ -2112,11 +2112,11 @@ func TestExportProject_Integration_SelectiveExport(t *testing.T) {
 
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
-	sceneRepo := repositories.NewSceneRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
 
-	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	service := NewService(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo)
 	ctx := context.Background()
 
 	// Create project with fixtures, scenes, cue lists
@@ -2128,8 +2128,8 @@ func TestExportProject_Integration_SelectiveExport(t *testing.T) {
 	fixture := &models.FixtureInstance{ID: cuid.New(), Name: "F1", ProjectID: project.ID, DefinitionID: def.ID, Universe: 1, StartChannel: 1}
 	_ = fixtureRepo.Create(ctx, fixture)
 
-	scene := &models.Scene{ID: cuid.New(), Name: "S1", ProjectID: project.ID}
-	_ = sceneRepo.Create(ctx, scene)
+	look := &models.Look{ID: cuid.New(), Name: "L1", ProjectID: project.ID}
+	_ = lookRepo.Create(ctx, look)
 
 	cueList := &models.CueList{ID: cuid.New(), Name: "CL1", ProjectID: project.ID}
 	_ = cueListRepo.Create(ctx, cueList)
@@ -2142,27 +2142,27 @@ func TestExportProject_Integration_SelectiveExport(t *testing.T) {
 	if stats.FixtureInstancesCount != 1 {
 		t.Errorf("Expected 1 fixture, got %d", stats.FixtureInstancesCount)
 	}
-	if stats.ScenesCount != 0 {
-		t.Errorf("Expected 0 scenes, got %d", stats.ScenesCount)
+	if stats.LooksCount != 0 {
+		t.Errorf("Expected 0 scenes, got %d", stats.LooksCount)
 	}
 	if stats.CueListsCount != 0 {
 		t.Errorf("Expected 0 cue lists, got %d", stats.CueListsCount)
 	}
-	if len(exported.Scenes) != 0 {
-		t.Errorf("Expected no scenes in export, got %d", len(exported.Scenes))
+	if len(exported.Looks) != 0 {
+		t.Errorf("Expected no scenes in export, got %d", len(exported.Looks))
 	}
 	if len(exported.CueLists) != 0 {
 		t.Errorf("Expected no cue lists in export, got %d", len(exported.CueLists))
 	}
 }
 
-// New tests for Scene Boards, Layout Fields, and Fade Behavior
+// New tests for Look Boards, Layout Fields, and Fade Behavior
 
-func TestExportedSceneBoard_AllFields(t *testing.T) {
-	desc := "Test scene board"
+func TestExportedLookBoard_AllFields(t *testing.T) {
+	desc := "Test look board"
 	gridSize := 50
 
-	board := ExportedSceneBoard{
+	board := ExportedLookBoard{
 		RefID:           "board-1",
 		OriginalID:      "orig-board-1",
 		Name:            "Main Board",
@@ -2171,10 +2171,10 @@ func TestExportedSceneBoard_AllFields(t *testing.T) {
 		GridSize:        &gridSize,
 		CanvasWidth:     2000,
 		CanvasHeight:    2000,
-		Buttons: []ExportedSceneBoardButton{
+		Buttons: []ExportedLookBoardButton{
 			{
 				OriginalID: "btn-1",
-				SceneRefID: "scene-1",
+				LookRefID: "look-1",
 				LayoutX:    100,
 				LayoutY:    200,
 			},
@@ -2189,7 +2189,7 @@ func TestExportedSceneBoard_AllFields(t *testing.T) {
 	if board.Name != "Main Board" {
 		t.Errorf("Expected 'Main Board', got '%s'", board.Name)
 	}
-	if board.Description == nil || *board.Description != "Test scene board" {
+	if board.Description == nil || *board.Description != "Test look board" {
 		t.Error("Expected description")
 	}
 	if board.DefaultFadeTime != 3.0 {
@@ -2206,15 +2206,15 @@ func TestExportedSceneBoard_AllFields(t *testing.T) {
 	}
 }
 
-func TestExportedSceneBoardButton_AllFields(t *testing.T) {
+func TestExportedLookBoardButton_AllFields(t *testing.T) {
 	width := 200
 	height := 120
 	color := "#FF0000"
 	label := "Test Button"
 
-	btn := ExportedSceneBoardButton{
+	btn := ExportedLookBoardButton{
 		OriginalID: "btn-1",
-		SceneRefID: "scene-1",
+		LookRefID: "look-1",
 		LayoutX:    100,
 		LayoutY:    200,
 		Width:      &width,
@@ -2228,8 +2228,8 @@ func TestExportedSceneBoardButton_AllFields(t *testing.T) {
 	if btn.OriginalID != "btn-1" {
 		t.Errorf("Expected 'btn-1', got '%s'", btn.OriginalID)
 	}
-	if btn.SceneRefID != "scene-1" {
-		t.Errorf("Expected 'scene-1', got '%s'", btn.SceneRefID)
+	if btn.LookRefID != "look-1" {
+		t.Errorf("Expected 'look-1', got '%s'", btn.LookRefID)
 	}
 	if btn.LayoutX != 100 {
 		t.Errorf("Expected 100, got %d", btn.LayoutX)
@@ -2323,22 +2323,22 @@ func TestExportedInstanceChannel_FadeBehaviorFields(t *testing.T) {
 	}
 }
 
-func TestExportStats_SceneBoardsCount(t *testing.T) {
+func TestExportStats_LookBoardsCount(t *testing.T) {
 	stats := &ExportStats{
 		FixtureDefinitionsCount: 5,
 		FixtureInstancesCount:   10,
-		ScenesCount:             8,
+		LooksCount:             8,
 		CueListsCount:           2,
 		CuesCount:               15,
-		SceneBoardsCount:        3,
+		LookBoardsCount:        3,
 	}
 
-	if stats.SceneBoardsCount != 3 {
-		t.Errorf("Expected 3, got %d", stats.SceneBoardsCount)
+	if stats.LookBoardsCount != 3 {
+		t.Errorf("Expected 3, got %d", stats.LookBoardsCount)
 	}
 }
 
-func TestExportedProject_WithSceneBoards_ToJSON(t *testing.T) {
+func TestExportedProject_WithLookBoards_ToJSON(t *testing.T) {
 	gridSize := 50
 	width := 200
 	height := 120
@@ -2349,7 +2349,7 @@ func TestExportedProject_WithSceneBoards_ToJSON(t *testing.T) {
 			OriginalID: "proj-123",
 			Name:       "Test Project",
 		},
-		SceneBoards: []ExportedSceneBoard{
+		LookBoards: []ExportedLookBoard{
 			{
 				RefID:           "board-1",
 				Name:            "Main Board",
@@ -2357,9 +2357,9 @@ func TestExportedProject_WithSceneBoards_ToJSON(t *testing.T) {
 				GridSize:        &gridSize,
 				CanvasWidth:     2000,
 				CanvasHeight:    2000,
-				Buttons: []ExportedSceneBoardButton{
+				Buttons: []ExportedLookBoardButton{
 					{
-						SceneRefID: "scene-1",
+						LookRefID: "look-1",
 						LayoutX:    100,
 						LayoutY:    200,
 						Width:      &width,
@@ -2375,9 +2375,9 @@ func TestExportedProject_WithSceneBoards_ToJSON(t *testing.T) {
 		t.Fatalf("ToJSON() error: %v", err)
 	}
 
-	// Verify scene boards are in JSON
-	if !strings.Contains(jsonStr, "sceneBoards") {
-		t.Error("Expected sceneBoards in JSON")
+	// Verify look boards are in JSON
+	if !strings.Contains(jsonStr, "lookBoards") {
+		t.Error("Expected lookBoards in JSON")
 	}
 	if !strings.Contains(jsonStr, "Main Board") {
 		t.Error("Expected 'Main Board' in JSON")
@@ -2392,14 +2392,14 @@ func TestExportedProject_WithSceneBoards_ToJSON(t *testing.T) {
 		t.Fatalf("ParseExportedProject() error: %v", err)
 	}
 
-	if len(parsed.SceneBoards) != 1 {
-		t.Errorf("Expected 1 scene board, got %d", len(parsed.SceneBoards))
+	if len(parsed.LookBoards) != 1 {
+		t.Errorf("Expected 1 look board, got %d", len(parsed.LookBoards))
 	}
-	if parsed.SceneBoards[0].Name != "Main Board" {
-		t.Errorf("Expected 'Main Board', got '%s'", parsed.SceneBoards[0].Name)
+	if parsed.LookBoards[0].Name != "Main Board" {
+		t.Errorf("Expected 'Main Board', got '%s'", parsed.LookBoards[0].Name)
 	}
-	if len(parsed.SceneBoards[0].Buttons) != 1 {
-		t.Errorf("Expected 1 button, got %d", len(parsed.SceneBoards[0].Buttons))
+	if len(parsed.LookBoards[0].Buttons) != 1 {
+		t.Errorf("Expected 1 button, got %d", len(parsed.LookBoards[0].Buttons))
 	}
 }
 
@@ -2409,11 +2409,11 @@ func TestExportProject_WithFadeBehavior_Integration(t *testing.T) {
 
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
-	sceneRepo := repositories.NewSceneRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
 
-	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	service := NewService(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo)
 	ctx := context.Background()
 
 	// Create project
@@ -2483,11 +2483,11 @@ func TestExportProject_WithLayoutFields_Integration(t *testing.T) {
 
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
-	sceneRepo := repositories.NewSceneRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
 
-	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	service := NewService(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo)
 	ctx := context.Background()
 
 	// Create project
@@ -2544,57 +2544,57 @@ func TestExportProject_WithLayoutFields_Integration(t *testing.T) {
 	}
 }
 
-func TestNewServiceWithSceneBoards(t *testing.T) {
+func TestNewServiceWithLookBoards(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
-	sceneRepo := repositories.NewSceneRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
-	sceneBoardRepo := repositories.NewSceneBoardRepository(db)
+	lookBoardRepo := repositories.NewLookBoardRepository(db)
 
-	service := NewServiceWithSceneBoards(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo, sceneBoardRepo)
+	service := NewServiceWithLookBoards(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo)
 
 	if service == nil {
-		t.Fatal("Expected NewServiceWithSceneBoards to return non-nil service")
+		t.Fatal("Expected NewServiceWithLookBoards to return non-nil service")
 	}
-	if service.sceneBoardRepo == nil {
-		t.Error("Expected sceneBoardRepo to be set")
+	if service.lookBoardRepo == nil {
+		t.Error("Expected lookBoardRepo to be set")
 	}
 }
 
-func TestExportProject_WithSceneBoards_Integration(t *testing.T) {
+func TestExportProject_WithLookBoards_Integration(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
-	sceneRepo := repositories.NewSceneRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
-	sceneBoardRepo := repositories.NewSceneBoardRepository(db)
+	lookBoardRepo := repositories.NewLookBoardRepository(db)
 
-	service := NewServiceWithSceneBoards(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo, sceneBoardRepo)
+	service := NewServiceWithLookBoards(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo)
 	ctx := context.Background()
 
 	// Create project
-	project := &models.Project{ID: cuid.New(), Name: "Scene Board Test"}
+	project := &models.Project{ID: cuid.New(), Name: "Look Board Test"}
 	_ = projectRepo.Create(ctx, project)
 
-	// Create a scene
-	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
-	_ = sceneRepo.Create(ctx, scene)
+	// Create a look
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	_ = lookRepo.Create(ctx, look)
 
-	// Create scene board with buttons
+	// Create look board with buttons
 	gridSize := 50
 	width := 200
 	height := 120
 	color := "#FF0000"
 	label := "Test"
 
-	board := &models.SceneBoard{
+	board := &models.LookBoard{
 		ID:              cuid.New(),
 		Name:            "Main Board",
 		ProjectID:       project.ID,
@@ -2603,10 +2603,10 @@ func TestExportProject_WithSceneBoards_Integration(t *testing.T) {
 		CanvasWidth:     2000,
 		CanvasHeight:    2000,
 	}
-	buttons := []models.SceneBoardButton{
+	buttons := []models.LookBoardButton{
 		{
 			ID:      cuid.New(),
-			SceneID: scene.ID,
+			LookID: look.ID,
 			LayoutX: 100,
 			LayoutY: 200,
 			Width:   &width,
@@ -2615,23 +2615,23 @@ func TestExportProject_WithSceneBoards_Integration(t *testing.T) {
 			Label:   &label,
 		},
 	}
-	_ = sceneBoardRepo.CreateWithButtons(ctx, board, buttons)
+	_ = lookBoardRepo.CreateWithButtons(ctx, board, buttons)
 
-	// Export with scene boards (default: true)
+	// Export with look boards (default: true)
 	exported, stats, err := service.ExportProject(ctx, project.ID, true, true, true)
 	if err != nil {
 		t.Fatalf("ExportProject failed: %v", err)
 	}
 
-	// Verify scene boards are exported
-	if stats.SceneBoardsCount != 1 {
-		t.Errorf("Expected 1 scene board, got %d", stats.SceneBoardsCount)
+	// Verify look boards are exported
+	if stats.LookBoardsCount != 1 {
+		t.Errorf("Expected 1 look board, got %d", stats.LookBoardsCount)
 	}
-	if len(exported.SceneBoards) != 1 {
-		t.Fatalf("Expected 1 scene board in export, got %d", len(exported.SceneBoards))
+	if len(exported.LookBoards) != 1 {
+		t.Fatalf("Expected 1 look board in export, got %d", len(exported.LookBoards))
 	}
 
-	expBoard := exported.SceneBoards[0]
+	expBoard := exported.LookBoards[0]
 	if expBoard.Name != "Main Board" {
 		t.Errorf("Expected 'Main Board', got '%s'", expBoard.Name)
 	}
@@ -2647,8 +2647,8 @@ func TestExportProject_WithSceneBoards_Integration(t *testing.T) {
 	}
 
 	expBtn := expBoard.Buttons[0]
-	if expBtn.SceneRefID != scene.ID {
-		t.Errorf("Expected SceneRefID '%s', got '%s'", scene.ID, expBtn.SceneRefID)
+	if expBtn.LookRefID != look.ID {
+		t.Errorf("Expected LookRefID '%s', got '%s'", look.ID, expBtn.LookRefID)
 	}
 	if expBtn.LayoutX != 100 {
 		t.Errorf("Expected LayoutX 100, got %d", expBtn.LayoutX)
@@ -2664,56 +2664,56 @@ func TestExportProject_WithSceneBoards_Integration(t *testing.T) {
 	}
 }
 
-func TestExportProject_ExcludeSceneBoards_Integration(t *testing.T) {
+func TestExportProject_ExcludeLookBoards_Integration(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
-	sceneRepo := repositories.NewSceneRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
-	sceneBoardRepo := repositories.NewSceneBoardRepository(db)
+	lookBoardRepo := repositories.NewLookBoardRepository(db)
 
-	service := NewServiceWithSceneBoards(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo, sceneBoardRepo)
+	service := NewServiceWithLookBoards(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo)
 	ctx := context.Background()
 
 	// Create project
-	project := &models.Project{ID: cuid.New(), Name: "Exclude Scene Boards Test"}
+	project := &models.Project{ID: cuid.New(), Name: "Exclude Look Boards Test"}
 	_ = projectRepo.Create(ctx, project)
 
-	// Create a scene
-	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
-	_ = sceneRepo.Create(ctx, scene)
+	// Create a look
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	_ = lookRepo.Create(ctx, look)
 
-	// Create scene board with button
-	board := &models.SceneBoard{
+	// Create look board with button
+	board := &models.LookBoard{
 		ID:        cuid.New(),
 		Name:      "Should Be Excluded",
 		ProjectID: project.ID,
 	}
-	buttons := []models.SceneBoardButton{
-		{ID: cuid.New(), SceneID: scene.ID, LayoutX: 100, LayoutY: 200},
+	buttons := []models.LookBoardButton{
+		{ID: cuid.New(), LookID: look.ID, LayoutX: 100, LayoutY: 200},
 	}
-	_ = sceneBoardRepo.CreateWithButtons(ctx, board, buttons)
+	_ = lookBoardRepo.CreateWithButtons(ctx, board, buttons)
 
-	// Export with scene boards explicitly excluded (false)
+	// Export with look boards explicitly excluded (false)
 	exported, stats, err := service.ExportProject(ctx, project.ID, true, true, true, false)
 	if err != nil {
 		t.Fatalf("ExportProject failed: %v", err)
 	}
 
-	// Verify scene boards are NOT exported
-	if stats.SceneBoardsCount != 0 {
-		t.Errorf("Expected 0 scene boards, got %d", stats.SceneBoardsCount)
+	// Verify look boards are NOT exported
+	if stats.LookBoardsCount != 0 {
+		t.Errorf("Expected 0 look boards, got %d", stats.LookBoardsCount)
 	}
-	if len(exported.SceneBoards) != 0 {
-		t.Errorf("Expected 0 scene boards in export, got %d", len(exported.SceneBoards))
+	if len(exported.LookBoards) != 0 {
+		t.Errorf("Expected 0 look boards in export, got %d", len(exported.LookBoards))
 	}
 
-	// Scenes should still be exported
-	if stats.ScenesCount == 0 {
-		t.Error("Expected scenes to be exported")
+	// Looks should still be exported
+	if stats.LooksCount == 0 {
+		t.Error("Expected looks to be exported")
 	}
 }
 
@@ -2723,11 +2723,11 @@ func TestExportProject_ModeRefID_Integration(t *testing.T) {
 
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
-	sceneRepo := repositories.NewSceneRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
 
-	service := NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	service := NewService(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo)
 	ctx := context.Background()
 
 	// Create project

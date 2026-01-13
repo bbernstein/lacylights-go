@@ -144,7 +144,7 @@ func serializeSparseChannels(channels []*generated.ChannelValueInput) (string, e
 }
 
 // sparseChannelsToDenseArray converts sparse channel JSON to a dense int array.
-// Used for backward-compatible output like CompareScenes.
+// Used for backward-compatible output like CompareLooks.
 // The resulting array is sized to (maxOffset + 1), which is bounded by DMX constraints
 // (max 512 channels per fixture). For sparse data with high offsets, this may create
 // arrays with many zero-value elements.
@@ -234,39 +234,39 @@ func sparseChannelsEqual(channelsJSON1, channelsJSON2 string) bool {
 	return true
 }
 
-// reapplyActiveSceneIfNeeded checks if the given scene is currently active and
+// reapplyActiveLookIfNeeded checks if the given look is currently active and
 // if so, re-applies its DMX values immediately. This ensures that when an active
-// scene is edited and saved, the changes are immediately reflected in the DMX output.
-// Returns nil if the scene is not active or if the scene was successfully re-applied.
+// look is edited and saved, the changes are immediately reflected in the DMX output.
+// Returns nil if the look is not active or if the look was successfully re-applied.
 //
 // Note: This function uses immediate channel updates (no fade) because when editing
-// a scene, users expect to see their changes reflected instantly. This differs from
-// ActivateSceneFromBoard which uses the fade engine for smooth transitions.
+// a look, users expect to see their changes reflected instantly. This differs from
+// ActivateLookFromBoard which uses the fade engine for smooth transitions.
 //
-// Note: There is a potential race condition between checking the active scene ID and
-// reloading the scene data. If another operation changes the active scene between these
-// operations, we may apply the wrong scene. This is acceptable because:
-// 1. The scene update has already been persisted successfully
-// 2. This is a best-effort UX improvement - the scene data will still be correct
+// Note: There is a potential race condition between checking the active look ID and
+// reloading the look data. If another operation changes the active look between these
+// operations, we may apply the wrong look. This is acceptable because:
+// 1. The look update has already been persisted successfully
+// 2. This is a best-effort UX improvement - the look data will still be correct
 // 3. The likelihood of this race is very low in practice
-func (r *Resolver) reapplyActiveSceneIfNeeded(ctx context.Context, sceneID string) error {
-	// Check if this scene is currently active
-	activeSceneID := r.DMXService.GetActiveSceneID()
-	if activeSceneID == nil || *activeSceneID != sceneID {
-		// Scene is not active, nothing to do
+func (r *Resolver) reapplyActiveLookIfNeeded(ctx context.Context, lookID string) error {
+	// Check if this look is currently active
+	activeLookID := r.DMXService.GetActiveLookID()
+	if activeLookID == nil || *activeLookID != lookID {
+		// Look is not active, nothing to do
 		return nil
 	}
 
-	// Scene is active - reload and re-apply its DMX values
-	var scene models.Scene
-	result := r.db.WithContext(ctx).Preload("FixtureValues").First(&scene, "id = ?", sceneID)
+	// Look is active - reload and re-apply its DMX values
+	var look models.Look
+	result := r.db.WithContext(ctx).Preload("FixtureValues").First(&look, "id = ?", lookID)
 	if result.Error != nil {
-		return fmt.Errorf("failed to reload scene: %w", result.Error)
+		return fmt.Errorf("failed to reload look: %w", result.Error)
 	}
 
-	// Load fixtures for the scene's fixture values
+	// Load fixtures for the look's fixture values
 	var fixtureIDs []string
-	for _, fv := range scene.FixtureValues {
+	for _, fv := range look.FixtureValues {
 		fixtureIDs = append(fixtureIDs, fv.FixtureID)
 	}
 
@@ -282,7 +282,7 @@ func (r *Resolver) reapplyActiveSceneIfNeeded(ctx context.Context, sceneID strin
 	}
 
 	// Set channel values directly (no fade, immediate update)
-	for _, fixtureValue := range scene.FixtureValues {
+	for _, fixtureValue := range look.FixtureValues {
 		fixture := fixtureMap[fixtureValue.FixtureID]
 		if fixture == nil {
 			continue
@@ -291,7 +291,7 @@ func (r *Resolver) reapplyActiveSceneIfNeeded(ctx context.Context, sceneID strin
 		// Parse sparse channel values from JSON
 		var channels []models.ChannelValue
 		if err := json.Unmarshal([]byte(fixtureValue.Channels), &channels); err != nil {
-			log.Printf("Warning: failed to unmarshal channels for fixtureID %s in sceneID %s: %v", fixtureValue.FixtureID, sceneID, err)
+			log.Printf("Warning: failed to unmarshal channels for fixtureID %s in lookID %s: %v", fixtureValue.FixtureID, lookID, err)
 			continue
 		}
 
@@ -311,6 +311,6 @@ func (r *Resolver) reapplyActiveSceneIfNeeded(ctx context.Context, sceneID strin
 	// Force immediate transmission
 	r.DMXService.TriggerChangeDetection()
 
-	log.Printf("Re-applied active scene %s after update", sceneID)
+	log.Printf("Re-applied active look %s after update", lookID)
 	return nil
 }

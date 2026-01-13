@@ -18,7 +18,7 @@ type TestDB struct {
 	DB          *gorm.DB
 	ProjectRepo *repositories.ProjectRepository
 	FixtureRepo *repositories.FixtureRepository
-	SceneRepo   *repositories.SceneRepository
+	LookRepo    *repositories.LookRepository
 	CueListRepo *repositories.CueListRepository
 	CueRepo     *repositories.CueRepository
 }
@@ -45,12 +45,12 @@ func SetupTestDB(t *testing.T) (*TestDB, func()) {
 		&models.ModeChannel{},
 		&models.FixtureInstance{},
 		&models.InstanceChannel{},
-		&models.Scene{},
+		&models.Look{},
 		&models.FixtureValue{},
 		&models.CueList{},
 		&models.Cue{},
-		&models.SceneBoard{},
-		&models.SceneBoardButton{},
+		&models.LookBoard{},
+		&models.LookBoardButton{},
 		&models.Setting{},
 	)
 	if err != nil {
@@ -62,7 +62,7 @@ func SetupTestDB(t *testing.T) (*TestDB, func()) {
 		DB:          db,
 		ProjectRepo: repositories.NewProjectRepository(db),
 		FixtureRepo: repositories.NewFixtureRepository(db),
-		SceneRepo:   repositories.NewSceneRepository(db),
+		LookRepo:    repositories.NewLookRepository(db),
 		CueListRepo: repositories.NewCueListRepository(db),
 		CueRepo:     repositories.NewCueRepository(db),
 	}

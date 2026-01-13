@@ -86,43 +86,43 @@ type BulkFixtureUpdateInput struct {
 	Fixtures []*FixtureUpdateItem `json:"fixtures"`
 }
 
+type BulkLookBoardButtonCreateInput struct {
+	Buttons []*CreateLookBoardButtonInput `json:"buttons"`
+}
+
+type BulkLookBoardButtonUpdateInput struct {
+	Buttons []*LookBoardButtonUpdateItem `json:"buttons"`
+}
+
+type BulkLookBoardCreateInput struct {
+	LookBoards []*CreateLookBoardInput `json:"lookBoards"`
+}
+
+type BulkLookBoardUpdateInput struct {
+	LookBoards []*LookBoardUpdateItem `json:"lookBoards"`
+}
+
+type BulkLookCreateInput struct {
+	Looks []*CreateLookInput `json:"looks"`
+}
+
+// Updates multiple looks with partial fixture value merging support.
+// Each look can independently specify name, description, fixtureValues, and mergeFixtures.
+// Operations are applied in order and fail on first error.
+type BulkLookPartialUpdateInput struct {
+	Looks []*LookPartialUpdateItem `json:"looks"`
+}
+
+type BulkLookUpdateInput struct {
+	Looks []*LookUpdateItem `json:"looks"`
+}
+
 type BulkProjectCreateInput struct {
 	Projects []*CreateProjectInput `json:"projects"`
 }
 
 type BulkProjectUpdateInput struct {
 	Projects []*ProjectUpdateItem `json:"projects"`
-}
-
-type BulkSceneBoardButtonCreateInput struct {
-	Buttons []*CreateSceneBoardButtonInput `json:"buttons"`
-}
-
-type BulkSceneBoardButtonUpdateInput struct {
-	Buttons []*SceneBoardButtonUpdateItem `json:"buttons"`
-}
-
-type BulkSceneBoardCreateInput struct {
-	SceneBoards []*CreateSceneBoardInput `json:"sceneBoards"`
-}
-
-type BulkSceneBoardUpdateInput struct {
-	SceneBoards []*SceneBoardUpdateItem `json:"sceneBoards"`
-}
-
-type BulkSceneCreateInput struct {
-	Scenes []*CreateSceneInput `json:"scenes"`
-}
-
-// Updates multiple scenes with partial fixture value merging support.
-// Each scene can independently specify name, description, fixtureValues, and mergeFixtures.
-// Operations are applied in order and fail on first error.
-type BulkScenePartialUpdateInput struct {
-	Scenes []*ScenePartialUpdateItem `json:"scenes"`
-}
-
-type BulkSceneUpdateInput struct {
-	Scenes []*SceneUpdateItem `json:"scenes"`
 }
 
 type ChannelAssignmentInput struct {
@@ -184,7 +184,7 @@ type CreateCueInput struct {
 	Name        string                         `json:"name"`
 	CueNumber   float64                        `json:"cueNumber"`
 	CueListID   string                         `json:"cueListId"`
-	SceneID     string                         `json:"sceneId"`
+	LookID      string                         `json:"lookId"`
 	FadeInTime  float64                        `json:"fadeInTime"`
 	FadeOutTime float64                        `json:"fadeOutTime"`
 	FollowTime  graphql.Omittable[*float64]    `json:"followTime,omitempty"`
@@ -220,6 +220,34 @@ type CreateFixtureInstanceInput struct {
 	Tags         graphql.Omittable[[]string] `json:"tags,omitempty"`
 }
 
+type CreateLookBoardButtonInput struct {
+	LookBoardID string                     `json:"lookBoardId"`
+	LookID      string                     `json:"lookId"`
+	LayoutX     int                        `json:"layoutX"`
+	LayoutY     int                        `json:"layoutY"`
+	Width       graphql.Omittable[*int]    `json:"width,omitempty"`
+	Height      graphql.Omittable[*int]    `json:"height,omitempty"`
+	Color       graphql.Omittable[*string] `json:"color,omitempty"`
+	Label       graphql.Omittable[*string] `json:"label,omitempty"`
+}
+
+type CreateLookBoardInput struct {
+	Name            string                      `json:"name"`
+	Description     graphql.Omittable[*string]  `json:"description,omitempty"`
+	ProjectID       string                      `json:"projectId"`
+	DefaultFadeTime graphql.Omittable[*float64] `json:"defaultFadeTime,omitempty"`
+	GridSize        graphql.Omittable[*int]     `json:"gridSize,omitempty"`
+	CanvasWidth     graphql.Omittable[*int]     `json:"canvasWidth,omitempty"`
+	CanvasHeight    graphql.Omittable[*int]     `json:"canvasHeight,omitempty"`
+}
+
+type CreateLookInput struct {
+	Name          string                     `json:"name"`
+	Description   graphql.Omittable[*string] `json:"description,omitempty"`
+	ProjectID     string                     `json:"projectId"`
+	FixtureValues []*FixtureValueInput       `json:"fixtureValues"`
+}
+
 type CreateModeInput struct {
 	Name      string                     `json:"name"`
 	ShortName graphql.Omittable[*string] `json:"shortName,omitempty"`
@@ -233,44 +261,16 @@ type CreateProjectInput struct {
 	LayoutCanvasHeight graphql.Omittable[*int]    `json:"layoutCanvasHeight,omitempty"`
 }
 
-type CreateSceneBoardButtonInput struct {
-	SceneBoardID string                     `json:"sceneBoardId"`
-	SceneID      string                     `json:"sceneId"`
-	LayoutX      int                        `json:"layoutX"`
-	LayoutY      int                        `json:"layoutY"`
-	Width        graphql.Omittable[*int]    `json:"width,omitempty"`
-	Height       graphql.Omittable[*int]    `json:"height,omitempty"`
-	Color        graphql.Omittable[*string] `json:"color,omitempty"`
-	Label        graphql.Omittable[*string] `json:"label,omitempty"`
-}
-
-type CreateSceneBoardInput struct {
-	Name            string                      `json:"name"`
-	Description     graphql.Omittable[*string]  `json:"description,omitempty"`
-	ProjectID       string                      `json:"projectId"`
-	DefaultFadeTime graphql.Omittable[*float64] `json:"defaultFadeTime,omitempty"`
-	GridSize        graphql.Omittable[*int]     `json:"gridSize,omitempty"`
-	CanvasWidth     graphql.Omittable[*int]     `json:"canvasWidth,omitempty"`
-	CanvasHeight    graphql.Omittable[*int]     `json:"canvasHeight,omitempty"`
-}
-
-type CreateSceneInput struct {
-	Name          string                     `json:"name"`
-	Description   graphql.Omittable[*string] `json:"description,omitempty"`
-	ProjectID     string                     `json:"projectId"`
-	FixtureValues []*FixtureValueInput       `json:"fixtureValues"`
-}
-
 // Payload for cue list data change notifications
 type CueListDataChangedPayload struct {
 	CueListID  string                `json:"cueListId"`
 	ChangeType CueListDataChangeType `json:"changeType"`
 	// Affected cue IDs (for cue changes)
 	AffectedCueIds []string `json:"affectedCueIds,omitempty"`
-	// Affected scene ID (for scene name changes)
-	AffectedSceneID *string `json:"affectedSceneId,omitempty"`
-	// New scene name if this is a SCENE_NAME_CHANGED event
-	NewSceneName *string `json:"newSceneName,omitempty"`
+	// Affected look ID (for look name changes)
+	AffectedLookID *string `json:"affectedLookId,omitempty"`
+	// New look name if this is a LOOK_NAME_CHANGED event
+	NewLookName *string `json:"newLookName,omitempty"`
 	// Timestamp of the change
 	Timestamp string `json:"timestamp"`
 }
@@ -278,9 +278,9 @@ type CueListDataChangedPayload struct {
 type CueListPlaybackStatus struct {
 	CueListID       string `json:"cueListId"`
 	CurrentCueIndex *int   `json:"currentCueIndex,omitempty"`
-	// True when a scene's values are currently active on DMX fixtures (stays true after fade completes until stopped)
+	// True when a look's values are currently active on DMX fixtures (stays true after fade completes until stopped)
 	IsPlaying bool `json:"isPlaying"`
-	// True when the cue list is paused (scene activated outside cue context, cue index preserved)
+	// True when the cue list is paused (look activated outside cue context, cue index preserved)
 	IsPaused bool `json:"isPaused"`
 	// True when a fade-in transition is in progress
 	IsFading     bool        `json:"isFading"`
@@ -329,7 +329,7 @@ type CueUsageSummary struct {
 type ExportOptionsInput struct {
 	Description     graphql.Omittable[*string] `json:"description,omitempty"`
 	IncludeFixtures graphql.Omittable[*bool]   `json:"includeFixtures,omitempty"`
-	IncludeScenes   graphql.Omittable[*bool]   `json:"includeScenes,omitempty"`
+	IncludeLooks    graphql.Omittable[*bool]   `json:"includeLooks,omitempty"`
 	IncludeCueLists graphql.Omittable[*bool]   `json:"includeCueLists,omitempty"`
 }
 
@@ -343,10 +343,10 @@ type ExportResult struct {
 type ExportStats struct {
 	FixtureDefinitionsCount int `json:"fixtureDefinitionsCount"`
 	FixtureInstancesCount   int `json:"fixtureInstancesCount"`
-	ScenesCount             int `json:"scenesCount"`
+	LooksCount              int `json:"looksCount"`
 	CueListsCount           int `json:"cueListsCount"`
 	CuesCount               int `json:"cuesCount"`
-	SceneBoardsCount        int `json:"sceneBoardsCount"`
+	LookBoardsCount         int `json:"lookBoardsCount"`
 }
 
 type FixtureChannelAssignment struct {
@@ -442,21 +442,21 @@ type FixtureUpdateItem struct {
 type FixtureUsage struct {
 	FixtureID   string             `json:"fixtureId"`
 	FixtureName string             `json:"fixtureName"`
-	Scenes      []*SceneSummary    `json:"scenes"`
+	Looks       []*LookSummary     `json:"looks"`
 	Cues        []*CueUsageSummary `json:"cues"`
 }
 
 type FixtureValueInput struct {
-	FixtureID  string                  `json:"fixtureId"`
-	Channels   []*ChannelValueInput    `json:"channels"`
-	SceneOrder graphql.Omittable[*int] `json:"sceneOrder,omitempty"`
+	FixtureID string                  `json:"fixtureId"`
+	Channels  []*ChannelValueInput    `json:"channels"`
+	LookOrder graphql.Omittable[*int] `json:"lookOrder,omitempty"`
 }
 
 // Global playback status - returns which cue list is currently playing or paused (if any)
 type GlobalPlaybackStatus struct {
 	// True if any cue list is currently playing
 	IsPlaying bool `json:"isPlaying"`
-	// True if a cue list is paused (scene activated outside cue context)
+	// True if a cue list is paused (look activated outside cue context)
 	IsPaused bool `json:"isPaused"`
 	// True if a fade transition is in progress
 	IsFading bool `json:"isFading"`
@@ -498,15 +498,106 @@ type ImportResult struct {
 type ImportStats struct {
 	FixtureDefinitionsCreated int `json:"fixtureDefinitionsCreated"`
 	FixtureInstancesCreated   int `json:"fixtureInstancesCreated"`
-	ScenesCreated             int `json:"scenesCreated"`
+	LooksCreated              int `json:"looksCreated"`
 	CueListsCreated           int `json:"cueListsCreated"`
 	CuesCreated               int `json:"cuesCreated"`
-	SceneBoardsCreated        int `json:"sceneBoardsCreated"`
+	LookBoardsCreated         int `json:"lookBoardsCreated"`
 }
 
 type LacyLightsFixture struct {
 	Manufacturer string `json:"manufacturer"`
 	Model        string `json:"model"`
+}
+
+type LookBoardButtonPositionInput struct {
+	ButtonID string `json:"buttonId"`
+	LayoutX  int    `json:"layoutX"`
+	LayoutY  int    `json:"layoutY"`
+}
+
+type LookBoardButtonUpdateItem struct {
+	ButtonID string                     `json:"buttonId"`
+	LayoutX  graphql.Omittable[*int]    `json:"layoutX,omitempty"`
+	LayoutY  graphql.Omittable[*int]    `json:"layoutY,omitempty"`
+	Width    graphql.Omittable[*int]    `json:"width,omitempty"`
+	Height   graphql.Omittable[*int]    `json:"height,omitempty"`
+	Color    graphql.Omittable[*string] `json:"color,omitempty"`
+	Label    graphql.Omittable[*string] `json:"label,omitempty"`
+}
+
+type LookBoardUpdateItem struct {
+	LookBoardID     string                      `json:"lookBoardId"`
+	Name            graphql.Omittable[*string]  `json:"name,omitempty"`
+	Description     graphql.Omittable[*string]  `json:"description,omitempty"`
+	DefaultFadeTime graphql.Omittable[*float64] `json:"defaultFadeTime,omitempty"`
+	GridSize        graphql.Omittable[*int]     `json:"gridSize,omitempty"`
+	CanvasWidth     graphql.Omittable[*int]     `json:"canvasWidth,omitempty"`
+	CanvasHeight    graphql.Omittable[*int]     `json:"canvasHeight,omitempty"`
+}
+
+type LookComparison struct {
+	Look1                 LookSummary       `json:"look1"`
+	Look2                 LookSummary       `json:"look2"`
+	Differences           []*LookDifference `json:"differences"`
+	IdenticalFixtureCount int               `json:"identicalFixtureCount"`
+	DifferentFixtureCount int               `json:"differentFixtureCount"`
+}
+
+type LookDifference struct {
+	FixtureID      string         `json:"fixtureId"`
+	FixtureName    string         `json:"fixtureName"`
+	DifferenceType DifferenceType `json:"differenceType"`
+	Look1Values    []int          `json:"look1Values,omitempty"`
+	Look2Values    []int          `json:"look2Values,omitempty"`
+}
+
+type LookFilterInput struct {
+	NameContains graphql.Omittable[*string] `json:"nameContains,omitempty"`
+	UsesFixture  graphql.Omittable[*string] `json:"usesFixture,omitempty"`
+}
+
+type LookFixtureSummary struct {
+	FixtureID   string      `json:"fixtureId"`
+	FixtureName string      `json:"fixtureName"`
+	FixtureType FixtureType `json:"fixtureType"`
+}
+
+type LookPage struct {
+	Looks      []*LookSummary `json:"looks"`
+	Pagination PaginationInfo `json:"pagination"`
+}
+
+// Partial update for a single look in a bulk operation.
+// When mergeFixtures is true (default), only specified fixtures are updated.
+// When false, all existing fixtures are replaced with the provided list.
+type LookPartialUpdateItem struct {
+	LookID        string                                  `json:"lookId"`
+	Name          graphql.Omittable[*string]              `json:"name,omitempty"`
+	Description   graphql.Omittable[*string]              `json:"description,omitempty"`
+	FixtureValues graphql.Omittable[[]*FixtureValueInput] `json:"fixtureValues,omitempty"`
+	// When true (default), only specified fixtures are updated. When false, replaces all fixtures.
+	MergeFixtures graphql.Omittable[*bool] `json:"mergeFixtures,omitempty"`
+}
+
+type LookSummary struct {
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Description  *string `json:"description,omitempty"`
+	FixtureCount int     `json:"fixtureCount"`
+	CreatedAt    string  `json:"createdAt"`
+	UpdatedAt    string  `json:"updatedAt"`
+}
+
+type LookUpdateItem struct {
+	LookID      string                     `json:"lookId"`
+	Name        graphql.Omittable[*string] `json:"name,omitempty"`
+	Description graphql.Omittable[*string] `json:"description,omitempty"`
+}
+
+type LookUsage struct {
+	LookID   string             `json:"lookId"`
+	LookName string             `json:"lookName"`
+	Cues     []*CueUsageSummary `json:"cues"`
 }
 
 type Mutation struct {
@@ -644,7 +735,7 @@ type QLCExportResult struct {
 	ProjectName  string `json:"projectName"`
 	XMLContent   string `json:"xmlContent"`
 	FixtureCount int    `json:"fixtureCount"`
-	SceneCount   int    `json:"sceneCount"`
+	LookCount    int    `json:"lookCount"`
 	CueListCount int    `json:"cueListCount"`
 }
 
@@ -671,7 +762,7 @@ type QLCImportResult struct {
 	Project          models.Project `json:"project"`
 	OriginalFileName string         `json:"originalFileName"`
 	FixtureCount     int            `json:"fixtureCount"`
-	SceneCount       int            `json:"sceneCount"`
+	LookCount        int            `json:"lookCount"`
 	CueListCount     int            `json:"cueListCount"`
 	Warnings         []string       `json:"warnings"`
 }
@@ -684,97 +775,6 @@ type RepositoryVersion struct {
 	Installed       string `json:"installed"`
 	Latest          string `json:"latest"`
 	UpdateAvailable bool   `json:"updateAvailable"`
-}
-
-type SceneBoardButtonPositionInput struct {
-	ButtonID string `json:"buttonId"`
-	LayoutX  int    `json:"layoutX"`
-	LayoutY  int    `json:"layoutY"`
-}
-
-type SceneBoardButtonUpdateItem struct {
-	ButtonID string                     `json:"buttonId"`
-	LayoutX  graphql.Omittable[*int]    `json:"layoutX,omitempty"`
-	LayoutY  graphql.Omittable[*int]    `json:"layoutY,omitempty"`
-	Width    graphql.Omittable[*int]    `json:"width,omitempty"`
-	Height   graphql.Omittable[*int]    `json:"height,omitempty"`
-	Color    graphql.Omittable[*string] `json:"color,omitempty"`
-	Label    graphql.Omittable[*string] `json:"label,omitempty"`
-}
-
-type SceneBoardUpdateItem struct {
-	SceneBoardID    string                      `json:"sceneBoardId"`
-	Name            graphql.Omittable[*string]  `json:"name,omitempty"`
-	Description     graphql.Omittable[*string]  `json:"description,omitempty"`
-	DefaultFadeTime graphql.Omittable[*float64] `json:"defaultFadeTime,omitempty"`
-	GridSize        graphql.Omittable[*int]     `json:"gridSize,omitempty"`
-	CanvasWidth     graphql.Omittable[*int]     `json:"canvasWidth,omitempty"`
-	CanvasHeight    graphql.Omittable[*int]     `json:"canvasHeight,omitempty"`
-}
-
-type SceneComparison struct {
-	Scene1                SceneSummary       `json:"scene1"`
-	Scene2                SceneSummary       `json:"scene2"`
-	Differences           []*SceneDifference `json:"differences"`
-	IdenticalFixtureCount int                `json:"identicalFixtureCount"`
-	DifferentFixtureCount int                `json:"differentFixtureCount"`
-}
-
-type SceneDifference struct {
-	FixtureID      string         `json:"fixtureId"`
-	FixtureName    string         `json:"fixtureName"`
-	DifferenceType DifferenceType `json:"differenceType"`
-	Scene1Values   []int          `json:"scene1Values,omitempty"`
-	Scene2Values   []int          `json:"scene2Values,omitempty"`
-}
-
-type SceneFilterInput struct {
-	NameContains graphql.Omittable[*string] `json:"nameContains,omitempty"`
-	UsesFixture  graphql.Omittable[*string] `json:"usesFixture,omitempty"`
-}
-
-type SceneFixtureSummary struct {
-	FixtureID   string      `json:"fixtureId"`
-	FixtureName string      `json:"fixtureName"`
-	FixtureType FixtureType `json:"fixtureType"`
-}
-
-type ScenePage struct {
-	Scenes     []*SceneSummary `json:"scenes"`
-	Pagination PaginationInfo  `json:"pagination"`
-}
-
-// Partial update for a single scene in a bulk operation.
-// When mergeFixtures is true (default), only specified fixtures are updated.
-// When false, all existing fixtures are replaced with the provided list.
-type ScenePartialUpdateItem struct {
-	SceneID       string                                  `json:"sceneId"`
-	Name          graphql.Omittable[*string]              `json:"name,omitempty"`
-	Description   graphql.Omittable[*string]              `json:"description,omitempty"`
-	FixtureValues graphql.Omittable[[]*FixtureValueInput] `json:"fixtureValues,omitempty"`
-	// When true (default), only specified fixtures are updated. When false, replaces all fixtures.
-	MergeFixtures graphql.Omittable[*bool] `json:"mergeFixtures,omitempty"`
-}
-
-type SceneSummary struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	Description  *string `json:"description,omitempty"`
-	FixtureCount int     `json:"fixtureCount"`
-	CreatedAt    string  `json:"createdAt"`
-	UpdatedAt    string  `json:"updatedAt"`
-}
-
-type SceneUpdateItem struct {
-	SceneID     string                     `json:"sceneId"`
-	Name        graphql.Omittable[*string] `json:"name,omitempty"`
-	Description graphql.Omittable[*string] `json:"description,omitempty"`
-}
-
-type SceneUsage struct {
-	SceneID   string             `json:"sceneId"`
-	SceneName string             `json:"sceneName"`
-	Cues      []*CueUsageSummary `json:"cues"`
 }
 
 type Subscription struct {
@@ -819,16 +819,7 @@ type UpdateFixtureInstanceInput struct {
 	LayoutRotation graphql.Omittable[*float64] `json:"layoutRotation,omitempty"`
 }
 
-type UpdateResult struct {
-	Success         bool    `json:"success"`
-	Repository      string  `json:"repository"`
-	PreviousVersion string  `json:"previousVersion"`
-	NewVersion      string  `json:"newVersion"`
-	Message         *string `json:"message,omitempty"`
-	Error           *string `json:"error,omitempty"`
-}
-
-type UpdateSceneBoardButtonInput struct {
+type UpdateLookBoardButtonInput struct {
 	LayoutX graphql.Omittable[*int]    `json:"layoutX,omitempty"`
 	LayoutY graphql.Omittable[*int]    `json:"layoutY,omitempty"`
 	Width   graphql.Omittable[*int]    `json:"width,omitempty"`
@@ -837,7 +828,7 @@ type UpdateSceneBoardButtonInput struct {
 	Label   graphql.Omittable[*string] `json:"label,omitempty"`
 }
 
-type UpdateSceneBoardInput struct {
+type UpdateLookBoardInput struct {
 	Name            graphql.Omittable[*string]  `json:"name,omitempty"`
 	Description     graphql.Omittable[*string]  `json:"description,omitempty"`
 	DefaultFadeTime graphql.Omittable[*float64] `json:"defaultFadeTime,omitempty"`
@@ -846,10 +837,19 @@ type UpdateSceneBoardInput struct {
 	CanvasHeight    graphql.Omittable[*int]     `json:"canvasHeight,omitempty"`
 }
 
-type UpdateSceneInput struct {
+type UpdateLookInput struct {
 	Name          graphql.Omittable[*string]              `json:"name,omitempty"`
 	Description   graphql.Omittable[*string]              `json:"description,omitempty"`
 	FixtureValues graphql.Omittable[[]*FixtureValueInput] `json:"fixtureValues,omitempty"`
+}
+
+type UpdateResult struct {
+	Success         bool    `json:"success"`
+	Repository      string  `json:"repository"`
+	PreviousVersion string  `json:"previousVersion"`
+	NewVersion      string  `json:"newVersion"`
+	Message         *string `json:"message,omitempty"`
+	Error           *string `json:"error,omitempty"`
 }
 
 type UpdateSettingInput struct {
@@ -1001,7 +1001,7 @@ const (
 	CueListDataChangeTypeCueRemoved             CueListDataChangeType = "CUE_REMOVED"
 	CueListDataChangeTypeCueReordered           CueListDataChangeType = "CUE_REORDERED"
 	CueListDataChangeTypeCueListMetadataChanged CueListDataChangeType = "CUE_LIST_METADATA_CHANGED"
-	CueListDataChangeTypeSceneNameChanged       CueListDataChangeType = "SCENE_NAME_CHANGED"
+	CueListDataChangeTypeLookNameChanged        CueListDataChangeType = "LOOK_NAME_CHANGED"
 )
 
 var AllCueListDataChangeType = []CueListDataChangeType{
@@ -1010,12 +1010,12 @@ var AllCueListDataChangeType = []CueListDataChangeType{
 	CueListDataChangeTypeCueRemoved,
 	CueListDataChangeTypeCueReordered,
 	CueListDataChangeTypeCueListMetadataChanged,
-	CueListDataChangeTypeSceneNameChanged,
+	CueListDataChangeTypeLookNameChanged,
 }
 
 func (e CueListDataChangeType) IsValid() bool {
 	switch e {
-	case CueListDataChangeTypeCueAdded, CueListDataChangeTypeCueUpdated, CueListDataChangeTypeCueRemoved, CueListDataChangeTypeCueReordered, CueListDataChangeTypeCueListMetadataChanged, CueListDataChangeTypeSceneNameChanged:
+	case CueListDataChangeTypeCueAdded, CueListDataChangeTypeCueUpdated, CueListDataChangeTypeCueRemoved, CueListDataChangeTypeCueReordered, CueListDataChangeTypeCueListMetadataChanged, CueListDataChangeTypeLookNameChanged:
 		return true
 	}
 	return false
@@ -1060,19 +1060,19 @@ type DifferenceType string
 
 const (
 	DifferenceTypeValuesChanged DifferenceType = "VALUES_CHANGED"
-	DifferenceTypeOnlyInScene1  DifferenceType = "ONLY_IN_SCENE1"
-	DifferenceTypeOnlyInScene2  DifferenceType = "ONLY_IN_SCENE2"
+	DifferenceTypeOnlyInLook1   DifferenceType = "ONLY_IN_LOOK1"
+	DifferenceTypeOnlyInLook2   DifferenceType = "ONLY_IN_LOOK2"
 )
 
 var AllDifferenceType = []DifferenceType{
 	DifferenceTypeValuesChanged,
-	DifferenceTypeOnlyInScene1,
-	DifferenceTypeOnlyInScene2,
+	DifferenceTypeOnlyInLook1,
+	DifferenceTypeOnlyInLook2,
 }
 
 func (e DifferenceType) IsValid() bool {
 	switch e {
-	case DifferenceTypeValuesChanged, DifferenceTypeOnlyInScene1, DifferenceTypeOnlyInScene2:
+	case DifferenceTypeValuesChanged, DifferenceTypeOnlyInLook1, DifferenceTypeOnlyInLook2:
 		return true
 	}
 	return false
@@ -1176,7 +1176,7 @@ func (e EasingType) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Determines how a channel behaves during scene transitions.
+// Determines how a channel behaves during look transitions.
 // FADE - Interpolate smoothly between values (default for intensity, colors)
 // SNAP - Jump to target value at start of transition (for gobos, macros, effects)
 // SNAP_END - Jump to target value at end of transition
@@ -1410,6 +1410,63 @@ func (e ImportMode) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+type LookSortField string
+
+const (
+	LookSortFieldName      LookSortField = "NAME"
+	LookSortFieldCreatedAt LookSortField = "CREATED_AT"
+	LookSortFieldUpdatedAt LookSortField = "UPDATED_AT"
+)
+
+var AllLookSortField = []LookSortField{
+	LookSortFieldName,
+	LookSortFieldCreatedAt,
+	LookSortFieldUpdatedAt,
+}
+
+func (e LookSortField) IsValid() bool {
+	switch e {
+	case LookSortFieldName, LookSortFieldCreatedAt, LookSortFieldUpdatedAt:
+		return true
+	}
+	return false
+}
+
+func (e LookSortField) String() string {
+	return string(e)
+}
+
+func (e *LookSortField) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = LookSortField(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid LookSortField", str)
+	}
+	return nil
+}
+
+func (e LookSortField) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *LookSortField) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e LookSortField) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 // Type of fixture change detected during OFL update check
 type OFLFixtureChangeType string
 
@@ -1588,63 +1645,6 @@ func (e *ProjectRole) UnmarshalJSON(b []byte) error {
 }
 
 func (e ProjectRole) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
-}
-
-type SceneSortField string
-
-const (
-	SceneSortFieldName      SceneSortField = "NAME"
-	SceneSortFieldCreatedAt SceneSortField = "CREATED_AT"
-	SceneSortFieldUpdatedAt SceneSortField = "UPDATED_AT"
-)
-
-var AllSceneSortField = []SceneSortField{
-	SceneSortFieldName,
-	SceneSortFieldCreatedAt,
-	SceneSortFieldUpdatedAt,
-}
-
-func (e SceneSortField) IsValid() bool {
-	switch e {
-	case SceneSortFieldName, SceneSortFieldCreatedAt, SceneSortFieldUpdatedAt:
-		return true
-	}
-	return false
-}
-
-func (e SceneSortField) String() string {
-	return string(e)
-}
-
-func (e *SceneSortField) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-
-	*e = SceneSortField(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid SceneSortField", str)
-	}
-	return nil
-}
-
-func (e SceneSortField) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *SceneSortField) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e SceneSortField) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

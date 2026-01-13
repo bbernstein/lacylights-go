@@ -24,8 +24,8 @@ type ChannelTarget struct {
 	FadeBehavior string // "FADE", "SNAP", or "SNAP_END" - defaults to "FADE" if empty
 }
 
-// SceneChannel represents a channel value in a scene.
-type SceneChannel struct {
+// LookChannel represents a channel value in a look.
+type LookChannel struct {
 	Universe     int
 	Channel      int
 	Value        int
@@ -354,10 +354,10 @@ func (e *Engine) FadeChannels(targets []ChannelTarget, duration time.Duration, f
 	return fadeID
 }
 
-// FadeToScene fades to a scene's channel values.
-func (e *Engine) FadeToScene(sceneChannels []SceneChannel, fadeInTime time.Duration, fadeID string, easingType EasingType) string {
-	targets := make([]ChannelTarget, len(sceneChannels))
-	for i, ch := range sceneChannels {
+// FadeToLook fades to a look's channel values.
+func (e *Engine) FadeToLook(lookChannels []LookChannel, fadeInTime time.Duration, fadeID string, easingType EasingType) string {
+	targets := make([]ChannelTarget, len(lookChannels))
+	for i, ch := range lookChannels {
 		targets[i] = ChannelTarget{
 			Universe:     ch.Universe,
 			Channel:      ch.Channel,

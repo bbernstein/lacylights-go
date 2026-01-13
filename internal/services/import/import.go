@@ -34,10 +34,12 @@ const (
 type ImportStats struct {
 	FixtureDefinitionsCreated int
 	FixtureInstancesCreated   int
-	ScenesCreated             int
+	LooksCreated              int
+	ScenesCreated             int // Deprecated: use LooksCreated
 	CueListsCreated           int
 	CuesCreated               int
-	SceneBoardsCreated        int
+	LookBoardsCreated         int
+	SceneBoardsCreated        int // Deprecated: use LookBoardsCreated
 }
 
 // ImportOptions configures the import behavior.
@@ -51,47 +53,47 @@ type ImportOptions struct {
 
 // Service handles project import operations.
 type Service struct {
-	projectRepo    *repositories.ProjectRepository
-	fixtureRepo    *repositories.FixtureRepository
-	sceneRepo      *repositories.SceneRepository
-	cueListRepo    *repositories.CueListRepository
-	cueRepo        *repositories.CueRepository
-	sceneBoardRepo *repositories.SceneBoardRepository
+	projectRepo   *repositories.ProjectRepository
+	fixtureRepo   *repositories.FixtureRepository
+	lookRepo      *repositories.LookRepository
+	cueListRepo   *repositories.CueListRepository
+	cueRepo       *repositories.CueRepository
+	lookBoardRepo *repositories.LookBoardRepository
 }
 
 // NewService creates a new import service.
 func NewService(
 	projectRepo *repositories.ProjectRepository,
 	fixtureRepo *repositories.FixtureRepository,
-	sceneRepo *repositories.SceneRepository,
+	lookRepo *repositories.LookRepository,
 	cueListRepo *repositories.CueListRepository,
 	cueRepo *repositories.CueRepository,
 ) *Service {
 	return &Service{
-		projectRepo:  projectRepo,
-		fixtureRepo:  fixtureRepo,
-		sceneRepo:    sceneRepo,
-		cueListRepo:  cueListRepo,
-		cueRepo:      cueRepo,
+		projectRepo: projectRepo,
+		fixtureRepo: fixtureRepo,
+		lookRepo:    lookRepo,
+		cueListRepo: cueListRepo,
+		cueRepo:     cueRepo,
 	}
 }
 
-// NewServiceWithSceneBoards creates a new import service with scene board support.
-func NewServiceWithSceneBoards(
+// NewServiceWithLookBoards creates a new import service with look board support.
+func NewServiceWithLookBoards(
 	projectRepo *repositories.ProjectRepository,
 	fixtureRepo *repositories.FixtureRepository,
-	sceneRepo *repositories.SceneRepository,
+	lookRepo *repositories.LookRepository,
 	cueListRepo *repositories.CueListRepository,
 	cueRepo *repositories.CueRepository,
-	sceneBoardRepo *repositories.SceneBoardRepository,
+	lookBoardRepo *repositories.LookBoardRepository,
 ) *Service {
 	return &Service{
-		projectRepo:    projectRepo,
-		fixtureRepo:    fixtureRepo,
-		sceneRepo:      sceneRepo,
-		cueListRepo:    cueListRepo,
-		cueRepo:        cueRepo,
-		sceneBoardRepo: sceneBoardRepo,
+		projectRepo:   projectRepo,
+		fixtureRepo:   fixtureRepo,
+		lookRepo:      lookRepo,
+		cueListRepo:   cueListRepo,
+		cueRepo:       cueRepo,
+		lookBoardRepo: lookBoardRepo,
 	}
 }
 
@@ -266,9 +268,9 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 	}
 
 	// Track ID mappings for references
-	definitionIDMap := make(map[string]string) // old ID -> new ID
-	fixtureIDMap := make(map[string]string)    // old ID -> new ID
-	sceneIDMap := make(map[string]string)      // old ID -> new ID
+	definitionIDMap := make(map[string]string)    // old ID -> new ID
+	fixtureIDMap := make(map[string]string)       // old ID -> new ID
+	lookIDMap := make(map[string]string)          // old ID -> new ID
 	modeRefIDToNameMap := make(map[string]string) // old mode refID -> new mode name
 
 	// Import fixture definitions
@@ -601,19 +603,24 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 		stats.FixtureInstancesCreated++
 	}
 
-	// Import scenes
-	for _, scene := range exported.Scenes {
-		newScene := &models.Scene{
-			Name:        scene.Name,
-			Description: scene.Description,
+	// Import looks (support both new "looks" format and legacy "scenes" format)
+	looksToImport := exported.Looks
+	if len(looksToImport) == 0 && len(exported.Scenes) > 0 {
+		// Backward compatibility: use legacy "scenes" field
+		looksToImport = exported.Scenes
+	}
+	for _, look := range looksToImport {
+		newLook := &models.Look{
+			Name:        look.Name,
+			Description: look.Description,
 			ProjectID:   projectID,
 		}
 
 		var fixtureValues []models.FixtureValue
-		for _, fv := range scene.FixtureValues {
+		for _, fv := range look.FixtureValues {
 			newFixtureID, ok := fixtureIDMap[fv.FixtureRefID]
 			if !ok {
-				warnings = append(warnings, "Skipping fixture value with unknown fixture '"+fv.FixtureRefID+"' in scene '"+scene.Name+"'")
+				warnings = append(warnings, "Skipping fixture value with unknown fixture '"+fv.FixtureRefID+"' in look '"+look.Name+"'")
 				continue
 			}
 
@@ -641,22 +648,27 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 			}
 			channelsJSON, err := json.Marshal(channels)
 			if err != nil {
-				warnings = append(warnings, "Skipping fixture value for fixture '"+fv.FixtureRefID+"' in scene '"+scene.Name+"' due to JSON marshaling error: "+err.Error())
+				warnings = append(warnings, "Skipping fixture value for fixture '"+fv.FixtureRefID+"' in look '"+look.Name+"' due to JSON marshaling error: "+err.Error())
 				continue
+			}
+			// Support both new LookOrder and legacy SceneOrder
+			lookOrder := fv.LookOrder
+			if lookOrder == nil {
+				lookOrder = fv.SceneOrder
 			}
 			fixtureValues = append(fixtureValues, models.FixtureValue{
 				ID:        cuid.New(),
 				FixtureID: newFixtureID,
 				Channels:  string(channelsJSON),
-				SceneOrder: fv.SceneOrder,
+				LookOrder: lookOrder,
 			})
 		}
 
-		if err := s.sceneRepo.CreateWithFixtureValues(ctx, newScene, fixtureValues); err != nil {
+		if err := s.lookRepo.CreateWithFixtureValues(ctx, newLook, fixtureValues); err != nil {
 			return "", nil, nil, err
 		}
-		sceneIDMap[scene.RefID] = newScene.ID
-		stats.ScenesCreated++
+		lookIDMap[look.RefID] = newLook.ID
+		stats.LooksCreated++
 	}
 
 	// Import cue lists
@@ -675,9 +687,14 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 
 		// Import cues
 		for _, cue := range cueList.Cues {
-			newSceneID, ok := sceneIDMap[cue.SceneRefID]
+			// Support both new LookRefID and legacy SceneRefID
+			lookRefID := cue.LookRefID
+			if lookRefID == "" {
+				lookRefID = cue.SceneRefID
+			}
+			newLookID, ok := lookIDMap[lookRefID]
 			if !ok {
-				warnings = append(warnings, "Skipping cue with unknown scene in cue list: "+cueList.Name)
+				warnings = append(warnings, "Skipping cue with unknown look in cue list: "+cueList.Name)
 				continue
 			}
 
@@ -685,7 +702,7 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 				Name:        cue.Name,
 				CueNumber:   cue.CueNumber,
 				CueListID:   newCueList.ID,
-				SceneID:     newSceneID,
+				LookID:      newLookID,
 				FadeInTime:  cue.FadeInTime,
 				FadeOutTime: cue.FadeOutTime,
 				FollowTime:  cue.FollowTime,
@@ -700,14 +717,19 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 		}
 	}
 
-	// Import scene boards
-	// Note: Scene boards are imported regardless of includeScenes flag. If scenes were not
-	// included in the import (or failed to import), scene board buttons referencing those
-	// scenes will be skipped with a warning. This allows partial imports while maintaining
+	// Import look boards (support both new "lookBoards" format and legacy "sceneBoards" format)
+	// Note: Look boards are imported regardless of includeLooks flag. If looks were not
+	// included in the import (or failed to import), look board buttons referencing those
+	// looks will be skipped with a warning. This allows partial imports while maintaining
 	// data integrity.
-	if s.sceneBoardRepo != nil && len(exported.SceneBoards) > 0 {
-		for _, board := range exported.SceneBoards {
-			newBoard := &models.SceneBoard{
+	boardsToImport := exported.LookBoards
+	if len(boardsToImport) == 0 && len(exported.SceneBoards) > 0 {
+		// Backward compatibility: use legacy "sceneBoards" field
+		boardsToImport = exported.SceneBoards
+	}
+	if s.lookBoardRepo != nil && len(boardsToImport) > 0 {
+		for _, board := range boardsToImport {
+			newBoard := &models.LookBoard{
 				Name:            board.Name,
 				Description:     board.Description,
 				DefaultFadeTime: board.DefaultFadeTime,
@@ -717,16 +739,21 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 				ProjectID:       projectID,
 			}
 
-			var buttons []models.SceneBoardButton
+			var buttons []models.LookBoardButton
 			for _, btn := range board.Buttons {
-				newSceneID, ok := sceneIDMap[btn.SceneRefID]
+				// Support both new LookRefID and legacy SceneRefID
+				lookRefID := btn.LookRefID
+				if lookRefID == "" {
+					lookRefID = btn.SceneRefID
+				}
+				newLookID, ok := lookIDMap[lookRefID]
 				if !ok {
-					warnings = append(warnings, "Skipping scene board button with unknown scene in board: "+board.Name)
+					warnings = append(warnings, "Skipping look board button with unknown look in board: "+board.Name)
 					continue
 				}
 
-				buttons = append(buttons, models.SceneBoardButton{
-					SceneID: newSceneID,
+				buttons = append(buttons, models.LookBoardButton{
+					LookID:  newLookID,
 					LayoutX: btn.LayoutX,
 					LayoutY: btn.LayoutY,
 					Width:   btn.Width,
@@ -736,10 +763,10 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 				})
 			}
 
-			if err := s.sceneBoardRepo.CreateWithButtons(ctx, newBoard, buttons); err != nil {
+			if err := s.lookBoardRepo.CreateWithButtons(ctx, newBoard, buttons); err != nil {
 				return "", nil, nil, err
 			}
-			stats.SceneBoardsCreated++
+			stats.LookBoardsCreated++
 		}
 	}
 

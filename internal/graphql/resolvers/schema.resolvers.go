@@ -39,11 +39,6 @@ func (r *channelDefinitionResolver) FadeBehavior(ctx context.Context, obj *model
 	return generated.FadeBehavior(obj.FadeBehavior), nil
 }
 
-// Scene is the resolver for the scene field.
-func (r *cueResolver) Scene(ctx context.Context, obj *models.Cue) (*models.Scene, error) {
-	return r.SceneRepo.FindByID(ctx, obj.SceneID)
-}
-
 // CueList is the resolver for the cueList field.
 func (r *cueResolver) CueList(ctx context.Context, obj *models.Cue) (*models.CueList, error) {
 	return r.CueListRepo.FindByID(ctx, obj.CueListID)
@@ -271,6 +266,51 @@ func (r *instanceChannelResolver) FadeBehavior(ctx context.Context, obj *models.
 		return generated.FadeBehaviorFade, nil
 	}
 	return generated.FadeBehavior(obj.FadeBehavior), nil
+}
+
+// Project is the resolver for the project field.
+func (r *lookResolver) Project(ctx context.Context, obj *models.Look) (*models.Project, error) {
+	return r.ProjectRepo.FindByID(ctx, obj.ProjectID)
+}
+
+// CreatedAt is the resolver for the createdAt field.
+func (r *lookResolver) CreatedAt(ctx context.Context, obj *models.Look) (string, error) {
+	return obj.CreatedAt.Format(time.RFC3339), nil
+}
+
+// UpdatedAt is the resolver for the updatedAt field.
+func (r *lookResolver) UpdatedAt(ctx context.Context, obj *models.Look) (string, error) {
+	return obj.UpdatedAt.Format(time.RFC3339), nil
+}
+
+// Project is the resolver for the project field.
+func (r *lookBoardResolver) Project(ctx context.Context, obj *models.LookBoard) (*models.Project, error) {
+	return r.ProjectRepo.FindByID(ctx, obj.ProjectID)
+}
+
+// CreatedAt is the resolver for the createdAt field.
+func (r *lookBoardResolver) CreatedAt(ctx context.Context, obj *models.LookBoard) (string, error) {
+	return obj.CreatedAt.Format(time.RFC3339), nil
+}
+
+// UpdatedAt is the resolver for the updatedAt field.
+func (r *lookBoardResolver) UpdatedAt(ctx context.Context, obj *models.LookBoard) (string, error) {
+	return obj.UpdatedAt.Format(time.RFC3339), nil
+}
+
+// LookBoard is the resolver for the lookBoard field.
+func (r *lookBoardButtonResolver) LookBoard(ctx context.Context, obj *models.LookBoardButton) (*models.LookBoard, error) {
+	return r.LookBoardRepo.FindByID(ctx, obj.LookBoardID)
+}
+
+// CreatedAt is the resolver for the createdAt field.
+func (r *lookBoardButtonResolver) CreatedAt(ctx context.Context, obj *models.LookBoardButton) (string, error) {
+	return obj.CreatedAt.Format(time.RFC3339), nil
+}
+
+// UpdatedAt is the resolver for the updatedAt field.
+func (r *lookBoardButtonResolver) UpdatedAt(ctx context.Context, obj *models.LookBoardButton) (string, error) {
+	return obj.UpdatedAt.Format(time.RFC3339), nil
 }
 
 // Channel is the resolver for the channel field.
@@ -1174,30 +1214,27 @@ func (r *mutationResolver) ReorderProjectFixtures(ctx context.Context, projectID
 	return true, nil
 }
 
-// ReorderSceneFixtures is the resolver for the reorderSceneFixtures field.
-func (r *mutationResolver) ReorderSceneFixtures(ctx context.Context, sceneID string, fixtureOrders []*generated.FixtureOrderInput) (bool, error) {
-	// Verify scene exists
-	scene, err := r.SceneRepo.FindByID(ctx, sceneID)
+// ReorderLookFixtures is the resolver for the reorderLookFixtures field.
+func (r *mutationResolver) ReorderLookFixtures(ctx context.Context, lookID string, fixtureOrders []*generated.FixtureOrderInput) (bool, error) {
+	// Get existing fixture values
+	fixtureValues, err := r.LookRepo.GetFixtureValues(ctx, lookID)
 	if err != nil {
 		return false, err
 	}
-	if scene == nil {
-		return false, fmt.Errorf("scene not found: %s", sceneID)
+
+	// Build a map of existing fixture values
+	valueMap := make(map[string]*models.FixtureValue)
+	for i := range fixtureValues {
+		valueMap[fixtureValues[i].FixtureID] = &fixtureValues[i]
 	}
 
-	// Update each fixture value's scene_order
+	// Update orders
 	for _, order := range fixtureOrders {
-		fixtureValue, err := r.SceneRepo.GetFixtureValue(ctx, sceneID, order.FixtureID)
-		if err != nil {
-			return false, err
-		}
-		if fixtureValue == nil {
-			return false, fmt.Errorf("fixture not found in scene: fixture=%s scene=%s", order.FixtureID, sceneID)
-		}
-
-		fixtureValue.SceneOrder = &order.Order
-		if err := r.SceneRepo.UpdateFixtureValue(ctx, fixtureValue); err != nil {
-			return false, err
+		if value, exists := valueMap[order.FixtureID]; exists {
+			value.LookOrder = &order.Order
+			if err := r.LookRepo.UpdateFixtureValue(ctx, value); err != nil {
+				return false, fmt.Errorf("failed to update fixture order: %w", err)
+			}
 		}
 	}
 
@@ -1229,180 +1266,159 @@ func (r *mutationResolver) UpdateFixturePositions(ctx context.Context, positions
 	return true, nil
 }
 
-// CreateScene is the resolver for the createScene field.
-func (r *mutationResolver) CreateScene(ctx context.Context, input generated.CreateSceneInput) (*models.Scene, error) {
-	scene := &models.Scene{
+// CreateLook is the resolver for the createLook field.
+func (r *mutationResolver) CreateLook(ctx context.Context, input generated.CreateLookInput) (*models.Look, error) {
+	// Create the look model
+	look := &models.Look{
 		Name:      input.Name,
 		ProjectID: input.ProjectID,
 	}
-
-	if input.Description.IsSet() {
-		scene.Description = input.Description.Value()
+	if input.Description.IsSet() && input.Description.Value() != nil {
+		look.Description = input.Description.Value()
 	}
 
 	// Convert fixture values
 	var fixtureValues []models.FixtureValue
-	for _, fv := range input.FixtureValues {
+	for i, fv := range input.FixtureValues {
 		channelsJSON, err := serializeSparseChannels(fv.Channels)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to serialize channels for fixture %s: %w", fv.FixtureID, err)
 		}
-		value := models.FixtureValue{
+
+		lookOrder := i
+		if fv.LookOrder.IsSet() && fv.LookOrder.Value() != nil {
+			lookOrder = *fv.LookOrder.Value()
+		}
+
+		fixtureValues = append(fixtureValues, models.FixtureValue{
 			FixtureID: fv.FixtureID,
 			Channels:  channelsJSON,
-		}
-		if fv.SceneOrder.IsSet() && fv.SceneOrder.Value() != nil {
-			value.SceneOrder = fv.SceneOrder.Value()
-		}
-		fixtureValues = append(fixtureValues, value)
-	}
-
-	// Create scene with fixture values
-	if err := r.SceneRepo.CreateWithFixtureValues(ctx, scene, fixtureValues); err != nil {
-		return nil, err
-	}
-
-	return scene, nil
-}
-
-// UpdateScene is the resolver for the updateScene field.
-func (r *mutationResolver) UpdateScene(ctx context.Context, id string, input generated.UpdateSceneInput) (*models.Scene, error) {
-	scene, err := r.SceneRepo.FindByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if scene == nil {
-		return nil, fmt.Errorf("scene not found: %s", id)
-	}
-
-	// Track if name changed for notification
-	oldName := scene.Name
-	nameChanged := false
-
-	// Update fields if provided
-	if input.Name.IsSet() && input.Name.Value() != nil {
-		newName := *input.Name.Value()
-		if newName != oldName {
-			scene.Name = newName
-			nameChanged = true
-		}
-	}
-
-	if input.Description.IsSet() {
-		scene.Description = input.Description.Value()
-	}
-
-	// Update fixture values if provided
-	if input.FixtureValues.IsSet() {
-		// Delete existing fixture values
-		if err := r.SceneRepo.DeleteFixtureValues(ctx, id); err != nil {
-			return nil, err
-		}
-
-		// Create new fixture values
-		var fixtureValues []models.FixtureValue
-		for _, fv := range input.FixtureValues.Value() {
-			channelsJSON, err := serializeSparseChannels(fv.Channels)
-			if err != nil {
-				return nil, err
-			}
-			value := models.FixtureValue{
-				SceneID:   id,
-				FixtureID: fv.FixtureID,
-				Channels:  channelsJSON,
-			}
-			if fv.SceneOrder.IsSet() && fv.SceneOrder.Value() != nil {
-				value.SceneOrder = fv.SceneOrder.Value()
-			}
-			fixtureValues = append(fixtureValues, value)
-		}
-
-		if err := r.SceneRepo.CreateFixtureValues(ctx, fixtureValues); err != nil {
-			return nil, err
-		}
-	}
-
-	// Save the scene
-	if err := r.SceneRepo.Update(ctx, scene); err != nil {
-		return nil, err
-	}
-
-	// If this scene is currently active (displayed on DMX), re-apply its values
-	// so changes are immediately reflected in the output
-	if err := r.reapplyActiveSceneIfNeeded(ctx, id); err != nil {
-		// Log the error but don't fail the update - the scene was saved successfully
-		log.Printf("Warning: failed to re-apply active scene after update: %v", err)
-	}
-
-	// If name changed, notify all cue lists using this scene
-	if nameChanged {
-		r.notifySceneNameChange(ctx, id, scene.Name)
-	}
-
-	return scene, nil
-}
-
-// DuplicateScene is the resolver for the duplicateScene field.
-func (r *mutationResolver) DuplicateScene(ctx context.Context, id string) (*models.Scene, error) {
-	// Get original scene
-	original, err := r.SceneRepo.FindByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if original == nil {
-		return nil, fmt.Errorf("scene not found: %s", id)
-	}
-
-	// Get original fixture values
-	originalValues, err := r.SceneRepo.GetFixtureValues(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create new scene with "(Copy)" suffix
-	newScene := &models.Scene{
-		Name:        original.Name + " (Copy)",
-		Description: original.Description,
-		ProjectID:   original.ProjectID,
-	}
-
-	// Prepare new fixture values
-	var newValues []models.FixtureValue
-	for _, v := range originalValues {
-		newValues = append(newValues, models.FixtureValue{
-			FixtureID:  v.FixtureID,
-			Channels:   v.Channels,
-			SceneOrder: v.SceneOrder,
+			LookOrder: &lookOrder,
 		})
 	}
 
-	// Create new scene with fixture values
-	if err := r.SceneRepo.CreateWithFixtureValues(ctx, newScene, newValues); err != nil {
+	// Create look with fixture values in a transaction
+	if err := r.LookRepo.CreateWithFixtureValues(ctx, look, fixtureValues); err != nil {
 		return nil, err
 	}
 
-	return newScene, nil
+	return look, nil
 }
 
-// CloneScene is the resolver for the cloneScene field.
-func (r *mutationResolver) CloneScene(ctx context.Context, sceneID string, newName string) (*models.Scene, error) {
-	// Get original scene
-	original, err := r.SceneRepo.FindByID(ctx, sceneID)
+// UpdateLook is the resolver for the updateLook field.
+func (r *mutationResolver) UpdateLook(ctx context.Context, id string, input generated.UpdateLookInput) (*models.Look, error) {
+	// Find the existing look
+	look, err := r.LookRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if look == nil {
+		return nil, fmt.Errorf("look not found: %s", id)
+	}
+
+	// Track if name changed for notification
+	nameChanged := false
+	newName := look.Name
+
+	// Update fields if provided
+	if input.Name.IsSet() && input.Name.Value() != nil {
+		newName = *input.Name.Value()
+		if newName != look.Name {
+			nameChanged = true
+			look.Name = newName
+		}
+	}
+	if input.Description.IsSet() {
+		look.Description = input.Description.Value()
+	}
+
+	// Update the look
+	if err := r.LookRepo.Update(ctx, look); err != nil {
+		return nil, err
+	}
+
+	// Notify cue lists if name changed
+	if nameChanged {
+		r.notifyLookNameChange(ctx, id, newName)
+	}
+
+	// Handle fixture values if provided
+	if input.FixtureValues.IsSet() {
+		// Delete existing fixture values
+		if err := r.LookRepo.DeleteFixtureValues(ctx, id); err != nil {
+			return nil, fmt.Errorf("failed to delete existing fixture values: %w", err)
+		}
+
+		// Add new fixture values
+		fixtureValues := input.FixtureValues.Value()
+		for i, fv := range fixtureValues {
+			channelsJSON, err := serializeSparseChannels(fv.Channels)
+			if err != nil {
+				return nil, fmt.Errorf("failed to serialize channels for fixture %s: %w", fv.FixtureID, err)
+			}
+
+			lookOrder := i
+			if fv.LookOrder.IsSet() && fv.LookOrder.Value() != nil {
+				lookOrder = *fv.LookOrder.Value()
+			}
+
+			fixtureValue := &models.FixtureValue{
+				LookID:    id,
+				FixtureID: fv.FixtureID,
+				Channels:  channelsJSON,
+				LookOrder: &lookOrder,
+			}
+			if err := r.LookRepo.CreateFixtureValue(ctx, fixtureValue); err != nil {
+				return nil, fmt.Errorf("failed to create fixture value: %w", err)
+			}
+		}
+	}
+
+	// Re-apply the look if it's currently active
+	if err := r.reapplyActiveLookIfNeeded(ctx, id); err != nil {
+		log.Printf("Warning: failed to re-apply active look %s: %v", id, err)
+	}
+
+	return look, nil
+}
+
+// DuplicateLook is the resolver for the duplicateLook field.
+func (r *mutationResolver) DuplicateLook(ctx context.Context, id string) (*models.Look, error) {
+	// Get original look
+	original, err := r.LookRepo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if original == nil {
-		return nil, fmt.Errorf("scene not found: %s", sceneID)
+		return nil, fmt.Errorf("look not found: %s", id)
+	}
+
+	// Generate a new name with "Copy" suffix
+	newName := original.Name + " Copy"
+
+	// Use CloneLook implementation
+	return r.CloneLook(ctx, id, newName)
+}
+
+// CloneLook is the resolver for the cloneLook field.
+func (r *mutationResolver) CloneLook(ctx context.Context, lookID string, newName string) (*models.Look, error) {
+	// Get original look
+	original, err := r.LookRepo.FindByID(ctx, lookID)
+	if err != nil {
+		return nil, err
+	}
+	if original == nil {
+		return nil, fmt.Errorf("look not found: %s", lookID)
 	}
 
 	// Get original fixture values
-	originalValues, err := r.SceneRepo.GetFixtureValues(ctx, sceneID)
+	originalValues, err := r.LookRepo.GetFixtureValues(ctx, lookID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create new scene with provided name
-	newScene := &models.Scene{
+	// Create new look with provided name
+	newLook := &models.Look{
 		Name:        newName,
 		Description: original.Description,
 		ProjectID:   original.ProjectID,
@@ -1412,111 +1428,108 @@ func (r *mutationResolver) CloneScene(ctx context.Context, sceneID string, newNa
 	var newValues []models.FixtureValue
 	for _, v := range originalValues {
 		newValues = append(newValues, models.FixtureValue{
-			FixtureID:  v.FixtureID,
-			Channels:   v.Channels,
-			SceneOrder: v.SceneOrder,
+			FixtureID: v.FixtureID,
+			Channels:  v.Channels,
+			LookOrder: v.LookOrder,
 		})
 	}
 
-	// Create new scene with fixture values
-	if err := r.SceneRepo.CreateWithFixtureValues(ctx, newScene, newValues); err != nil {
+	// Create new look with fixture values
+	if err := r.LookRepo.CreateWithFixtureValues(ctx, newLook, newValues); err != nil {
 		return nil, err
 	}
 
-	return newScene, nil
+	return newLook, nil
 }
 
-// DeleteScene is the resolver for the deleteScene field.
-func (r *mutationResolver) DeleteScene(ctx context.Context, id string) (bool, error) {
-	// Check if scene exists
-	scene, err := r.SceneRepo.FindByID(ctx, id)
+// DeleteLook is the resolver for the deleteLook field.
+func (r *mutationResolver) DeleteLook(ctx context.Context, id string) (bool, error) {
+	// Check if look exists
+	look, err := r.LookRepo.FindByID(ctx, id)
 	if err != nil {
 		return false, err
 	}
-	if scene == nil {
-		return false, fmt.Errorf("scene not found: %s", id)
+	if look == nil {
+		return false, fmt.Errorf("look not found: %s", id)
 	}
 
 	// Delete fixture values first
-	if err := r.SceneRepo.DeleteFixtureValues(ctx, id); err != nil {
-		return false, err
+	if err := r.LookRepo.DeleteFixtureValues(ctx, id); err != nil {
+		return false, fmt.Errorf("failed to delete fixture values: %w", err)
 	}
 
-	// Delete the scene
-	if err := r.SceneRepo.Delete(ctx, id); err != nil {
+	// Delete the look
+	if err := r.LookRepo.Delete(ctx, id); err != nil {
 		return false, err
 	}
 
 	return true, nil
 }
 
-// BulkCreateScenes is the resolver for the bulkCreateScenes field.
-func (r *mutationResolver) BulkCreateScenes(ctx context.Context, input generated.BulkSceneCreateInput) ([]*models.Scene, error) {
-	var createdScenes []*models.Scene
+// BulkCreateLooks is the resolver for the bulkCreateLooks field.
+func (r *mutationResolver) BulkCreateLooks(ctx context.Context, input generated.BulkLookCreateInput) ([]*models.Look, error) {
+	var createdLooks []*models.Look
 
-	for _, sceneInput := range input.Scenes {
-		scene, err := r.CreateScene(ctx, *sceneInput)
+	for _, lookInput := range input.Looks {
+		look, err := r.CreateLook(ctx, *lookInput)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to create look %s: %w", lookInput.Name, err)
 		}
-		createdScenes = append(createdScenes, scene)
+		createdLooks = append(createdLooks, look)
 	}
 
-	return createdScenes, nil
+	return createdLooks, nil
 }
 
-// BulkUpdateScenes is the resolver for the bulkUpdateScenes field.
-func (r *mutationResolver) BulkUpdateScenes(ctx context.Context, input generated.BulkSceneUpdateInput) ([]*models.Scene, error) {
-	var updatedScenes []*models.Scene
-	// Track scenes with name changes for notification
-	nameChangedScenes := make(map[string]string) // sceneID -> newName
+// BulkUpdateLooks is the resolver for the bulkUpdateLooks field.
+func (r *mutationResolver) BulkUpdateLooks(ctx context.Context, input generated.BulkLookUpdateInput) ([]*models.Look, error) {
+	var updatedLooks []*models.Look
 
-	for _, item := range input.Scenes {
-		scene, err := r.SceneRepo.FindByID(ctx, item.SceneID)
+	for _, lookUpdate := range input.Looks {
+		// Find the look
+		look, err := r.LookRepo.FindByID(ctx, lookUpdate.LookID)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to find look %s: %w", lookUpdate.LookID, err)
 		}
-		if scene == nil {
-			return nil, fmt.Errorf("scene not found: %s", item.SceneID)
-		}
-
-		if item.Name.IsSet() && item.Name.Value() != nil {
-			newName := *item.Name.Value()
-			if newName != scene.Name {
-				scene.Name = newName
-				nameChangedScenes[item.SceneID] = newName
-			}
+		if look == nil {
+			return nil, fmt.Errorf("look not found: %s", lookUpdate.LookID)
 		}
 
-		if item.Description.IsSet() {
-			scene.Description = item.Description.Value()
+		// Update fields if provided
+		if lookUpdate.Name.IsSet() && lookUpdate.Name.Value() != nil {
+			look.Name = *lookUpdate.Name.Value()
+		}
+		if lookUpdate.Description.IsSet() {
+			look.Description = lookUpdate.Description.Value()
 		}
 
-		if err := r.SceneRepo.Update(ctx, scene); err != nil {
-			return nil, err
+		// Save the look
+		if err := r.LookRepo.Update(ctx, look); err != nil {
+			return nil, fmt.Errorf("failed to update look %s: %w", lookUpdate.LookID, err)
 		}
 
-		updatedScenes = append(updatedScenes, scene)
+		updatedLooks = append(updatedLooks, look)
 	}
 
-	// Notify cue lists about scene name changes
-	for sceneID, newName := range nameChangedScenes {
-		r.notifySceneNameChange(ctx, sceneID, newName)
-	}
-
-	return updatedScenes, nil
+	return updatedLooks, nil
 }
 
-// BulkDeleteScenes is the resolver for the bulkDeleteScenes field.
-func (r *mutationResolver) BulkDeleteScenes(ctx context.Context, sceneIds []string) (*generated.BulkDeleteResult, error) {
+// BulkDeleteLooks is the resolver for the bulkDeleteLooks field.
+func (r *mutationResolver) BulkDeleteLooks(ctx context.Context, lookIds []string) (*generated.BulkDeleteResult, error) {
 	var deletedIds []string
 
-	for _, sceneID := range sceneIds {
-		_, err := r.DeleteScene(ctx, sceneID)
-		if err != nil {
-			return nil, err
+	for _, id := range lookIds {
+		// Delete fixture values first
+		if err := r.LookRepo.DeleteFixtureValues(ctx, id); err != nil {
+			continue
 		}
-		deletedIds = append(deletedIds, sceneID)
+
+		// Delete the look
+		if err := r.LookRepo.Delete(ctx, id); err != nil {
+			continue
+		}
+
+		deletedIds = append(deletedIds, id)
 	}
 
 	return &generated.BulkDeleteResult{
@@ -1525,124 +1538,147 @@ func (r *mutationResolver) BulkDeleteScenes(ctx context.Context, sceneIds []stri
 	}, nil
 }
 
-// AddFixturesToScene is the resolver for the addFixturesToScene field.
-func (r *mutationResolver) AddFixturesToScene(ctx context.Context, sceneID string, fixtureValues []*generated.FixtureValueInput, overwriteExisting *bool) (*models.Scene, error) {
-	scene, err := r.SceneRepo.FindByID(ctx, sceneID)
+// AddFixturesToLook is the resolver for the addFixturesToLook field.
+func (r *mutationResolver) AddFixturesToLook(ctx context.Context, lookID string, fixtureValues []*generated.FixtureValueInput, overwriteExisting *bool) (*models.Look, error) {
+	// Check if look exists
+	look, err := r.LookRepo.FindByID(ctx, lookID)
 	if err != nil {
 		return nil, err
 	}
-	if scene == nil {
-		return nil, fmt.Errorf("scene not found: %s", sceneID)
+	if look == nil {
+		return nil, fmt.Errorf("look not found: %s", lookID)
 	}
 
+	// Default to not overwriting
 	overwrite := false
 	if overwriteExisting != nil {
 		overwrite = *overwriteExisting
 	}
 
+	// Get existing fixture values to determine next order
+	existingValues, err := r.LookRepo.GetFixtureValues(ctx, lookID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build a map of existing fixture IDs
+	existingMap := make(map[string]*models.FixtureValue)
+	maxOrder := -1
+	for i := range existingValues {
+		existingMap[existingValues[i].FixtureID] = &existingValues[i]
+		if existingValues[i].LookOrder != nil && *existingValues[i].LookOrder > maxOrder {
+			maxOrder = *existingValues[i].LookOrder
+		}
+	}
+
+	// Process each fixture value
 	for _, fv := range fixtureValues {
 		channelsJSON, err := serializeSparseChannels(fv.Channels)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to serialize channels for fixture %s: %w", fv.FixtureID, err)
 		}
 
-		// Check if fixture already exists in scene
-		existing, err := r.SceneRepo.GetFixtureValue(ctx, sceneID, fv.FixtureID)
-		if err != nil {
-			return nil, err
-		}
-
-		if existing != nil {
+		if existing, exists := existingMap[fv.FixtureID]; exists {
 			if overwrite {
+				// Update existing fixture value
 				existing.Channels = channelsJSON
-				if fv.SceneOrder.IsSet() && fv.SceneOrder.Value() != nil {
-					existing.SceneOrder = fv.SceneOrder.Value()
-				}
-				if err := r.SceneRepo.UpdateFixtureValue(ctx, existing); err != nil {
-					return nil, err
+				if err := r.LookRepo.UpdateFixtureValue(ctx, existing); err != nil {
+					return nil, fmt.Errorf("failed to update fixture value: %w", err)
 				}
 			}
 			// Skip if not overwriting
 		} else {
-			// Create new fixture value
-			value := &models.FixtureValue{
-				SceneID:   sceneID,
+			// Add new fixture value
+			maxOrder++
+			lookOrder := maxOrder
+			if fv.LookOrder.IsSet() && fv.LookOrder.Value() != nil {
+				lookOrder = *fv.LookOrder.Value()
+			}
+
+			fixtureValue := &models.FixtureValue{
+				LookID:    lookID,
 				FixtureID: fv.FixtureID,
 				Channels:  channelsJSON,
+				LookOrder: &lookOrder,
 			}
-			if fv.SceneOrder.IsSet() && fv.SceneOrder.Value() != nil {
-				value.SceneOrder = fv.SceneOrder.Value()
-			}
-			if err := r.SceneRepo.CreateFixtureValue(ctx, value); err != nil {
-				return nil, err
+			if err := r.LookRepo.CreateFixtureValue(ctx, fixtureValue); err != nil {
+				return nil, fmt.Errorf("failed to create fixture value: %w", err)
 			}
 		}
 	}
 
-	// If this scene is currently active (displayed on DMX), re-apply its values
-	// so changes are immediately reflected in the output
-	if err := r.reapplyActiveSceneIfNeeded(ctx, sceneID); err != nil {
-		// Log the error but don't fail the update - the scene was saved successfully
-		log.Printf("Warning: failed to re-apply active scene after adding fixtures: %v", err)
+	// Re-apply the look if it's currently active
+	if err := r.reapplyActiveLookIfNeeded(ctx, lookID); err != nil {
+		log.Printf("Warning: failed to re-apply active look %s: %v", lookID, err)
 	}
 
-	return scene, nil
+	return look, nil
 }
 
-// RemoveFixturesFromScene is the resolver for the removeFixturesFromScene field.
-func (r *mutationResolver) RemoveFixturesFromScene(ctx context.Context, sceneID string, fixtureIds []string) (*models.Scene, error) {
-	scene, err := r.SceneRepo.FindByID(ctx, sceneID)
+// RemoveFixturesFromLook is the resolver for the removeFixturesFromLook field.
+func (r *mutationResolver) RemoveFixturesFromLook(ctx context.Context, lookID string, fixtureIds []string) (*models.Look, error) {
+	// Check if look exists
+	look, err := r.LookRepo.FindByID(ctx, lookID)
 	if err != nil {
 		return nil, err
 	}
-	if scene == nil {
-		return nil, fmt.Errorf("scene not found: %s", sceneID)
+	if look == nil {
+		return nil, fmt.Errorf("look not found: %s", lookID)
 	}
 
 	// Delete each fixture value
 	for _, fixtureID := range fixtureIds {
-		if err := r.SceneRepo.DeleteFixtureValue(ctx, sceneID, fixtureID); err != nil {
+		if err := r.LookRepo.DeleteFixtureValue(ctx, lookID, fixtureID); err != nil {
+			return nil, fmt.Errorf("failed to remove fixture %s from look: %w", fixtureID, err)
+		}
+	}
+
+	// Re-apply the look if it's currently active
+	if err := r.reapplyActiveLookIfNeeded(ctx, lookID); err != nil {
+		log.Printf("Warning: failed to re-apply active look %s: %v", lookID, err)
+	}
+
+	return look, nil
+}
+
+// UpdateLookPartial is the resolver for the updateLookPartial field.
+func (r *mutationResolver) UpdateLookPartial(ctx context.Context, lookID string, name *string, description *string, fixtureValues []*generated.FixtureValueInput, mergeFixtures *bool) (*models.Look, error) {
+	// Check if look exists
+	look, err := r.LookRepo.FindByID(ctx, lookID)
+	if err != nil {
+		return nil, err
+	}
+	if look == nil {
+		return nil, fmt.Errorf("look not found: %s", lookID)
+	}
+
+	// Update metadata fields if provided
+	updated := false
+	nameChanged := false
+	if name != nil && *name != look.Name {
+		look.Name = *name
+		updated = true
+		nameChanged = true
+	}
+	if description != nil {
+		look.Description = description
+		updated = true
+	}
+
+	if updated {
+		if err := r.LookRepo.Update(ctx, look); err != nil {
 			return nil, err
 		}
 	}
 
-	// If this scene is currently active (displayed on DMX), re-apply its values
-	// so changes are immediately reflected in the output
-	if err := r.reapplyActiveSceneIfNeeded(ctx, sceneID); err != nil {
-		// Log the error but don't fail the update - the scene was saved successfully
-		log.Printf("Warning: failed to re-apply active scene after removing fixtures: %v", err)
+	// Notify cue lists if name changed
+	if nameChanged {
+		r.notifyLookNameChange(ctx, lookID, *name)
 	}
 
-	return scene, nil
-}
-
-// UpdateScenePartial is the resolver for the updateScenePartial field.
-func (r *mutationResolver) UpdateScenePartial(ctx context.Context, sceneID string, name *string, description *string, fixtureValues []*generated.FixtureValueInput, mergeFixtures *bool) (*models.Scene, error) {
-	scene, err := r.SceneRepo.FindByID(ctx, sceneID)
-	if err != nil {
-		return nil, err
-	}
-	if scene == nil {
-		return nil, fmt.Errorf("scene not found: %s", sceneID)
-	}
-
-	// Track if name changed for notification
-	oldName := scene.Name
-	nameChanged := false
-
-	// Update name if provided
-	if name != nil && *name != oldName {
-		scene.Name = *name
-		nameChanged = true
-	}
-
-	// Update description if provided
-	if description != nil {
-		scene.Description = description
-	}
-
-	// Handle fixture values
-	if fixtureValues != nil {
+	// Handle fixture values if provided
+	if len(fixtureValues) > 0 {
+		// Default to merging (not replacing)
 		merge := true
 		if mergeFixtures != nil {
 			merge = *mergeFixtures
@@ -1650,242 +1686,210 @@ func (r *mutationResolver) UpdateScenePartial(ctx context.Context, sceneID strin
 
 		if !merge {
 			// Replace all fixture values
-			if err := r.SceneRepo.DeleteFixtureValues(ctx, sceneID); err != nil {
-				return nil, err
+			if err := r.LookRepo.DeleteFixtureValues(ctx, lookID); err != nil {
+				return nil, fmt.Errorf("failed to delete existing fixture values: %w", err)
 			}
 		}
 
+		// Get existing fixture values for merge logic
+		existingValues, err := r.LookRepo.GetFixtureValues(ctx, lookID)
+		if err != nil {
+			return nil, err
+		}
+
+		existingMap := make(map[string]*models.FixtureValue)
+		maxOrder := -1
+		for i := range existingValues {
+			existingMap[existingValues[i].FixtureID] = &existingValues[i]
+			if existingValues[i].LookOrder != nil && *existingValues[i].LookOrder > maxOrder {
+				maxOrder = *existingValues[i].LookOrder
+			}
+		}
+
+		// Process each fixture value
 		for _, fv := range fixtureValues {
 			channelsJSON, err := serializeSparseChannels(fv.Channels)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to serialize channels for fixture %s: %w", fv.FixtureID, err)
 			}
 
-			if merge {
-				// Check if fixture already exists
-				existing, err := r.SceneRepo.GetFixtureValue(ctx, sceneID, fv.FixtureID)
-				if err != nil {
-					return nil, err
-				}
-
-				if existing != nil {
-					// Update existing
-					existing.Channels = channelsJSON
-					if fv.SceneOrder.IsSet() && fv.SceneOrder.Value() != nil {
-						existing.SceneOrder = fv.SceneOrder.Value()
-					}
-					if err := r.SceneRepo.UpdateFixtureValue(ctx, existing); err != nil {
-						return nil, err
-					}
-				} else {
-					// Create new
-					value := &models.FixtureValue{
-						SceneID:   sceneID,
-						FixtureID: fv.FixtureID,
-						Channels:  channelsJSON,
-					}
-					if fv.SceneOrder.IsSet() && fv.SceneOrder.Value() != nil {
-						value.SceneOrder = fv.SceneOrder.Value()
-					}
-					if err := r.SceneRepo.CreateFixtureValue(ctx, value); err != nil {
-						return nil, err
-					}
+			if existing, exists := existingMap[fv.FixtureID]; exists && merge {
+				// Update existing fixture value
+				existing.Channels = channelsJSON
+				if err := r.LookRepo.UpdateFixtureValue(ctx, existing); err != nil {
+					return nil, fmt.Errorf("failed to update fixture value: %w", err)
 				}
 			} else {
-				// Create new fixture values
-				value := &models.FixtureValue{
-					SceneID:   sceneID,
+				// Add new fixture value
+				maxOrder++
+				lookOrder := maxOrder
+				if fv.LookOrder.IsSet() && fv.LookOrder.Value() != nil {
+					lookOrder = *fv.LookOrder.Value()
+				}
+
+				fixtureValue := &models.FixtureValue{
+					LookID:    lookID,
 					FixtureID: fv.FixtureID,
 					Channels:  channelsJSON,
+					LookOrder: &lookOrder,
 				}
-				if fv.SceneOrder.IsSet() && fv.SceneOrder.Value() != nil {
-					value.SceneOrder = fv.SceneOrder.Value()
-				}
-				if err := r.SceneRepo.CreateFixtureValue(ctx, value); err != nil {
-					return nil, err
+				if err := r.LookRepo.CreateFixtureValue(ctx, fixtureValue); err != nil {
+					return nil, fmt.Errorf("failed to create fixture value: %w", err)
 				}
 			}
 		}
 	}
 
-	// Save the scene
-	if err := r.SceneRepo.Update(ctx, scene); err != nil {
-		return nil, err
+	// Re-apply the look if it's currently active
+	if err := r.reapplyActiveLookIfNeeded(ctx, lookID); err != nil {
+		log.Printf("Warning: failed to re-apply active look %s: %v", lookID, err)
 	}
 
-	// If this scene is currently active (displayed on DMX), re-apply its values
-	// so changes are immediately reflected in the output
-	if err := r.reapplyActiveSceneIfNeeded(ctx, sceneID); err != nil {
-		// Log the error but don't fail the update - the scene was saved successfully
-		log.Printf("Warning: failed to re-apply active scene after update: %v", err)
-	}
-
-	// If name changed, notify all cue lists using this scene
-	if nameChanged {
-		r.notifySceneNameChange(ctx, sceneID, scene.Name)
-	}
-
-	return scene, nil
+	return look, nil
 }
 
-// BulkUpdateScenesPartial is the resolver for the bulkUpdateScenesPartial field.
-// Updates multiple scenes with partial fixture value merging support.
-// Each scene can independently specify name, description, fixtureValues, and mergeFixtures.
-// This is useful for batch operations like changing a channel value across many scenes.
-// Note: Like other bulk operations, this doesn't use transactions yet - partial failures
-// may leave the database in an inconsistent state. Transaction support should be added
-// project-wide as a separate refactoring effort.
-func (r *mutationResolver) BulkUpdateScenesPartial(ctx context.Context, input generated.BulkScenePartialUpdateInput) ([]*models.Scene, error) {
-	updatedScenes := make([]*models.Scene, 0, len(input.Scenes))
+// BulkUpdateLooksPartial is the resolver for the bulkUpdateLooksPartial field.
+func (r *mutationResolver) BulkUpdateLooksPartial(ctx context.Context, input generated.BulkLookPartialUpdateInput) ([]*models.Look, error) {
+	var updatedLooks []*models.Look
 
-	for i, item := range input.Scenes {
-		// Extract optional fields from the input
-		var name *string
-		if item.Name.IsSet() {
-			name = item.Name.Value()
+	for _, lookUpdate := range input.Looks {
+		// Extract values from optional fields
+		var name, description *string
+		if lookUpdate.Name.IsSet() {
+			name = lookUpdate.Name.Value()
 		}
-
-		var description *string
-		if item.Description.IsSet() {
-			description = item.Description.Value()
+		if lookUpdate.Description.IsSet() {
+			description = lookUpdate.Description.Value()
 		}
 
 		var fixtureValues []*generated.FixtureValueInput
-		if item.FixtureValues.IsSet() {
-			fixtureValues = item.FixtureValues.Value()
+		if lookUpdate.FixtureValues.IsSet() {
+			fixtureValues = lookUpdate.FixtureValues.Value()
 		}
 
 		var mergeFixtures *bool
-		if item.MergeFixtures.IsSet() {
-			mergeFixtures = item.MergeFixtures.Value()
+		if lookUpdate.MergeFixtures.IsSet() {
+			mergeFixtures = lookUpdate.MergeFixtures.Value()
 		}
 
-		// Call the existing UpdateScenePartial resolver for each scene
-		scene, err := r.UpdateScenePartial(ctx, item.SceneID, name, description, fixtureValues, mergeFixtures)
+		look, err := r.UpdateLookPartial(ctx, lookUpdate.LookID, name, description, fixtureValues, mergeFixtures)
 		if err != nil {
-			return nil, fmt.Errorf("failed to update scene %s (item %d of %d): %w", item.SceneID, i+1, len(input.Scenes), err)
+			return nil, fmt.Errorf("failed to update look %s: %w", lookUpdate.LookID, err)
 		}
-
-		updatedScenes = append(updatedScenes, scene)
+		updatedLooks = append(updatedLooks, look)
 	}
 
-	return updatedScenes, nil
+	return updatedLooks, nil
 }
 
-// CreateSceneBoard is the resolver for the createSceneBoard field.
-func (r *mutationResolver) CreateSceneBoard(ctx context.Context, input generated.CreateSceneBoardInput) (*models.SceneBoard, error) {
-	// Verify project exists
-	project, err := r.ProjectRepo.FindByID(ctx, input.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	if project == nil {
-		return nil, fmt.Errorf("project not found: %s", input.ProjectID)
-	}
-
-	board := &models.SceneBoard{
-		ID:              cuid.New(),
+// CreateLookBoard is the resolver for the createLookBoard field.
+func (r *mutationResolver) CreateLookBoard(ctx context.Context, input generated.CreateLookBoardInput) (*models.LookBoard, error) {
+	board := &models.LookBoard{
 		Name:            input.Name,
 		ProjectID:       input.ProjectID,
-		DefaultFadeTime: 3.0,
-		GridSize:        intPtr(50),
-		CanvasWidth:     2000,
-		CanvasHeight:    2000,
+		DefaultFadeTime: 3.0,  // Default
+		CanvasWidth:     2000, // Default
+		CanvasHeight:    2000, // Default
 	}
 
 	if input.Description.IsSet() {
 		board.Description = input.Description.Value()
 	}
-
 	if input.DefaultFadeTime.IsSet() && input.DefaultFadeTime.Value() != nil {
 		board.DefaultFadeTime = *input.DefaultFadeTime.Value()
 	}
-
 	if input.GridSize.IsSet() && input.GridSize.Value() != nil {
 		board.GridSize = input.GridSize.Value()
 	}
-
 	if input.CanvasWidth.IsSet() && input.CanvasWidth.Value() != nil {
+		if err := validateCanvasDimension(*input.CanvasWidth.Value(), "canvasWidth"); err != nil {
+			return nil, err
+		}
 		board.CanvasWidth = *input.CanvasWidth.Value()
 	}
-
 	if input.CanvasHeight.IsSet() && input.CanvasHeight.Value() != nil {
+		if err := validateCanvasDimension(*input.CanvasHeight.Value(), "canvasHeight"); err != nil {
+			return nil, err
+		}
 		board.CanvasHeight = *input.CanvasHeight.Value()
 	}
 
-	result := r.db.WithContext(ctx).Create(board)
-	if result.Error != nil {
-		return nil, result.Error
+	if err := r.LookBoardRepo.Create(ctx, board); err != nil {
+		return nil, err
 	}
 
 	return board, nil
 }
 
-// UpdateSceneBoard is the resolver for the updateSceneBoard field.
-func (r *mutationResolver) UpdateSceneBoard(ctx context.Context, id string, input generated.UpdateSceneBoardInput) (*models.SceneBoard, error) {
-	var board models.SceneBoard
-	result := r.db.WithContext(ctx).First(&board, "id = ?", id)
-	if result.Error != nil {
-		return nil, result.Error
+// UpdateLookBoard is the resolver for the updateLookBoard field.
+func (r *mutationResolver) UpdateLookBoard(ctx context.Context, id string, input generated.UpdateLookBoardInput) (*models.LookBoard, error) {
+	board, err := r.LookBoardRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if board == nil {
+		return nil, fmt.Errorf("look board not found: %s", id)
 	}
 
 	if input.Name.IsSet() && input.Name.Value() != nil {
 		board.Name = *input.Name.Value()
 	}
-
 	if input.Description.IsSet() {
 		board.Description = input.Description.Value()
 	}
-
 	if input.DefaultFadeTime.IsSet() && input.DefaultFadeTime.Value() != nil {
 		board.DefaultFadeTime = *input.DefaultFadeTime.Value()
 	}
-
-	if input.GridSize.IsSet() && input.GridSize.Value() != nil {
+	if input.GridSize.IsSet() {
 		board.GridSize = input.GridSize.Value()
 	}
-
 	if input.CanvasWidth.IsSet() && input.CanvasWidth.Value() != nil {
+		if err := validateCanvasDimension(*input.CanvasWidth.Value(), "canvasWidth"); err != nil {
+			return nil, err
+		}
 		board.CanvasWidth = *input.CanvasWidth.Value()
 	}
-
 	if input.CanvasHeight.IsSet() && input.CanvasHeight.Value() != nil {
+		if err := validateCanvasDimension(*input.CanvasHeight.Value(), "canvasHeight"); err != nil {
+			return nil, err
+		}
 		board.CanvasHeight = *input.CanvasHeight.Value()
 	}
 
-	result = r.db.WithContext(ctx).Save(&board)
-	if result.Error != nil {
-		return nil, result.Error
+	if err := r.LookBoardRepo.Update(ctx, board); err != nil {
+		return nil, err
 	}
 
-	return &board, nil
+	return board, nil
 }
 
-// DeleteSceneBoard is the resolver for the deleteSceneBoard field.
-func (r *mutationResolver) DeleteSceneBoard(ctx context.Context, id string) (bool, error) {
-	// Delete all buttons first
-	result := r.db.WithContext(ctx).Where("scene_board_id = ?", id).Delete(&models.SceneBoardButton{})
-	if result.Error != nil {
-		return false, result.Error
+// DeleteLookBoard is the resolver for the deleteLookBoard field.
+func (r *mutationResolver) DeleteLookBoard(ctx context.Context, id string) (bool, error) {
+	// Check if look board exists
+	board, err := r.LookBoardRepo.FindByID(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	if board == nil {
+		return false, fmt.Errorf("look board not found: %s", id)
 	}
 
-	// Delete the board
-	result = r.db.WithContext(ctx).Delete(&models.SceneBoard{}, "id = ?", id)
-	if result.Error != nil {
-		return false, result.Error
+	// Delete look board (repository handles button deletion)
+	if err := r.LookBoardRepo.Delete(ctx, id); err != nil {
+		return false, err
 	}
 
 	return true, nil
 }
 
-// BulkCreateSceneBoards is the resolver for the bulkCreateSceneBoards field.
-func (r *mutationResolver) BulkCreateSceneBoards(ctx context.Context, input generated.BulkSceneBoardCreateInput) ([]*models.SceneBoard, error) {
-	var createdBoards []*models.SceneBoard
+// BulkCreateLookBoards is the resolver for the bulkCreateLookBoards field.
+func (r *mutationResolver) BulkCreateLookBoards(ctx context.Context, input generated.BulkLookBoardCreateInput) ([]*models.LookBoard, error) {
+	var createdBoards []*models.LookBoard
 
-	for _, boardInput := range input.SceneBoards {
-		board, err := r.CreateSceneBoard(ctx, *boardInput)
+	for _, boardInput := range input.LookBoards {
+		board, err := r.CreateLookBoard(ctx, *boardInput)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to create look board %s: %w", boardInput.Name, err)
 		}
 		createdBoards = append(createdBoards, board)
 	}
@@ -1893,62 +1897,51 @@ func (r *mutationResolver) BulkCreateSceneBoards(ctx context.Context, input gene
 	return createdBoards, nil
 }
 
-// BulkUpdateSceneBoards is the resolver for the bulkUpdateSceneBoards field.
-func (r *mutationResolver) BulkUpdateSceneBoards(ctx context.Context, input generated.BulkSceneBoardUpdateInput) ([]*models.SceneBoard, error) {
-	var updatedBoards []*models.SceneBoard
+// BulkUpdateLookBoards is the resolver for the bulkUpdateLookBoards field.
+func (r *mutationResolver) BulkUpdateLookBoards(ctx context.Context, input generated.BulkLookBoardUpdateInput) ([]*models.LookBoard, error) {
+	var updatedBoards []*models.LookBoard
 
-	for _, item := range input.SceneBoards {
-		var board models.SceneBoard
-		result := r.db.WithContext(ctx).First(&board, "id = ?", item.SceneBoardID)
-		if result.Error != nil {
-			return nil, result.Error
+	for _, boardUpdate := range input.LookBoards {
+		// Build UpdateLookBoardInput from LookBoardUpdateItem
+		updateInput := generated.UpdateLookBoardInput{}
+		if boardUpdate.Name.IsSet() {
+			updateInput.Name = boardUpdate.Name
+		}
+		if boardUpdate.Description.IsSet() {
+			updateInput.Description = boardUpdate.Description
+		}
+		if boardUpdate.DefaultFadeTime.IsSet() {
+			updateInput.DefaultFadeTime = boardUpdate.DefaultFadeTime
+		}
+		if boardUpdate.GridSize.IsSet() {
+			updateInput.GridSize = boardUpdate.GridSize
+		}
+		if boardUpdate.CanvasWidth.IsSet() {
+			updateInput.CanvasWidth = boardUpdate.CanvasWidth
+		}
+		if boardUpdate.CanvasHeight.IsSet() {
+			updateInput.CanvasHeight = boardUpdate.CanvasHeight
 		}
 
-		if item.Name.IsSet() && item.Name.Value() != nil {
-			board.Name = *item.Name.Value()
+		board, err := r.UpdateLookBoard(ctx, boardUpdate.LookBoardID, updateInput)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update look board %s: %w", boardUpdate.LookBoardID, err)
 		}
-
-		if item.Description.IsSet() {
-			board.Description = item.Description.Value()
-		}
-
-		if item.DefaultFadeTime.IsSet() && item.DefaultFadeTime.Value() != nil {
-			board.DefaultFadeTime = *item.DefaultFadeTime.Value()
-		}
-
-		if item.GridSize.IsSet() && item.GridSize.Value() != nil {
-			board.GridSize = item.GridSize.Value()
-		}
-
-		if item.CanvasWidth.IsSet() && item.CanvasWidth.Value() != nil {
-			board.CanvasWidth = *item.CanvasWidth.Value()
-		}
-
-		if item.CanvasHeight.IsSet() && item.CanvasHeight.Value() != nil {
-			board.CanvasHeight = *item.CanvasHeight.Value()
-		}
-
-		result = r.db.WithContext(ctx).Save(&board)
-		if result.Error != nil {
-			return nil, result.Error
-		}
-
-		updatedBoards = append(updatedBoards, &board)
+		updatedBoards = append(updatedBoards, board)
 	}
 
 	return updatedBoards, nil
 }
 
-// BulkDeleteSceneBoards is the resolver for the bulkDeleteSceneBoards field.
-func (r *mutationResolver) BulkDeleteSceneBoards(ctx context.Context, sceneBoardIds []string) (*generated.BulkDeleteResult, error) {
+// BulkDeleteLookBoards is the resolver for the bulkDeleteLookBoards field.
+func (r *mutationResolver) BulkDeleteLookBoards(ctx context.Context, lookBoardIds []string) (*generated.BulkDeleteResult, error) {
 	var deletedIds []string
 
-	for _, boardID := range sceneBoardIds {
-		_, err := r.DeleteSceneBoard(ctx, boardID)
-		if err != nil {
-			return nil, err
+	for _, id := range lookBoardIds {
+		if err := r.LookBoardRepo.Delete(ctx, id); err != nil {
+			continue
 		}
-		deletedIds = append(deletedIds, boardID)
+		deletedIds = append(deletedIds, id)
 	}
 
 	return &generated.BulkDeleteResult{
@@ -1957,138 +1950,137 @@ func (r *mutationResolver) BulkDeleteSceneBoards(ctx context.Context, sceneBoard
 	}, nil
 }
 
-// AddSceneToBoard is the resolver for the addSceneToBoard field.
-func (r *mutationResolver) AddSceneToBoard(ctx context.Context, input generated.CreateSceneBoardButtonInput) (*models.SceneBoardButton, error) {
-	// Verify scene board exists
-	var board models.SceneBoard
-	result := r.db.WithContext(ctx).First(&board, "id = ?", input.SceneBoardID)
-	if result.Error != nil {
-		return nil, fmt.Errorf("scene board not found: %w", result.Error)
-	}
-
-	// Verify scene exists
-	scene, err := r.SceneRepo.FindByID(ctx, input.SceneID)
+// AddLookToBoard is the resolver for the addLookToBoard field.
+func (r *mutationResolver) AddLookToBoard(ctx context.Context, input generated.CreateLookBoardButtonInput) (*models.LookBoardButton, error) {
+	// Verify look board exists
+	board, err := r.LookBoardRepo.FindByID(ctx, input.LookBoardID)
 	if err != nil {
 		return nil, err
 	}
-	if scene == nil {
-		return nil, fmt.Errorf("scene not found: %s", input.SceneID)
+	if board == nil {
+		return nil, fmt.Errorf("look board not found: %s", input.LookBoardID)
 	}
 
-	button := &models.SceneBoardButton{
-		ID:           cuid.New(),
-		SceneBoardID: input.SceneBoardID,
-		SceneID:      input.SceneID,
-		LayoutX:      input.LayoutX,
-		LayoutY:      input.LayoutY,
-		Width:        intPtr(200),
-		Height:       intPtr(120),
+	// Verify look exists
+	look, err := r.LookRepo.FindByID(ctx, input.LookID)
+	if err != nil {
+		return nil, err
+	}
+	if look == nil {
+		return nil, fmt.Errorf("look not found: %s", input.LookID)
 	}
 
-	if input.Width.IsSet() && input.Width.Value() != nil {
-		button.Width = input.Width.Value()
-	}
-
-	if input.Height.IsSet() && input.Height.Value() != nil {
-		button.Height = input.Height.Value()
-	}
-
-	if input.Color.IsSet() {
-		button.Color = input.Color.Value()
-	}
-
-	if input.Label.IsSet() {
-		button.Label = input.Label.Value()
-	}
-
-	result = r.db.WithContext(ctx).Create(button)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-
-	return button, nil
-}
-
-// UpdateSceneBoardButton is the resolver for the updateSceneBoardButton field.
-func (r *mutationResolver) UpdateSceneBoardButton(ctx context.Context, id string, input generated.UpdateSceneBoardButtonInput) (*models.SceneBoardButton, error) {
-	var button models.SceneBoardButton
-	result := r.db.WithContext(ctx).First(&button, "id = ?", id)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-
-	if input.LayoutX.IsSet() && input.LayoutX.Value() != nil {
-		button.LayoutX = *input.LayoutX.Value()
-	}
-
-	if input.LayoutY.IsSet() && input.LayoutY.Value() != nil {
-		button.LayoutY = *input.LayoutY.Value()
+	button := &models.LookBoardButton{
+		LookBoardID: input.LookBoardID,
+		LookID:      input.LookID,
+		LayoutX:     input.LayoutX,
+		LayoutY:     input.LayoutY,
 	}
 
 	if input.Width.IsSet() {
 		button.Width = input.Width.Value()
 	}
-
 	if input.Height.IsSet() {
 		button.Height = input.Height.Value()
 	}
-
 	if input.Color.IsSet() {
 		button.Color = input.Color.Value()
 	}
-
 	if input.Label.IsSet() {
 		button.Label = input.Label.Value()
 	}
 
-	result = r.db.WithContext(ctx).Save(&button)
-	if result.Error != nil {
-		return nil, result.Error
+	if err := r.LookBoardRepo.CreateButton(ctx, button); err != nil {
+		return nil, err
 	}
 
-	return &button, nil
+	return button, nil
 }
 
-// RemoveSceneFromBoard is the resolver for the removeSceneFromBoard field.
-func (r *mutationResolver) RemoveSceneFromBoard(ctx context.Context, buttonID string) (bool, error) {
-	result := r.db.WithContext(ctx).Delete(&models.SceneBoardButton{}, "id = ?", buttonID)
-	if result.Error != nil {
-		return false, result.Error
+// UpdateLookBoardButton is the resolver for the updateLookBoardButton field.
+func (r *mutationResolver) UpdateLookBoardButton(ctx context.Context, id string, input generated.UpdateLookBoardButtonInput) (*models.LookBoardButton, error) {
+	button, err := r.LookBoardRepo.FindButtonByID(ctx, id)
+	if err != nil {
+		return nil, err
 	}
-	if result.RowsAffected == 0 {
-		return false, fmt.Errorf("button not found: %s", buttonID)
+	if button == nil {
+		return nil, fmt.Errorf("look board button not found: %s", id)
 	}
+
+	if input.LayoutX.IsSet() && input.LayoutX.Value() != nil {
+		button.LayoutX = *input.LayoutX.Value()
+	}
+	if input.LayoutY.IsSet() && input.LayoutY.Value() != nil {
+		button.LayoutY = *input.LayoutY.Value()
+	}
+	if input.Width.IsSet() {
+		button.Width = input.Width.Value()
+	}
+	if input.Height.IsSet() {
+		button.Height = input.Height.Value()
+	}
+	if input.Color.IsSet() {
+		button.Color = input.Color.Value()
+	}
+	if input.Label.IsSet() {
+		button.Label = input.Label.Value()
+	}
+
+	if err := r.LookBoardRepo.UpdateButton(ctx, button); err != nil {
+		return nil, err
+	}
+
+	return button, nil
+}
+
+// RemoveLookFromBoard is the resolver for the removeLookFromBoard field.
+func (r *mutationResolver) RemoveLookFromBoard(ctx context.Context, buttonID string) (bool, error) {
+	// Check if button exists
+	button, err := r.LookBoardRepo.FindButtonByID(ctx, buttonID)
+	if err != nil {
+		return false, err
+	}
+	if button == nil {
+		return false, fmt.Errorf("look board button not found: %s", buttonID)
+	}
+
+	if err := r.LookBoardRepo.DeleteButton(ctx, buttonID); err != nil {
+		return false, err
+	}
+
 	return true, nil
 }
 
-// UpdateSceneBoardButtonPositions is the resolver for the updateSceneBoardButtonPositions field.
-func (r *mutationResolver) UpdateSceneBoardButtonPositions(ctx context.Context, positions []*generated.SceneBoardButtonPositionInput) (bool, error) {
-	for _, position := range positions {
-		var button models.SceneBoardButton
-		result := r.db.WithContext(ctx).First(&button, "id = ?", position.ButtonID)
-		if result.Error != nil {
-			return false, result.Error
+// UpdateLookBoardButtonPositions is the resolver for the updateLookBoardButtonPositions field.
+func (r *mutationResolver) UpdateLookBoardButtonPositions(ctx context.Context, positions []*generated.LookBoardButtonPositionInput) (bool, error) {
+	for _, pos := range positions {
+		button, err := r.LookBoardRepo.FindButtonByID(ctx, pos.ButtonID)
+		if err != nil {
+			return false, err
+		}
+		if button == nil {
+			return false, fmt.Errorf("look board button not found: %s", pos.ButtonID)
 		}
 
-		button.LayoutX = position.LayoutX
-		button.LayoutY = position.LayoutY
+		button.LayoutX = pos.LayoutX
+		button.LayoutY = pos.LayoutY
 
-		result = r.db.WithContext(ctx).Save(&button)
-		if result.Error != nil {
-			return false, result.Error
+		if err := r.LookBoardRepo.UpdateButton(ctx, button); err != nil {
+			return false, err
 		}
 	}
+
 	return true, nil
 }
 
-// BulkCreateSceneBoardButtons is the resolver for the bulkCreateSceneBoardButtons field.
-func (r *mutationResolver) BulkCreateSceneBoardButtons(ctx context.Context, input generated.BulkSceneBoardButtonCreateInput) ([]*models.SceneBoardButton, error) {
-	var createdButtons []*models.SceneBoardButton
+// BulkCreateLookBoardButtons is the resolver for the bulkCreateLookBoardButtons field.
+func (r *mutationResolver) BulkCreateLookBoardButtons(ctx context.Context, input generated.BulkLookBoardButtonCreateInput) ([]*models.LookBoardButton, error) {
+	var createdButtons []*models.LookBoardButton
 
 	for _, buttonInput := range input.Buttons {
-		button, err := r.AddSceneToBoard(ctx, *buttonInput)
+		button, err := r.AddLookToBoard(ctx, *buttonInput)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to create look board button: %w", err)
 		}
 		createdButtons = append(createdButtons, button)
 	}
@@ -2096,62 +2088,51 @@ func (r *mutationResolver) BulkCreateSceneBoardButtons(ctx context.Context, inpu
 	return createdButtons, nil
 }
 
-// BulkUpdateSceneBoardButtons is the resolver for the bulkUpdateSceneBoardButtons field.
-func (r *mutationResolver) BulkUpdateSceneBoardButtons(ctx context.Context, input generated.BulkSceneBoardButtonUpdateInput) ([]*models.SceneBoardButton, error) {
-	var updatedButtons []*models.SceneBoardButton
+// BulkUpdateLookBoardButtons is the resolver for the bulkUpdateLookBoardButtons field.
+func (r *mutationResolver) BulkUpdateLookBoardButtons(ctx context.Context, input generated.BulkLookBoardButtonUpdateInput) ([]*models.LookBoardButton, error) {
+	var updatedButtons []*models.LookBoardButton
 
-	for _, item := range input.Buttons {
-		var button models.SceneBoardButton
-		result := r.db.WithContext(ctx).First(&button, "id = ?", item.ButtonID)
-		if result.Error != nil {
-			return nil, result.Error
+	for _, buttonUpdate := range input.Buttons {
+		// Build UpdateLookBoardButtonInput from LookBoardButtonUpdateItem
+		updateInput := generated.UpdateLookBoardButtonInput{}
+		if buttonUpdate.LayoutX.IsSet() {
+			updateInput.LayoutX = buttonUpdate.LayoutX
+		}
+		if buttonUpdate.LayoutY.IsSet() {
+			updateInput.LayoutY = buttonUpdate.LayoutY
+		}
+		if buttonUpdate.Width.IsSet() {
+			updateInput.Width = buttonUpdate.Width
+		}
+		if buttonUpdate.Height.IsSet() {
+			updateInput.Height = buttonUpdate.Height
+		}
+		if buttonUpdate.Color.IsSet() {
+			updateInput.Color = buttonUpdate.Color
+		}
+		if buttonUpdate.Label.IsSet() {
+			updateInput.Label = buttonUpdate.Label
 		}
 
-		if item.LayoutX.IsSet() && item.LayoutX.Value() != nil {
-			button.LayoutX = *item.LayoutX.Value()
+		button, err := r.UpdateLookBoardButton(ctx, buttonUpdate.ButtonID, updateInput)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update look board button %s: %w", buttonUpdate.ButtonID, err)
 		}
-
-		if item.LayoutY.IsSet() && item.LayoutY.Value() != nil {
-			button.LayoutY = *item.LayoutY.Value()
-		}
-
-		if item.Width.IsSet() {
-			button.Width = item.Width.Value()
-		}
-
-		if item.Height.IsSet() {
-			button.Height = item.Height.Value()
-		}
-
-		if item.Color.IsSet() {
-			button.Color = item.Color.Value()
-		}
-
-		if item.Label.IsSet() {
-			button.Label = item.Label.Value()
-		}
-
-		result = r.db.WithContext(ctx).Save(&button)
-		if result.Error != nil {
-			return nil, result.Error
-		}
-
-		updatedButtons = append(updatedButtons, &button)
+		updatedButtons = append(updatedButtons, button)
 	}
 
 	return updatedButtons, nil
 }
 
-// BulkDeleteSceneBoardButtons is the resolver for the bulkDeleteSceneBoardButtons field.
-func (r *mutationResolver) BulkDeleteSceneBoardButtons(ctx context.Context, buttonIds []string) (*generated.BulkDeleteResult, error) {
+// BulkDeleteLookBoardButtons is the resolver for the bulkDeleteLookBoardButtons field.
+func (r *mutationResolver) BulkDeleteLookBoardButtons(ctx context.Context, buttonIds []string) (*generated.BulkDeleteResult, error) {
 	var deletedIds []string
 
-	for _, buttonID := range buttonIds {
-		_, err := r.RemoveSceneFromBoard(ctx, buttonID)
-		if err != nil {
-			return nil, err
+	for _, id := range buttonIds {
+		if err := r.LookBoardRepo.DeleteButton(ctx, id); err != nil {
+			continue
 		}
-		deletedIds = append(deletedIds, buttonID)
+		deletedIds = append(deletedIds, id)
 	}
 
 	return &generated.BulkDeleteResult{
@@ -2160,55 +2141,45 @@ func (r *mutationResolver) BulkDeleteSceneBoardButtons(ctx context.Context, butt
 	}, nil
 }
 
-// ActivateSceneFromBoard is the resolver for the activateSceneFromBoard field.
-func (r *mutationResolver) ActivateSceneFromBoard(ctx context.Context, sceneBoardID string, sceneID string, fadeTimeOverride *float64) (bool, error) {
-	// Auto-pause any playing cue lists since a scene is being activated outside cue context
-	r.PlaybackService.PausePlayingCueLists()
-
-	// Verify scene board exists
-	var board models.SceneBoard
-	result := r.db.WithContext(ctx).First(&board, "id = ?", sceneBoardID)
-	if result.Error != nil {
-		return false, fmt.Errorf("scene board not found: %w", result.Error)
-	}
-
-	// Verify scene exists
-	scene, err := r.SceneRepo.FindByID(ctx, sceneID)
+// ActivateLookFromBoard is the resolver for the activateLookFromBoard field.
+func (r *mutationResolver) ActivateLookFromBoard(ctx context.Context, lookBoardID string, lookID string, fadeTimeOverride *float64) (bool, error) {
+	// Verify look board exists and get its default fade time
+	board, err := r.LookBoardRepo.FindByID(ctx, lookBoardID)
 	if err != nil {
 		return false, err
 	}
-	if scene == nil {
-		return false, fmt.Errorf("scene not found: %s", sceneID)
+	if board == nil {
+		return false, fmt.Errorf("look board not found: %s", lookBoardID)
 	}
 
-	// Cancel any active preview sessions for this project to ensure preview overrides
-	// don't interfere with scene playback. Preview mode uses DMX channel overrides that
-	// take precedence over base scene values.
-	r.PreviewService.CancelAllProjectSessions(ctx, scene.ProjectID)
-
-	// Use fade time override if provided, otherwise use board default
+	// Use override fade time or board's default
 	fadeTime := board.DefaultFadeTime
 	if fadeTimeOverride != nil {
 		fadeTime = *fadeTimeOverride
 	}
 
-	// Load scene with fixture values
-	var fullScene models.Scene
-	result = r.db.WithContext(ctx).Preload("FixtureValues").First(&fullScene, "id = ?", sceneID)
+	// Auto-pause any playing cue lists since a look is being activated outside cue context
+	r.PlaybackService.PausePlayingCueLists()
+
+	// Load look with fixture values
+	var look models.Look
+	result := r.db.Preload("FixtureValues").First(&look, "id = ?", lookID)
 	if result.Error != nil {
-		return false, result.Error
+		return false, fmt.Errorf("look not found: %w", result.Error)
 	}
 
-	// Load fixtures for the scene's fixture values
+	// Cancel any active preview sessions for this project
+	r.PreviewService.CancelAllProjectSessions(ctx, look.ProjectID)
+
+	// Load fixtures for the look's fixture values
 	var fixtureIDs []string
-	for _, fv := range fullScene.FixtureValues {
+	for _, fv := range look.FixtureValues {
 		fixtureIDs = append(fixtureIDs, fv.FixtureID)
 	}
 
 	var fixtures []models.FixtureInstance
 	if len(fixtureIDs) > 0 {
-		// Load fixtures with their channels to get fadeBehavior
-		r.db.WithContext(ctx).Preload("Channels").Where("id IN ?", fixtureIDs).Find(&fixtures)
+		r.db.Preload("Channels").Where("id IN ?", fixtureIDs).Find(&fixtures)
 	}
 
 	// Create fixture lookup map
@@ -2217,31 +2188,22 @@ func (r *mutationResolver) ActivateSceneFromBoard(ctx context.Context, sceneBoar
 		fixtureMap[fixtures[i].ID] = &fixtures[i]
 	}
 
-	// Build scene channels for fade
-	var sceneChannels []fade.SceneChannel
-	for _, fixtureValue := range fullScene.FixtureValues {
+	// Build look channels for fade engine
+	var lookChannels []fade.LookChannel
+	for _, fixtureValue := range look.FixtureValues {
 		fixture := fixtureMap[fixtureValue.FixtureID]
 		if fixture == nil {
 			continue
 		}
 
-		// Parse sparse channel values from JSON (Channels field)
+		// Parse sparse channel values from JSON
 		var channels []models.ChannelValue
 		if err := json.Unmarshal([]byte(fixtureValue.Channels), &channels); err != nil {
-			log.Printf("Warning: failed to unmarshal channels for fixtureID %s in sceneID %s: %v", fixtureValue.FixtureID, sceneID, err)
+			log.Printf("Warning: failed to unmarshal channels for fixtureID %s in lookID %s: %v", fixtureValue.FixtureID, lookID, err)
 			continue
 		}
 
-		// Build a map of channel offset -> fade behavior for efficient lookup
-		fadeBehaviorMap := make(map[int]string)
-		for _, chanDef := range fixture.Channels {
-			if chanDef.FadeBehavior != "" {
-				fadeBehaviorMap[chanDef.Offset] = chanDef.FadeBehavior
-			}
-		}
-
-		// Build channel targets with fade behavior from channel definitions
-		// Only process channels that exist in the sparse array
+		// Process each channel in the sparse array
 		for _, ch := range channels {
 			dmxChannel := fixture.StartChannel + ch.Offset
 
@@ -2252,11 +2214,16 @@ func (r *mutationResolver) ActivateSceneFromBoard(ctx context.Context, sceneBoar
 
 			// Get fade behavior from channel definition (if available)
 			fadeBehavior := fade.FadeBehaviorFade // Default to FADE
-			if fb, ok := fadeBehaviorMap[ch.Offset]; ok {
-				fadeBehavior = fb
+			for _, chanDef := range fixture.Channels {
+				if chanDef.Offset == ch.Offset {
+					if chanDef.FadeBehavior != "" {
+						fadeBehavior = chanDef.FadeBehavior
+					}
+					break
+				}
 			}
 
-			sceneChannels = append(sceneChannels, fade.SceneChannel{
+			lookChannels = append(lookChannels, fade.LookChannel{
 				Universe:     fixture.Universe,
 				Channel:      dmxChannel,
 				Value:        ch.Value,
@@ -2266,12 +2233,11 @@ func (r *mutationResolver) ActivateSceneFromBoard(ctx context.Context, sceneBoar
 	}
 
 	// Execute fade
-	fadeID := fmt.Sprintf("scene-board-%s", sceneID)
-	fadeDuration := time.Duration(fadeTime * float64(time.Second))
-	r.FadeEngine.FadeToScene(sceneChannels, fadeDuration, fadeID, fade.EasingInOutSine)
+	fadeID := fmt.Sprintf("board-%s-look-%s", lookBoardID, lookID)
+	r.FadeEngine.FadeToLook(lookChannels, time.Duration(fadeTime*float64(time.Second)), fadeID, fade.EasingInOutSine)
 
-	// Track the active scene
-	r.DMXService.SetActiveScene(sceneID)
+	// Track the active look
+	r.DMXService.SetActiveLook(lookID)
 
 	return true, nil
 }
@@ -2434,20 +2400,20 @@ func (r *mutationResolver) CreateCue(ctx context.Context, input generated.Create
 		return nil, fmt.Errorf("cue list not found: %s", input.CueListID)
 	}
 
-	// Verify scene exists
-	scene, err := r.SceneRepo.FindByID(ctx, input.SceneID)
+	// Verify look exists
+	look, err := r.LookRepo.FindByID(ctx, input.LookID)
 	if err != nil {
 		return nil, err
 	}
-	if scene == nil {
-		return nil, fmt.Errorf("scene not found: %s", input.SceneID)
+	if look == nil {
+		return nil, fmt.Errorf("look not found: %s", input.LookID)
 	}
 
 	cue := &models.Cue{
 		Name:        input.Name,
 		CueNumber:   input.CueNumber,
 		CueListID:   input.CueListID,
-		SceneID:     input.SceneID,
+		LookID:      input.LookID,
 		FadeInTime:  input.FadeInTime,
 		FadeOutTime: input.FadeOutTime,
 	}
@@ -2489,21 +2455,21 @@ func (r *mutationResolver) UpdateCue(ctx context.Context, id string, input gener
 		return nil, fmt.Errorf("cue not found: %s", id)
 	}
 
-	// Verify scene exists if being changed
-	if input.SceneID != cue.SceneID {
-		scene, err := r.SceneRepo.FindByID(ctx, input.SceneID)
+	// Verify look exists if being changed
+	if input.LookID != cue.LookID {
+		look, err := r.LookRepo.FindByID(ctx, input.LookID)
 		if err != nil {
 			return nil, err
 		}
-		if scene == nil {
-			return nil, fmt.Errorf("scene not found: %s", input.SceneID)
+		if look == nil {
+			return nil, fmt.Errorf("look not found: %s", input.LookID)
 		}
 	}
 
 	// Update fields
 	cue.Name = input.Name
 	cue.CueNumber = input.CueNumber
-	cue.SceneID = input.SceneID
+	cue.LookID = input.LookID
 	cue.FadeInTime = input.FadeInTime
 	cue.FadeOutTime = input.FadeOutTime
 
@@ -2710,7 +2676,7 @@ func (r *mutationResolver) ToggleCueSkip(ctx context.Context, cueID string) (*mo
 // StartPreviewSession is the resolver for the startPreviewSession field.
 func (r *mutationResolver) StartPreviewSession(ctx context.Context, projectID string) (*models.PreviewSession, error) {
 	// Auto-pause any playing cue lists since a preview session is being started.
-	// This ensures the user can edit scenes without the cue list continuing to play
+	// This ensures the user can edit looks without the cue list continuing to play
 	// in the background, and allows them to resume when returning to the cue list.
 	r.PlaybackService.PausePlayingCueLists()
 
@@ -2770,13 +2736,13 @@ func (r *mutationResolver) UpdatePreviewChannel(ctx context.Context, sessionID s
 	return r.PreviewService.UpdateChannelValue(ctx, sessionID, fixtureID, channelIndex, value)
 }
 
-// InitializePreviewWithScene is the resolver for the initializePreviewWithScene field.
-func (r *mutationResolver) InitializePreviewWithScene(ctx context.Context, sessionID string, sceneID string) (bool, error) {
-	// Auto-pause any playing cue lists since a scene is being loaded into preview.
-	// This ensures consistent behavior when editing scenes during cue list playback.
+// InitializePreviewWithLook is the resolver for the initializePreviewWithLook field.
+func (r *mutationResolver) InitializePreviewWithLook(ctx context.Context, sessionID string, lookID string) (bool, error) {
+	// Auto-pause any playing cue lists since a look is being loaded into preview.
+	// This ensures consistent behavior when editing looks during cue list playback.
 	r.PlaybackService.PausePlayingCueLists()
 
-	return r.PreviewService.InitializeWithScene(ctx, sessionID, sceneID)
+	return r.PreviewService.InitializeWithLook(ctx, sessionID, lookID)
 }
 
 // SetChannelValue is the resolver for the setChannelValue field.
@@ -2793,26 +2759,26 @@ func (r *mutationResolver) SetChannelValue(ctx context.Context, universe int, ch
 	return true, nil
 }
 
-// SetSceneLive is the resolver for the setSceneLive field.
-func (r *mutationResolver) SetSceneLive(ctx context.Context, sceneID string) (bool, error) {
-	// Auto-pause any playing cue lists since a scene is being activated outside cue context
+// SetLookLive is the resolver for the setLookLive field.
+func (r *mutationResolver) SetLookLive(ctx context.Context, lookID string) (bool, error) {
+	// Auto-pause any playing cue lists since a look is being activated outside cue context
 	r.PlaybackService.PausePlayingCueLists()
 
-	// Load scene with fixture values
-	var scene models.Scene
-	result := r.db.Preload("FixtureValues").First(&scene, "id = ?", sceneID)
+	// Load look with fixture values
+	var look models.Look
+	result := r.db.Preload("FixtureValues").First(&look, "id = ?", lookID)
 	if result.Error != nil {
-		return false, fmt.Errorf("scene not found: %w", result.Error)
+		return false, fmt.Errorf("look not found: %w", result.Error)
 	}
 
 	// Cancel any active preview sessions for this project to ensure preview overrides
-	// don't interfere with scene playback. Preview mode uses DMX channel overrides that
-	// take precedence over base scene values.
-	r.PreviewService.CancelAllProjectSessions(ctx, scene.ProjectID)
+	// don't interfere with look playback. Preview mode uses DMX channel overrides that
+	// take precedence over base look values.
+	r.PreviewService.CancelAllProjectSessions(ctx, look.ProjectID)
 
-	// Load fixtures for the scene's fixture values
+	// Load fixtures for the look's fixture values
 	var fixtureIDs []string
-	for _, fv := range scene.FixtureValues {
+	for _, fv := range look.FixtureValues {
 		fixtureIDs = append(fixtureIDs, fv.FixtureID)
 	}
 
@@ -2828,7 +2794,7 @@ func (r *mutationResolver) SetSceneLive(ctx context.Context, sceneID string) (bo
 	}
 
 	// Set channel values directly (no fade)
-	for _, fixtureValue := range scene.FixtureValues {
+	for _, fixtureValue := range look.FixtureValues {
 		fixture := fixtureMap[fixtureValue.FixtureID]
 		if fixture == nil {
 			continue
@@ -2837,7 +2803,7 @@ func (r *mutationResolver) SetSceneLive(ctx context.Context, sceneID string) (bo
 		// Parse sparse channel values from JSON (Channels field)
 		var channels []models.ChannelValue
 		if err := json.Unmarshal([]byte(fixtureValue.Channels), &channels); err != nil {
-			log.Printf("Warning: failed to unmarshal channels for fixtureID %s in sceneID %s: %v", fixtureValue.FixtureID, sceneID, err)
+			log.Printf("Warning: failed to unmarshal channels for fixtureID %s in lookID %s: %v", fixtureValue.FixtureID, lookID, err)
 			continue
 		}
 
@@ -2857,8 +2823,8 @@ func (r *mutationResolver) SetSceneLive(ctx context.Context, sceneID string) (bo
 	// Force immediate transmission
 	r.DMXService.TriggerChangeDetection()
 
-	// Track the active scene
-	r.DMXService.SetActiveScene(sceneID)
+	// Track the active look
+	r.DMXService.SetActiveLook(lookID)
 
 	return true, nil
 }
@@ -2897,8 +2863,8 @@ func (r *mutationResolver) FadeToBlack(ctx context.Context, fadeOutTime float64)
 		}(fadeID)
 	}
 
-	// Clear active scene tracking
-	r.DMXService.ClearActiveScene()
+	// Clear active look tracking
+	r.DMXService.ClearActiveLook()
 
 	_ = fadeID // suppress unused variable warning
 	return true, nil
@@ -2969,15 +2935,15 @@ func (r *mutationResolver) ExportProject(ctx context.Context, projectID string, 
 
 	// Parse options
 	includeFixtures := true
-	includeScenes := true
+	includeLooks := true
 	includeCueLists := true
 
 	if options != nil {
 		if options.IncludeFixtures.IsSet() && options.IncludeFixtures.Value() != nil {
 			includeFixtures = *options.IncludeFixtures.Value()
 		}
-		if options.IncludeScenes.IsSet() && options.IncludeScenes.Value() != nil {
-			includeScenes = *options.IncludeScenes.Value()
+		if options.IncludeLooks.IsSet() && options.IncludeLooks.Value() != nil {
+			includeLooks = *options.IncludeLooks.Value()
 		}
 		if options.IncludeCueLists.IsSet() && options.IncludeCueLists.Value() != nil {
 			includeCueLists = *options.IncludeCueLists.Value()
@@ -2985,7 +2951,7 @@ func (r *mutationResolver) ExportProject(ctx context.Context, projectID string, 
 	}
 
 	// Export project
-	exported, stats, err := r.ExportService.ExportProject(ctx, projectID, includeFixtures, includeScenes, includeCueLists)
+	exported, stats, err := r.ExportService.ExportProject(ctx, projectID, includeFixtures, includeLooks, includeCueLists)
 	if err != nil {
 		return nil, err
 	}
@@ -3006,10 +2972,10 @@ func (r *mutationResolver) ExportProject(ctx context.Context, projectID string, 
 		Stats: generated.ExportStats{
 			FixtureDefinitionsCount: stats.FixtureDefinitionsCount,
 			FixtureInstancesCount:   stats.FixtureInstancesCount,
-			ScenesCount:             stats.ScenesCount,
+			LooksCount:              stats.LooksCount,
 			CueListsCount:           stats.CueListsCount,
 			CuesCount:               stats.CuesCount,
-			SceneBoardsCount:        stats.SceneBoardsCount,
+			LookBoardsCount:         stats.LookBoardsCount,
 		},
 	}, nil
 }
@@ -3050,10 +3016,10 @@ func (r *mutationResolver) ImportProject(ctx context.Context, jsonContent string
 		Stats: generated.ImportStats{
 			FixtureDefinitionsCreated: stats.FixtureDefinitionsCreated,
 			FixtureInstancesCreated:   stats.FixtureInstancesCreated,
-			ScenesCreated:             stats.ScenesCreated,
+			LooksCreated:              stats.LooksCreated,
 			CueListsCreated:           stats.CueListsCreated,
 			CuesCreated:               stats.CuesCreated,
-			SceneBoardsCreated:        stats.SceneBoardsCreated,
+			LookBoardsCreated:         stats.LookBoardsCreated,
 		},
 		Warnings: warnings,
 	}, nil
@@ -3139,8 +3105,8 @@ func (r *mutationResolver) SetArtNetEnabled(ctx context.Context, enabled bool, f
 		// This stops packet transmission; fade may still be in progress for visual effect
 		r.DMXService.DisableArtNet()
 
-		// Clear any active scene tracking
-		r.DMXService.ClearActiveScene()
+		// Clear any active look tracking
+		r.DMXService.ClearActiveLook()
 
 		// Persist setting
 		_, err := r.SettingRepo.Upsert(ctx, "artnet_enabled", "false")
@@ -3402,10 +3368,13 @@ func (r *projectResolver) FixtureCount(ctx context.Context, obj *models.Project)
 	return int(count), err
 }
 
-// SceneCount is the resolver for the sceneCount field.
-func (r *projectResolver) SceneCount(ctx context.Context, obj *models.Project) (int, error) {
-	count, err := r.ProjectRepo.CountScenes(ctx, obj.ID)
-	return int(count), err
+// LookCount is the resolver for the lookCount field.
+func (r *projectResolver) LookCount(ctx context.Context, obj *models.Project) (int, error) {
+	looks, err := r.LookRepo.FindByProjectID(ctx, obj.ID)
+	if err != nil {
+		return 0, err
+	}
+	return len(looks), nil
 }
 
 // CueListCount is the resolver for the cueListCount field.
@@ -3437,19 +3406,6 @@ func (r *projectResolver) Fixtures(ctx context.Context, obj *models.Project) ([]
 	return pointers, nil
 }
 
-// Scenes is the resolver for the scenes field.
-func (r *projectResolver) Scenes(ctx context.Context, obj *models.Project) ([]*models.Scene, error) {
-	scenes, err := r.SceneRepo.FindByProjectID(ctx, obj.ID)
-	if err != nil {
-		return nil, err
-	}
-	pointers := make([]*models.Scene, len(scenes))
-	for i := range scenes {
-		pointers[i] = &scenes[i]
-	}
-	return pointers, nil
-}
-
 // CueLists is the resolver for the cueLists field.
 func (r *projectResolver) CueLists(ctx context.Context, obj *models.Project) ([]*models.CueList, error) {
 	cueLists, err := r.CueListRepo.FindByProjectID(ctx, obj.ID)
@@ -3459,20 +3415,6 @@ func (r *projectResolver) CueLists(ctx context.Context, obj *models.Project) ([]
 	pointers := make([]*models.CueList, len(cueLists))
 	for i := range cueLists {
 		pointers[i] = &cueLists[i]
-	}
-	return pointers, nil
-}
-
-// SceneBoards is the resolver for the sceneBoards field.
-func (r *projectResolver) SceneBoards(ctx context.Context, obj *models.Project) ([]*models.SceneBoard, error) {
-	var boards []models.SceneBoard
-	result := r.db.Where("project_id = ?", obj.ID).Order("created_at DESC").Find(&boards)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	pointers := make([]*models.SceneBoard, len(boards))
-	for i := range boards {
-		pointers[i] = &boards[i]
 	}
 	return pointers, nil
 }
@@ -3916,26 +3858,40 @@ func (r *queryResolver) SuggestChannelAssignment(ctx context.Context, input gene
 	}, nil
 }
 
-// Scenes is the resolver for the scenes field.
-func (r *queryResolver) Scenes(ctx context.Context, projectID string, page *int, perPage *int, filter *generated.SceneFilterInput, sortBy *generated.SceneSortField) (*generated.ScenePage, error) {
-	scenes, err := r.SceneRepo.FindByProjectID(ctx, projectID)
+// Looks is the resolver for the looks field.
+func (r *queryResolver) Looks(ctx context.Context, projectID string, page *int, perPage *int, filter *generated.LookFilterInput, sortBy *generated.LookSortField) (*generated.LookPage, error) {
+	// Get all looks in project
+	looks, err := r.LookRepo.FindByProjectID(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
 
+	// Build summaries
+	summaries := make([]*generated.LookSummary, 0, len(looks))
+	for i := range looks {
+		look := &looks[i]
+		fixtureCount, _ := r.LookRepo.CountFixtures(ctx, look.ID)
+		summaries = append(summaries, &generated.LookSummary{
+			ID:           look.ID,
+			Name:         look.Name,
+			Description:  look.Description,
+			FixtureCount: int(fixtureCount),
+		})
+	}
+
 	// Apply pagination
 	pageNum := 1
-	pageSize := 50
+	perPageNum := 50
 	if page != nil {
 		pageNum = *page
 	}
 	if perPage != nil {
-		pageSize = *perPage
+		perPageNum = *perPage
 	}
 
-	total := len(scenes)
-	start := (pageNum - 1) * pageSize
-	end := start + pageSize
+	total := len(summaries)
+	start := (pageNum - 1) * perPageNum
+	end := start + perPageNum
 	if start > total {
 		start = total
 	}
@@ -3943,47 +3899,59 @@ func (r *queryResolver) Scenes(ctx context.Context, projectID string, page *int,
 		end = total
 	}
 
-	// Convert to SceneSummary
-	items := make([]*generated.SceneSummary, end-start)
-	for i := start; i < end; i++ {
-		scene := &scenes[i]
-		fixtureCount, _ := r.SceneRepo.CountFixtures(ctx, scene.ID)
-		items[i-start] = &generated.SceneSummary{
-			ID:           scene.ID,
-			Name:         scene.Name,
-			Description:  scene.Description,
-			FixtureCount: int(fixtureCount),
-			CreatedAt:    scene.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-			UpdatedAt:    scene.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
-		}
+	totalPages := (total + perPageNum - 1) / perPageNum
+	if totalPages < 1 {
+		totalPages = 1
 	}
 
-	return &generated.ScenePage{
-		Scenes: items,
+	return &generated.LookPage{
+		Looks: summaries[start:end],
 		Pagination: generated.PaginationInfo{
-			Total:   total,
-			Page:    pageNum,
-			PerPage: pageSize,
-			HasMore: end < total,
+			Total:      total,
+			Page:       pageNum,
+			PerPage:    perPageNum,
+			TotalPages: totalPages,
+			HasMore:    end < total,
 		},
 	}, nil
 }
 
-// Scene is the resolver for the scene field.
-func (r *queryResolver) Scene(ctx context.Context, id string, includeFixtureValues *bool) (*models.Scene, error) {
-	return r.SceneRepo.FindByID(ctx, id)
+// Look is the resolver for the look field.
+func (r *queryResolver) Look(ctx context.Context, id string, includeFixtureValues *bool) (*models.Look, error) {
+	look, err := r.LookRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if look == nil {
+		return nil, fmt.Errorf("look not found: %s", id)
+	}
+
+	// Load fixture values if requested (default: true)
+	include := true
+	if includeFixtureValues != nil {
+		include = *includeFixtureValues
+	}
+	if include {
+		fixtureValues, err := r.LookRepo.GetFixtureValues(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		look.FixtureValues = fixtureValues
+	}
+
+	return look, nil
 }
 
-// SceneFixtures is the resolver for the sceneFixtures field.
-func (r *queryResolver) SceneFixtures(ctx context.Context, sceneID string) ([]*generated.SceneFixtureSummary, error) {
-	// Get fixture values for the scene
+// LookFixtures is the resolver for the lookFixtures field.
+func (r *queryResolver) LookFixtures(ctx context.Context, lookID string) ([]*generated.LookFixtureSummary, error) {
+	// Get fixture values for the look
 	var fixtureValues []models.FixtureValue
-	result := r.db.Where("scene_id = ?", sceneID).Find(&fixtureValues)
+	result := r.db.Where("look_id = ?", lookID).Find(&fixtureValues)
 	if result.Error != nil {
 		return nil, result.Error
 	}
 
-	summaries := make([]*generated.SceneFixtureSummary, 0, len(fixtureValues))
+	summaries := make([]*generated.LookFixtureSummary, 0, len(fixtureValues))
 	for _, fv := range fixtureValues {
 		fixture, err := r.FixtureRepo.FindByID(ctx, fv.FixtureID)
 		if err != nil || fixture == nil {
@@ -3995,7 +3963,7 @@ func (r *queryResolver) SceneFixtures(ctx context.Context, sceneID string) ([]*g
 			fixtureType = generated.FixtureType(*fixture.Type)
 		}
 
-		summaries = append(summaries, &generated.SceneFixtureSummary{
+		summaries = append(summaries, &generated.LookFixtureSummary{
 			FixtureID:   fixture.ID,
 			FixtureName: fixture.Name,
 			FixtureType: fixtureType,
@@ -4005,40 +3973,48 @@ func (r *queryResolver) SceneFixtures(ctx context.Context, sceneID string) ([]*g
 	return summaries, nil
 }
 
-// SearchScenes is the resolver for the searchScenes field.
-func (r *queryResolver) SearchScenes(ctx context.Context, projectID string, query string, filter *generated.SceneFilterInput, page *int, perPage *int) (*generated.ScenePage, error) {
-	scenes, err := r.SceneRepo.FindByProjectID(ctx, projectID)
+// SearchLooks is the resolver for the searchLooks field.
+func (r *queryResolver) SearchLooks(ctx context.Context, projectID string, query string, filter *generated.LookFilterInput, page *int, perPage *int) (*generated.LookPage, error) {
+	// Get all looks in project
+	looks, err := r.LookRepo.FindByProjectID(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Filter by search query (name, description)
-	var filtered []models.Scene
-	queryLower := strings.ToLower(query)
-	for _, s := range scenes {
-		if strings.Contains(strings.ToLower(s.Name), queryLower) {
-			filtered = append(filtered, s)
-			continue
+	// Filter by name containing query
+	var filtered []models.Look
+	for i := range looks {
+		if strings.Contains(strings.ToLower(looks[i].Name), strings.ToLower(query)) {
+			filtered = append(filtered, looks[i])
 		}
-		if s.Description != nil && strings.Contains(strings.ToLower(*s.Description), queryLower) {
-			filtered = append(filtered, s)
-			continue
-		}
+	}
+
+	// Build summaries
+	summaries := make([]*generated.LookSummary, 0, len(filtered))
+	for i := range filtered {
+		look := &filtered[i]
+		fixtureCount, _ := r.LookRepo.CountFixtures(ctx, look.ID)
+		summaries = append(summaries, &generated.LookSummary{
+			ID:           look.ID,
+			Name:         look.Name,
+			Description:  look.Description,
+			FixtureCount: int(fixtureCount),
+		})
 	}
 
 	// Apply pagination
 	pageNum := 1
-	pageSize := 50
+	perPageNum := 50
 	if page != nil {
 		pageNum = *page
 	}
 	if perPage != nil {
-		pageSize = *perPage
+		perPageNum = *perPage
 	}
 
-	total := len(filtered)
-	start := (pageNum - 1) * pageSize
-	end := start + pageSize
+	total := len(summaries)
+	start := (pageNum - 1) * perPageNum
+	end := start + perPageNum
 	if start > total {
 		start = total
 	}
@@ -4046,64 +4022,46 @@ func (r *queryResolver) SearchScenes(ctx context.Context, projectID string, quer
 		end = total
 	}
 
-	items := make([]*generated.SceneSummary, end-start)
-	for i := start; i < end; i++ {
-		scene := &filtered[i]
-		fixtureCount, _ := r.SceneRepo.CountFixtures(ctx, scene.ID)
-		items[i-start] = &generated.SceneSummary{
-			ID:           scene.ID,
-			Name:         scene.Name,
-			Description:  scene.Description,
-			FixtureCount: int(fixtureCount),
-			CreatedAt:    scene.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-			UpdatedAt:    scene.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
-		}
+	totalPages := (total + perPageNum - 1) / perPageNum
+	if totalPages < 1 {
+		totalPages = 1
 	}
 
-	return &generated.ScenePage{
-		Scenes: items,
+	return &generated.LookPage{
+		Looks: summaries[start:end],
 		Pagination: generated.PaginationInfo{
-			Total:   total,
-			Page:    pageNum,
-			PerPage: pageSize,
-			HasMore: end < total,
+			Total:      total,
+			Page:       pageNum,
+			PerPage:    perPageNum,
+			TotalPages: totalPages,
+			HasMore:    end < total,
 		},
 	}, nil
 }
 
-// SceneBoards is the resolver for the sceneBoards field.
-func (r *queryResolver) SceneBoards(ctx context.Context, projectID string) ([]*models.SceneBoard, error) {
-	var boards []models.SceneBoard
-	result := r.db.Where("project_id = ?", projectID).Order("created_at DESC").Find(&boards)
-	if result.Error != nil {
-		return nil, result.Error
+// LookBoards is the resolver for the lookBoards field.
+func (r *queryResolver) LookBoards(ctx context.Context, projectID string) ([]*models.LookBoard, error) {
+	boards, err := r.LookBoardRepo.FindByProjectID(ctx, projectID)
+	if err != nil {
+		return nil, err
 	}
-	// Convert to pointers
-	pointers := make([]*models.SceneBoard, len(boards))
+
+	// Convert to pointer slice
+	result := make([]*models.LookBoard, len(boards))
 	for i := range boards {
-		pointers[i] = &boards[i]
+		result[i] = &boards[i]
 	}
-	return pointers, nil
+	return result, nil
 }
 
-// SceneBoard is the resolver for the sceneBoard field.
-func (r *queryResolver) SceneBoard(ctx context.Context, id string) (*models.SceneBoard, error) {
-	var board models.SceneBoard
-	result := r.db.Preload("Buttons").First(&board, "id = ?", id)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	return &board, nil
+// LookBoard is the resolver for the lookBoard field.
+func (r *queryResolver) LookBoard(ctx context.Context, id string) (*models.LookBoard, error) {
+	return r.LookBoardRepo.FindByID(ctx, id)
 }
 
-// SceneBoardButton is the resolver for the sceneBoardButton field.
-func (r *queryResolver) SceneBoardButton(ctx context.Context, id string) (*models.SceneBoardButton, error) {
-	var button models.SceneBoardButton
-	result := r.db.First(&button, "id = ?", id)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	return &button, nil
+// LookBoardButton is the resolver for the lookBoardButton field.
+func (r *queryResolver) LookBoardButton(ctx context.Context, id string) (*models.LookBoardButton, error) {
+	return r.LookBoardRepo.FindButtonByID(ctx, id)
 }
 
 // FixtureUsage is the resolver for the fixtureUsage field.
@@ -4117,39 +4075,39 @@ func (r *queryResolver) FixtureUsage(ctx context.Context, fixtureID string) (*ge
 		return nil, fmt.Errorf("fixture not found: %s", fixtureID)
 	}
 
-	// Find scenes that use this fixture
+	// Find looks that use this fixture
 	var fixtureValues []models.FixtureValue
 	r.db.Where("fixture_id = ?", fixtureID).Find(&fixtureValues)
 
-	sceneIDs := make([]string, 0, len(fixtureValues))
+	lookIDs := make([]string, 0, len(fixtureValues))
 	for _, fv := range fixtureValues {
-		sceneIDs = append(sceneIDs, fv.SceneID)
+		lookIDs = append(lookIDs, fv.LookID)
 	}
 
-	// Get unique scenes and convert to SceneSummary
-	var scenes []models.Scene
-	if len(sceneIDs) > 0 {
-		r.db.Where("id IN ?", sceneIDs).Find(&scenes)
+	// Get unique looks and convert to LookSummary
+	var looks []models.Look
+	if len(lookIDs) > 0 {
+		r.db.Where("id IN ?", lookIDs).Find(&looks)
 	}
 
-	sceneSummaries := make([]*generated.SceneSummary, len(scenes))
-	for i, scene := range scenes {
-		fixtureCount, _ := r.SceneRepo.CountFixtures(ctx, scene.ID)
-		sceneSummaries[i] = &generated.SceneSummary{
-			ID:           scene.ID,
-			Name:         scene.Name,
-			Description:  scene.Description,
+	lookSummaries := make([]*generated.LookSummary, len(looks))
+	for i, look := range looks {
+		fixtureCount, _ := r.LookRepo.CountFixtures(ctx, look.ID)
+		lookSummaries[i] = &generated.LookSummary{
+			ID:           look.ID,
+			Name:         look.Name,
+			Description:  look.Description,
 			FixtureCount: int(fixtureCount),
-			CreatedAt:    scene.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-			UpdatedAt:    scene.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
+			CreatedAt:    look.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+			UpdatedAt:    look.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
 		}
 	}
 
-	// Find cues that use this fixture (through scenes)
+	// Find cues that use this fixture (through looks)
 	var cueUsageSummaries []*generated.CueUsageSummary
-	if len(sceneIDs) > 0 {
+	if len(lookIDs) > 0 {
 		var cues []models.Cue
-		r.db.Where("scene_id IN ?", sceneIDs).Find(&cues)
+		r.db.Where("look_id IN ?", lookIDs).Find(&cues)
 		for _, cue := range cues {
 			cueList, _ := r.CueListRepo.FindByID(ctx, cue.CueListID)
 			cueListName := ""
@@ -4169,25 +4127,25 @@ func (r *queryResolver) FixtureUsage(ctx context.Context, fixtureID string) (*ge
 	return &generated.FixtureUsage{
 		FixtureID:   fixture.ID,
 		FixtureName: fixture.Name,
-		Scenes:      sceneSummaries,
+		Looks:       lookSummaries,
 		Cues:        cueUsageSummaries,
 	}, nil
 }
 
-// SceneUsage is the resolver for the sceneUsage field.
-func (r *queryResolver) SceneUsage(ctx context.Context, sceneID string) (*generated.SceneUsage, error) {
-	// Get scene
-	scene, err := r.SceneRepo.FindByID(ctx, sceneID)
+// LookUsage is the resolver for the lookUsage field.
+func (r *queryResolver) LookUsage(ctx context.Context, lookID string) (*generated.LookUsage, error) {
+	// Get look
+	look, err := r.LookRepo.FindByID(ctx, lookID)
 	if err != nil {
 		return nil, err
 	}
-	if scene == nil {
-		return nil, fmt.Errorf("scene not found: %s", sceneID)
+	if look == nil {
+		return nil, fmt.Errorf("look not found: %s", lookID)
 	}
 
-	// Find cues that use this scene
+	// Find cues that use this look
 	var cues []models.Cue
-	r.db.Where("scene_id = ?", sceneID).Find(&cues)
+	r.db.Where("look_id = ?", lookID).Find(&cues)
 
 	// Convert to CueUsageSummary
 	cueUsageSummaries := make([]*generated.CueUsageSummary, 0, len(cues))
@@ -4206,29 +4164,29 @@ func (r *queryResolver) SceneUsage(ctx context.Context, sceneID string) (*genera
 		})
 	}
 
-	return &generated.SceneUsage{
-		SceneID:   scene.ID,
-		SceneName: scene.Name,
-		Cues:      cueUsageSummaries,
+	return &generated.LookUsage{
+		LookID:   look.ID,
+		LookName: look.Name,
+		Cues:     cueUsageSummaries,
 	}, nil
 }
 
-// CompareScenes is the resolver for the compareScenes field.
-func (r *queryResolver) CompareScenes(ctx context.Context, sceneID1 string, sceneID2 string) (*generated.SceneComparison, error) {
-	// Get scenes
-	scene1, err := r.SceneRepo.FindByID(ctx, sceneID1)
+// CompareLooks is the resolver for the compareLooks field.
+func (r *queryResolver) CompareLooks(ctx context.Context, lookID1 string, lookID2 string) (*generated.LookComparison, error) {
+	// Get looks
+	look1, err := r.LookRepo.FindByID(ctx, lookID1)
 	if err != nil {
 		return nil, err
 	}
-	scene2, err := r.SceneRepo.FindByID(ctx, sceneID2)
+	look2, err := r.LookRepo.FindByID(ctx, lookID2)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get fixture values for each scene
+	// Get fixture values for each look
 	var values1, values2 []models.FixtureValue
-	r.db.Where("scene_id = ?", sceneID1).Find(&values1)
-	r.db.Where("scene_id = ?", sceneID2).Find(&values2)
+	r.db.Where("look_id = ?", lookID1).Find(&values1)
+	r.db.Where("look_id = ?", lookID2).Find(&values2)
 
 	// Build maps for comparison
 	fixtures1 := make(map[string]models.FixtureValue)
@@ -4242,7 +4200,7 @@ func (r *queryResolver) CompareScenes(ctx context.Context, sceneID1 string, scen
 	}
 
 	// Find differences
-	var differences []*generated.SceneDifference
+	var differences []*generated.LookDifference
 	identicalCount := 0
 	differentCount := 0
 
@@ -4254,29 +4212,29 @@ func (r *queryResolver) CompareScenes(ctx context.Context, sceneID1 string, scen
 		}
 
 		if fv2, ok := fixtures2[fixtureID]; ok {
-			// Fixture in both scenes - compare semantically, not by JSON string
+			// Fixture in both looks - compare semantically, not by JSON string
 			if !sparseChannelsEqual(fv1.Channels, fv2.Channels) {
 				vals1 := sparseChannelsToDenseArray(fv1.Channels)
 				vals2 := sparseChannelsToDenseArray(fv2.Channels)
-				differences = append(differences, &generated.SceneDifference{
+				differences = append(differences, &generated.LookDifference{
 					FixtureID:      fixtureID,
 					FixtureName:    fixtureName,
 					DifferenceType: generated.DifferenceTypeValuesChanged,
-					Scene1Values:   vals1,
-					Scene2Values:   vals2,
+					Look1Values:    vals1,
+					Look2Values:    vals2,
 				})
 				differentCount++
 			} else {
 				identicalCount++
 			}
 		} else {
-			// Fixture only in scene1
+			// Fixture only in look1
 			vals1 := sparseChannelsToDenseArray(fv1.Channels)
-			differences = append(differences, &generated.SceneDifference{
+			differences = append(differences, &generated.LookDifference{
 				FixtureID:      fixtureID,
 				FixtureName:    fixtureName,
-				DifferenceType: generated.DifferenceTypeOnlyInScene1,
-				Scene1Values:   vals1,
+				DifferenceType: generated.DifferenceTypeOnlyInLook1,
+				Look1Values:    vals1,
 			})
 			differentCount++
 		}
@@ -4284,48 +4242,48 @@ func (r *queryResolver) CompareScenes(ctx context.Context, sceneID1 string, scen
 
 	for fixtureID, fv2 := range fixtures2 {
 		if _, ok := fixtures1[fixtureID]; !ok {
-			// Fixture only in scene2
+			// Fixture only in look2
 			fixture, _ := r.FixtureRepo.FindByID(ctx, fixtureID)
 			fixtureName := ""
 			if fixture != nil {
 				fixtureName = fixture.Name
 			}
 			vals2 := sparseChannelsToDenseArray(fv2.Channels)
-			differences = append(differences, &generated.SceneDifference{
+			differences = append(differences, &generated.LookDifference{
 				FixtureID:      fixtureID,
 				FixtureName:    fixtureName,
-				DifferenceType: generated.DifferenceTypeOnlyInScene2,
-				Scene2Values:   vals2,
+				DifferenceType: generated.DifferenceTypeOnlyInLook2,
+				Look2Values:    vals2,
 			})
 			differentCount++
 		}
 	}
 
-	// Convert scenes to SceneSummary
-	fixtureCount1, _ := r.SceneRepo.CountFixtures(ctx, scene1.ID)
-	fixtureCount2, _ := r.SceneRepo.CountFixtures(ctx, scene2.ID)
+	// Convert looks to LookSummary
+	fixtureCount1, _ := r.LookRepo.CountFixtures(ctx, look1.ID)
+	fixtureCount2, _ := r.LookRepo.CountFixtures(ctx, look2.ID)
 
-	scene1Summary := generated.SceneSummary{
-		ID:           scene1.ID,
-		Name:         scene1.Name,
-		Description:  scene1.Description,
+	look1Summary := generated.LookSummary{
+		ID:           look1.ID,
+		Name:         look1.Name,
+		Description:  look1.Description,
 		FixtureCount: int(fixtureCount1),
-		CreatedAt:    scene1.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		UpdatedAt:    scene1.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
+		CreatedAt:    look1.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+		UpdatedAt:    look1.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
 	}
 
-	scene2Summary := generated.SceneSummary{
-		ID:           scene2.ID,
-		Name:         scene2.Name,
-		Description:  scene2.Description,
+	look2Summary := generated.LookSummary{
+		ID:           look2.ID,
+		Name:         look2.Name,
+		Description:  look2.Description,
 		FixtureCount: int(fixtureCount2),
-		CreatedAt:    scene2.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		UpdatedAt:    scene2.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
+		CreatedAt:    look2.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+		UpdatedAt:    look2.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
 	}
 
-	return &generated.SceneComparison{
-		Scene1:                scene1Summary,
-		Scene2:                scene2Summary,
+	return &generated.LookComparison{
+		Look1:                 look1Summary,
+		Look2:                 look2Summary,
 		Differences:           differences,
 		IdenticalFixtureCount: identicalCount,
 		DifferentFixtureCount: differentCount,
@@ -4365,7 +4323,7 @@ func (r *queryResolver) CueLists(ctx context.Context, projectID string) ([]*gene
 }
 
 // CueList is the resolver for the cueList field.
-func (r *queryResolver) CueList(ctx context.Context, id string, page *int, perPage *int, includeSceneDetails *bool) (*models.CueList, error) {
+func (r *queryResolver) CueList(ctx context.Context, id string, page *int, perPage *int, includeLookDetails *bool) (*models.CueList, error) {
 	return r.CueListRepo.FindByID(ctx, id)
 }
 
@@ -4511,11 +4469,18 @@ func (r *queryResolver) PreviewSession(ctx context.Context, sessionID string) (*
 	return &session, nil
 }
 
-// CurrentActiveScene is the resolver for the currentActiveScene field.
-func (r *queryResolver) CurrentActiveScene(ctx context.Context) (*models.Scene, error) {
-	// TODO: Implement tracking of currently active scene
-	// For now, return nil (no active scene)
-	return nil, nil
+// CurrentActiveLook is the resolver for the currentActiveLook field.
+func (r *queryResolver) CurrentActiveLook(ctx context.Context) (*models.Look, error) {
+	activeLookID := r.DMXService.GetActiveLookID()
+	if activeLookID == nil {
+		return nil, nil
+	}
+
+	look, err := r.LookRepo.FindByID(ctx, *activeLookID)
+	if err != nil {
+		return nil, err
+	}
+	return look, nil
 }
 
 // Settings is the resolver for the settings field.
@@ -4836,21 +4801,19 @@ func (r *queryResolver) FixturesByIds(ctx context.Context, ids []string) ([]*mod
 	return fixtures, nil
 }
 
-// ScenesByIds is the resolver for the scenesByIds field.
-func (r *queryResolver) ScenesByIds(ctx context.Context, ids []string) ([]*models.Scene, error) {
-	var scenes []*models.Scene
-
+// LooksByIds is the resolver for the looksByIds field.
+func (r *queryResolver) LooksByIds(ctx context.Context, ids []string) ([]*models.Look, error) {
+	var looks []*models.Look
 	for _, id := range ids {
-		scene, err := r.SceneRepo.FindByID(ctx, id)
+		look, err := r.LookRepo.FindByID(ctx, id)
 		if err != nil {
 			return nil, err
 		}
-		if scene != nil {
-			scenes = append(scenes, scene)
+		if look != nil {
+			looks = append(looks, look)
 		}
 	}
-
-	return scenes, nil
+	return looks, nil
 }
 
 // CuesByIds is the resolver for the cuesByIds field.
@@ -4887,19 +4850,19 @@ func (r *queryResolver) CueListsByIds(ctx context.Context, ids []string) ([]*mod
 	return cueLists, nil
 }
 
-// SceneBoardsByIds is the resolver for the sceneBoardsByIds field.
-func (r *queryResolver) SceneBoardsByIds(ctx context.Context, ids []string) ([]*models.SceneBoard, error) {
-	var sceneBoards []*models.SceneBoard
+// LookBoardsByIds is the resolver for the lookBoardsByIds field.
+func (r *queryResolver) LookBoardsByIds(ctx context.Context, ids []string) ([]*models.LookBoard, error) {
+	var lookBoards []*models.LookBoard
 
 	for _, id := range ids {
-		var board models.SceneBoard
+		var board models.LookBoard
 		result := r.db.WithContext(ctx).First(&board, "id = ?", id)
 		if result.Error == nil {
-			sceneBoards = append(sceneBoards, &board)
+			lookBoards = append(lookBoards, &board)
 		}
 	}
 
-	return sceneBoards, nil
+	return lookBoards, nil
 }
 
 // FixtureDefinitionsByIds is the resolver for the fixtureDefinitionsByIds field.
@@ -4934,88 +4897,6 @@ func (r *queryResolver) ProjectsByIds(ctx context.Context, ids []string) ([]*mod
 	}
 
 	return projects, nil
-}
-
-// Project is the resolver for the project field.
-func (r *sceneResolver) Project(ctx context.Context, obj *models.Scene) (*models.Project, error) {
-	return r.ProjectRepo.FindByID(ctx, obj.ProjectID)
-}
-
-// FixtureValues is the resolver for the fixtureValues field.
-func (r *sceneResolver) FixtureValues(ctx context.Context, obj *models.Scene) ([]*models.FixtureValue, error) {
-	values, err := r.SceneRepo.GetFixtureValues(ctx, obj.ID)
-	if err != nil {
-		return nil, err
-	}
-	pointers := make([]*models.FixtureValue, len(values))
-	for i := range values {
-		pointers[i] = &values[i]
-	}
-	return pointers, nil
-}
-
-// CreatedAt is the resolver for the createdAt field.
-func (r *sceneResolver) CreatedAt(ctx context.Context, obj *models.Scene) (string, error) {
-	return obj.CreatedAt.Format("2006-01-02T15:04:05.000Z"), nil
-}
-
-// UpdatedAt is the resolver for the updatedAt field.
-func (r *sceneResolver) UpdatedAt(ctx context.Context, obj *models.Scene) (string, error) {
-	return obj.UpdatedAt.Format("2006-01-02T15:04:05.000Z"), nil
-}
-
-// Project is the resolver for the project field.
-func (r *sceneBoardResolver) Project(ctx context.Context, obj *models.SceneBoard) (*models.Project, error) {
-	return r.ProjectRepo.FindByID(ctx, obj.ProjectID)
-}
-
-// Buttons is the resolver for the buttons field.
-func (r *sceneBoardResolver) Buttons(ctx context.Context, obj *models.SceneBoard) ([]*models.SceneBoardButton, error) {
-	var buttons []models.SceneBoardButton
-	result := r.db.WithContext(ctx).Where("scene_board_id = ?", obj.ID).Find(&buttons)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	pointers := make([]*models.SceneBoardButton, len(buttons))
-	for i := range buttons {
-		pointers[i] = &buttons[i]
-	}
-	return pointers, nil
-}
-
-// CreatedAt is the resolver for the createdAt field.
-func (r *sceneBoardResolver) CreatedAt(ctx context.Context, obj *models.SceneBoard) (string, error) {
-	return obj.CreatedAt.Format("2006-01-02T15:04:05.000Z"), nil
-}
-
-// UpdatedAt is the resolver for the updatedAt field.
-func (r *sceneBoardResolver) UpdatedAt(ctx context.Context, obj *models.SceneBoard) (string, error) {
-	return obj.UpdatedAt.Format("2006-01-02T15:04:05.000Z"), nil
-}
-
-// SceneBoard is the resolver for the sceneBoard field.
-func (r *sceneBoardButtonResolver) SceneBoard(ctx context.Context, obj *models.SceneBoardButton) (*models.SceneBoard, error) {
-	var board models.SceneBoard
-	result := r.db.First(&board, "id = ?", obj.SceneBoardID)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	return &board, nil
-}
-
-// Scene is the resolver for the scene field.
-func (r *sceneBoardButtonResolver) Scene(ctx context.Context, obj *models.SceneBoardButton) (*models.Scene, error) {
-	return r.SceneRepo.FindByID(ctx, obj.SceneID)
-}
-
-// CreatedAt is the resolver for the createdAt field.
-func (r *sceneBoardButtonResolver) CreatedAt(ctx context.Context, obj *models.SceneBoardButton) (string, error) {
-	return obj.CreatedAt.Format("2006-01-02T15:04:05.000Z"), nil
-}
-
-// UpdatedAt is the resolver for the updatedAt field.
-func (r *sceneBoardButtonResolver) UpdatedAt(ctx context.Context, obj *models.SceneBoardButton) (string, error) {
-	return obj.UpdatedAt.Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // CreatedAt is the resolver for the createdAt field.
@@ -5475,6 +5356,17 @@ func (r *Resolver) InstanceChannel() generated.InstanceChannelResolver {
 	return &instanceChannelResolver{r}
 }
 
+// Look returns generated.LookResolver implementation.
+func (r *Resolver) Look() generated.LookResolver { return &lookResolver{r} }
+
+// LookBoard returns generated.LookBoardResolver implementation.
+func (r *Resolver) LookBoard() generated.LookBoardResolver { return &lookBoardResolver{r} }
+
+// LookBoardButton returns generated.LookBoardButtonResolver implementation.
+func (r *Resolver) LookBoardButton() generated.LookBoardButtonResolver {
+	return &lookBoardButtonResolver{r}
+}
+
 // ModeChannel returns generated.ModeChannelResolver implementation.
 func (r *Resolver) ModeChannel() generated.ModeChannelResolver { return &modeChannelResolver{r} }
 
@@ -5495,17 +5387,6 @@ func (r *Resolver) ProjectUser() generated.ProjectUserResolver { return &project
 // Query returns generated.QueryResolver implementation.
 func (r *Resolver) Query() generated.QueryResolver { return &queryResolver{r} }
 
-// Scene returns generated.SceneResolver implementation.
-func (r *Resolver) Scene() generated.SceneResolver { return &sceneResolver{r} }
-
-// SceneBoard returns generated.SceneBoardResolver implementation.
-func (r *Resolver) SceneBoard() generated.SceneBoardResolver { return &sceneBoardResolver{r} }
-
-// SceneBoardButton returns generated.SceneBoardButtonResolver implementation.
-func (r *Resolver) SceneBoardButton() generated.SceneBoardButtonResolver {
-	return &sceneBoardButtonResolver{r}
-}
-
 // Setting returns generated.SettingResolver implementation.
 func (r *Resolver) Setting() generated.SettingResolver { return &settingResolver{r} }
 
@@ -5523,15 +5404,15 @@ type fixtureInstanceResolver struct{ *Resolver }
 type fixtureModeResolver struct{ *Resolver }
 type fixtureValueResolver struct{ *Resolver }
 type instanceChannelResolver struct{ *Resolver }
+type lookResolver struct{ *Resolver }
+type lookBoardResolver struct{ *Resolver }
+type lookBoardButtonResolver struct{ *Resolver }
 type modeChannelResolver struct{ *Resolver }
 type mutationResolver struct{ *Resolver }
 type previewSessionResolver struct{ *Resolver }
 type projectResolver struct{ *Resolver }
 type projectUserResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
-type sceneResolver struct{ *Resolver }
-type sceneBoardResolver struct{ *Resolver }
-type sceneBoardButtonResolver struct{ *Resolver }
 type settingResolver struct{ *Resolver }
 type subscriptionResolver struct{ *Resolver }
 type userResolver struct{ *Resolver }

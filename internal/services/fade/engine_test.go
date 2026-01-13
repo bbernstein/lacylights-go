@@ -219,21 +219,21 @@ func TestFadeChannels_ReplacesExistingFade(t *testing.T) {
 	}
 }
 
-func TestFadeToScene(t *testing.T) {
+func TestFadeToLook(t *testing.T) {
 	engine, dmxService := createTestEngine()
 	engine.Start()
 	defer engine.Stop()
 
-	sceneChannels := []SceneChannel{
+	lookChannels := []LookChannel{
 		{Universe: 1, Channel: 1, Value: 128},
 		{Universe: 1, Channel: 2, Value: 64},
 		{Universe: 2, Channel: 1, Value: 200},
 	}
 
-	fadeID := engine.FadeToScene(sceneChannels, 100*time.Millisecond, "scene-fade", "")
+	fadeID := engine.FadeToLook(lookChannels, 100*time.Millisecond, "look-fade", "")
 
-	if fadeID != "scene-fade" {
-		t.Errorf("FadeToScene should return the provided fade ID, got %s", fadeID)
+	if fadeID != "look-fade" {
+		t.Errorf("FadeToLook should return the provided fade ID, got %s", fadeID)
 	}
 
 	// Wait for completion
@@ -398,17 +398,17 @@ func TestFadeInterrupt(t *testing.T) {
 	// Start fade to 255 on channel 1 with a different ID
 	dmxService.SetChannelValue(1, 1, 0)
 	targets1 := []ChannelTarget{{Universe: 1, Channel: 1, TargetValue: 255}}
-	engine.FadeChannels(targets1, 500*time.Millisecond, "scene-A", EasingLinear, nil)
+	engine.FadeChannels(targets1, 500*time.Millisecond, "look-A", EasingLinear, nil)
 
 	// Wait a bit so the first fade is in progress
 	time.Sleep(50 * time.Millisecond)
 
 	// Start a new fade to 100 on the SAME channel but with a DIFFERENT fade ID
-	// This simulates clicking a different scene on the scene board
+	// This simulates clicking a different look on the look board
 	targets2 := []ChannelTarget{{Universe: 1, Channel: 1, TargetValue: 100}}
-	engine.FadeChannels(targets2, 500*time.Millisecond, "scene-B", EasingLinear, nil)
+	engine.FadeChannels(targets2, 500*time.Millisecond, "look-B", EasingLinear, nil)
 
-	// The first fade should be cancelled, only scene-B fade should be active
+	// The first fade should be cancelled, only look-B fade should be active
 	if engine.ActiveFadeCount() != 1 {
 		t.Errorf("After interrupt, should have 1 active fade, got %d", engine.ActiveFadeCount())
 	}
@@ -416,10 +416,10 @@ func TestFadeInterrupt(t *testing.T) {
 	// Wait for fade to complete
 	time.Sleep(600 * time.Millisecond)
 
-	// Final value should be 100 (from scene-B), not 255 (from scene-A)
+	// Final value should be 100 (from look-B), not 255 (from look-A)
 	finalValue := dmxService.GetChannelValue(1, 1)
 	if finalValue != 100 {
-		t.Errorf("Final value should be 100 (scene-B), got %d", finalValue)
+		t.Errorf("Final value should be 100 (look-B), got %d", finalValue)
 	}
 }
 
@@ -672,7 +672,7 @@ func TestFadeBehavior_SNAP_END(t *testing.T) {
 	}
 }
 
-// TestFadeBehavior_Mixed tests mixed fade behaviors in the same scene
+// TestFadeBehavior_Mixed tests mixed fade behaviors in the same look
 func TestFadeBehavior_Mixed(t *testing.T) {
 	engine, dmxService := createTestEngine()
 	engine.Start()
@@ -756,8 +756,8 @@ func TestFadeBehavior_Default(t *testing.T) {
 	}
 }
 
-// TestFadeToScene_WithBehavior tests FadeToScene passes through FadeBehavior
-func TestFadeToScene_WithBehavior(t *testing.T) {
+// TestFadeToLook_WithBehavior tests FadeToLook passes through FadeBehavior
+func TestFadeToLook_WithBehavior(t *testing.T) {
 	engine, dmxService := createTestEngine()
 	engine.Start()
 	defer engine.Stop()
@@ -766,13 +766,13 @@ func TestFadeToScene_WithBehavior(t *testing.T) {
 	dmxService.SetChannelValue(1, 1, 0)
 	dmxService.SetChannelValue(1, 2, 0)
 
-	// Create scene channels with different behaviors
-	sceneChannels := []SceneChannel{
+	// Create look channels with different behaviors
+	lookChannels := []LookChannel{
 		{Universe: 1, Channel: 1, Value: 100, FadeBehavior: FadeBehaviorFade},
 		{Universe: 1, Channel: 2, Value: 100, FadeBehavior: FadeBehaviorSnap},
 	}
 
-	engine.FadeToScene(sceneChannels, 200*time.Millisecond, "", EasingLinear)
+	engine.FadeToLook(lookChannels, 200*time.Millisecond, "", EasingLinear)
 
 	// Wait for 50% of the fade
 	time.Sleep(100 * time.Millisecond)
@@ -782,12 +782,12 @@ func TestFadeToScene_WithBehavior(t *testing.T) {
 
 	// FADE should be interpolating
 	if fadeValue < 30 || fadeValue > 70 {
-		t.Errorf("FADE channel via FadeToScene should be ~50, got %d", fadeValue)
+		t.Errorf("FADE channel via FadeToLook should be ~50, got %d", fadeValue)
 	}
 
 	// SNAP should be at target
 	if snapValue != 100 {
-		t.Errorf("SNAP channel via FadeToScene should be at 100, got %d", snapValue)
+		t.Errorf("SNAP channel via FadeToLook should be at 100, got %d", snapValue)
 	}
 }
 

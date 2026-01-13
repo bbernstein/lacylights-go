@@ -37,7 +37,7 @@ type Service struct {
 	sessionTimeout  time.Duration
 	sessionTimers   map[string]*time.Timer
 	fixtureRepo     *repositories.FixtureRepository
-	sceneRepo       *repositories.SceneRepository
+	lookRepo        *repositories.LookRepository
 	dmxService      *dmx.Service
 	onSessionUpdate func(session *Session, dmxOutput []DMXOutput) // Callback for subscription updates
 }
@@ -45,7 +45,7 @@ type Service struct {
 // NewService creates a new preview service.
 func NewService(
 	fixtureRepo *repositories.FixtureRepository,
-	sceneRepo *repositories.SceneRepository,
+	lookRepo *repositories.LookRepository,
 	dmxService *dmx.Service,
 ) *Service {
 	return &Service{
@@ -53,7 +53,7 @@ func NewService(
 		sessionTimeout: 30 * time.Minute,
 		sessionTimers:  make(map[string]*time.Timer),
 		fixtureRepo:    fixtureRepo,
-		sceneRepo:      sceneRepo,
+		lookRepo:       lookRepo,
 		dmxService:     dmxService,
 	}
 }
@@ -136,7 +136,7 @@ func (s *Service) UpdateChannelValue(ctx context.Context, sessionID string, fixt
 	session.ChannelOverrides[channelKey] = value
 
 	// Apply to live DMX output immediately via channel override.
-	// Preview overrides take precedence over scene playback, allowing
+	// Preview overrides take precedence over look playback, allowing
 	// real-time channel adjustments to be visible on the physical fixtures.
 	if s.dmxService != nil {
 		s.dmxService.SetChannelOverride(fixture.Universe, absoluteChannel, byte(value))
@@ -201,8 +201,8 @@ func (s *Service) CancelSession(ctx context.Context, sessionID string) (bool, er
 	return true, nil
 }
 
-// InitializeWithScene initializes a preview session with values from a scene.
-func (s *Service) InitializeWithScene(ctx context.Context, sessionID string, sceneID string) (bool, error) {
+// InitializeWithLook initializes a preview session with values from a look.
+func (s *Service) InitializeWithLook(ctx context.Context, sessionID string, lookID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -211,21 +211,21 @@ func (s *Service) InitializeWithScene(ctx context.Context, sessionID string, sce
 		return false, nil
 	}
 
-	// Get scene with fixture values
-	scene, err := s.sceneRepo.FindByID(ctx, sceneID)
+	// Get look with fixture values
+	look, err := s.lookRepo.FindByID(ctx, lookID)
 	if err != nil {
 		return false, err
 	}
-	if scene == nil {
+	if look == nil {
 		return false, nil
 	}
 
-	fixtureValues, err := s.sceneRepo.GetFixtureValues(ctx, sceneID)
+	fixtureValues, err := s.lookRepo.GetFixtureValues(ctx, lookID)
 	if err != nil {
 		return false, err
 	}
 
-	// Apply all fixture values from the scene
+	// Apply all fixture values from the look
 	for _, fv := range fixtureValues {
 		fixture, err := s.fixtureRepo.FindByID(ctx, fv.FixtureID)
 		if err != nil {
@@ -238,7 +238,7 @@ func (s *Service) InitializeWithScene(ctx context.Context, sessionID string, sce
 		// Parse sparse channel values from JSON
 		var channels []models.ChannelValue
 		if err := json.Unmarshal([]byte(fv.Channels), &channels); err != nil {
-			log.Printf("Warning: failed to unmarshal channels for fixtureID %s in scene: %v", fv.FixtureID, err)
+			log.Printf("Warning: failed to unmarshal channels for fixtureID %s in look: %v", fv.FixtureID, err)
 			continue
 		}
 
@@ -307,10 +307,10 @@ func (s *Service) GetDMXOutput(sessionID string) []DMXOutput {
 }
 
 // CancelAllProjectSessions cancels all active preview sessions for a project.
-// This should be called when activating scenes or starting cue playback to ensure
-// preview overrides don't interfere with scene output. Preview mode uses channel
-// overrides that take precedence over base scene values, so if not cleared,
-// stale preview values would override the newly activated scene.
+// This should be called when activating looks or starting cue playback to ensure
+// preview overrides don't interfere with look output. Preview mode uses channel
+// overrides that take precedence over base look values, so if not cleared,
+// stale preview values would override the newly activated look.
 //
 // The ctx parameter is included for API consistency and future cancellation support,
 // but is currently unused as the operation completes synchronously.

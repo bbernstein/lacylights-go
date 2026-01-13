@@ -33,12 +33,12 @@ func setupTestDB(t *testing.T) (*gorm.DB, func()) {
 		&models.ModeChannel{},
 		&models.FixtureInstance{},
 		&models.InstanceChannel{},
-		&models.Scene{},
+		&models.Look{},
 		&models.FixtureValue{},
 		&models.CueList{},
 		&models.Cue{},
-		&models.SceneBoard{},
-		&models.SceneBoardButton{},
+		&models.LookBoard{},
+		&models.LookBoardButton{},
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)
@@ -61,13 +61,13 @@ func TestExportImportRoundTrip_Integration(t *testing.T) {
 
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
-	sceneRepo := repositories.NewSceneRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
-	sceneBoardRepo := repositories.NewSceneBoardRepository(db)
+	lookBoardRepo := repositories.NewLookBoardRepository(db)
 
-	exportService := export.NewServiceWithSceneBoards(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo, sceneBoardRepo)
-	importService := importservice.NewServiceWithSceneBoards(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo, sceneBoardRepo)
+	exportService := export.NewServiceWithLookBoards(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo)
+	importService := importservice.NewServiceWithLookBoards(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo)
 	ctx := context.Background()
 
 	// === SETUP: Create source project with all data types ===
@@ -138,31 +138,31 @@ func TestExportImportRoundTrip_Integration(t *testing.T) {
 		db.Create(&ic)
 	}
 
-	// 4. Create scene
-	scene := &models.Scene{
+	// 4. Create look
+	look := &models.Look{
 		ID:        cuid.New(),
-		Name:      "Test Scene",
+		Name:      "Test Look",
 		ProjectID: sourceProject.ID,
 	}
-	if err := sceneRepo.Create(ctx, scene); err != nil {
-		t.Fatalf("Failed to create scene: %v", err)
+	if err := lookRepo.Create(ctx, look); err != nil {
+		t.Fatalf("Failed to create look: %v", err)
 	}
 
-	// Create fixture value in scene
+	// Create fixture value in look
 	fv := &models.FixtureValue{
 		ID:        cuid.New(),
-		SceneID:   scene.ID,
+		LookID:    look.ID,
 		FixtureID: fixture.ID,
 		Channels:  `[{"offset":0,"value":255},{"offset":2,"value":128}]`,
 	}
-	if err := sceneRepo.CreateFixtureValue(ctx, fv); err != nil {
+	if err := lookRepo.CreateFixtureValue(ctx, fv); err != nil {
 		t.Fatalf("Failed to create fixture value: %v", err)
 	}
 
-	// 5. Create scene board
+	// 5. Create look board
 	desc := "Main control board"
 	gridSize := 10
-	board := &models.SceneBoard{
+	board := &models.LookBoard{
 		ID:              cuid.New(),
 		ProjectID:       sourceProject.ID,
 		Name:            "Main Board",
@@ -174,21 +174,21 @@ func TestExportImportRoundTrip_Integration(t *testing.T) {
 	}
 	db.Create(board)
 
-	// Create button on scene board
+	// Create button on look board
 	buttonWidth := 150
 	buttonHeight := 100
 	buttonColor := "#FF5500"
-	buttonLabel := "Scene 1"
-	button := &models.SceneBoardButton{
-		ID:           cuid.New(),
-		SceneBoardID: board.ID,
-		SceneID:      scene.ID,
-		LayoutX:      100,
-		LayoutY:      200,
-		Width:        &buttonWidth,
-		Height:       &buttonHeight,
-		Color:        &buttonColor,
-		Label:        &buttonLabel,
+	buttonLabel := "Look 1"
+	button := &models.LookBoardButton{
+		ID:          cuid.New(),
+		LookBoardID: board.ID,
+		LookID:      look.ID,
+		LayoutX:     100,
+		LayoutY:     200,
+		Width:       &buttonWidth,
+		Height:      &buttonHeight,
+		Color:       &buttonColor,
+		Label:       &buttonLabel,
 	}
 	db.Create(button)
 
@@ -208,7 +208,7 @@ func TestExportImportRoundTrip_Integration(t *testing.T) {
 		Name:        "Cue 1",
 		CueNumber:   1.0,
 		CueListID:   cueList.ID,
-		SceneID:     scene.ID,
+		LookID:      look.ID,
 		FadeInTime:  3.0,
 		FadeOutTime: 2.0,
 	}
@@ -226,8 +226,8 @@ func TestExportImportRoundTrip_Integration(t *testing.T) {
 	if exportStats.FixtureDefinitionsCount != 1 {
 		t.Errorf("Export: Expected 1 definition, got %d", exportStats.FixtureDefinitionsCount)
 	}
-	if exportStats.SceneBoardsCount != 1 {
-		t.Errorf("Export: Expected 1 scene board, got %d", exportStats.SceneBoardsCount)
+	if exportStats.LookBoardsCount != 1 {
+		t.Errorf("Export: Expected 1 look board, got %d", exportStats.LookBoardsCount)
 	}
 
 	// Convert to JSON (simulating file save/load)
@@ -250,11 +250,11 @@ func TestExportImportRoundTrip_Integration(t *testing.T) {
 	}
 
 	// Verify import stats
-	if importStats.ScenesCreated != 1 {
-		t.Errorf("Import: Expected 1 scene, got %d", importStats.ScenesCreated)
+	if importStats.LooksCreated != 1 {
+		t.Errorf("Import: Expected 1 look, got %d", importStats.LooksCreated)
 	}
-	if importStats.SceneBoardsCreated != 1 {
-		t.Errorf("Import: Expected 1 scene board, got %d", importStats.SceneBoardsCreated)
+	if importStats.LookBoardsCreated != 1 {
+		t.Errorf("Import: Expected 1 look board, got %d", importStats.LookBoardsCreated)
 	}
 
 	// === VERIFY IMPORTED DATA ===
@@ -309,22 +309,22 @@ func TestExportImportRoundTrip_Integration(t *testing.T) {
 		}
 	}
 
-	// 4. Verify imported scene
-	importedScenes, _ := sceneRepo.FindByProjectID(ctx, importedProjectID)
-	if len(importedScenes) != 1 {
-		t.Fatalf("Expected 1 imported scene, got %d", len(importedScenes))
+	// 4. Verify imported look
+	importedLooks, _ := lookRepo.FindByProjectID(ctx, importedProjectID)
+	if len(importedLooks) != 1 {
+		t.Fatalf("Expected 1 imported look, got %d", len(importedLooks))
 	}
-	if importedScenes[0].Name != "Test Scene" {
-		t.Errorf("Expected scene name 'Test Scene', got '%s'", importedScenes[0].Name)
+	if importedLooks[0].Name != "Test Look" {
+		t.Errorf("Expected look name 'Test Look', got '%s'", importedLooks[0].Name)
 	}
 
-	// 5. Verify imported scene board
-	importedBoards, err := sceneBoardRepo.FindByProjectID(ctx, importedProjectID)
+	// 5. Verify imported look board
+	importedBoards, err := lookBoardRepo.FindByProjectID(ctx, importedProjectID)
 	if err != nil {
-		t.Fatalf("Failed to get imported scene boards: %v", err)
+		t.Fatalf("Failed to get imported look boards: %v", err)
 	}
 	if len(importedBoards) != 1 {
-		t.Fatalf("Expected 1 imported scene board, got %d", len(importedBoards))
+		t.Fatalf("Expected 1 imported look board, got %d", len(importedBoards))
 	}
 
 	importedBoard := importedBoards[0]
@@ -342,7 +342,7 @@ func TestExportImportRoundTrip_Integration(t *testing.T) {
 	}
 
 	// Verify imported button
-	importedButtons, _ := sceneBoardRepo.GetButtons(ctx, importedBoard.ID)
+	importedButtons, _ := lookBoardRepo.GetButtons(ctx, importedBoard.ID)
 	if len(importedButtons) != 1 {
 		t.Fatalf("Expected 1 imported button, got %d", len(importedButtons))
 	}
@@ -393,12 +393,12 @@ func TestExportImportRoundTrip_FadeBehavior(t *testing.T) {
 
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
-	sceneRepo := repositories.NewSceneRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
 
-	exportService := export.NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
-	importService := importservice.NewService(projectRepo, fixtureRepo, sceneRepo, cueListRepo, cueRepo)
+	exportService := export.NewService(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo)
+	importService := importservice.NewService(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo)
 	ctx := context.Background()
 
 	// Create project with fixture definition containing different fade behaviors

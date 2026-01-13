@@ -32,8 +32,8 @@ type PlaybackState struct {
 	CueListName     string // Cached cue list name (avoids DB query on status updates)
 	CueCount        int    // Cached count of cues in the list (avoids DB query on status updates)
 	CurrentCueIndex *int
-	IsPlaying       bool // True when scene values are active on DMX (stays true after fade until stopped)
-	IsPaused        bool // True when paused by external scene activation (cue index preserved)
+	IsPlaying       bool // True when look values are active on DMX (stays true after fade until stopped)
+	IsPaused        bool // True when paused by external look activation (cue index preserved)
 	IsFading        bool // True when a fade transition is in progress
 	CurrentCue      *CueForPlayback
 	FadeProgress    float64
@@ -45,8 +45,8 @@ type PlaybackState struct {
 type CueListPlaybackStatus struct {
 	CueListID       string
 	CurrentCueIndex *int
-	IsPlaying       bool // True when scene values are active on DMX (stays true after fade until stopped)
-	IsPaused        bool // True when paused by external scene activation (cue index preserved)
+	IsPlaying       bool // True when look values are active on DMX (stays true after fade until stopped)
+	IsPaused        bool // True when paused by external look activation (cue index preserved)
 	IsFading        bool // True when a fade transition is in progress
 	CurrentCue      *CueForPlayback
 	FadeProgress    float64
@@ -271,7 +271,7 @@ func (s *Service) StartCue(cueListID string, cueListName string, cueCount int, c
 		CueListName:     cueListName,
 		CueCount:        cueCount,
 		CurrentCueIndex: &cueIndex,
-		IsPlaying:       true,  // Scene is now active on DMX
+		IsPlaying:       true,  // Look is now active on DMX
 		IsPaused:        false, // Explicitly clear paused state
 		IsFading:        true,  // Fade transition is starting
 		CurrentCue: &CueForPlayback{
@@ -308,7 +308,7 @@ func (s *Service) StartCue(cueListID string, cueListName string, cueCount int, c
 		s.mu.Unlock()
 	}
 
-	// Mark fade as complete after fadeInTime (but keep isPlaying true - scene is still active)
+	// Mark fade as complete after fadeInTime (but keep isPlaying true - look is still active)
 	fadeTime := time.Duration(cue.FadeInTime * float64(time.Second))
 	s.mu.Lock()
 	// Stop any existing fade complete timer for this cue list
@@ -319,7 +319,7 @@ func (s *Service) StartCue(cueListID string, cueListName string, cueCount int, c
 		s.mu.Lock()
 		currentState := s.states[cueListID]
 		if currentState != nil && currentState.CurrentCueIndex != nil && *currentState.CurrentCueIndex == cueIndex {
-			currentState.IsFading = false // Fade complete, but scene still playing
+			currentState.IsFading = false // Fade complete, but look still playing
 			currentState.LastUpdated = time.Now()
 		}
 		// Clean up the timer from the map
@@ -333,32 +333,32 @@ func (s *Service) StartCue(cueListID string, cueListName string, cueCount int, c
 
 // ExecuteCueDmx executes a cue's DMX output.
 func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOverride *float64) error {
-	// Load the cue with its scene and fixture values
+	// Load the cue with its look and fixture values
 	var cue models.Cue
 	result := s.db.WithContext(ctx).
-		Preload("Scene.FixtureValues").
+		Preload("Look.FixtureValues").
 		First(&cue, "id = ?", cueID)
 	if result.Error != nil {
 		return fmt.Errorf("cue not found: %w", result.Error)
 	}
 
-	if cue.Scene == nil {
-		return fmt.Errorf("cue has no scene")
+	if cue.Look == nil {
+		return fmt.Errorf("cue has no look")
 	}
 
 	// Cancel any active preview sessions for this project to ensure preview overrides
 	// don't interfere with cue playback. Preview mode uses DMX channel overrides that
-	// take precedence over base scene values.
+	// take precedence over base look values.
 	s.mu.RLock()
 	ps := s.previewService
 	s.mu.RUnlock()
 	if ps != nil {
-		ps.CancelAllProjectSessions(ctx, cue.Scene.ProjectID)
+		ps.CancelAllProjectSessions(ctx, cue.Look.ProjectID)
 	}
 
-	// Load fixtures for the scene's fixture values
+	// Load fixtures for the look's fixture values
 	var fixtureIDs []string
-	for _, fv := range cue.Scene.FixtureValues {
+	for _, fv := range cue.Look.FixtureValues {
 		fixtureIDs = append(fixtureIDs, fv.FixtureID)
 	}
 
@@ -380,10 +380,10 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 		actualFadeTime = *fadeInTimeOverride
 	}
 
-	// Build scene channels for fade engine
-	var sceneChannels []fade.SceneChannel
+	// Build look channels for fade engine
+	var lookChannels []fade.LookChannel
 
-	for _, fixtureValue := range cue.Scene.FixtureValues {
+	for _, fixtureValue := range cue.Look.FixtureValues {
 		fixture := fixtureMap[fixtureValue.FixtureID]
 		if fixture == nil {
 			continue
@@ -420,7 +420,7 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 				}
 			}
 
-			sceneChannels = append(sceneChannels, fade.SceneChannel{
+			lookChannels = append(lookChannels, fade.LookChannel{
 				Universe:     fixture.Universe,
 				Channel:      dmxChannel,
 				Value:        ch.Value,
@@ -437,10 +437,10 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 
 	// Execute fade
 	fadeID := fmt.Sprintf("cue-%s", cueID)
-	s.fadeEngine.FadeToScene(sceneChannels, time.Duration(actualFadeTime*float64(time.Second)), fadeID, easingType)
+	s.fadeEngine.FadeToLook(lookChannels, time.Duration(actualFadeTime*float64(time.Second)), fadeID, easingType)
 
-	// Track the active scene
-	s.dmxService.SetActiveScene(cue.SceneID)
+	// Track the active look
+	s.dmxService.SetActiveLook(cue.LookID)
 
 	return nil
 }
@@ -529,10 +529,10 @@ func (s *Service) StopCueList(cueListID string) {
 		delete(s.fadeCompleteTimers, cueListID)
 	}
 
-	// Update state - scene is no longer active on DMX
+	// Update state - look is no longer active on DMX
 	state := s.states[cueListID]
 	if state != nil {
-		state.IsPlaying = false  // Scene no longer active on DMX
+		state.IsPlaying = false  // Look no longer active on DMX
 		state.IsPaused = false   // Clear paused state
 		state.IsFading = false   // No fade in progress
 		state.FadeProgress = 0
@@ -545,7 +545,7 @@ func (s *Service) StopCueList(cueListID string) {
 }
 
 // PauseCueList pauses the cue list playback, preserving the current cue position.
-// Called automatically when a scene is activated outside cue list context.
+// Called automatically when a look is activated outside cue list context.
 func (s *Service) PauseCueList(cueListID string) {
 	s.mu.Lock()
 
@@ -586,7 +586,7 @@ func (s *Service) PauseCueList(cueListID string) {
 }
 
 // PausePlayingCueLists pauses any currently playing cue lists.
-// Called when a scene is activated outside cue list context.
+// Called when a look is activated outside cue list context.
 func (s *Service) PausePlayingCueLists() {
 	s.mu.RLock()
 	var playingCueListIDs []string
@@ -602,7 +602,7 @@ func (s *Service) PausePlayingCueLists() {
 	}
 }
 
-// ResumeCueList resumes a paused cue list by snapping to the current cue's scene values instantly.
+// ResumeCueList resumes a paused cue list by snapping to the current cue's look values instantly.
 func (s *Service) ResumeCueList(ctx context.Context, cueListID string) error {
 	s.mu.RLock()
 	state := s.states[cueListID]

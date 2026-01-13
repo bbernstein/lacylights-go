@@ -328,3 +328,429 @@ func TestChannelValueModel(t *testing.T) {
 		t.Errorf("Expected Value 128, got %d", cv.Value)
 	}
 }
+
+// setupOldSchemaDB creates a test database with the old "scene" terminology
+func setupOldSchemaDB(t *testing.T) *gorm.DB {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+
+	// Create tables with old schema (scene terminology)
+	err = db.Exec(`
+		CREATE TABLE projects (
+			id TEXT PRIMARY KEY,
+			name TEXT,
+			description TEXT,
+			created_at DATETIME,
+			updated_at DATETIME
+		)
+	`).Error
+	if err != nil {
+		t.Fatalf("Failed to create projects table: %v", err)
+	}
+
+	err = db.Exec(`
+		CREATE TABLE scenes (
+			id TEXT PRIMARY KEY,
+			name TEXT,
+			description TEXT,
+			project_id TEXT,
+			created_at DATETIME,
+			updated_at DATETIME
+		)
+	`).Error
+	if err != nil {
+		t.Fatalf("Failed to create scenes table: %v", err)
+	}
+
+	err = db.Exec(`
+		CREATE TABLE fixture_instances (
+			id TEXT PRIMARY KEY,
+			name TEXT,
+			project_id TEXT
+		)
+	`).Error
+	if err != nil {
+		t.Fatalf("Failed to create fixture_instances table: %v", err)
+	}
+
+	err = db.Exec(`
+		CREATE TABLE fixture_values (
+			id TEXT PRIMARY KEY,
+			scene_id TEXT,
+			fixture_id TEXT,
+			channels TEXT DEFAULT '[]',
+			scene_order INTEGER
+		)
+	`).Error
+	if err != nil {
+		t.Fatalf("Failed to create fixture_values table: %v", err)
+	}
+
+	err = db.Exec(`
+		CREATE TABLE cue_lists (
+			id TEXT PRIMARY KEY,
+			name TEXT,
+			project_id TEXT
+		)
+	`).Error
+	if err != nil {
+		t.Fatalf("Failed to create cue_lists table: %v", err)
+	}
+
+	err = db.Exec(`
+		CREATE TABLE cues (
+			id TEXT PRIMARY KEY,
+			name TEXT,
+			cue_number REAL,
+			cue_list_id TEXT,
+			scene_id TEXT,
+			fade_in_time REAL DEFAULT 0,
+			fade_out_time REAL DEFAULT 0,
+			follow_time REAL,
+			easing_type TEXT,
+			notes TEXT,
+			skip INTEGER DEFAULT 0,
+			created_at DATETIME,
+			updated_at DATETIME
+		)
+	`).Error
+	if err != nil {
+		t.Fatalf("Failed to create cues table: %v", err)
+	}
+
+	err = db.Exec(`
+		CREATE TABLE scene_boards (
+			id TEXT PRIMARY KEY,
+			name TEXT,
+			project_id TEXT,
+			default_fade_time REAL DEFAULT 3.0,
+			grid_size INTEGER DEFAULT 50,
+			canvas_width INTEGER DEFAULT 2000,
+			canvas_height INTEGER DEFAULT 2000,
+			created_at DATETIME,
+			updated_at DATETIME
+		)
+	`).Error
+	if err != nil {
+		t.Fatalf("Failed to create scene_boards table: %v", err)
+	}
+
+	err = db.Exec(`
+		CREATE TABLE scene_board_buttons (
+			id TEXT PRIMARY KEY,
+			scene_board_id TEXT,
+			scene_id TEXT,
+			layout_x INTEGER,
+			layout_y INTEGER,
+			width INTEGER DEFAULT 200,
+			height INTEGER DEFAULT 120,
+			color TEXT,
+			label TEXT,
+			created_at DATETIME,
+			updated_at DATETIME
+		)
+	`).Error
+	if err != nil {
+		t.Fatalf("Failed to create scene_board_buttons table: %v", err)
+	}
+
+	return db
+}
+
+func TestMigrateSceneToLook_FreshDatabase(t *testing.T) {
+	// Create database without the scenes table (fresh install)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+
+	// Should return early without error
+	err = migrateSceneToLook(db)
+	if err != nil {
+		t.Errorf("Expected no error for fresh database, got: %v", err)
+	}
+}
+
+func TestMigrateSceneToLook_RenamesScenesTable(t *testing.T) {
+	db := setupOldSchemaDB(t)
+
+	// Insert test data
+	err := db.Exec(`
+		INSERT INTO scenes (id, name, description, project_id)
+		VALUES ('scene-1', 'Opening', 'Opening scene', 'proj-1')
+	`).Error
+	if err != nil {
+		t.Fatalf("Failed to insert test scene: %v", err)
+	}
+
+	// Run migration
+	err = migrateSceneToLook(db)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// Verify scenes table is gone
+	if db.Migrator().HasTable("scenes") {
+		t.Error("Expected scenes table to be renamed")
+	}
+
+	// Verify looks table exists with data
+	if !db.Migrator().HasTable("looks") {
+		t.Error("Expected looks table to exist")
+	}
+
+	var name string
+	db.Raw("SELECT name FROM looks WHERE id = 'scene-1'").Scan(&name)
+	if name != "Opening" {
+		t.Errorf("Expected look name 'Opening', got: %s", name)
+	}
+}
+
+func TestMigrateSceneToLook_MigratesFixtureValues(t *testing.T) {
+	db := setupOldSchemaDB(t)
+
+	// Insert test data
+	err := db.Exec(`
+		INSERT INTO fixture_values (id, scene_id, fixture_id, channels, scene_order)
+		VALUES ('fv-1', 'scene-1', 'fixture-1', '[{"offset":0,"value":255}]', 1)
+	`).Error
+	if err != nil {
+		t.Fatalf("Failed to insert test data: %v", err)
+	}
+
+	// Run migration
+	err = migrateSceneToLook(db)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// Verify columns were renamed
+	if db.Migrator().HasColumn("fixture_values", "scene_id") {
+		t.Error("Expected scene_id column to be renamed to look_id")
+	}
+	if db.Migrator().HasColumn("fixture_values", "scene_order") {
+		t.Error("Expected scene_order column to be renamed to look_order")
+	}
+
+	// Verify data was migrated correctly
+	var lookID string
+	var lookOrder int
+	if err := db.Raw("SELECT look_id, look_order FROM fixture_values WHERE id = 'fv-1'").Row().Scan(&lookID, &lookOrder); err != nil {
+		t.Fatalf("Failed to scan fixture_values: %v", err)
+	}
+	if lookID != "scene-1" {
+		t.Errorf("Expected look_id 'scene-1', got: %s", lookID)
+	}
+	if lookOrder != 1 {
+		t.Errorf("Expected look_order 1, got: %d", lookOrder)
+	}
+}
+
+func TestMigrateSceneToLook_MigratesCues(t *testing.T) {
+	db := setupOldSchemaDB(t)
+
+	// Insert test data
+	err := db.Exec(`
+		INSERT INTO cues (id, name, cue_number, cue_list_id, scene_id)
+		VALUES ('cue-1', 'Cue 1', 1.0, 'list-1', 'scene-1')
+	`).Error
+	if err != nil {
+		t.Fatalf("Failed to insert test data: %v", err)
+	}
+
+	// Run migration
+	err = migrateSceneToLook(db)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// Verify column was renamed
+	if db.Migrator().HasColumn("cues", "scene_id") {
+		t.Error("Expected scene_id column to be renamed to look_id")
+	}
+
+	// Verify data was migrated correctly
+	var lookID string
+	db.Raw("SELECT look_id FROM cues WHERE id = 'cue-1'").Scan(&lookID)
+	if lookID != "scene-1" {
+		t.Errorf("Expected look_id 'scene-1', got: %s", lookID)
+	}
+}
+
+func TestMigrateSceneToLook_RenamesSceneBoards(t *testing.T) {
+	db := setupOldSchemaDB(t)
+
+	// Insert test data
+	err := db.Exec(`
+		INSERT INTO scene_boards (id, name, project_id)
+		VALUES ('sb-1', 'Main Board', 'proj-1')
+	`).Error
+	if err != nil {
+		t.Fatalf("Failed to insert test data: %v", err)
+	}
+
+	// Run migration
+	err = migrateSceneToLook(db)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// Verify table was renamed
+	if db.Migrator().HasTable("scene_boards") {
+		t.Error("Expected scene_boards table to be renamed")
+	}
+	if !db.Migrator().HasTable("look_boards") {
+		t.Error("Expected look_boards table to exist")
+	}
+
+	// Verify data exists
+	var name string
+	db.Raw("SELECT name FROM look_boards WHERE id = 'sb-1'").Scan(&name)
+	if name != "Main Board" {
+		t.Errorf("Expected name 'Main Board', got: %s", name)
+	}
+}
+
+func TestMigrateSceneToLook_MigratesSceneBoardButtons(t *testing.T) {
+	db := setupOldSchemaDB(t)
+
+	// Insert test data
+	err := db.Exec(`
+		INSERT INTO scene_board_buttons (id, scene_board_id, scene_id, layout_x, layout_y)
+		VALUES ('btn-1', 'sb-1', 'scene-1', 100, 200)
+	`).Error
+	if err != nil {
+		t.Fatalf("Failed to insert test data: %v", err)
+	}
+
+	// Run migration
+	err = migrateSceneToLook(db)
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// Verify table was renamed
+	if db.Migrator().HasTable("scene_board_buttons") {
+		t.Error("Expected scene_board_buttons table to be renamed")
+	}
+	if !db.Migrator().HasTable("look_board_buttons") {
+		t.Error("Expected look_board_buttons table to exist")
+	}
+
+	// Verify columns were renamed and data migrated
+	var lookBoardID, lookID string
+	var layoutX, layoutY int
+	if err := db.Raw("SELECT look_board_id, look_id, layout_x, layout_y FROM look_board_buttons WHERE id = 'btn-1'").Row().Scan(&lookBoardID, &lookID, &layoutX, &layoutY); err != nil {
+		t.Fatalf("Failed to scan look_board_buttons: %v", err)
+	}
+	if lookBoardID != "sb-1" {
+		t.Errorf("Expected look_board_id 'sb-1', got: %s", lookBoardID)
+	}
+	if lookID != "scene-1" {
+		t.Errorf("Expected look_id 'scene-1', got: %s", lookID)
+	}
+	if layoutX != 100 {
+		t.Errorf("Expected layout_x 100, got: %d", layoutX)
+	}
+	if layoutY != 200 {
+		t.Errorf("Expected layout_y 200, got: %d", layoutY)
+	}
+}
+
+func TestMigrateSceneToLook_FullMigration(t *testing.T) {
+	db := setupOldSchemaDB(t)
+
+	// Insert comprehensive test data across all tables
+	db.Exec(`INSERT INTO projects (id, name) VALUES ('proj-1', 'Test Project')`)
+	db.Exec(`INSERT INTO scenes (id, name, project_id) VALUES ('scene-1', 'Look 1', 'proj-1'), ('scene-2', 'Look 2', 'proj-1')`)
+	db.Exec(`INSERT INTO fixture_instances (id, name, project_id) VALUES ('fix-1', 'Par 1', 'proj-1')`)
+	db.Exec(`INSERT INTO fixture_values (id, scene_id, fixture_id, channels, scene_order) VALUES ('fv-1', 'scene-1', 'fix-1', '[{"offset":0,"value":255}]', 1)`)
+	db.Exec(`INSERT INTO cue_lists (id, name, project_id) VALUES ('list-1', 'Main', 'proj-1')`)
+	db.Exec(`INSERT INTO cues (id, name, cue_number, cue_list_id, scene_id) VALUES ('cue-1', 'Cue 1', 1.0, 'list-1', 'scene-1')`)
+	db.Exec(`INSERT INTO scene_boards (id, name, project_id) VALUES ('sb-1', 'Board 1', 'proj-1')`)
+	db.Exec(`INSERT INTO scene_board_buttons (id, scene_board_id, scene_id, layout_x, layout_y) VALUES ('btn-1', 'sb-1', 'scene-1', 0, 0)`)
+
+	// Run migration
+	err := migrateSceneToLook(db)
+	if err != nil {
+		t.Fatalf("Migration failed: %v", err)
+	}
+
+	// Verify all old tables/columns are gone
+	if db.Migrator().HasTable("scenes") {
+		t.Error("scenes table should not exist")
+	}
+	if db.Migrator().HasTable("scene_boards") {
+		t.Error("scene_boards table should not exist")
+	}
+	if db.Migrator().HasTable("scene_board_buttons") {
+		t.Error("scene_board_buttons table should not exist")
+	}
+
+	// Verify all new tables exist
+	if !db.Migrator().HasTable("looks") {
+		t.Error("looks table should exist")
+	}
+	if !db.Migrator().HasTable("look_boards") {
+		t.Error("look_boards table should exist")
+	}
+	if !db.Migrator().HasTable("look_board_buttons") {
+		t.Error("look_board_buttons table should exist")
+	}
+
+	// Verify data integrity
+	var lookCount, fvCount, cueCount, boardCount, buttonCount int64
+	db.Raw("SELECT COUNT(*) FROM looks").Scan(&lookCount)
+	db.Raw("SELECT COUNT(*) FROM fixture_values").Scan(&fvCount)
+	db.Raw("SELECT COUNT(*) FROM cues").Scan(&cueCount)
+	db.Raw("SELECT COUNT(*) FROM look_boards").Scan(&boardCount)
+	db.Raw("SELECT COUNT(*) FROM look_board_buttons").Scan(&buttonCount)
+
+	if lookCount != 2 {
+		t.Errorf("Expected 2 looks, got %d", lookCount)
+	}
+	if fvCount != 1 {
+		t.Errorf("Expected 1 fixture_value, got %d", fvCount)
+	}
+	if cueCount != 1 {
+		t.Errorf("Expected 1 cue, got %d", cueCount)
+	}
+	if boardCount != 1 {
+		t.Errorf("Expected 1 look_board, got %d", boardCount)
+	}
+	if buttonCount != 1 {
+		t.Errorf("Expected 1 look_board_button, got %d", buttonCount)
+	}
+}
+
+func TestMigrateSceneToLook_Idempotent(t *testing.T) {
+	db := setupOldSchemaDB(t)
+
+	// Insert test data
+	db.Exec(`INSERT INTO scenes (id, name) VALUES ('scene-1', 'Look 1')`)
+
+	// Run migration twice - should be idempotent
+	err := migrateSceneToLook(db)
+	if err != nil {
+		t.Fatalf("First migration failed: %v", err)
+	}
+
+	// Second run should return early (no scenes table)
+	err = migrateSceneToLook(db)
+	if err != nil {
+		t.Errorf("Second migration should succeed (idempotent), got: %v", err)
+	}
+
+	// Data should still be intact
+	var count int64
+	db.Raw("SELECT COUNT(*) FROM looks").Scan(&count)
+	if count != 1 {
+		t.Errorf("Expected 1 look after idempotent migration, got %d", count)
+	}
+}
