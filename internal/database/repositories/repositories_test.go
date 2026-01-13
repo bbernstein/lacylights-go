@@ -2539,3 +2539,118 @@ func TestLookBoardRepository_Delete_CascadesButtons(t *testing.T) {
 		t.Errorf("Expected 0 buttons in DB after cascade delete, got %d", buttonCountAfter)
 	}
 }
+
+func TestLookBoardRepository_FindButtonByID(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := NewLookBoardRepository(testDB.DB)
+
+	// Create project and look
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	testDB.DB.Create(look)
+
+	// Create board and button
+	board := &models.LookBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	_ = repo.Create(ctx, board)
+	button := &models.LookBoardButton{LookBoardID: board.ID, LookID: look.ID, LayoutX: 100, LayoutY: 200}
+	_ = repo.CreateButton(ctx, button)
+
+	// Find by ID
+	found, err := repo.FindButtonByID(ctx, button.ID)
+	if err != nil {
+		t.Fatalf("FindButtonByID failed: %v", err)
+	}
+	if found == nil {
+		t.Fatal("Expected button to be found")
+	}
+	if found.LayoutX != 100 || found.LayoutY != 200 {
+		t.Errorf("Button position mismatch: got (%d, %d)", found.LayoutX, found.LayoutY)
+	}
+
+	// Find non-existent button
+	notFound, err := repo.FindButtonByID(ctx, "non-existent-id")
+	if err != nil {
+		t.Fatalf("FindButtonByID for non-existent should not error: %v", err)
+	}
+	if notFound != nil {
+		t.Error("Expected nil for non-existent button")
+	}
+}
+
+func TestLookBoardRepository_UpdateButton(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := NewLookBoardRepository(testDB.DB)
+
+	// Create project and look
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	testDB.DB.Create(look)
+
+	// Create board and button
+	board := &models.LookBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	_ = repo.Create(ctx, board)
+	button := &models.LookBoardButton{LookBoardID: board.ID, LookID: look.ID, LayoutX: 100, LayoutY: 200}
+	_ = repo.CreateButton(ctx, button)
+
+	// Update button
+	button.LayoutX = 300
+	button.LayoutY = 400
+	color := "#FF0000"
+	button.Color = &color
+	err := repo.UpdateButton(ctx, button)
+	if err != nil {
+		t.Fatalf("UpdateButton failed: %v", err)
+	}
+
+	// Verify update
+	found, _ := repo.FindButtonByID(ctx, button.ID)
+	if found.LayoutX != 300 || found.LayoutY != 400 {
+		t.Errorf("Expected position (300, 400), got (%d, %d)", found.LayoutX, found.LayoutY)
+	}
+	if found.Color == nil || *found.Color != "#FF0000" {
+		t.Errorf("Expected color #FF0000, got %v", found.Color)
+	}
+}
+
+func TestLookBoardRepository_DeleteButton(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := NewLookBoardRepository(testDB.DB)
+
+	// Create project and look
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	testDB.DB.Create(look)
+
+	// Create board and button
+	board := &models.LookBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	_ = repo.Create(ctx, board)
+	button := &models.LookBoardButton{LookBoardID: board.ID, LookID: look.ID, LayoutX: 100, LayoutY: 200}
+	_ = repo.CreateButton(ctx, button)
+
+	// Verify button exists
+	found, _ := repo.FindButtonByID(ctx, button.ID)
+	if found == nil {
+		t.Fatal("Button should exist before delete")
+	}
+
+	// Delete button
+	err := repo.DeleteButton(ctx, button.ID)
+	if err != nil {
+		t.Fatalf("DeleteButton failed: %v", err)
+	}
+
+	// Verify button is deleted
+	deleted, _ := repo.FindButtonByID(ctx, button.ID)
+	if deleted != nil {
+		t.Error("Button should be deleted")
+	}
+}

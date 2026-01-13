@@ -14,6 +14,23 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+func TestDefaultExportOptions(t *testing.T) {
+	opts := DefaultExportOptions()
+
+	if !opts.IncludeFixtures {
+		t.Error("Expected IncludeFixtures to be true")
+	}
+	if !opts.IncludeLooks {
+		t.Error("Expected IncludeLooks to be true")
+	}
+	if !opts.IncludeCueLists {
+		t.Error("Expected IncludeCueLists to be true")
+	}
+	if !opts.IncludeLookBoards {
+		t.Error("Expected IncludeLookBoards to be true")
+	}
+}
+
 func TestExportedProject_ToJSON(t *testing.T) {
 	desc := "Test project description"
 	project := &ExportedProject{
@@ -2904,5 +2921,80 @@ func TestExportProject_ModeRefID_Integration(t *testing.T) {
 		t.Error("PAR 3: Expected ModeRefID to be set, got nil")
 	} else if *par3.ModeRefID != modeNameToRefID["5-channel"] {
 		t.Errorf("PAR 3: ModeRefID mismatch, expected %s, got %s", modeNameToRefID["5-channel"], *par3.ModeRefID)
+	}
+}
+
+// TestExportStats_DeprecatedFieldsBackwardCompatibility verifies that the deprecated
+// ScenesCount and SceneBoardsCount fields are populated for backward compatibility.
+func TestExportStats_DeprecatedFieldsBackwardCompatibility(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
+	lookBoardRepo := repositories.NewLookBoardRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+
+	service := NewServiceWithLookBoards(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo)
+	ctx := context.Background()
+
+	// Create project
+	project := &models.Project{ID: cuid.New(), Name: "Backward Compat Test"}
+	_ = projectRepo.Create(ctx, project)
+
+	// Create definition and fixture
+	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "Test", Model: "Model", Type: "LED_PAR"}
+	_ = fixtureRepo.CreateDefinition(ctx, def)
+	fixture := &models.FixtureInstance{
+		ID:           cuid.New(),
+		Name:         "Fixture1",
+		ProjectID:    project.ID,
+		DefinitionID: def.ID,
+		Universe:     1,
+		StartChannel: 1,
+	}
+	_ = fixtureRepo.Create(ctx, fixture)
+
+	// Create two looks
+	for i := 0; i < 2; i++ {
+		look := &models.Look{
+			ID:        cuid.New(),
+			Name:      "Look " + string(rune('A'+i)),
+			ProjectID: project.ID,
+		}
+		_ = lookRepo.Create(ctx, look)
+	}
+
+	// Create one look board
+	lookBoard := &models.LookBoard{
+		ID:        cuid.New(),
+		Name:      "Test Board",
+		ProjectID: project.ID,
+	}
+	_ = lookBoardRepo.Create(ctx, lookBoard)
+
+	// Export with looks and look boards
+	// ExportProject params: includeFixtures, includeLooks, includeCueLists, includeLookBoards
+	_, stats, err := service.ExportProject(ctx, project.ID, true, true, false, true)
+	if err != nil {
+		t.Fatalf("ExportProject failed: %v", err)
+	}
+
+	// Verify new fields
+	if stats.LooksCount != 2 {
+		t.Errorf("Expected LooksCount=2, got %d", stats.LooksCount)
+	}
+	if stats.LookBoardsCount != 1 {
+		t.Errorf("Expected LookBoardsCount=1, got %d", stats.LookBoardsCount)
+	}
+
+	// Verify deprecated fields are populated for backward compatibility
+	if stats.ScenesCount != stats.LooksCount {
+		t.Errorf("Expected deprecated ScenesCount=%d to equal LooksCount=%d", stats.ScenesCount, stats.LooksCount)
+	}
+	if stats.SceneBoardsCount != stats.LookBoardsCount {
+		t.Errorf("Expected deprecated SceneBoardsCount=%d to equal LookBoardsCount=%d", stats.SceneBoardsCount, stats.LookBoardsCount)
 	}
 }
