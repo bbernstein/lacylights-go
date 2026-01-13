@@ -495,6 +495,16 @@ func migrateSceneToLook(db *gorm.DB) error {
 
 	log.Println("🔄 Migrating scene terminology to look terminology...")
 
+	// Wrap entire migration in a transaction for atomicity
+	return db.Transaction(func(tx *gorm.DB) error {
+		return doMigrateSceneToLook(tx)
+	})
+}
+
+// doMigrateSceneToLook performs the actual migration within a transaction.
+// This is separated from migrateSceneToLook to allow proper transaction wrapping.
+func doMigrateSceneToLook(db *gorm.DB) error {
+
 	// SQLite-specific migration using raw SQL
 	// We need to:
 	// 1. Migrate scenes -> looks
@@ -526,10 +536,11 @@ func migrateSceneToLook(db *gorm.DB) error {
 			}
 			log.Printf("  Copied %d scenes to looks table", scenesCount)
 		} else if scenesCount > 0 && looksCount > 0 {
-			log.Printf("  Warning: Both scenes (%d) and looks (%d) have data, skipping scene migration", scenesCount, looksCount)
+			// CRITICAL: Both tables have data - this is an inconsistent state that requires manual intervention
+			return fmt.Errorf("migration conflict: both scenes (%d records) and looks (%d records) tables contain data; manual data reconciliation required before migration can proceed", scenesCount, looksCount)
 		}
 
-		// Drop the old scenes table
+		// Only drop the old scenes table if we successfully copied or it was empty
 		if err := db.Exec("DROP TABLE scenes").Error; err != nil {
 			return fmt.Errorf("failed to drop old scenes table: %w", err)
 		}
@@ -597,9 +608,13 @@ func migrateSceneToLook(db *gorm.DB) error {
 				return fmt.Errorf("failed to rename fixture_values_new: %w", err)
 			}
 
-			// Recreate indexes
-			db.Exec("CREATE INDEX IF NOT EXISTS idx_fixture_values_look_id ON fixture_values(look_id)")
-			db.Exec("CREATE INDEX IF NOT EXISTS idx_fixture_values_fixture_id ON fixture_values(fixture_id)")
+			// Recreate indexes (log warnings but don't fail migration for index errors)
+			if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_fixture_values_look_id ON fixture_values(look_id)").Error; err != nil {
+				log.Printf("  Warning: failed to create idx_fixture_values_look_id: %v", err)
+			}
+			if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_fixture_values_fixture_id ON fixture_values(fixture_id)").Error; err != nil {
+				log.Printf("  Warning: failed to create idx_fixture_values_fixture_id: %v", err)
+			}
 
 			log.Println("  Cleaned up fixture_values table (removed scene_id, scene_order columns)")
 		} else {
@@ -632,9 +647,13 @@ func migrateSceneToLook(db *gorm.DB) error {
 				return fmt.Errorf("failed to rename fixture_values_new: %w", err)
 			}
 
-			// Recreate indexes
-			db.Exec("CREATE INDEX IF NOT EXISTS idx_fixture_values_look_id ON fixture_values(look_id)")
-			db.Exec("CREATE INDEX IF NOT EXISTS idx_fixture_values_fixture_id ON fixture_values(fixture_id)")
+			// Recreate indexes (log warnings but don't fail migration for index errors)
+			if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_fixture_values_look_id ON fixture_values(look_id)").Error; err != nil {
+				log.Printf("  Warning: failed to create idx_fixture_values_look_id: %v", err)
+			}
+			if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_fixture_values_fixture_id ON fixture_values(fixture_id)").Error; err != nil {
+				log.Printf("  Warning: failed to create idx_fixture_values_fixture_id: %v", err)
+			}
 
 			log.Println("  Migrated table: fixture_values (scene_id -> look_id, scene_order -> look_order)")
 		}
@@ -712,8 +731,13 @@ func migrateSceneToLook(db *gorm.DB) error {
 			return fmt.Errorf("failed to rename cues_new: %w", err)
 		}
 
-		db.Exec("CREATE INDEX IF NOT EXISTS idx_cues_cue_list_id ON cues(cue_list_id)")
-		db.Exec("CREATE INDEX IF NOT EXISTS idx_cues_look_id ON cues(look_id)")
+		// Recreate indexes (log warnings but don't fail migration for index errors)
+		if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_cues_cue_list_id ON cues(cue_list_id)").Error; err != nil {
+			log.Printf("  Warning: failed to create idx_cues_cue_list_id: %v", err)
+		}
+		if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_cues_look_id ON cues(look_id)").Error; err != nil {
+			log.Printf("  Warning: failed to create idx_cues_look_id: %v", err)
+		}
 
 		log.Println("  Migrated table: cues (scene_id -> look_id)")
 	}
@@ -741,10 +765,11 @@ func migrateSceneToLook(db *gorm.DB) error {
 				}
 				log.Printf("  Copied %d scene_boards to look_boards table", sceneBoardsCount)
 			} else if sceneBoardsCount > 0 && lookBoardsCount > 0 {
-				log.Printf("  Warning: Both scene_boards (%d) and look_boards (%d) have data, skipping scene_boards migration", sceneBoardsCount, lookBoardsCount)
+				// CRITICAL: Both tables have data - this is an inconsistent state that requires manual intervention
+				return fmt.Errorf("migration conflict: both scene_boards (%d records) and look_boards (%d records) tables contain data; manual data reconciliation required before migration can proceed", sceneBoardsCount, lookBoardsCount)
 			}
 
-			// Drop the old scene_boards table
+			// Only drop the old scene_boards table if we successfully copied or it was empty
 			if err := db.Exec("DROP TABLE scene_boards").Error; err != nil {
 				return fmt.Errorf("failed to drop old scene_boards table: %w", err)
 			}
@@ -781,10 +806,11 @@ func migrateSceneToLook(db *gorm.DB) error {
 				}
 				log.Printf("  Copied %d scene_board_buttons to look_board_buttons table", sceneBoardButtonsCount)
 			} else if sceneBoardButtonsCount > 0 && lookBoardButtonsCount > 0 {
-				log.Printf("  Warning: Both scene_board_buttons (%d) and look_board_buttons (%d) have data, skipping migration", sceneBoardButtonsCount, lookBoardButtonsCount)
+				// CRITICAL: Both tables have data - this is an inconsistent state that requires manual intervention
+				return fmt.Errorf("migration conflict: both scene_board_buttons (%d records) and look_board_buttons (%d records) tables contain data; manual data reconciliation required before migration can proceed", sceneBoardButtonsCount, lookBoardButtonsCount)
 			}
 
-			// Drop the old scene_board_buttons table
+			// Only drop the old scene_board_buttons table if we successfully copied or it was empty
 			if err := db.Exec("DROP TABLE scene_board_buttons").Error; err != nil {
 				return fmt.Errorf("failed to drop old scene_board_buttons: %w", err)
 			}
@@ -825,8 +851,13 @@ func migrateSceneToLook(db *gorm.DB) error {
 			log.Println("  Migrated table: scene_board_buttons -> look_board_buttons")
 		}
 
-		db.Exec("CREATE INDEX IF NOT EXISTS idx_look_board_buttons_look_board_id ON look_board_buttons(look_board_id)")
-		db.Exec("CREATE INDEX IF NOT EXISTS idx_look_board_buttons_look_id ON look_board_buttons(look_id)")
+		// Recreate indexes (log warnings but don't fail migration for index errors)
+		if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_look_board_buttons_look_board_id ON look_board_buttons(look_board_id)").Error; err != nil {
+			log.Printf("  Warning: failed to create idx_look_board_buttons_look_board_id: %v", err)
+		}
+		if err := db.Exec("CREATE INDEX IF NOT EXISTS idx_look_board_buttons_look_id ON look_board_buttons(look_id)").Error; err != nil {
+			log.Printf("  Warning: failed to create idx_look_board_buttons_look_id: %v", err)
+		}
 	}
 
 	log.Println("✅ Scene to look migration complete")
