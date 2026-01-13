@@ -136,6 +136,18 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+// setupInMemoryDB creates an empty in-memory database for tests
+// that need to set up their own schema (e.g., testing migration scenarios)
+func setupInMemoryDB(t *testing.T) *gorm.DB {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+	return db
+}
+
 func TestMigrateChannelValuesToSparse_EmptyDatabase(t *testing.T) {
 	db := setupTestDB(t)
 
@@ -752,5 +764,433 @@ func TestMigrateSceneToLook_Idempotent(t *testing.T) {
 	db.Raw("SELECT COUNT(*) FROM looks").Scan(&count)
 	if count != 1 {
 		t.Errorf("Expected 1 look after idempotent migration, got %d", count)
+	}
+}
+
+// Tests for AutoMigrate scenario (both old and new tables exist)
+// This simulates the case where GORM AutoMigrate runs before our custom migration,
+// creating empty new tables while old tables still have data.
+
+func TestMigrateSceneToLook_AutoMigrate_ScenesAndLooksBothExist(t *testing.T) {
+	db := setupInMemoryDB(t)
+
+	// Simulate AutoMigrate creating both old (scenes) and new (looks) tables
+	db.Exec(`CREATE TABLE scenes (
+		id TEXT PRIMARY KEY,
+		name TEXT,
+		description TEXT,
+		project_id TEXT,
+		created_at DATETIME,
+		updated_at DATETIME
+	)`)
+	db.Exec(`CREATE TABLE looks (
+		id TEXT PRIMARY KEY,
+		name TEXT,
+		description TEXT,
+		project_id TEXT,
+		created_at DATETIME,
+		updated_at DATETIME
+	)`)
+
+	// Add data to old table (scenes has data, looks is empty - simulates user's existing database)
+	db.Exec(`INSERT INTO scenes (id, name, description) VALUES ('scene-1', 'Scene 1', 'First scene')`)
+	db.Exec(`INSERT INTO scenes (id, name, description) VALUES ('scene-2', 'Scene 2', 'Second scene')`)
+
+	err := migrateSceneToLook(db)
+	if err != nil {
+		t.Fatalf("Migration failed: %v", err)
+	}
+
+	// Verify scenes table is dropped
+	var scenesExists int
+	db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='scenes'").Scan(&scenesExists)
+	if scenesExists != 0 {
+		t.Error("scenes table should be dropped after migration")
+	}
+
+	// Verify looks table has the data
+	var count int64
+	db.Raw("SELECT COUNT(*) FROM looks").Scan(&count)
+	if count != 2 {
+		t.Errorf("Expected 2 looks after migration, got %d", count)
+	}
+
+	// Verify data integrity
+	var name string
+	db.Raw("SELECT name FROM looks WHERE id = 'scene-1'").Scan(&name)
+	if name != "Scene 1" {
+		t.Errorf("Expected 'Scene 1', got '%s'", name)
+	}
+}
+
+func TestMigrateSceneToLook_AutoMigrate_FixtureValuesWithBothColumns(t *testing.T) {
+	db := setupInMemoryDB(t)
+
+	// Create tables that simulate AutoMigrate having run
+	// Old scenes table with data
+	db.Exec(`CREATE TABLE scenes (id TEXT PRIMARY KEY, name TEXT)`)
+	db.Exec(`INSERT INTO scenes (id, name) VALUES ('scene-1', 'Scene 1')`)
+
+	// fixture_values with BOTH old (scene_id) and new (look_id) columns
+	// This simulates AutoMigrate adding new columns without removing old ones
+	db.Exec(`CREATE TABLE fixture_values (
+		id TEXT PRIMARY KEY,
+		scene_id TEXT,
+		scene_order INTEGER,
+		look_id TEXT,
+		look_order INTEGER,
+		fixture_id TEXT,
+		channels TEXT DEFAULT '[]'
+	)`)
+
+	// Add data with old column populated, new column empty
+	db.Exec(`INSERT INTO fixture_values (id, scene_id, scene_order, fixture_id) VALUES ('fv-1', 'scene-1', 1, 'fixture-1')`)
+	db.Exec(`INSERT INTO fixture_values (id, scene_id, scene_order, fixture_id) VALUES ('fv-2', 'scene-1', 2, 'fixture-2')`)
+
+	// Create other required tables with all columns needed by the migration
+	db.Exec(`CREATE TABLE cues (
+		id TEXT PRIMARY KEY,
+		name TEXT,
+		cue_number REAL,
+		cue_list_id TEXT,
+		scene_id TEXT,
+		fade_in_time REAL,
+		fade_out_time REAL,
+		follow_time REAL,
+		easing_type TEXT,
+		notes TEXT,
+		skip INTEGER,
+		created_at DATETIME,
+		updated_at DATETIME
+	)`)
+	db.Exec(`CREATE TABLE scene_boards (
+		id TEXT PRIMARY KEY,
+		name TEXT,
+		description TEXT,
+		project_id TEXT,
+		grid_size INTEGER,
+		default_fade_time REAL,
+		canvas_width INTEGER,
+		canvas_height INTEGER,
+		created_at DATETIME,
+		updated_at DATETIME
+	)`)
+	db.Exec(`CREATE TABLE scene_board_buttons (
+		id TEXT PRIMARY KEY,
+		scene_board_id TEXT,
+		scene_id TEXT,
+		layout_x INTEGER,
+		layout_y INTEGER,
+		width INTEGER,
+		height INTEGER,
+		color TEXT,
+		label TEXT,
+		created_at DATETIME,
+		updated_at DATETIME
+	)`)
+
+	err := migrateSceneToLook(db)
+	if err != nil {
+		t.Fatalf("Migration failed: %v", err)
+	}
+
+	// Verify fixture_values now uses look_id
+	var lookId string
+	db.Raw("SELECT look_id FROM fixture_values WHERE id = 'fv-1'").Scan(&lookId)
+	if lookId != "scene-1" {
+		t.Errorf("Expected look_id 'scene-1', got '%s'", lookId)
+	}
+
+	// Verify scene_id column is removed
+	var hasSceneId bool
+	db.Raw("SELECT COUNT(*) > 0 FROM pragma_table_info('fixture_values') WHERE name = 'scene_id'").Scan(&hasSceneId)
+	if hasSceneId {
+		t.Error("fixture_values should not have scene_id column after migration")
+	}
+}
+
+func TestMigrateSceneToLook_AutoMigrate_CuesWithBothColumns(t *testing.T) {
+	db := setupInMemoryDB(t)
+
+	// Create tables that simulate AutoMigrate having run
+	db.Exec(`CREATE TABLE scenes (id TEXT PRIMARY KEY, name TEXT)`)
+	db.Exec(`INSERT INTO scenes (id, name) VALUES ('scene-1', 'Scene 1')`)
+
+	// cues with BOTH old (scene_id) and new (look_id) columns
+	db.Exec(`CREATE TABLE cues (
+		id TEXT PRIMARY KEY,
+		name TEXT,
+		cue_number REAL,
+		cue_list_id TEXT,
+		scene_id TEXT,
+		look_id TEXT,
+		fade_in_time REAL,
+		fade_out_time REAL,
+		follow_time REAL,
+		easing_type TEXT,
+		notes TEXT,
+		skip INTEGER,
+		created_at DATETIME,
+		updated_at DATETIME
+	)`)
+
+	// Add data with old column populated, new column empty
+	db.Exec(`INSERT INTO cues (id, name, cue_number, scene_id) VALUES ('cue-1', 'Cue 1', 1.0, 'scene-1')`)
+	db.Exec(`INSERT INTO cues (id, name, cue_number, scene_id) VALUES ('cue-2', 'Cue 2', 2.0, 'scene-1')`)
+
+	// Create other required tables with all columns needed by the migration
+	db.Exec(`CREATE TABLE fixture_values (
+		id TEXT PRIMARY KEY,
+		scene_id TEXT,
+		scene_order INTEGER,
+		fixture_id TEXT,
+		channels TEXT DEFAULT '[]'
+	)`)
+	db.Exec(`CREATE TABLE scene_boards (
+		id TEXT PRIMARY KEY,
+		name TEXT,
+		description TEXT,
+		project_id TEXT,
+		grid_size INTEGER,
+		default_fade_time REAL,
+		canvas_width INTEGER,
+		canvas_height INTEGER,
+		created_at DATETIME,
+		updated_at DATETIME
+	)`)
+	db.Exec(`CREATE TABLE scene_board_buttons (
+		id TEXT PRIMARY KEY,
+		scene_board_id TEXT,
+		scene_id TEXT,
+		layout_x INTEGER,
+		layout_y INTEGER,
+		width INTEGER,
+		height INTEGER,
+		color TEXT,
+		label TEXT,
+		created_at DATETIME,
+		updated_at DATETIME
+	)`)
+
+	err := migrateSceneToLook(db)
+	if err != nil {
+		t.Fatalf("Migration failed: %v", err)
+	}
+
+	// Verify cues now uses look_id
+	var lookId string
+	db.Raw("SELECT look_id FROM cues WHERE id = 'cue-1'").Scan(&lookId)
+	if lookId != "scene-1" {
+		t.Errorf("Expected look_id 'scene-1', got '%s'", lookId)
+	}
+
+	// Verify scene_id column is removed
+	var hasSceneId bool
+	db.Raw("SELECT COUNT(*) > 0 FROM pragma_table_info('cues') WHERE name = 'scene_id'").Scan(&hasSceneId)
+	if hasSceneId {
+		t.Error("cues should not have scene_id column after migration")
+	}
+}
+
+func TestMigrateSceneToLook_AutoMigrate_SceneBoardsBothExist(t *testing.T) {
+	db := setupInMemoryDB(t)
+
+	// Create tables that simulate AutoMigrate having run
+	db.Exec(`CREATE TABLE scenes (id TEXT PRIMARY KEY, name TEXT)`)
+	db.Exec(`INSERT INTO scenes (id, name) VALUES ('scene-1', 'Scene 1')`)
+
+	// Both old and new scene_boards/look_boards tables
+	db.Exec(`CREATE TABLE scene_boards (
+		id TEXT PRIMARY KEY,
+		name TEXT,
+		description TEXT,
+		project_id TEXT,
+		grid_size INTEGER,
+		default_fade_time REAL,
+		canvas_width INTEGER,
+		canvas_height INTEGER,
+		created_at DATETIME,
+		updated_at DATETIME
+	)`)
+	db.Exec(`CREATE TABLE look_boards (
+		id TEXT PRIMARY KEY,
+		name TEXT,
+		description TEXT,
+		project_id TEXT,
+		grid_size INTEGER,
+		default_fade_time REAL,
+		canvas_width INTEGER,
+		canvas_height INTEGER,
+		created_at DATETIME,
+		updated_at DATETIME
+	)`)
+
+	// Add data to old table
+	db.Exec(`INSERT INTO scene_boards (id, name, grid_size) VALUES ('sb-1', 'Board 1', 50)`)
+	db.Exec(`INSERT INTO scene_boards (id, name, grid_size) VALUES ('sb-2', 'Board 2', 100)`)
+
+	// Create other required tables with all columns needed by the migration
+	db.Exec(`CREATE TABLE fixture_values (
+		id TEXT PRIMARY KEY,
+		scene_id TEXT,
+		scene_order INTEGER,
+		fixture_id TEXT,
+		channels TEXT DEFAULT '[]'
+	)`)
+	db.Exec(`CREATE TABLE cues (
+		id TEXT PRIMARY KEY,
+		name TEXT,
+		cue_number REAL,
+		cue_list_id TEXT,
+		scene_id TEXT,
+		fade_in_time REAL,
+		fade_out_time REAL,
+		follow_time REAL,
+		easing_type TEXT,
+		notes TEXT,
+		skip INTEGER,
+		created_at DATETIME,
+		updated_at DATETIME
+	)`)
+	db.Exec(`CREATE TABLE scene_board_buttons (
+		id TEXT PRIMARY KEY,
+		scene_board_id TEXT,
+		scene_id TEXT,
+		layout_x INTEGER,
+		layout_y INTEGER,
+		width INTEGER,
+		height INTEGER,
+		color TEXT,
+		label TEXT,
+		created_at DATETIME,
+		updated_at DATETIME
+	)`)
+
+	err := migrateSceneToLook(db)
+	if err != nil {
+		t.Fatalf("Migration failed: %v", err)
+	}
+
+	// Verify scene_boards table is dropped
+	var sceneBoardsExists int
+	db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='scene_boards'").Scan(&sceneBoardsExists)
+	if sceneBoardsExists != 0 {
+		t.Error("scene_boards table should be dropped after migration")
+	}
+
+	// Verify look_boards table has the data
+	var count int64
+	db.Raw("SELECT COUNT(*) FROM look_boards").Scan(&count)
+	if count != 2 {
+		t.Errorf("Expected 2 look_boards after migration, got %d", count)
+	}
+}
+
+func TestMigrateSceneToLook_AutoMigrate_ButtonsBothExist(t *testing.T) {
+	db := setupInMemoryDB(t)
+
+	// Create tables that simulate AutoMigrate having run
+	db.Exec(`CREATE TABLE scenes (id TEXT PRIMARY KEY, name TEXT)`)
+	db.Exec(`INSERT INTO scenes (id, name) VALUES ('scene-1', 'Scene 1')`)
+
+	db.Exec(`CREATE TABLE scene_boards (
+		id TEXT PRIMARY KEY,
+		name TEXT,
+		description TEXT,
+		project_id TEXT,
+		grid_size INTEGER,
+		default_fade_time REAL,
+		canvas_width INTEGER,
+		canvas_height INTEGER,
+		created_at DATETIME,
+		updated_at DATETIME
+	)`)
+	db.Exec(`INSERT INTO scene_boards (id, name) VALUES ('sb-1', 'Board 1')`)
+
+	// Both old and new button tables
+	db.Exec(`CREATE TABLE scene_board_buttons (
+		id TEXT PRIMARY KEY,
+		scene_board_id TEXT,
+		scene_id TEXT,
+		layout_x INTEGER,
+		layout_y INTEGER,
+		width INTEGER,
+		height INTEGER,
+		color TEXT,
+		label TEXT,
+		created_at DATETIME,
+		updated_at DATETIME
+	)`)
+	db.Exec(`CREATE TABLE look_board_buttons (
+		id TEXT PRIMARY KEY,
+		look_board_id TEXT,
+		look_id TEXT,
+		layout_x INTEGER,
+		layout_y INTEGER,
+		width INTEGER,
+		height INTEGER,
+		color TEXT,
+		label TEXT,
+		created_at DATETIME,
+		updated_at DATETIME
+	)`)
+
+	// Add data to old table
+	db.Exec(`INSERT INTO scene_board_buttons (id, scene_board_id, scene_id, layout_x, layout_y) VALUES ('btn-1', 'sb-1', 'scene-1', 100, 200)`)
+	db.Exec(`INSERT INTO scene_board_buttons (id, scene_board_id, scene_id, layout_x, layout_y) VALUES ('btn-2', 'sb-1', 'scene-1', 300, 400)`)
+
+	// Create other required tables with all columns needed by the migration
+	db.Exec(`CREATE TABLE fixture_values (
+		id TEXT PRIMARY KEY,
+		scene_id TEXT,
+		scene_order INTEGER,
+		fixture_id TEXT,
+		channels TEXT DEFAULT '[]'
+	)`)
+	db.Exec(`CREATE TABLE cues (
+		id TEXT PRIMARY KEY,
+		name TEXT,
+		cue_number REAL,
+		cue_list_id TEXT,
+		scene_id TEXT,
+		fade_in_time REAL,
+		fade_out_time REAL,
+		follow_time REAL,
+		easing_type TEXT,
+		notes TEXT,
+		skip INTEGER,
+		created_at DATETIME,
+		updated_at DATETIME
+	)`)
+
+	err := migrateSceneToLook(db)
+	if err != nil {
+		t.Fatalf("Migration failed: %v", err)
+	}
+
+	// Verify scene_board_buttons table is dropped
+	var oldTableExists int
+	db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='scene_board_buttons'").Scan(&oldTableExists)
+	if oldTableExists != 0 {
+		t.Error("scene_board_buttons table should be dropped after migration")
+	}
+
+	// Verify look_board_buttons table has the data
+	var count int64
+	db.Raw("SELECT COUNT(*) FROM look_board_buttons").Scan(&count)
+	if count != 2 {
+		t.Errorf("Expected 2 look_board_buttons after migration, got %d", count)
+	}
+
+	// Verify column names were translated
+	var lookBoardId, lookId string
+	if err := db.Raw("SELECT look_board_id, look_id FROM look_board_buttons WHERE id = 'btn-1'").Row().Scan(&lookBoardId, &lookId); err != nil {
+		t.Fatalf("Failed to query look_board_buttons: %v", err)
+	}
+	if lookBoardId != "sb-1" {
+		t.Errorf("Expected look_board_id 'sb-1', got '%s'", lookBoardId)
+	}
+	if lookId != "scene-1" {
+		t.Errorf("Expected look_id 'scene-1', got '%s'", lookId)
 	}
 }

@@ -446,6 +446,11 @@ func backfillLayoutCanvasDimensions(db *gorm.DB) error {
 // This is a one-time migration that runs on startup to rename tables and columns.
 // SQLite doesn't support renaming columns directly, so we use ALTER TABLE RENAME TO for tables
 // and recreate tables with new column names where needed.
+//
+// Note: AutoMigrate runs BEFORE this function, so the new tables (looks, look_boards, etc.)
+// may already exist. This function handles both cases:
+// - If old tables exist and new tables don't: rename old to new
+// - If both exist: copy data from old to new and drop old tables
 func migrateSceneToLook(db *gorm.DB) error {
 	// Check if migration is needed by looking for old table names
 	if !db.Migrator().HasTable("scenes") {
@@ -456,58 +461,174 @@ func migrateSceneToLook(db *gorm.DB) error {
 
 	// SQLite-specific migration using raw SQL
 	// We need to:
-	// 1. Rename tables: scenes -> looks, scene_boards -> look_boards, scene_board_buttons -> look_board_buttons
-	// 2. For columns: SQLite doesn't support ALTER COLUMN RENAME, so we need to recreate tables
+	// 1. Migrate scenes -> looks
+	// 2. Migrate fixture_values columns (scene_id -> look_id, scene_order -> look_order)
+	// 3. Migrate cues columns (scene_id -> look_id)
+	// 4. Migrate scene_boards -> look_boards
+	// 5. Migrate scene_board_buttons -> look_board_buttons
 
-	// Step 1: Rename the scenes table to looks
-	if err := db.Exec("ALTER TABLE scenes RENAME TO looks").Error; err != nil {
-		return fmt.Errorf("failed to rename scenes table: %w", err)
+	// Step 1: Migrate scenes table to looks table
+	// AutoMigrate may have created an empty "looks" table, so we need to handle both cases
+	if db.Migrator().HasTable("looks") {
+		// Both tables exist - copy data from scenes to looks, then drop scenes
+		// First check if looks is empty and scenes has data
+		var looksCount, scenesCount int64
+		if err := db.Raw("SELECT COUNT(*) FROM looks").Scan(&looksCount).Error; err != nil {
+			return fmt.Errorf("failed to count looks: %w", err)
+		}
+		if err := db.Raw("SELECT COUNT(*) FROM scenes").Scan(&scenesCount).Error; err != nil {
+			return fmt.Errorf("failed to count scenes: %w", err)
+		}
+
+		if scenesCount > 0 && looksCount == 0 {
+			// Copy data from scenes to looks
+			if err := db.Exec(`
+				INSERT INTO looks (id, name, description, project_id, created_at, updated_at)
+				SELECT id, name, description, project_id, created_at, updated_at FROM scenes
+			`).Error; err != nil {
+				return fmt.Errorf("failed to copy scenes to looks: %w", err)
+			}
+			log.Printf("  Copied %d scenes to looks table", scenesCount)
+		} else if scenesCount > 0 && looksCount > 0 {
+			log.Printf("  Warning: Both scenes (%d) and looks (%d) have data, skipping scene migration", scenesCount, looksCount)
+		}
+
+		// Drop the old scenes table
+		if err := db.Exec("DROP TABLE scenes").Error; err != nil {
+			return fmt.Errorf("failed to drop old scenes table: %w", err)
+		}
+		log.Println("  Dropped old scenes table")
+	} else {
+		// Only scenes table exists - rename it to looks
+		if err := db.Exec("ALTER TABLE scenes RENAME TO looks").Error; err != nil {
+			return fmt.Errorf("failed to rename scenes table: %w", err)
+		}
+		log.Println("  Renamed table: scenes -> looks")
 	}
-	log.Println("  Renamed table: scenes -> looks")
 
-	// Step 2: Handle fixture_values table - need to rename scene_id to look_id and scene_order to look_order
-	// SQLite requires creating a new table, copying data, and dropping the old table
+	// Step 2: Handle fixture_values table - need to migrate scene_id to look_id and scene_order to look_order
+	// Check if old columns exist
 	if db.Migrator().HasColumn("fixture_values", "scene_id") {
-		// Create new table structure
-		if err := db.Exec(`
-			CREATE TABLE fixture_values_new (
-				id TEXT PRIMARY KEY,
-				look_id TEXT,
-				fixture_id TEXT,
-				channels TEXT DEFAULT '[]',
-				look_order INTEGER,
-				FOREIGN KEY (look_id) REFERENCES looks(id),
-				FOREIGN KEY (fixture_id) REFERENCES fixture_instances(id)
-			)
-		`).Error; err != nil {
-			return fmt.Errorf("failed to create fixture_values_new: %w", err)
-		}
+		// Old schema has scene_id - we need to migrate the data
+		// Check if new columns also exist (from AutoMigrate)
+		hasLookId := db.Migrator().HasColumn("fixture_values", "look_id")
 
-		// Copy data with column rename
-		if err := db.Exec(`
-			INSERT INTO fixture_values_new (id, look_id, fixture_id, channels, look_order)
-			SELECT id, scene_id, fixture_id, channels, scene_order FROM fixture_values
-		`).Error; err != nil {
-			return fmt.Errorf("failed to copy fixture_values data: %w", err)
-		}
+		if hasLookId {
+			// Both old and new columns exist - copy data from scene_id to look_id where look_id is null
+			var countToMigrate int64
+			if err := db.Raw("SELECT COUNT(*) FROM fixture_values WHERE scene_id IS NOT NULL AND (look_id IS NULL OR look_id = '')").Scan(&countToMigrate).Error; err != nil {
+				return fmt.Errorf("failed to count fixture_values to migrate: %w", err)
+			}
 
-		// Drop old table and rename new one
-		if err := db.Exec("DROP TABLE fixture_values").Error; err != nil {
-			return fmt.Errorf("failed to drop old fixture_values: %w", err)
-		}
-		if err := db.Exec("ALTER TABLE fixture_values_new RENAME TO fixture_values").Error; err != nil {
-			return fmt.Errorf("failed to rename fixture_values_new: %w", err)
-		}
+			if countToMigrate > 0 {
+				if err := db.Exec(`
+					UPDATE fixture_values
+					SET look_id = scene_id, look_order = scene_order
+					WHERE scene_id IS NOT NULL AND (look_id IS NULL OR look_id = '')
+				`).Error; err != nil {
+					return fmt.Errorf("failed to migrate fixture_values data: %w", err)
+				}
+				log.Printf("  Migrated %d fixture_values records (scene_id -> look_id)", countToMigrate)
+			}
 
-		// Recreate indexes
-		db.Exec("CREATE INDEX idx_fixture_values_look_id ON fixture_values(look_id)")
-		db.Exec("CREATE INDEX idx_fixture_values_fixture_id ON fixture_values(fixture_id)")
+			// Now drop the old columns by recreating the table without them
+			// First check the current table structure to preserve any additional columns
+			if err := db.Exec(`
+				CREATE TABLE fixture_values_new (
+					id TEXT PRIMARY KEY,
+					look_id TEXT,
+					fixture_id TEXT,
+					channels TEXT DEFAULT '[]',
+					look_order INTEGER,
+					FOREIGN KEY (look_id) REFERENCES looks(id),
+					FOREIGN KEY (fixture_id) REFERENCES fixture_instances(id)
+				)
+			`).Error; err != nil {
+				return fmt.Errorf("failed to create fixture_values_new: %w", err)
+			}
 
-		log.Println("  Migrated table: fixture_values (scene_id -> look_id, scene_order -> look_order)")
+			if err := db.Exec(`
+				INSERT INTO fixture_values_new (id, look_id, fixture_id, channels, look_order)
+				SELECT id, look_id, fixture_id, channels, look_order FROM fixture_values
+			`).Error; err != nil {
+				return fmt.Errorf("failed to copy fixture_values data: %w", err)
+			}
+
+			if err := db.Exec("DROP TABLE fixture_values").Error; err != nil {
+				return fmt.Errorf("failed to drop old fixture_values: %w", err)
+			}
+			if err := db.Exec("ALTER TABLE fixture_values_new RENAME TO fixture_values").Error; err != nil {
+				return fmt.Errorf("failed to rename fixture_values_new: %w", err)
+			}
+
+			// Recreate indexes
+			db.Exec("CREATE INDEX IF NOT EXISTS idx_fixture_values_look_id ON fixture_values(look_id)")
+			db.Exec("CREATE INDEX IF NOT EXISTS idx_fixture_values_fixture_id ON fixture_values(fixture_id)")
+
+			log.Println("  Cleaned up fixture_values table (removed scene_id, scene_order columns)")
+		} else {
+			// Only old columns exist - do a full table rebuild
+			if err := db.Exec(`
+				CREATE TABLE fixture_values_new (
+					id TEXT PRIMARY KEY,
+					look_id TEXT,
+					fixture_id TEXT,
+					channels TEXT DEFAULT '[]',
+					look_order INTEGER,
+					FOREIGN KEY (look_id) REFERENCES looks(id),
+					FOREIGN KEY (fixture_id) REFERENCES fixture_instances(id)
+				)
+			`).Error; err != nil {
+				return fmt.Errorf("failed to create fixture_values_new: %w", err)
+			}
+
+			if err := db.Exec(`
+				INSERT INTO fixture_values_new (id, look_id, fixture_id, channels, look_order)
+				SELECT id, scene_id, fixture_id, channels, scene_order FROM fixture_values
+			`).Error; err != nil {
+				return fmt.Errorf("failed to copy fixture_values data: %w", err)
+			}
+
+			if err := db.Exec("DROP TABLE fixture_values").Error; err != nil {
+				return fmt.Errorf("failed to drop old fixture_values: %w", err)
+			}
+			if err := db.Exec("ALTER TABLE fixture_values_new RENAME TO fixture_values").Error; err != nil {
+				return fmt.Errorf("failed to rename fixture_values_new: %w", err)
+			}
+
+			// Recreate indexes
+			db.Exec("CREATE INDEX IF NOT EXISTS idx_fixture_values_look_id ON fixture_values(look_id)")
+			db.Exec("CREATE INDEX IF NOT EXISTS idx_fixture_values_fixture_id ON fixture_values(fixture_id)")
+
+			log.Println("  Migrated table: fixture_values (scene_id -> look_id, scene_order -> look_order)")
+		}
 	}
 
 	// Step 3: Handle cues table - need to rename scene_id to look_id
 	if db.Migrator().HasColumn("cues", "scene_id") {
+		// Check if new column also exists (from AutoMigrate)
+		hasLookId := db.Migrator().HasColumn("cues", "look_id")
+
+		if hasLookId {
+			// Both old and new columns exist - copy data from scene_id to look_id where look_id is null
+			var countToMigrate int64
+			if err := db.Raw("SELECT COUNT(*) FROM cues WHERE scene_id IS NOT NULL AND (look_id IS NULL OR look_id = '')").Scan(&countToMigrate).Error; err != nil {
+				return fmt.Errorf("failed to count cues to migrate: %w", err)
+			}
+
+			if countToMigrate > 0 {
+				if err := db.Exec(`
+					UPDATE cues
+					SET look_id = scene_id
+					WHERE scene_id IS NOT NULL AND (look_id IS NULL OR look_id = '')
+				`).Error; err != nil {
+					return fmt.Errorf("failed to migrate cues data: %w", err)
+				}
+				log.Printf("  Migrated %d cue records (scene_id -> look_id)", countToMigrate)
+			}
+		}
+
+		// Rebuild table without the old scene_id column
 		if err := db.Exec(`
 			CREATE TABLE cues_new (
 				id TEXT PRIMARY KEY,
@@ -530,10 +651,21 @@ func migrateSceneToLook(db *gorm.DB) error {
 			return fmt.Errorf("failed to create cues_new: %w", err)
 		}
 
-		if err := db.Exec(`
-			INSERT INTO cues_new (id, name, cue_number, cue_list_id, look_id, fade_in_time, fade_out_time, follow_time, easing_type, notes, skip, created_at, updated_at)
-			SELECT id, name, cue_number, cue_list_id, scene_id, fade_in_time, fade_out_time, follow_time, easing_type, notes, skip, created_at, updated_at FROM cues
-		`).Error; err != nil {
+		// Use look_id if it exists (post-update), otherwise use scene_id
+		var insertSQL string
+		if hasLookId {
+			insertSQL = `
+				INSERT INTO cues_new (id, name, cue_number, cue_list_id, look_id, fade_in_time, fade_out_time, follow_time, easing_type, notes, skip, created_at, updated_at)
+				SELECT id, name, cue_number, cue_list_id, look_id, fade_in_time, fade_out_time, follow_time, easing_type, notes, skip, created_at, updated_at FROM cues
+			`
+		} else {
+			insertSQL = `
+				INSERT INTO cues_new (id, name, cue_number, cue_list_id, look_id, fade_in_time, fade_out_time, follow_time, easing_type, notes, skip, created_at, updated_at)
+				SELECT id, name, cue_number, cue_list_id, scene_id, fade_in_time, fade_out_time, follow_time, easing_type, notes, skip, created_at, updated_at FROM cues
+			`
+		}
+
+		if err := db.Exec(insertSQL).Error; err != nil {
 			return fmt.Errorf("failed to copy cues data: %w", err)
 		}
 
@@ -544,57 +676,121 @@ func migrateSceneToLook(db *gorm.DB) error {
 			return fmt.Errorf("failed to rename cues_new: %w", err)
 		}
 
-		db.Exec("CREATE INDEX idx_cues_cue_list_id ON cues(cue_list_id)")
-		db.Exec("CREATE INDEX idx_cues_look_id ON cues(look_id)")
+		db.Exec("CREATE INDEX IF NOT EXISTS idx_cues_cue_list_id ON cues(cue_list_id)")
+		db.Exec("CREATE INDEX IF NOT EXISTS idx_cues_look_id ON cues(look_id)")
 
 		log.Println("  Migrated table: cues (scene_id -> look_id)")
 	}
 
 	// Step 4: Rename scene_boards to look_boards
 	if db.Migrator().HasTable("scene_boards") {
-		if err := db.Exec("ALTER TABLE scene_boards RENAME TO look_boards").Error; err != nil {
-			return fmt.Errorf("failed to rename scene_boards table: %w", err)
+		// Check if look_boards already exists (from AutoMigrate)
+		if db.Migrator().HasTable("look_boards") {
+			// Both tables exist - copy data from scene_boards to look_boards, then drop scene_boards
+			var lookBoardsCount, sceneBoardsCount int64
+			if err := db.Raw("SELECT COUNT(*) FROM look_boards").Scan(&lookBoardsCount).Error; err != nil {
+				return fmt.Errorf("failed to count look_boards: %w", err)
+			}
+			if err := db.Raw("SELECT COUNT(*) FROM scene_boards").Scan(&sceneBoardsCount).Error; err != nil {
+				return fmt.Errorf("failed to count scene_boards: %w", err)
+			}
+
+			if sceneBoardsCount > 0 && lookBoardsCount == 0 {
+				// Copy data from scene_boards to look_boards
+				if err := db.Exec(`
+					INSERT INTO look_boards (id, name, description, project_id, grid_size, default_fade_time, canvas_width, canvas_height, created_at, updated_at)
+					SELECT id, name, description, project_id, grid_size, default_fade_time, canvas_width, canvas_height, created_at, updated_at FROM scene_boards
+				`).Error; err != nil {
+					return fmt.Errorf("failed to copy scene_boards to look_boards: %w", err)
+				}
+				log.Printf("  Copied %d scene_boards to look_boards table", sceneBoardsCount)
+			} else if sceneBoardsCount > 0 && lookBoardsCount > 0 {
+				log.Printf("  Warning: Both scene_boards (%d) and look_boards (%d) have data, skipping scene_boards migration", sceneBoardsCount, lookBoardsCount)
+			}
+
+			// Drop the old scene_boards table
+			if err := db.Exec("DROP TABLE scene_boards").Error; err != nil {
+				return fmt.Errorf("failed to drop old scene_boards table: %w", err)
+			}
+			log.Println("  Dropped old scene_boards table")
+		} else {
+			// Only scene_boards table exists - rename it to look_boards
+			if err := db.Exec("ALTER TABLE scene_boards RENAME TO look_boards").Error; err != nil {
+				return fmt.Errorf("failed to rename scene_boards table: %w", err)
+			}
+			log.Println("  Renamed table: scene_boards -> look_boards")
 		}
-		log.Println("  Renamed table: scene_boards -> look_boards")
 	}
 
 	// Step 5: Handle scene_board_buttons - rename to look_board_buttons and update columns
 	if db.Migrator().HasTable("scene_board_buttons") {
-		if err := db.Exec(`
-			CREATE TABLE look_board_buttons (
-				id TEXT PRIMARY KEY,
-				look_board_id TEXT,
-				look_id TEXT,
-				layout_x INTEGER,
-				layout_y INTEGER,
-				width INTEGER DEFAULT 200,
-				height INTEGER DEFAULT 120,
-				color TEXT,
-				label TEXT,
-				created_at DATETIME,
-				updated_at DATETIME,
-				FOREIGN KEY (look_board_id) REFERENCES look_boards(id),
-				FOREIGN KEY (look_id) REFERENCES looks(id)
-			)
-		`).Error; err != nil {
-			return fmt.Errorf("failed to create look_board_buttons: %w", err)
+		// Check if look_board_buttons already exists (from AutoMigrate)
+		if db.Migrator().HasTable("look_board_buttons") {
+			// Both tables exist - copy data from scene_board_buttons to look_board_buttons, then drop old table
+			var lookBoardButtonsCount, sceneBoardButtonsCount int64
+			if err := db.Raw("SELECT COUNT(*) FROM look_board_buttons").Scan(&lookBoardButtonsCount).Error; err != nil {
+				return fmt.Errorf("failed to count look_board_buttons: %w", err)
+			}
+			if err := db.Raw("SELECT COUNT(*) FROM scene_board_buttons").Scan(&sceneBoardButtonsCount).Error; err != nil {
+				return fmt.Errorf("failed to count scene_board_buttons: %w", err)
+			}
+
+			if sceneBoardButtonsCount > 0 && lookBoardButtonsCount == 0 {
+				// Copy data from scene_board_buttons to look_board_buttons (translating column names)
+				if err := db.Exec(`
+					INSERT INTO look_board_buttons (id, look_board_id, look_id, layout_x, layout_y, width, height, color, label, created_at, updated_at)
+					SELECT id, scene_board_id, scene_id, layout_x, layout_y, width, height, color, label, created_at, updated_at FROM scene_board_buttons
+				`).Error; err != nil {
+					return fmt.Errorf("failed to copy scene_board_buttons to look_board_buttons: %w", err)
+				}
+				log.Printf("  Copied %d scene_board_buttons to look_board_buttons table", sceneBoardButtonsCount)
+			} else if sceneBoardButtonsCount > 0 && lookBoardButtonsCount > 0 {
+				log.Printf("  Warning: Both scene_board_buttons (%d) and look_board_buttons (%d) have data, skipping migration", sceneBoardButtonsCount, lookBoardButtonsCount)
+			}
+
+			// Drop the old scene_board_buttons table
+			if err := db.Exec("DROP TABLE scene_board_buttons").Error; err != nil {
+				return fmt.Errorf("failed to drop old scene_board_buttons: %w", err)
+			}
+			log.Println("  Dropped old scene_board_buttons table")
+		} else {
+			// Only scene_board_buttons table exists - create new table and copy data
+			if err := db.Exec(`
+				CREATE TABLE look_board_buttons (
+					id TEXT PRIMARY KEY,
+					look_board_id TEXT,
+					look_id TEXT,
+					layout_x INTEGER,
+					layout_y INTEGER,
+					width INTEGER DEFAULT 200,
+					height INTEGER DEFAULT 120,
+					color TEXT,
+					label TEXT,
+					created_at DATETIME,
+					updated_at DATETIME,
+					FOREIGN KEY (look_board_id) REFERENCES look_boards(id),
+					FOREIGN KEY (look_id) REFERENCES looks(id)
+				)
+			`).Error; err != nil {
+				return fmt.Errorf("failed to create look_board_buttons: %w", err)
+			}
+
+			if err := db.Exec(`
+				INSERT INTO look_board_buttons (id, look_board_id, look_id, layout_x, layout_y, width, height, color, label, created_at, updated_at)
+				SELECT id, scene_board_id, scene_id, layout_x, layout_y, width, height, color, label, created_at, updated_at FROM scene_board_buttons
+			`).Error; err != nil {
+				return fmt.Errorf("failed to copy scene_board_buttons data: %w", err)
+			}
+
+			if err := db.Exec("DROP TABLE scene_board_buttons").Error; err != nil {
+				return fmt.Errorf("failed to drop old scene_board_buttons: %w", err)
+			}
+
+			log.Println("  Migrated table: scene_board_buttons -> look_board_buttons")
 		}
 
-		if err := db.Exec(`
-			INSERT INTO look_board_buttons (id, look_board_id, look_id, layout_x, layout_y, width, height, color, label, created_at, updated_at)
-			SELECT id, scene_board_id, scene_id, layout_x, layout_y, width, height, color, label, created_at, updated_at FROM scene_board_buttons
-		`).Error; err != nil {
-			return fmt.Errorf("failed to copy scene_board_buttons data: %w", err)
-		}
-
-		if err := db.Exec("DROP TABLE scene_board_buttons").Error; err != nil {
-			return fmt.Errorf("failed to drop old scene_board_buttons: %w", err)
-		}
-
-		db.Exec("CREATE INDEX idx_look_board_buttons_look_board_id ON look_board_buttons(look_board_id)")
-		db.Exec("CREATE INDEX idx_look_board_buttons_look_id ON look_board_buttons(look_id)")
-
-		log.Println("  Migrated table: scene_board_buttons -> look_board_buttons")
+		db.Exec("CREATE INDEX IF NOT EXISTS idx_look_board_buttons_look_board_id ON look_board_buttons(look_board_id)")
+		db.Exec("CREATE INDEX IF NOT EXISTS idx_look_board_buttons_look_id ON look_board_buttons(look_id)")
 	}
 
 	log.Println("✅ Scene to look migration complete")
