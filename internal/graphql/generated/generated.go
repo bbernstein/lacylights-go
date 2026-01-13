@@ -853,6 +853,7 @@ type ChannelDefinitionResolver interface {
 	FadeBehavior(ctx context.Context, obj *models.ChannelDefinition) (FadeBehavior, error)
 }
 type CueResolver interface {
+	Look(ctx context.Context, obj *models.Cue) (*models.Look, error)
 	CueList(ctx context.Context, obj *models.Cue) (*models.CueList, error)
 
 	EasingType(ctx context.Context, obj *models.Cue) (*EasingType, error)
@@ -899,18 +900,20 @@ type InstanceChannelResolver interface {
 }
 type LookResolver interface {
 	Project(ctx context.Context, obj *models.Look) (*models.Project, error)
-
+	FixtureValues(ctx context.Context, obj *models.Look) ([]*models.FixtureValue, error)
 	CreatedAt(ctx context.Context, obj *models.Look) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.Look) (string, error)
 }
 type LookBoardResolver interface {
 	Project(ctx context.Context, obj *models.LookBoard) (*models.Project, error)
 
+	Buttons(ctx context.Context, obj *models.LookBoard) ([]*models.LookBoardButton, error)
 	CreatedAt(ctx context.Context, obj *models.LookBoard) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.LookBoard) (string, error)
 }
 type LookBoardButtonResolver interface {
 	LookBoard(ctx context.Context, obj *models.LookBoardButton) (*models.LookBoard, error)
+	Look(ctx context.Context, obj *models.LookBoardButton) (*models.Look, error)
 
 	CreatedAt(ctx context.Context, obj *models.LookBoardButton) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.LookBoardButton) (string, error)
@@ -1031,7 +1034,7 @@ type ProjectResolver interface {
 	CreatedAt(ctx context.Context, obj *models.Project) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.Project) (string, error)
 	Fixtures(ctx context.Context, obj *models.Project) ([]*models.FixtureInstance, error)
-
+	Looks(ctx context.Context, obj *models.Project) ([]*models.Look, error)
 	CueLists(ctx context.Context, obj *models.Project) ([]*models.CueList, error)
 
 	Users(ctx context.Context, obj *models.Project) ([]*models.ProjectUser, error)
@@ -10310,7 +10313,7 @@ func (ec *executionContext) _Cue_look(ctx context.Context, field graphql.Collect
 		field,
 		ec.fieldContext_Cue_look,
 		func(ctx context.Context) (any, error) {
-			return obj.Look, nil
+			return ec.resolvers.Cue().Look(ctx, obj)
 		},
 		nil,
 		ec.marshalNLook2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐLook,
@@ -10323,8 +10326,8 @@ func (ec *executionContext) fieldContext_Cue_look(_ context.Context, field graph
 	fc = &graphql.FieldContext{
 		Object:     "Cue",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -15096,10 +15099,10 @@ func (ec *executionContext) _Look_fixtureValues(ctx context.Context, field graph
 		field,
 		ec.fieldContext_Look_fixtureValues,
 		func(ctx context.Context) (any, error) {
-			return obj.FixtureValues, nil
+			return ec.resolvers.Look().FixtureValues(ctx, obj)
 		},
 		nil,
-		ec.marshalNFixtureValue2ᚕgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureValueᚄ,
+		ec.marshalNFixtureValue2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureValueᚄ,
 		true,
 		true,
 	)
@@ -15109,8 +15112,8 @@ func (ec *executionContext) fieldContext_Look_fixtureValues(_ context.Context, f
 	fc = &graphql.FieldContext{
 		Object:     "Look",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -15457,10 +15460,10 @@ func (ec *executionContext) _LookBoard_buttons(ctx context.Context, field graphq
 		field,
 		ec.fieldContext_LookBoard_buttons,
 		func(ctx context.Context) (any, error) {
-			return obj.Buttons, nil
+			return ec.resolvers.LookBoard().Buttons(ctx, obj)
 		},
 		nil,
-		ec.marshalNLookBoardButton2ᚕgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐLookBoardButtonᚄ,
+		ec.marshalNLookBoardButton2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐLookBoardButtonᚄ,
 		true,
 		true,
 	)
@@ -15470,8 +15473,8 @@ func (ec *executionContext) fieldContext_LookBoard_buttons(_ context.Context, fi
 	fc = &graphql.FieldContext{
 		Object:     "LookBoard",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -15650,7 +15653,7 @@ func (ec *executionContext) _LookBoardButton_look(ctx context.Context, field gra
 		field,
 		ec.fieldContext_LookBoardButton_look,
 		func(ctx context.Context) (any, error) {
-			return obj.Look, nil
+			return ec.resolvers.LookBoardButton().Look(ctx, obj)
 		},
 		nil,
 		ec.marshalNLook2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐLook,
@@ -15663,8 +15666,8 @@ func (ec *executionContext) fieldContext_LookBoardButton_look(_ context.Context,
 	fc = &graphql.FieldContext{
 		Object:     "LookBoardButton",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -23957,10 +23960,10 @@ func (ec *executionContext) _Project_looks(ctx context.Context, field graphql.Co
 		field,
 		ec.fieldContext_Project_looks,
 		func(ctx context.Context) (any, error) {
-			return obj.Looks, nil
+			return ec.resolvers.Project().Looks(ctx, obj)
 		},
 		nil,
-		ec.marshalNLook2ᚕgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐLookᚄ,
+		ec.marshalNLook2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐLookᚄ,
 		true,
 		true,
 	)
@@ -23970,8 +23973,8 @@ func (ec *executionContext) fieldContext_Project_looks(_ context.Context, field 
 	fc = &graphql.FieldContext{
 		Object:     "Project",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -34978,10 +34981,41 @@ func (ec *executionContext) _Cue(ctx context.Context, sel ast.SelectionSet, obj 
 				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "look":
-			out.Values[i] = ec._Cue_look(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Cue_look(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "cueList":
 			field := field
 
@@ -37253,10 +37287,41 @@ func (ec *executionContext) _Look(ctx context.Context, sel ast.SelectionSet, obj
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "fixtureValues":
-			out.Values[i] = ec._Look_fixtureValues(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Look_fixtureValues(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "createdAt":
 			field := field
 
@@ -37429,10 +37494,41 @@ func (ec *executionContext) _LookBoard(ctx context.Context, sel ast.SelectionSet
 				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "buttons":
-			out.Values[i] = ec._LookBoard_buttons(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._LookBoard_buttons(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "createdAt":
 			field := field
 
@@ -37581,10 +37677,41 @@ func (ec *executionContext) _LookBoardButton(ctx context.Context, sel ast.Select
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "look":
-			out.Values[i] = ec._LookBoardButton_look(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._LookBoardButton_look(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "layoutX":
 			out.Values[i] = ec._LookBoardButton_layoutX(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -39708,10 +39835,41 @@ func (ec *executionContext) _Project(ctx context.Context, sel ast.SelectionSet, 
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "looks":
-			out.Values[i] = ec._Project_looks(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Project_looks(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "cueLists":
 			field := field
 
@@ -44144,11 +44302,7 @@ func (ec *executionContext) marshalNFixtureUsage2ᚖgithubᚗcomᚋbbernsteinᚋ
 	return ec._FixtureUsage(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNFixtureValue2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureValue(ctx context.Context, sel ast.SelectionSet, v models.FixtureValue) graphql.Marshaler {
-	return ec._FixtureValue(ctx, sel, &v)
-}
-
-func (ec *executionContext) marshalNFixtureValue2ᚕgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureValueᚄ(ctx context.Context, sel ast.SelectionSet, v []models.FixtureValue) graphql.Marshaler {
+func (ec *executionContext) marshalNFixtureValue2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureValueᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.FixtureValue) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -44172,7 +44326,7 @@ func (ec *executionContext) marshalNFixtureValue2ᚕgithubᚗcomᚋbbernsteinᚋ
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNFixtureValue2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureValue(ctx, sel, v[i])
+			ret[i] = ec.marshalNFixtureValue2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureValue(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -44190,6 +44344,16 @@ func (ec *executionContext) marshalNFixtureValue2ᚕgithubᚗcomᚋbbernsteinᚋ
 	}
 
 	return ret
+}
+
+func (ec *executionContext) marshalNFixtureValue2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureValue(ctx context.Context, sel ast.SelectionSet, v *models.FixtureValue) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._FixtureValue(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNFixtureValueInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureValueInputᚄ(ctx context.Context, v any) ([]*FixtureValueInput, error) {
@@ -44492,50 +44656,6 @@ func (ec *executionContext) marshalNLook2githubᚗcomᚋbbernsteinᚋlacylights�
 	return ec._Look(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNLook2ᚕgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐLookᚄ(ctx context.Context, sel ast.SelectionSet, v []models.Look) graphql.Marshaler {
-	ret := make(graphql.Array, len(v))
-	var wg sync.WaitGroup
-	isLen1 := len(v) == 1
-	if !isLen1 {
-		wg.Add(len(v))
-	}
-	for i := range v {
-		i := i
-		fc := &graphql.FieldContext{
-			Index:  &i,
-			Result: &v[i],
-		}
-		ctx := graphql.WithFieldContext(ctx, fc)
-		f := func(i int) {
-			defer func() {
-				if r := recover(); r != nil {
-					ec.Error(ctx, ec.Recover(ctx, r))
-					ret = nil
-				}
-			}()
-			if !isLen1 {
-				defer wg.Done()
-			}
-			ret[i] = ec.marshalNLook2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐLook(ctx, sel, v[i])
-		}
-		if isLen1 {
-			f(i)
-		} else {
-			go f(i)
-		}
-
-	}
-	wg.Wait()
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
-}
-
 func (ec *executionContext) marshalNLook2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐLookᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.Look) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
@@ -44694,50 +44814,6 @@ func (ec *executionContext) marshalNLookBoard2ᚖgithubᚗcomᚋbbernsteinᚋlac
 
 func (ec *executionContext) marshalNLookBoardButton2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐLookBoardButton(ctx context.Context, sel ast.SelectionSet, v models.LookBoardButton) graphql.Marshaler {
 	return ec._LookBoardButton(ctx, sel, &v)
-}
-
-func (ec *executionContext) marshalNLookBoardButton2ᚕgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐLookBoardButtonᚄ(ctx context.Context, sel ast.SelectionSet, v []models.LookBoardButton) graphql.Marshaler {
-	ret := make(graphql.Array, len(v))
-	var wg sync.WaitGroup
-	isLen1 := len(v) == 1
-	if !isLen1 {
-		wg.Add(len(v))
-	}
-	for i := range v {
-		i := i
-		fc := &graphql.FieldContext{
-			Index:  &i,
-			Result: &v[i],
-		}
-		ctx := graphql.WithFieldContext(ctx, fc)
-		f := func(i int) {
-			defer func() {
-				if r := recover(); r != nil {
-					ec.Error(ctx, ec.Recover(ctx, r))
-					ret = nil
-				}
-			}()
-			if !isLen1 {
-				defer wg.Done()
-			}
-			ret[i] = ec.marshalNLookBoardButton2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐLookBoardButton(ctx, sel, v[i])
-		}
-		if isLen1 {
-			f(i)
-		} else {
-			go f(i)
-		}
-
-	}
-	wg.Wait()
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
 }
 
 func (ec *executionContext) marshalNLookBoardButton2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐLookBoardButtonᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.LookBoardButton) graphql.Marshaler {

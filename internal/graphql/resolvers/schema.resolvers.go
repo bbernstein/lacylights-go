@@ -39,6 +39,11 @@ func (r *channelDefinitionResolver) FadeBehavior(ctx context.Context, obj *model
 	return generated.FadeBehavior(obj.FadeBehavior), nil
 }
 
+// Look is the resolver for the look field.
+func (r *cueResolver) Look(ctx context.Context, obj *models.Cue) (*models.Look, error) {
+	return r.LookRepo.FindByID(ctx, obj.LookID)
+}
+
 // CueList is the resolver for the cueList field.
 func (r *cueResolver) CueList(ctx context.Context, obj *models.Cue) (*models.CueList, error) {
 	return r.CueListRepo.FindByID(ctx, obj.CueListID)
@@ -273,6 +278,19 @@ func (r *lookResolver) Project(ctx context.Context, obj *models.Look) (*models.P
 	return r.ProjectRepo.FindByID(ctx, obj.ProjectID)
 }
 
+// FixtureValues is the resolver for the fixtureValues field.
+func (r *lookResolver) FixtureValues(ctx context.Context, obj *models.Look) ([]*models.FixtureValue, error) {
+	values, err := r.LookRepo.GetFixtureValues(ctx, obj.ID)
+	if err != nil {
+		return nil, err
+	}
+	pointers := make([]*models.FixtureValue, len(values))
+	for i := range values {
+		pointers[i] = &values[i]
+	}
+	return pointers, nil
+}
+
 // CreatedAt is the resolver for the createdAt field.
 func (r *lookResolver) CreatedAt(ctx context.Context, obj *models.Look) (string, error) {
 	return obj.CreatedAt.Format(time.RFC3339), nil
@@ -288,6 +306,19 @@ func (r *lookBoardResolver) Project(ctx context.Context, obj *models.LookBoard) 
 	return r.ProjectRepo.FindByID(ctx, obj.ProjectID)
 }
 
+// Buttons is the resolver for the buttons field.
+func (r *lookBoardResolver) Buttons(ctx context.Context, obj *models.LookBoard) ([]*models.LookBoardButton, error) {
+	buttons, err := r.LookBoardRepo.GetButtons(ctx, obj.ID)
+	if err != nil {
+		return nil, err
+	}
+	pointers := make([]*models.LookBoardButton, len(buttons))
+	for i := range buttons {
+		pointers[i] = &buttons[i]
+	}
+	return pointers, nil
+}
+
 // CreatedAt is the resolver for the createdAt field.
 func (r *lookBoardResolver) CreatedAt(ctx context.Context, obj *models.LookBoard) (string, error) {
 	return obj.CreatedAt.Format(time.RFC3339), nil
@@ -301,6 +332,11 @@ func (r *lookBoardResolver) UpdatedAt(ctx context.Context, obj *models.LookBoard
 // LookBoard is the resolver for the lookBoard field.
 func (r *lookBoardButtonResolver) LookBoard(ctx context.Context, obj *models.LookBoardButton) (*models.LookBoard, error) {
 	return r.LookBoardRepo.FindByID(ctx, obj.LookBoardID)
+}
+
+// Look is the resolver for the look field.
+func (r *lookBoardButtonResolver) Look(ctx context.Context, obj *models.LookBoardButton) (*models.Look, error) {
+	return r.LookRepo.FindByID(ctx, obj.LookID)
 }
 
 // CreatedAt is the resolver for the createdAt field.
@@ -3406,19 +3442,6 @@ func (r *projectResolver) Fixtures(ctx context.Context, obj *models.Project) ([]
 	return pointers, nil
 }
 
-// CueLists is the resolver for the cueLists field.
-func (r *projectResolver) CueLists(ctx context.Context, obj *models.Project) ([]*models.CueList, error) {
-	cueLists, err := r.CueListRepo.FindByProjectID(ctx, obj.ID)
-	if err != nil {
-		return nil, err
-	}
-	pointers := make([]*models.CueList, len(cueLists))
-	for i := range cueLists {
-		pointers[i] = &cueLists[i]
-	}
-	return pointers, nil
-}
-
 // Looks is the resolver for the looks field.
 func (r *projectResolver) Looks(ctx context.Context, obj *models.Project) ([]*models.Look, error) {
 	looks, err := r.LookRepo.FindByProjectID(ctx, obj.ID)
@@ -3428,6 +3451,19 @@ func (r *projectResolver) Looks(ctx context.Context, obj *models.Project) ([]*mo
 	pointers := make([]*models.Look, len(looks))
 	for i := range looks {
 		pointers[i] = &looks[i]
+	}
+	return pointers, nil
+}
+
+// CueLists is the resolver for the cueLists field.
+func (r *projectResolver) CueLists(ctx context.Context, obj *models.Project) ([]*models.CueList, error) {
+	cueLists, err := r.CueListRepo.FindByProjectID(ctx, obj.ID)
+	if err != nil {
+		return nil, err
+	}
+	pointers := make([]*models.CueList, len(cueLists))
+	for i := range cueLists {
+		pointers[i] = &cueLists[i]
 	}
 	return pointers, nil
 }
