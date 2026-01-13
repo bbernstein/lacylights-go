@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// LookRepository handles scene data access.
+// LookRepository handles look data access.
 type LookRepository struct {
 	db *gorm.DB
 }
