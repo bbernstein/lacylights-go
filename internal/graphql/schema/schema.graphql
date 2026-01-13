@@ -62,7 +62,7 @@ enum EasingType {
 }
 
 """
-Determines how a channel behaves during scene transitions.
+Determines how a channel behaves during look transitions.
 FADE - Interpolate smoothly between values (default for intensity, colors)
 SNAP - Jump to target value at start of transition (for gobos, macros, effects)
 SNAP_END - Jump to target value at end of transition
@@ -73,7 +73,7 @@ enum FadeBehavior {
   SNAP_END
 }
 
-enum SceneSortField {
+enum LookSortField {
   NAME
   CREATED_AT
   UPDATED_AT
@@ -81,8 +81,8 @@ enum SceneSortField {
 
 enum DifferenceType {
   VALUES_CHANGED
-  ONLY_IN_SCENE1
-  ONLY_IN_SCENE2
+  ONLY_IN_LOOK1
+  ONLY_IN_LOOK2
 }
 
 enum WiFiSecurityType {
@@ -135,7 +135,7 @@ enum CueListDataChangeType {
   CUE_REMOVED
   CUE_REORDERED
   CUE_LIST_METADATA_CHANGED
-  SCENE_NAME_CHANGED
+  LOOK_NAME_CHANGED
 }
 
 "Payload for cue list data change notifications"
@@ -144,10 +144,10 @@ type CueListDataChangedPayload {
   changeType: CueListDataChangeType!
   "Affected cue IDs (for cue changes)"
   affectedCueIds: [ID!]
-  "Affected scene ID (for scene name changes)"
-  affectedSceneId: ID
-  "New scene name if this is a SCENE_NAME_CHANGED event"
-  newSceneName: String
+  "Affected look ID (for look name changes)"
+  affectedLookId: ID
+  "New look name if this is a LOOK_NAME_CHANGED event"
+  newLookName: String
   "Timestamp of the change"
   timestamp: String!
 }
@@ -161,14 +161,14 @@ type Project {
   name: String!
   description: String
   fixtureCount: Int!
-  sceneCount: Int!
+  lookCount: Int!
   cueListCount: Int!
   createdAt: String!
   updatedAt: String!
   fixtures: [FixtureInstance!]!
-  scenes: [Scene!]!
+  looks: [Look!]!
   cueLists: [CueList!]!
-  sceneBoards: [SceneBoard!]!
+  lookBoards: [LookBoard!]!
   users: [ProjectUser!]!
 
   # 2D Layout Canvas Configuration (for fixture layout editor)
@@ -261,7 +261,7 @@ type InstanceChannel {
   isDiscrete: Boolean!
 }
 
-type Scene {
+type Look {
   id: ID!
   name: String!
   description: String
@@ -280,10 +280,10 @@ type FixtureValue {
   id: ID!
   fixture: FixtureInstance!
   channels: [ChannelValue!]!
-  sceneOrder: Int
+  lookOrder: Int
 }
 
-type SceneBoard {
+type LookBoard {
   id: ID!
   name: String!
   description: String
@@ -292,15 +292,15 @@ type SceneBoard {
   gridSize: Int
   canvasWidth: Int!
   canvasHeight: Int!
-  buttons: [SceneBoardButton!]!
+  buttons: [LookBoardButton!]!
   createdAt: String!
   updatedAt: String!
 }
 
-type SceneBoardButton {
+type LookBoardButton {
   id: ID!
-  sceneBoard: SceneBoard!
-  scene: Scene!
+  lookBoard: LookBoard!
+  look: Look!
   layoutX: Int!
   layoutY: Int!
   width: Int
@@ -328,7 +328,7 @@ type Cue {
   id: ID!
   name: String!
   cueNumber: Float!
-  scene: Scene!
+  look: Look!
   cueList: CueList!
   fadeInTime: Float!
   fadeOutTime: Float!
@@ -342,9 +342,9 @@ type Cue {
 type CueListPlaybackStatus {
   cueListId: ID!
   currentCueIndex: Int
-  "True when a scene's values are currently active on DMX fixtures (stays true after fade completes until stopped)"
+  "True when a look's values are currently active on DMX fixtures (stays true after fade completes until stopped)"
   isPlaying: Boolean!
-  "True when the cue list is paused (scene activated outside cue context, cue index preserved)"
+  "True when the cue list is paused (look activated outside cue context, cue index preserved)"
   isPaused: Boolean!
   "True when a fade-in transition is in progress"
   isFading: Boolean!
@@ -359,7 +359,7 @@ type CueListPlaybackStatus {
 type GlobalPlaybackStatus {
   "True if any cue list is currently playing"
   isPlaying: Boolean!
-  "True if a cue list is paused (scene activated outside cue context)"
+  "True if a cue list is paused (look activated outside cue context)"
   isPaused: Boolean!
   "True if a fade transition is in progress"
   isFading: Boolean!
@@ -454,7 +454,7 @@ type CuePage {
   pagination: PaginationInfo!
 }
 
-type SceneSummary {
+type LookSummary {
   id: ID!
   name: String!
   description: String
@@ -463,12 +463,12 @@ type SceneSummary {
   updatedAt: String!
 }
 
-type ScenePage {
-  scenes: [SceneSummary!]!
+type LookPage {
+  looks: [LookSummary!]!
   pagination: PaginationInfo!
 }
 
-type SceneFixtureSummary {
+type LookFixtureSummary {
   fixtureId: ID!
   fixtureName: String!
   fixtureType: FixtureType!
@@ -494,28 +494,28 @@ type CueUsageSummary {
 type FixtureUsage {
   fixtureId: ID!
   fixtureName: String!
-  scenes: [SceneSummary!]!
+  looks: [LookSummary!]!
   cues: [CueUsageSummary!]!
 }
 
-type SceneUsage {
-  sceneId: ID!
-  sceneName: String!
+type LookUsage {
+  lookId: ID!
+  lookName: String!
   cues: [CueUsageSummary!]!
 }
 
-type SceneDifference {
+type LookDifference {
   fixtureId: ID!
   fixtureName: String!
   differenceType: DifferenceType!
-  scene1Values: [Int!]
-  scene2Values: [Int!]
+  look1Values: [Int!]
+  look2Values: [Int!]
 }
 
-type SceneComparison {
-  scene1: SceneSummary!
-  scene2: SceneSummary!
-  differences: [SceneDifference!]!
+type LookComparison {
+  look1: LookSummary!
+  look2: LookSummary!
+  differences: [LookDifference!]!
   identicalFixtureCount: Int!
   differentFixtureCount: Int!
 }
@@ -797,10 +797,10 @@ type ExportResult {
 type ExportStats {
   fixtureDefinitionsCount: Int!
   fixtureInstancesCount: Int!
-  scenesCount: Int!
+  looksCount: Int!
   cueListsCount: Int!
   cuesCount: Int!
-  sceneBoardsCount: Int!
+  lookBoardsCount: Int!
 }
 
 type ImportResult {
@@ -812,10 +812,10 @@ type ImportResult {
 type ImportStats {
   fixtureDefinitionsCreated: Int!
   fixtureInstancesCreated: Int!
-  scenesCreated: Int!
+  looksCreated: Int!
   cueListsCreated: Int!
   cuesCreated: Int!
-  sceneBoardsCreated: Int!
+  lookBoardsCreated: Int!
 }
 
 # =============================================================================
@@ -826,7 +826,7 @@ type QLCExportResult {
   projectName: String!
   xmlContent: String!
   fixtureCount: Int!
-  sceneCount: Int!
+  lookCount: Int!
   cueListCount: Int!
 }
 
@@ -834,7 +834,7 @@ type QLCImportResult {
   project: Project!
   originalFileName: String!
   fixtureCount: Int!
-  sceneCount: Int!
+  lookCount: Int!
   cueListCount: Int!
   warnings: [String!]!
 }
@@ -964,14 +964,14 @@ input CueOrderInput {
   cueNumber: Float!
 }
 
-input CreateSceneInput {
+input CreateLookInput {
   name: String!
   description: String
   projectId: ID!
   fixtureValues: [FixtureValueInput!]!
 }
 
-input UpdateSceneInput {
+input UpdateLookInput {
   name: String
   description: String
   fixtureValues: [FixtureValueInput!]
@@ -985,15 +985,15 @@ input ChannelValueInput {
 input FixtureValueInput {
   fixtureId: ID!
   channels: [ChannelValueInput!]!
-  sceneOrder: Int
+  lookOrder: Int
 }
 
-input SceneFilterInput {
+input LookFilterInput {
   nameContains: String
   usesFixture: ID
 }
 
-input CreateSceneBoardInput {
+input CreateLookBoardInput {
   name: String!
   description: String
   projectId: ID!
@@ -1003,7 +1003,7 @@ input CreateSceneBoardInput {
   canvasHeight: Int = 2000
 }
 
-input UpdateSceneBoardInput {
+input UpdateLookBoardInput {
   name: String
   description: String
   defaultFadeTime: Float
@@ -1012,9 +1012,9 @@ input UpdateSceneBoardInput {
   canvasHeight: Int
 }
 
-input CreateSceneBoardButtonInput {
-  sceneBoardId: ID!
-  sceneId: ID!
+input CreateLookBoardButtonInput {
+  lookBoardId: ID!
+  lookId: ID!
   layoutX: Int!
   layoutY: Int!
   width: Int = 200
@@ -1023,7 +1023,7 @@ input CreateSceneBoardButtonInput {
   label: String
 }
 
-input UpdateSceneBoardButtonInput {
+input UpdateLookBoardButtonInput {
   layoutX: Int
   layoutY: Int
   width: Int
@@ -1032,7 +1032,7 @@ input UpdateSceneBoardButtonInput {
   label: String
 }
 
-input SceneBoardButtonPositionInput {
+input LookBoardButtonPositionInput {
   buttonId: ID!
   layoutX: Int!
   layoutY: Int!
@@ -1065,7 +1065,7 @@ input CreateCueInput {
   name: String!
   cueNumber: Float!
   cueListId: ID!
-  sceneId: ID!
+  lookId: ID!
   fadeInTime: Float!
   fadeOutTime: Float!
   followTime: Float
@@ -1116,8 +1116,8 @@ type BulkDeleteResult {
 }
 
 # Bulk Create Inputs
-input BulkSceneCreateInput {
-  scenes: [CreateSceneInput!]!
+input BulkLookCreateInput {
+  looks: [CreateLookInput!]!
 }
 
 input BulkCueCreateInput {
@@ -1128,12 +1128,12 @@ input BulkCueListCreateInput {
   cueLists: [CreateCueListInput!]!
 }
 
-input BulkSceneBoardCreateInput {
-  sceneBoards: [CreateSceneBoardInput!]!
+input BulkLookBoardCreateInput {
+  lookBoards: [CreateLookBoardInput!]!
 }
 
-input BulkSceneBoardButtonCreateInput {
-  buttons: [CreateSceneBoardButtonInput!]!
+input BulkLookBoardButtonCreateInput {
+  buttons: [CreateLookBoardButtonInput!]!
 }
 
 input BulkFixtureDefinitionCreateInput {
@@ -1145,32 +1145,32 @@ input BulkProjectCreateInput {
 }
 
 # Bulk Update Inputs
-input BulkSceneUpdateInput {
-  scenes: [SceneUpdateItem!]!
+input BulkLookUpdateInput {
+  looks: [LookUpdateItem!]!
 }
 
-input SceneUpdateItem {
-  sceneId: ID!
+input LookUpdateItem {
+  lookId: ID!
   name: String
   description: String
 }
 
 """
-Updates multiple scenes with partial fixture value merging support.
-Each scene can independently specify name, description, fixtureValues, and mergeFixtures.
+Updates multiple looks with partial fixture value merging support.
+Each look can independently specify name, description, fixtureValues, and mergeFixtures.
 Operations are applied in order and fail on first error.
 """
-input BulkScenePartialUpdateInput {
-  scenes: [ScenePartialUpdateItem!]!
+input BulkLookPartialUpdateInput {
+  looks: [LookPartialUpdateItem!]!
 }
 
 """
-Partial update for a single scene in a bulk operation.
+Partial update for a single look in a bulk operation.
 When mergeFixtures is true (default), only specified fixtures are updated.
 When false, all existing fixtures are replaced with the provided list.
 """
-input ScenePartialUpdateItem {
-  sceneId: ID!
+input LookPartialUpdateItem {
+  lookId: ID!
   name: String
   description: String
   fixtureValues: [FixtureValueInput!]
@@ -1189,12 +1189,12 @@ input CueListUpdateItem {
   loop: Boolean
 }
 
-input BulkSceneBoardUpdateInput {
-  sceneBoards: [SceneBoardUpdateItem!]!
+input BulkLookBoardUpdateInput {
+  lookBoards: [LookBoardUpdateItem!]!
 }
 
-input SceneBoardUpdateItem {
-  sceneBoardId: ID!
+input LookBoardUpdateItem {
+  lookBoardId: ID!
   name: String
   description: String
   defaultFadeTime: Float
@@ -1203,11 +1203,11 @@ input SceneBoardUpdateItem {
   canvasHeight: Int
 }
 
-input BulkSceneBoardButtonUpdateInput {
-  buttons: [SceneBoardButtonUpdateItem!]!
+input BulkLookBoardButtonUpdateInput {
+  buttons: [LookBoardButtonUpdateItem!]!
 }
 
-input SceneBoardButtonUpdateItem {
+input LookBoardButtonUpdateItem {
   buttonId: ID!
   layoutX: Int
   layoutY: Int
@@ -1265,7 +1265,7 @@ input FixtureSpecInput {
 input ExportOptionsInput {
   description: String
   includeFixtures: Boolean
-  includeScenes: Boolean
+  includeLooks: Boolean
   includeCueLists: Boolean
 }
 
@@ -1329,34 +1329,34 @@ type Query {
   channelMap(projectId: ID!, universe: Int): ChannelMapResult!
   suggestChannelAssignment(input: ChannelAssignmentInput!): ChannelAssignmentSuggestion!
 
-  # Scenes
-  scenes(
+  # Looks
+  looks(
     projectId: ID!
     page: Int = 1
     perPage: Int = 50
-    filter: SceneFilterInput
-    sortBy: SceneSortField = CREATED_AT
-  ): ScenePage!
-  scene(id: ID!, includeFixtureValues: Boolean = true): Scene
-  sceneFixtures(sceneId: ID!): [SceneFixtureSummary!]!
+    filter: LookFilterInput
+    sortBy: LookSortField = CREATED_AT
+  ): LookPage!
+  look(id: ID!, includeFixtureValues: Boolean = true): Look
+  lookFixtures(lookId: ID!): [LookFixtureSummary!]!
 
-  searchScenes(
+  searchLooks(
     projectId: ID!
     query: String!
-    filter: SceneFilterInput
+    filter: LookFilterInput
     page: Int = 1
     perPage: Int = 50
-  ): ScenePage!
+  ): LookPage!
 
-  # Scene Boards
-  sceneBoards(projectId: ID!): [SceneBoard!]!
-  sceneBoard(id: ID!): SceneBoard
-  sceneBoardButton(id: ID!): SceneBoardButton
+  # Look Boards
+  lookBoards(projectId: ID!): [LookBoard!]!
+  lookBoard(id: ID!): LookBoard
+  lookBoardButton(id: ID!): LookBoardButton
 
   # Relationship Queries
   fixtureUsage(fixtureId: ID!): FixtureUsage!
-  sceneUsage(sceneId: ID!): SceneUsage!
-  compareScenes(sceneId1: ID!, sceneId2: ID!): SceneComparison!
+  lookUsage(lookId: ID!): LookUsage!
+  compareLooks(lookId1: ID!, lookId2: ID!): LookComparison!
 
   # Cue Lists
   cueLists(projectId: ID!): [CueListSummary!]!
@@ -1364,7 +1364,7 @@ type Query {
     id: ID!
     page: Int = 1
     perPage: Int = 50
-    includeSceneDetails: Boolean = false
+    includeLookDetails: Boolean = false
   ): CueList
   cueListPlaybackStatus(cueListId: ID!): CueListPlaybackStatus
   "Get global playback status - which cue list is currently playing (if any)"
@@ -1387,8 +1387,8 @@ type Query {
   # Preview System
   previewSession(sessionId: ID!): PreviewSession
 
-  # Active Scene Tracking
-  currentActiveScene: Scene
+  # Active Look Tracking
+  currentActiveLook: Look
 
   # Settings
   settings: [Setting!]!
@@ -1424,10 +1424,10 @@ type Query {
 
   # Bulk Read Queries
   fixturesByIds(ids: [ID!]!): [FixtureInstance!]!
-  scenesByIds(ids: [ID!]!): [Scene!]!
+  looksByIds(ids: [ID!]!): [Look!]!
   cuesByIds(ids: [ID!]!): [Cue!]!
   cueListsByIds(ids: [ID!]!): [CueList!]!
-  sceneBoardsByIds(ids: [ID!]!): [SceneBoard!]!
+  lookBoardsByIds(ids: [ID!]!): [LookBoard!]!
   fixtureDefinitionsByIds(ids: [ID!]!): [FixtureDefinition!]!
   projectsByIds(ids: [ID!]!): [Project!]!
 }
@@ -1484,66 +1484,66 @@ type Mutation {
     projectId: ID!
     fixtureOrders: [FixtureOrderInput!]!
   ): Boolean!
-  reorderSceneFixtures(
-    sceneId: ID!
+  reorderLookFixtures(
+    lookId: ID!
     fixtureOrders: [FixtureOrderInput!]!
   ): Boolean!
 
   # Fixture Layout Positions
   updateFixturePositions(positions: [FixturePositionInput!]!): Boolean!
 
-  # Scenes
-  createScene(input: CreateSceneInput!): Scene!
-  updateScene(id: ID!, input: UpdateSceneInput!): Scene!
-  duplicateScene(id: ID!): Scene!
-  cloneScene(sceneId: ID!, newName: String!): Scene!
-  deleteScene(id: ID!): Boolean!
-  bulkCreateScenes(input: BulkSceneCreateInput!): [Scene!]!
-  bulkUpdateScenes(input: BulkSceneUpdateInput!): [Scene!]!
-  bulkDeleteScenes(sceneIds: [ID!]!): BulkDeleteResult!
+  # Looks
+  createLook(input: CreateLookInput!): Look!
+  updateLook(id: ID!, input: UpdateLookInput!): Look!
+  duplicateLook(id: ID!): Look!
+  cloneLook(lookId: ID!, newName: String!): Look!
+  deleteLook(id: ID!): Boolean!
+  bulkCreateLooks(input: BulkLookCreateInput!): [Look!]!
+  bulkUpdateLooks(input: BulkLookUpdateInput!): [Look!]!
+  bulkDeleteLooks(lookIds: [ID!]!): BulkDeleteResult!
 
-  # Safe Scene Updates (Additive)
-  addFixturesToScene(
-    sceneId: ID!
+  # Safe Look Updates (Additive)
+  addFixturesToLook(
+    lookId: ID!
     fixtureValues: [FixtureValueInput!]!
     overwriteExisting: Boolean = false
-  ): Scene!
-  removeFixturesFromScene(sceneId: ID!, fixtureIds: [ID!]!): Scene!
-  updateScenePartial(
-    sceneId: ID!
+  ): Look!
+  removeFixturesFromLook(lookId: ID!, fixtureIds: [ID!]!): Look!
+  updateLookPartial(
+    lookId: ID!
     name: String
     description: String
     fixtureValues: [FixtureValueInput!]
     mergeFixtures: Boolean = true
-  ): Scene!
-  bulkUpdateScenesPartial(input: BulkScenePartialUpdateInput!): [Scene!]!
+  ): Look!
+  bulkUpdateLooksPartial(input: BulkLookPartialUpdateInput!): [Look!]!
 
-  # Scene Boards
-  createSceneBoard(input: CreateSceneBoardInput!): SceneBoard!
-  updateSceneBoard(id: ID!, input: UpdateSceneBoardInput!): SceneBoard!
-  deleteSceneBoard(id: ID!): Boolean!
-  bulkCreateSceneBoards(input: BulkSceneBoardCreateInput!): [SceneBoard!]!
-  bulkUpdateSceneBoards(input: BulkSceneBoardUpdateInput!): [SceneBoard!]!
-  bulkDeleteSceneBoards(sceneBoardIds: [ID!]!): BulkDeleteResult!
+  # Look Boards
+  createLookBoard(input: CreateLookBoardInput!): LookBoard!
+  updateLookBoard(id: ID!, input: UpdateLookBoardInput!): LookBoard!
+  deleteLookBoard(id: ID!): Boolean!
+  bulkCreateLookBoards(input: BulkLookBoardCreateInput!): [LookBoard!]!
+  bulkUpdateLookBoards(input: BulkLookBoardUpdateInput!): [LookBoard!]!
+  bulkDeleteLookBoards(lookBoardIds: [ID!]!): BulkDeleteResult!
 
-  # Scene Board Buttons
-  addSceneToBoard(input: CreateSceneBoardButtonInput!): SceneBoardButton!
-  updateSceneBoardButton(
+  # Look Board Buttons
+  addLookToBoard(input: CreateLookBoardButtonInput!): LookBoardButton!
+  updateLookBoardButton(
     id: ID!
-    input: UpdateSceneBoardButtonInput!
-  ): SceneBoardButton!
-  removeSceneFromBoard(buttonId: ID!): Boolean!
-  updateSceneBoardButtonPositions(
-    positions: [SceneBoardButtonPositionInput!]!
+    input: UpdateLookBoardButtonInput!
+  ): LookBoardButton!
+  removeLookFromBoard(buttonId: ID!): Boolean!
+  updateLookBoardButtonPositions(
+    positions: [LookBoardButtonPositionInput!]!
   ): Boolean!
-  bulkCreateSceneBoardButtons(input: BulkSceneBoardButtonCreateInput!): [SceneBoardButton!]!
-  bulkUpdateSceneBoardButtons(input: BulkSceneBoardButtonUpdateInput!): [SceneBoardButton!]!
-  bulkDeleteSceneBoardButtons(buttonIds: [ID!]!): BulkDeleteResult!
+  bulkCreateLookBoardButtons(input: BulkLookBoardButtonCreateInput!): [LookBoardButton!]!
+  bulkUpdateLookBoardButtons(input: BulkLookBoardButtonUpdateInput!): [LookBoardButton!]!
+  bulkDeleteLookBoardButtons(buttonIds: [ID!]!): BulkDeleteResult!
 
-  # Scene Board Playback (activates scene with board's fade time)
-  activateSceneFromBoard(
-    sceneBoardId: ID!
-    sceneId: ID!
+  # Look Board Playback (activates look with board's fade time)
+  activateLookFromBoard(
+    lookBoardId: ID!
+    lookId: ID!
     fadeTimeOverride: Float
   ): Boolean!
 
@@ -1576,11 +1576,11 @@ type Mutation {
     channelIndex: Int!
     value: Int!
   ): Boolean!
-  initializePreviewWithScene(sessionId: ID!, sceneId: ID!): Boolean!
+  initializePreviewWithLook(sessionId: ID!, lookId: ID!): Boolean!
 
   # DMX Control
   setChannelValue(universe: Int!, channel: Int!, value: Int!): Boolean!
-  setSceneLive(sceneId: ID!): Boolean!
+  setLookLive(lookId: ID!): Boolean!
   playCue(cueId: ID!, fadeInTime: Float): Boolean!
   fadeToBlack(fadeOutTime: Float!): Boolean!
 
@@ -1590,7 +1590,7 @@ type Mutation {
   previousCue(cueListId: ID!, fadeInTime: Float): Boolean!
   goToCue(cueListId: ID!, cueIndex: Int!, fadeInTime: Float): Boolean!
   stopCueList(cueListId: ID!): Boolean!
-  "Resume a paused cue list by snapping to the current cue's scene values instantly"
+  "Resume a paused cue list by snapping to the current cue's look values instantly"
   resumeCueList(cueListId: ID!): Boolean!
 
   # Native LacyLights Import/Export
@@ -1643,7 +1643,7 @@ type Subscription {
   projectUpdated(projectId: ID!): Project!
   previewSessionUpdated(projectId: ID!): PreviewSession!
   cueListPlaybackUpdated(cueListId: ID!): CueListPlaybackStatus!
-  "Real-time updates when cue list data changes (cue added/updated/removed, reordering, metadata changes, scene name changes)"
+  "Real-time updates when cue list data changes (cue added/updated/removed, reordering, metadata changes, look name changes)"
   cueListDataChanged(cueListId: ID!): CueListDataChangedPayload!
   "Global playback status updates - triggered when any cue list starts/stops/changes cue"
   globalPlaybackStatusUpdated: GlobalPlaybackStatus!

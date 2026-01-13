@@ -29,7 +29,7 @@ models:
     fields:
       fixtures:
         resolver: true
-      scenes:
+      looks:
         resolver: true
       cueLists:
         resolver: true
@@ -55,9 +55,9 @@ models:
         resolver: true
       channels:
         resolver: true
-  SceneBoardButton:
+  LookBoardButton:
     fields:
-      scene:
+      look:
         resolver: true
   CueList:
     fields:
@@ -65,13 +65,13 @@ models:
         resolver: true
   Cue:
     fields:
-      scene:
+      look:
         resolver: true
-  Scene:
+  Look:
     fields:
       fixtureValues:
         resolver: true
-  SceneBoard:
+  LookBoard:
     fields:
       buttons:
         resolver: true

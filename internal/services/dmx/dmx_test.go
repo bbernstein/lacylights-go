@@ -200,8 +200,8 @@ func TestFadeToBlack(t *testing.T) {
 	service.SetChannelValue(2, 50, 200)
 	service.SetChannelOverride(1, 2, 180)
 
-	// Set active scene
-	service.SetActiveScene("test-scene")
+	// Set active look
+	service.SetActiveLook("test-look")
 
 	// Fade to black (immediate)
 	service.FadeToBlack()
@@ -223,31 +223,31 @@ func TestFadeToBlack(t *testing.T) {
 		t.Error("Expected override to be cleared after fade to black")
 	}
 
-	// Active scene should be cleared
-	if service.GetActiveSceneID() != nil {
-		t.Error("Expected active scene to be nil after fade to black")
+	// Active look should be cleared
+	if service.GetActiveLookID() != nil {
+		t.Error("Expected active look to be nil after fade to black")
 	}
 }
 
-func TestActiveScene(t *testing.T) {
+func TestActiveLook(t *testing.T) {
 	service := NewService(Config{Enabled: false})
 
 	// Initially nil
-	if service.GetActiveSceneID() != nil {
-		t.Error("Expected initial active scene to be nil")
+	if service.GetActiveLookID() != nil {
+		t.Error("Expected initial active look to be nil")
 	}
 
-	// Set active scene
-	service.SetActiveScene("scene-1")
-	sceneID := service.GetActiveSceneID()
-	if sceneID == nil || *sceneID != "scene-1" {
-		t.Error("Expected active scene to be 'scene-1'")
+	// Set active look
+	service.SetActiveLook("look-1")
+	lookID := service.GetActiveLookID()
+	if lookID == nil || *lookID != "look-1" {
+		t.Error("Expected active look to be 'look-1'")
 	}
 
-	// Clear active scene
-	service.ClearActiveScene()
-	if service.GetActiveSceneID() != nil {
-		t.Error("Expected active scene to be nil after clear")
+	// Clear active look
+	service.ClearActiveLook()
+	if service.GetActiveLookID() != nil {
+		t.Error("Expected active look to be nil after clear")
 	}
 }
 

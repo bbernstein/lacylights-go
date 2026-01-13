@@ -967,10 +967,10 @@ func TestFixtureInstance_Delete(t *testing.T) {
 }
 
 // =============================================================================
-// Scene CRUD Tests
+// Look CRUD Tests
 // =============================================================================
 
-func TestScene_Create(t *testing.T) {
+func TestLook_Create(t *testing.T) {
 	c, _, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -1032,14 +1032,14 @@ func TestScene_Create(t *testing.T) {
 
 	// Create scene with fixture values
 	var sceneResp struct {
-		CreateScene struct {
+		CreateLook struct {
 			ID          string `json:"id"`
 			Name        string `json:"name"`
 			Description string `json:"description"`
-		} `json:"createScene"`
+		} `json:"createLook"`
 	}
 	err = c.Post(`mutation($projectId: ID!, $fixtureId: ID!) {
-		createScene(input: {
+		createLook(input: {
 			name: "Red Scene"
 			description: "All fixtures red"
 			projectId: $projectId
@@ -1063,18 +1063,18 @@ func TestScene_Create(t *testing.T) {
 		client.Var("fixtureId", instanceResp.CreateFixtureInstance.ID))
 
 	if err != nil {
-		t.Fatalf("CreateScene mutation failed: %v", err)
+		t.Fatalf("CreateLook mutation failed: %v", err)
 	}
 
-	if sceneResp.CreateScene.ID == "" {
+	if sceneResp.CreateLook.ID == "" {
 		t.Error("Expected scene ID to be set")
 	}
-	if sceneResp.CreateScene.Name != "Red Scene" {
-		t.Errorf("Expected name 'Red Scene', got '%s'", sceneResp.CreateScene.Name)
+	if sceneResp.CreateLook.Name != "Red Scene" {
+		t.Errorf("Expected name 'Red Scene', got '%s'", sceneResp.CreateLook.Name)
 	}
 }
 
-func TestScene_Read(t *testing.T) {
+func TestLook_Read(t *testing.T) {
 	c, _, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -1087,12 +1087,12 @@ func TestScene_Read(t *testing.T) {
 	_ = c.Post(`mutation { createProject(input: { name: "Test Project" }) { id } }`, &projectResp)
 
 	var createResp struct {
-		CreateScene struct {
+		CreateLook struct {
 			ID string `json:"id"`
-		} `json:"createScene"`
+		} `json:"createLook"`
 	}
 	_ = c.Post(`mutation($projectId: ID!) {
-		createScene(input: {
+		createLook(input: {
 			name: "Test Scene"
 			projectId: $projectId
 			fixtureValues: []
@@ -1103,28 +1103,28 @@ func TestScene_Read(t *testing.T) {
 
 	// Read the scene
 	var readResp struct {
-		Scene struct {
+		Look struct {
 			ID   string `json:"id"`
 			Name string `json:"name"`
-		} `json:"scene"`
+		} `json:"look"`
 	}
 	err := c.Post(`query($id: ID!) {
-		scene(id: $id) {
+		look(id: $id) {
 			id
 			name
 		}
-	}`, &readResp, client.Var("id", createResp.CreateScene.ID))
+	}`, &readResp, client.Var("id", createResp.CreateLook.ID))
 
 	if err != nil {
-		t.Fatalf("Scene query failed: %v", err)
+		t.Fatalf("Look query failed: %v", err)
 	}
 
-	if readResp.Scene.ID != createResp.CreateScene.ID {
-		t.Errorf("Expected scene ID %s, got %s", createResp.CreateScene.ID, readResp.Scene.ID)
+	if readResp.Look.ID != createResp.CreateLook.ID {
+		t.Errorf("Expected scene ID %s, got %s", createResp.CreateLook.ID, readResp.Look.ID)
 	}
 }
 
-func TestScene_Update(t *testing.T) {
+func TestLook_Update(t *testing.T) {
 	c, _, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -1137,12 +1137,12 @@ func TestScene_Update(t *testing.T) {
 	_ = c.Post(`mutation { createProject(input: { name: "Test Project" }) { id } }`, &projectResp)
 
 	var createResp struct {
-		CreateScene struct {
+		CreateLook struct {
 			ID string `json:"id"`
-		} `json:"createScene"`
+		} `json:"createLook"`
 	}
 	_ = c.Post(`mutation($projectId: ID!) {
-		createScene(input: {
+		createLook(input: {
 			name: "Original Name"
 			projectId: $projectId
 			fixtureValues: []
@@ -1153,28 +1153,28 @@ func TestScene_Update(t *testing.T) {
 
 	// Update the scene
 	var updateResp struct {
-		UpdateScene struct {
+		UpdateLook struct {
 			ID   string `json:"id"`
 			Name string `json:"name"`
-		} `json:"updateScene"`
+		} `json:"updateLook"`
 	}
 	err := c.Post(`mutation($id: ID!) {
-		updateScene(id: $id, input: { name: "Updated Name" }) {
+		updateLook(id: $id, input: { name: "Updated Name" }) {
 			id
 			name
 		}
-	}`, &updateResp, client.Var("id", createResp.CreateScene.ID))
+	}`, &updateResp, client.Var("id", createResp.CreateLook.ID))
 
 	if err != nil {
-		t.Fatalf("UpdateScene mutation failed: %v", err)
+		t.Fatalf("UpdateLook mutation failed: %v", err)
 	}
 
-	if updateResp.UpdateScene.Name != "Updated Name" {
-		t.Errorf("Expected name 'Updated Name', got '%s'", updateResp.UpdateScene.Name)
+	if updateResp.UpdateLook.Name != "Updated Name" {
+		t.Errorf("Expected name 'Updated Name', got '%s'", updateResp.UpdateLook.Name)
 	}
 }
 
-func TestScene_Delete(t *testing.T) {
+func TestLook_Delete(t *testing.T) {
 	c, _, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -1187,12 +1187,12 @@ func TestScene_Delete(t *testing.T) {
 	_ = c.Post(`mutation { createProject(input: { name: "Test Project" }) { id } }`, &projectResp)
 
 	var createResp struct {
-		CreateScene struct {
+		CreateLook struct {
 			ID string `json:"id"`
-		} `json:"createScene"`
+		} `json:"createLook"`
 	}
 	_ = c.Post(`mutation($projectId: ID!) {
-		createScene(input: {
+		createLook(input: {
 			name: "To Delete"
 			projectId: $projectId
 			fixtureValues: []
@@ -1203,18 +1203,18 @@ func TestScene_Delete(t *testing.T) {
 
 	// Delete the scene
 	var deleteResp struct {
-		DeleteScene bool `json:"deleteScene"`
+		DeleteLook bool `json:"deleteLook"`
 	}
 	err := c.Post(`mutation($id: ID!) {
-		deleteScene(id: $id)
-	}`, &deleteResp, client.Var("id", createResp.CreateScene.ID))
+		deleteLook(id: $id)
+	}`, &deleteResp, client.Var("id", createResp.CreateLook.ID))
 
 	if err != nil {
-		t.Fatalf("DeleteScene mutation failed: %v", err)
+		t.Fatalf("DeleteLook mutation failed: %v", err)
 	}
 
-	if !deleteResp.DeleteScene {
-		t.Error("Expected deleteScene to return true")
+	if !deleteResp.DeleteLook {
+		t.Error("Expected deleteLook to return true")
 	}
 }
 
@@ -1385,12 +1385,12 @@ func TestCue_Create(t *testing.T) {
 	_ = c.Post(`mutation { createProject(input: { name: "Test Project" }) { id } }`, &projectResp)
 
 	var sceneResp struct {
-		CreateScene struct {
+		CreateLook struct {
 			ID string `json:"id"`
-		} `json:"createScene"`
+		} `json:"createLook"`
 	}
 	_ = c.Post(`mutation($projectId: ID!) {
-		createScene(input: {
+		createLook(input: {
 			name: "Test Scene"
 			projectId: $projectId
 			fixtureValues: []
@@ -1423,12 +1423,12 @@ func TestCue_Create(t *testing.T) {
 			FadeOutTime float64 `json:"fadeOutTime"`
 		} `json:"createCue"`
 	}
-	err := c.Post(`mutation($cueListId: ID!, $sceneId: ID!) {
+	err := c.Post(`mutation($cueListId: ID!, $lookId: ID!) {
 		createCue(input: {
 			name: "Cue 1"
 			cueNumber: 1.0
 			cueListId: $cueListId
-			sceneId: $sceneId
+			lookId: $lookId
 			fadeInTime: 3.0
 			fadeOutTime: 2.0
 		}) {
@@ -1440,7 +1440,7 @@ func TestCue_Create(t *testing.T) {
 		}
 	}`, &cueResp,
 		client.Var("cueListId", cueListResp.CreateCueList.ID),
-		client.Var("sceneId", sceneResp.CreateScene.ID))
+		client.Var("lookId", sceneResp.CreateLook.ID))
 
 	if err != nil {
 		t.Fatalf("CreateCue mutation failed: %v", err)
@@ -1470,12 +1470,12 @@ func TestCue_Update(t *testing.T) {
 	_ = c.Post(`mutation { createProject(input: { name: "Test Project" }) { id } }`, &projectResp)
 
 	var sceneResp struct {
-		CreateScene struct {
+		CreateLook struct {
 			ID string `json:"id"`
-		} `json:"createScene"`
+		} `json:"createLook"`
 	}
 	_ = c.Post(`mutation($projectId: ID!) {
-		createScene(input: {
+		createLook(input: {
 			name: "Test Scene"
 			projectId: $projectId
 			fixtureValues: []
@@ -1503,12 +1503,12 @@ func TestCue_Update(t *testing.T) {
 			ID string `json:"id"`
 		} `json:"createCue"`
 	}
-	_ = c.Post(`mutation($cueListId: ID!, $sceneId: ID!) {
+	_ = c.Post(`mutation($cueListId: ID!, $lookId: ID!) {
 		createCue(input: {
 			name: "Original Name"
 			cueNumber: 1.0
 			cueListId: $cueListId
-			sceneId: $sceneId
+			lookId: $lookId
 			fadeInTime: 3.0
 			fadeOutTime: 2.0
 		}) {
@@ -1516,7 +1516,7 @@ func TestCue_Update(t *testing.T) {
 		}
 	}`, &createResp,
 		client.Var("cueListId", cueListResp.CreateCueList.ID),
-		client.Var("sceneId", sceneResp.CreateScene.ID))
+		client.Var("lookId", sceneResp.CreateLook.ID))
 
 	// Update the cue - note: updateCue uses CreateCueInput which requires all fields
 	var updateResp struct {
@@ -1526,12 +1526,12 @@ func TestCue_Update(t *testing.T) {
 			FadeInTime float64 `json:"fadeInTime"`
 		} `json:"updateCue"`
 	}
-	err := c.Post(`mutation($id: ID!, $cueListId: ID!, $sceneId: ID!) {
+	err := c.Post(`mutation($id: ID!, $cueListId: ID!, $lookId: ID!) {
 		updateCue(id: $id, input: {
 			name: "Updated Name",
 			cueNumber: 1.0,
 			cueListId: $cueListId,
-			sceneId: $sceneId,
+			lookId: $lookId,
 			fadeInTime: 5.0,
 			fadeOutTime: 2.0
 		}) {
@@ -1542,7 +1542,7 @@ func TestCue_Update(t *testing.T) {
 	}`, &updateResp,
 		client.Var("id", createResp.CreateCue.ID),
 		client.Var("cueListId", cueListResp.CreateCueList.ID),
-		client.Var("sceneId", sceneResp.CreateScene.ID))
+		client.Var("lookId", sceneResp.CreateLook.ID))
 
 	if err != nil {
 		t.Fatalf("UpdateCue mutation failed: %v", err)
@@ -1569,12 +1569,12 @@ func TestCue_Delete(t *testing.T) {
 	_ = c.Post(`mutation { createProject(input: { name: "Test Project" }) { id } }`, &projectResp)
 
 	var sceneResp struct {
-		CreateScene struct {
+		CreateLook struct {
 			ID string `json:"id"`
-		} `json:"createScene"`
+		} `json:"createLook"`
 	}
 	_ = c.Post(`mutation($projectId: ID!) {
-		createScene(input: {
+		createLook(input: {
 			name: "Test Scene"
 			projectId: $projectId
 			fixtureValues: []
@@ -1602,12 +1602,12 @@ func TestCue_Delete(t *testing.T) {
 			ID string `json:"id"`
 		} `json:"createCue"`
 	}
-	_ = c.Post(`mutation($cueListId: ID!, $sceneId: ID!) {
+	_ = c.Post(`mutation($cueListId: ID!, $lookId: ID!) {
 		createCue(input: {
 			name: "To Delete"
 			cueNumber: 1.0
 			cueListId: $cueListId
-			sceneId: $sceneId
+			lookId: $lookId
 			fadeInTime: 3.0
 			fadeOutTime: 2.0
 		}) {
@@ -1615,7 +1615,7 @@ func TestCue_Delete(t *testing.T) {
 		}
 	}`, &createResp,
 		client.Var("cueListId", cueListResp.CreateCueList.ID),
-		client.Var("sceneId", sceneResp.CreateScene.ID))
+		client.Var("lookId", sceneResp.CreateLook.ID))
 
 	// Delete the cue
 	var deleteResp struct {
@@ -1635,10 +1635,10 @@ func TestCue_Delete(t *testing.T) {
 }
 
 // =============================================================================
-// Scene Board CRUD Tests
+// Look Board CRUD Tests
 // =============================================================================
 
-func TestSceneBoard_Create(t *testing.T) {
+func TestLookBoard_Create(t *testing.T) {
 	c, _, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -1652,14 +1652,14 @@ func TestSceneBoard_Create(t *testing.T) {
 
 	// Create scene board
 	var boardResp struct {
-		CreateSceneBoard struct {
+		CreateLookBoard struct {
 			ID              string  `json:"id"`
 			Name            string  `json:"name"`
 			DefaultFadeTime float64 `json:"defaultFadeTime"`
-		} `json:"createSceneBoard"`
+		} `json:"createLookBoard"`
 	}
 	err := c.Post(`mutation($projectId: ID!) {
-		createSceneBoard(input: {
+		createLookBoard(input: {
 			name: "Main Board"
 			description: "Main scene board"
 			projectId: $projectId
@@ -1672,18 +1672,18 @@ func TestSceneBoard_Create(t *testing.T) {
 	}`, &boardResp, client.Var("projectId", projectResp.CreateProject.ID))
 
 	if err != nil {
-		t.Fatalf("CreateSceneBoard mutation failed: %v", err)
+		t.Fatalf("CreateLookBoard mutation failed: %v", err)
 	}
 
-	if boardResp.CreateSceneBoard.ID == "" {
+	if boardResp.CreateLookBoard.ID == "" {
 		t.Error("Expected scene board ID to be set")
 	}
-	if boardResp.CreateSceneBoard.Name != "Main Board" {
-		t.Errorf("Expected name 'Main Board', got '%s'", boardResp.CreateSceneBoard.Name)
+	if boardResp.CreateLookBoard.Name != "Main Board" {
+		t.Errorf("Expected name 'Main Board', got '%s'", boardResp.CreateLookBoard.Name)
 	}
 }
 
-func TestSceneBoard_Update(t *testing.T) {
+func TestLookBoard_Update(t *testing.T) {
 	c, _, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -1696,12 +1696,12 @@ func TestSceneBoard_Update(t *testing.T) {
 	_ = c.Post(`mutation { createProject(input: { name: "Test Project" }) { id } }`, &projectResp)
 
 	var createResp struct {
-		CreateSceneBoard struct {
+		CreateLookBoard struct {
 			ID string `json:"id"`
-		} `json:"createSceneBoard"`
+		} `json:"createLookBoard"`
 	}
 	_ = c.Post(`mutation($projectId: ID!) {
-		createSceneBoard(input: {
+		createLookBoard(input: {
 			name: "Original Name"
 			projectId: $projectId
 		}) {
@@ -1711,30 +1711,30 @@ func TestSceneBoard_Update(t *testing.T) {
 
 	// Update scene board
 	var updateResp struct {
-		UpdateSceneBoard struct {
+		UpdateLookBoard struct {
 			ID              string  `json:"id"`
 			Name            string  `json:"name"`
 			DefaultFadeTime float64 `json:"defaultFadeTime"`
-		} `json:"updateSceneBoard"`
+		} `json:"updateLookBoard"`
 	}
 	err := c.Post(`mutation($id: ID!) {
-		updateSceneBoard(id: $id, input: { name: "Updated Name", defaultFadeTime: 5.0 }) {
+		updateLookBoard(id: $id, input: { name: "Updated Name", defaultFadeTime: 5.0 }) {
 			id
 			name
 			defaultFadeTime
 		}
-	}`, &updateResp, client.Var("id", createResp.CreateSceneBoard.ID))
+	}`, &updateResp, client.Var("id", createResp.CreateLookBoard.ID))
 
 	if err != nil {
-		t.Fatalf("UpdateSceneBoard mutation failed: %v", err)
+		t.Fatalf("UpdateLookBoard mutation failed: %v", err)
 	}
 
-	if updateResp.UpdateSceneBoard.Name != "Updated Name" {
-		t.Errorf("Expected name 'Updated Name', got '%s'", updateResp.UpdateSceneBoard.Name)
+	if updateResp.UpdateLookBoard.Name != "Updated Name" {
+		t.Errorf("Expected name 'Updated Name', got '%s'", updateResp.UpdateLookBoard.Name)
 	}
 }
 
-func TestSceneBoard_Delete(t *testing.T) {
+func TestLookBoard_Delete(t *testing.T) {
 	c, _, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -1747,12 +1747,12 @@ func TestSceneBoard_Delete(t *testing.T) {
 	_ = c.Post(`mutation { createProject(input: { name: "Test Project" }) { id } }`, &projectResp)
 
 	var createResp struct {
-		CreateSceneBoard struct {
+		CreateLookBoard struct {
 			ID string `json:"id"`
-		} `json:"createSceneBoard"`
+		} `json:"createLookBoard"`
 	}
 	_ = c.Post(`mutation($projectId: ID!) {
-		createSceneBoard(input: {
+		createLookBoard(input: {
 			name: "To Delete"
 			projectId: $projectId
 		}) {
@@ -1762,26 +1762,26 @@ func TestSceneBoard_Delete(t *testing.T) {
 
 	// Delete scene board
 	var deleteResp struct {
-		DeleteSceneBoard bool `json:"deleteSceneBoard"`
+		DeleteLookBoard bool `json:"deleteLookBoard"`
 	}
 	err := c.Post(`mutation($id: ID!) {
-		deleteSceneBoard(id: $id)
-	}`, &deleteResp, client.Var("id", createResp.CreateSceneBoard.ID))
+		deleteLookBoard(id: $id)
+	}`, &deleteResp, client.Var("id", createResp.CreateLookBoard.ID))
 
 	if err != nil {
-		t.Fatalf("DeleteSceneBoard mutation failed: %v", err)
+		t.Fatalf("DeleteLookBoard mutation failed: %v", err)
 	}
 
-	if !deleteResp.DeleteSceneBoard {
-		t.Error("Expected deleteSceneBoard to return true")
+	if !deleteResp.DeleteLookBoard {
+		t.Error("Expected deleteLookBoard to return true")
 	}
 }
 
 // =============================================================================
-// Scene Board Button CRUD Tests
+// Look Board Button CRUD Tests
 // =============================================================================
 
-func TestSceneBoardButton_Create(t *testing.T) {
+func TestLookBoardButton_Create(t *testing.T) {
 	c, _, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -1794,12 +1794,12 @@ func TestSceneBoardButton_Create(t *testing.T) {
 	_ = c.Post(`mutation { createProject(input: { name: "Test Project" }) { id } }`, &projectResp)
 
 	var sceneResp struct {
-		CreateScene struct {
+		CreateLook struct {
 			ID string `json:"id"`
-		} `json:"createScene"`
+		} `json:"createLook"`
 	}
 	_ = c.Post(`mutation($projectId: ID!) {
-		createScene(input: {
+		createLook(input: {
 			name: "Test Scene"
 			projectId: $projectId
 			fixtureValues: []
@@ -1809,12 +1809,12 @@ func TestSceneBoardButton_Create(t *testing.T) {
 	}`, &sceneResp, client.Var("projectId", projectResp.CreateProject.ID))
 
 	var boardResp struct {
-		CreateSceneBoard struct {
+		CreateLookBoard struct {
 			ID string `json:"id"`
-		} `json:"createSceneBoard"`
+		} `json:"createLookBoard"`
 	}
 	_ = c.Post(`mutation($projectId: ID!) {
-		createSceneBoard(input: {
+		createLookBoard(input: {
 			name: "Test Board"
 			projectId: $projectId
 		}) {
@@ -1822,19 +1822,19 @@ func TestSceneBoardButton_Create(t *testing.T) {
 		}
 	}`, &boardResp, client.Var("projectId", projectResp.CreateProject.ID))
 
-	// Create button using addSceneToBoard mutation
+	// Create button using addLookToBoard mutation
 	var buttonResp struct {
-		AddSceneToBoard struct {
+		AddLookToBoard struct {
 			ID      string `json:"id"`
 			LayoutX int    `json:"layoutX"`
 			LayoutY int    `json:"layoutY"`
 			Label   string `json:"label"`
-		} `json:"addSceneToBoard"`
+		} `json:"addLookToBoard"`
 	}
-	err := c.Post(`mutation($boardId: ID!, $sceneId: ID!) {
-		addSceneToBoard(input: {
-			sceneBoardId: $boardId
-			sceneId: $sceneId
+	err := c.Post(`mutation($boardId: ID!, $lookId: ID!) {
+		addLookToBoard(input: {
+			lookBoardId: $boardId
+			lookId: $lookId
 			layoutX: 100
 			layoutY: 200
 			width: 150
@@ -1848,22 +1848,22 @@ func TestSceneBoardButton_Create(t *testing.T) {
 			label
 		}
 	}`, &buttonResp,
-		client.Var("boardId", boardResp.CreateSceneBoard.ID),
-		client.Var("sceneId", sceneResp.CreateScene.ID))
+		client.Var("boardId", boardResp.CreateLookBoard.ID),
+		client.Var("lookId", sceneResp.CreateLook.ID))
 
 	if err != nil {
-		t.Fatalf("AddSceneToBoard mutation failed: %v", err)
+		t.Fatalf("AddLookToBoard mutation failed: %v", err)
 	}
 
-	if buttonResp.AddSceneToBoard.ID == "" {
+	if buttonResp.AddLookToBoard.ID == "" {
 		t.Error("Expected button ID to be set")
 	}
-	if buttonResp.AddSceneToBoard.LayoutX != 100 {
-		t.Errorf("Expected layoutX 100, got %d", buttonResp.AddSceneToBoard.LayoutX)
+	if buttonResp.AddLookToBoard.LayoutX != 100 {
+		t.Errorf("Expected layoutX 100, got %d", buttonResp.AddLookToBoard.LayoutX)
 	}
 }
 
-func TestSceneBoardButton_Delete(t *testing.T) {
+func TestLookBoardButton_Delete(t *testing.T) {
 	c, _, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -1876,12 +1876,12 @@ func TestSceneBoardButton_Delete(t *testing.T) {
 	_ = c.Post(`mutation { createProject(input: { name: "Test Project" }) { id } }`, &projectResp)
 
 	var sceneResp struct {
-		CreateScene struct {
+		CreateLook struct {
 			ID string `json:"id"`
-		} `json:"createScene"`
+		} `json:"createLook"`
 	}
 	_ = c.Post(`mutation($projectId: ID!) {
-		createScene(input: {
+		createLook(input: {
 			name: "Test Scene"
 			projectId: $projectId
 			fixtureValues: []
@@ -1891,12 +1891,12 @@ func TestSceneBoardButton_Delete(t *testing.T) {
 	}`, &sceneResp, client.Var("projectId", projectResp.CreateProject.ID))
 
 	var boardResp struct {
-		CreateSceneBoard struct {
+		CreateLookBoard struct {
 			ID string `json:"id"`
-		} `json:"createSceneBoard"`
+		} `json:"createLookBoard"`
 	}
 	_ = c.Post(`mutation($projectId: ID!) {
-		createSceneBoard(input: {
+		createLookBoard(input: {
 			name: "Test Board"
 			projectId: $projectId
 		}) {
@@ -1904,39 +1904,39 @@ func TestSceneBoardButton_Delete(t *testing.T) {
 		}
 	}`, &boardResp, client.Var("projectId", projectResp.CreateProject.ID))
 
-	// Create button using addSceneToBoard
+	// Create button using addLookToBoard
 	var buttonResp struct {
-		AddSceneToBoard struct {
+		AddLookToBoard struct {
 			ID string `json:"id"`
-		} `json:"addSceneToBoard"`
+		} `json:"addLookToBoard"`
 	}
-	_ = c.Post(`mutation($boardId: ID!, $sceneId: ID!) {
-		addSceneToBoard(input: {
-			sceneBoardId: $boardId
-			sceneId: $sceneId
+	_ = c.Post(`mutation($boardId: ID!, $lookId: ID!) {
+		addLookToBoard(input: {
+			lookBoardId: $boardId
+			lookId: $lookId
 			layoutX: 0
 			layoutY: 0
 		}) {
 			id
 		}
 	}`, &buttonResp,
-		client.Var("boardId", boardResp.CreateSceneBoard.ID),
-		client.Var("sceneId", sceneResp.CreateScene.ID))
+		client.Var("boardId", boardResp.CreateLookBoard.ID),
+		client.Var("lookId", sceneResp.CreateLook.ID))
 
-	// Delete button using removeSceneFromBoard
+	// Delete button using removeLookFromBoard
 	var deleteResp struct {
-		RemoveSceneFromBoard bool `json:"removeSceneFromBoard"`
+		RemoveLookFromBoard bool `json:"removeLookFromBoard"`
 	}
 	err := c.Post(`mutation($buttonId: ID!) {
-		removeSceneFromBoard(buttonId: $buttonId)
-	}`, &deleteResp, client.Var("buttonId", buttonResp.AddSceneToBoard.ID))
+		removeLookFromBoard(buttonId: $buttonId)
+	}`, &deleteResp, client.Var("buttonId", buttonResp.AddLookToBoard.ID))
 
 	if err != nil {
-		t.Fatalf("RemoveSceneFromBoard mutation failed: %v", err)
+		t.Fatalf("RemoveLookFromBoard mutation failed: %v", err)
 	}
 
-	if !deleteResp.RemoveSceneFromBoard {
-		t.Error("Expected removeSceneFromBoard to return true")
+	if !deleteResp.RemoveLookFromBoard {
+		t.Error("Expected removeLookFromBoard to return true")
 	}
 }
 
@@ -2037,7 +2037,7 @@ func TestBulkDeleteProjects(t *testing.T) {
 	}
 }
 
-func TestBulkCreateScenes(t *testing.T) {
+func TestBulkCreateLooks(t *testing.T) {
 	c, _, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -2057,15 +2057,15 @@ func TestBulkCreateScenes(t *testing.T) {
 	}
 
 	var resp struct {
-		BulkCreateScenes []struct {
+		BulkCreateLooks []struct {
 			ID   string `json:"id"`
 			Name string `json:"name"`
-		} `json:"bulkCreateScenes"`
+		} `json:"bulkCreateLooks"`
 	}
 
 	err = c.Post(`mutation($projectId: ID!) {
-		bulkCreateScenes(input: {
-			scenes: [
+		bulkCreateLooks(input: {
+			looks: [
 				{ name: "Scene 1", projectId: $projectId, fixtureValues: [] },
 				{ name: "Scene 2", projectId: $projectId, fixtureValues: [] }
 			]
@@ -2076,15 +2076,15 @@ func TestBulkCreateScenes(t *testing.T) {
 	}`, &resp, client.Var("projectId", projectResp.CreateProject.ID))
 
 	if err != nil {
-		t.Fatalf("BulkCreateScenes mutation failed: %v", err)
+		t.Fatalf("BulkCreateLooks mutation failed: %v", err)
 	}
 
-	if len(resp.BulkCreateScenes) != 2 {
-		t.Errorf("Expected 2 scenes, got %d", len(resp.BulkCreateScenes))
+	if len(resp.BulkCreateLooks) != 2 {
+		t.Errorf("Expected 2 scenes, got %d", len(resp.BulkCreateLooks))
 	}
 }
 
-func TestBulkDeleteScenes(t *testing.T) {
+func TestBulkDeleteLooks(t *testing.T) {
 	c, _, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -2105,13 +2105,13 @@ func TestBulkDeleteScenes(t *testing.T) {
 
 	// Create scenes
 	var createResp struct {
-		BulkCreateScenes []struct {
+		BulkCreateLooks []struct {
 			ID string `json:"id"`
-		} `json:"bulkCreateScenes"`
+		} `json:"bulkCreateLooks"`
 	}
 	err = c.Post(`mutation($projectId: ID!) {
-		bulkCreateScenes(input: {
-			scenes: [
+		bulkCreateLooks(input: {
+			looks: [
 				{ name: "To Delete 1", projectId: $projectId, fixtureValues: [] },
 				{ name: "To Delete 2", projectId: $projectId, fixtureValues: [] }
 			]
@@ -2120,34 +2120,34 @@ func TestBulkDeleteScenes(t *testing.T) {
 		}
 	}`, &createResp, client.Var("projectId", projectResp.CreateProject.ID))
 	if err != nil {
-		t.Fatalf("BulkCreateScenes failed: %v", err)
+		t.Fatalf("BulkCreateLooks failed: %v", err)
 	}
 
-	ids := make([]string, len(createResp.BulkCreateScenes))
-	for i, s := range createResp.BulkCreateScenes {
+	ids := make([]string, len(createResp.BulkCreateLooks))
+	for i, s := range createResp.BulkCreateLooks {
 		ids[i] = s.ID
 	}
 
 	// Delete them
 	var deleteResp struct {
-		BulkDeleteScenes struct {
+		BulkDeleteLooks struct {
 			DeletedCount int      `json:"deletedCount"`
 			DeletedIds   []string `json:"deletedIds"`
-		} `json:"bulkDeleteScenes"`
+		} `json:"bulkDeleteLooks"`
 	}
 	err = c.Post(`mutation($ids: [ID!]!) {
-		bulkDeleteScenes(sceneIds: $ids) {
+		bulkDeleteLooks(lookIds: $ids) {
 			deletedCount
 			deletedIds
 		}
 	}`, &deleteResp, client.Var("ids", ids))
 
 	if err != nil {
-		t.Fatalf("BulkDeleteScenes mutation failed: %v", err)
+		t.Fatalf("BulkDeleteLooks mutation failed: %v", err)
 	}
 
-	if deleteResp.BulkDeleteScenes.DeletedCount != 2 {
-		t.Errorf("Expected deletedCount 2, got %d", deleteResp.BulkDeleteScenes.DeletedCount)
+	if deleteResp.BulkDeleteLooks.DeletedCount != 2 {
+		t.Errorf("Expected deletedCount 2, got %d", deleteResp.BulkDeleteLooks.DeletedCount)
 	}
 }
 
@@ -2203,7 +2203,7 @@ func TestProjectsByIds(t *testing.T) {
 	}
 }
 
-func TestScenesByIds(t *testing.T) {
+func TestLooksByIds(t *testing.T) {
 	c, _, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -2224,14 +2224,14 @@ func TestScenesByIds(t *testing.T) {
 
 	// Create scenes
 	var createResp struct {
-		BulkCreateScenes []struct {
+		BulkCreateLooks []struct {
 			ID   string `json:"id"`
 			Name string `json:"name"`
-		} `json:"bulkCreateScenes"`
+		} `json:"bulkCreateLooks"`
 	}
 	err = c.Post(`mutation($projectId: ID!) {
-		bulkCreateScenes(input: {
-			scenes: [
+		bulkCreateLooks(input: {
+			looks: [
 				{ name: "Scene A", projectId: $projectId, fixtureValues: [] },
 				{ name: "Scene B", projectId: $projectId, fixtureValues: [] }
 			]
@@ -2241,33 +2241,33 @@ func TestScenesByIds(t *testing.T) {
 		}
 	}`, &createResp, client.Var("projectId", projectResp.CreateProject.ID))
 	if err != nil {
-		t.Fatalf("BulkCreateScenes failed: %v", err)
+		t.Fatalf("BulkCreateLooks failed: %v", err)
 	}
 
-	ids := make([]string, len(createResp.BulkCreateScenes))
-	for i, s := range createResp.BulkCreateScenes {
+	ids := make([]string, len(createResp.BulkCreateLooks))
+	for i, s := range createResp.BulkCreateLooks {
 		ids[i] = s.ID
 	}
 
 	var queryResp struct {
-		ScenesByIds []struct {
+		LooksByIds []struct {
 			ID   string `json:"id"`
 			Name string `json:"name"`
-		} `json:"scenesByIds"`
+		} `json:"looksByIds"`
 	}
 	err = c.Post(`query($ids: [ID!]!) {
-		scenesByIds(ids: $ids) {
+		looksByIds(ids: $ids) {
 			id
 			name
 		}
 	}`, &queryResp, client.Var("ids", ids))
 
 	if err != nil {
-		t.Fatalf("ScenesByIds query failed: %v", err)
+		t.Fatalf("LooksByIds query failed: %v", err)
 	}
 
-	if len(queryResp.ScenesByIds) != 2 {
-		t.Errorf("Expected 2 scenes, got %d", len(queryResp.ScenesByIds))
+	if len(queryResp.LooksByIds) != 2 {
+		t.Errorf("Expected 2 scenes, got %d", len(queryResp.LooksByIds))
 	}
 }
 

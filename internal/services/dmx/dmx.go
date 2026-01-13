@@ -29,8 +29,8 @@ type Service struct {
 	// Channel overrides (key: "universe:channel", 1-indexed)
 	channelOverrides map[string]byte
 
-	// Active scene tracking
-	activeSceneID *string
+	// Active look tracking
+	activeLookID *string
 
 	// Configuration
 	enabled         bool
@@ -610,8 +610,8 @@ func (s *Service) FadeToBlack() {
 		}
 	}
 
-	// Clear active scene
-	s.activeSceneID = nil
+	// Clear active look
+	s.activeLookID = nil
 
 	// Clear all overrides
 	s.channelOverrides = make(map[string]byte)
@@ -619,25 +619,25 @@ func (s *Service) FadeToBlack() {
 	s.triggerHighRate()
 }
 
-// SetActiveScene sets the currently active scene ID.
-func (s *Service) SetActiveScene(sceneID string) {
+// SetActiveLook sets the currently active look ID.
+func (s *Service) SetActiveLook(lookID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.activeSceneID = &sceneID
+	s.activeLookID = &lookID
 }
 
-// GetActiveSceneID returns the currently active scene ID.
-func (s *Service) GetActiveSceneID() *string {
+// GetActiveLookID returns the currently active look ID.
+func (s *Service) GetActiveLookID() *string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.activeSceneID
+	return s.activeLookID
 }
 
-// ClearActiveScene clears the active scene.
-func (s *Service) ClearActiveScene() {
+// ClearActiveLook clears the active look.
+func (s *Service) ClearActiveLook() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.activeSceneID = nil
+	s.activeLookID = nil
 }
 
 // IsEnabled returns whether DMX output is enabled.

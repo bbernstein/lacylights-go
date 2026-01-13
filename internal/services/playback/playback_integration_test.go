@@ -55,8 +55,8 @@ func createTestProject(t *testing.T, testDB *testutil.TestDB) *models.Project {
 	return project
 }
 
-// createTestFixtureWithScene creates a fixture definition, instance, scene, and fixture values.
-func createTestFixtureWithScene(t *testing.T, testDB *testutil.TestDB, project *models.Project) (*models.FixtureInstance, *models.Scene) {
+// createTestFixtureWithLook creates a fixture definition, instance, look, and fixture values.
+func createTestFixtureWithLook(t *testing.T, testDB *testutil.TestDB, project *models.Project) (*models.FixtureInstance, *models.Look) {
 	t.Helper()
 
 	// Create fixture definition
@@ -94,20 +94,20 @@ func createTestFixtureWithScene(t *testing.T, testDB *testutil.TestDB, project *
 		t.Fatalf("Failed to create fixture instance: %v", err)
 	}
 
-	// Create scene
-	scene := &models.Scene{
+	// Create look
+	look := &models.Look{
 		ID:        cuid.New(),
 		ProjectID: project.ID,
-		Name:      "Test Scene",
+		Name:      "Test Look",
 	}
-	if err := testDB.DB.Create(scene).Error; err != nil {
-		t.Fatalf("Failed to create scene: %v", err)
+	if err := testDB.DB.Create(look).Error; err != nil {
+		t.Fatalf("Failed to create look: %v", err)
 	}
 
-	// Create fixture value for scene
+	// Create fixture value for look
 	fixtureValue := &models.FixtureValue{
 		ID:        cuid.New(),
-		SceneID:   scene.ID,
+		LookID:    look.ID,
 		FixtureID: fixture.ID,
 		Channels:  `[{"offset":0,"value":255},{"offset":1,"value":128},{"offset":2,"value":64},{"offset":3,"value":32}]`,
 	}
@@ -115,11 +115,11 @@ func createTestFixtureWithScene(t *testing.T, testDB *testutil.TestDB, project *
 		t.Fatalf("Failed to create fixture value: %v", err)
 	}
 
-	return fixture, scene
+	return fixture, look
 }
 
 // createTestCueList creates a cue list with cues.
-func createTestCueList(t *testing.T, testDB *testutil.TestDB, project *models.Project, scenes []*models.Scene, loop bool) *models.CueList {
+func createTestCueList(t *testing.T, testDB *testutil.TestDB, project *models.Project, looks []*models.Look, loop bool) *models.CueList {
 	t.Helper()
 
 	cueList := &models.CueList{
@@ -132,12 +132,12 @@ func createTestCueList(t *testing.T, testDB *testutil.TestDB, project *models.Pr
 		t.Fatalf("Failed to create cue list: %v", err)
 	}
 
-	for i, scene := range scenes {
+	for i, look := range looks {
 		cue := &models.Cue{
 			ID:          cuid.New(),
 			CueListID:   cueList.ID,
-			SceneID:     scene.ID,
-			Name:        scene.Name,
+			LookID:      look.ID,
+			Name:        look.Name,
 			CueNumber:   float64(i + 1),
 			FadeInTime:  0.1, // Short fade times for testing
 			FadeOutTime: 0.05,
@@ -157,8 +157,8 @@ func TestStartCueList_Integration(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene}, false)
+	_, look := createTestFixtureWithLook(t, testDB, project)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look}, false)
 
 	// Start cue list
 	err := service.StartCueList(ctx, cueList.ID, nil, nil)
@@ -228,18 +228,18 @@ func TestStartCueList_FromSpecificCue(t *testing.T) {
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
 
-	// Create two scenes and cues
-	_, scene1 := createTestFixtureWithScene(t, testDB, project)
-	scene2 := &models.Scene{
+	// Create two looks and cues
+	_, look1 := createTestFixtureWithLook(t, testDB, project)
+	look2 := &models.Look{
 		ID:        cuid.New(),
 		ProjectID: project.ID,
-		Name:      "Scene 2",
+		Name:      "Look 2",
 	}
-	if err := testDB.DB.Create(scene2).Error; err != nil {
-		t.Fatalf("Failed to create scene 2: %v", err)
+	if err := testDB.DB.Create(look2).Error; err != nil {
+		t.Fatalf("Failed to create look 2: %v", err)
 	}
 
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene1, scene2}, false)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look1, look2}, false)
 
 	// Start from cue number 2
 	startCue := 2.0
@@ -263,18 +263,18 @@ func TestNextCue_Integration(t *testing.T) {
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
 
-	// Create two scenes
-	_, scene1 := createTestFixtureWithScene(t, testDB, project)
-	scene2 := &models.Scene{
+	// Create two looks
+	_, look1 := createTestFixtureWithLook(t, testDB, project)
+	look2 := &models.Look{
 		ID:        cuid.New(),
 		ProjectID: project.ID,
-		Name:      "Scene 2",
+		Name:      "Look 2",
 	}
-	if err := testDB.DB.Create(scene2).Error; err != nil {
-		t.Fatalf("Failed to create scene 2: %v", err)
+	if err := testDB.DB.Create(look2).Error; err != nil {
+		t.Fatalf("Failed to create look 2: %v", err)
 	}
 
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene1, scene2}, false)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look1, look2}, false)
 
 	// Start cue list
 	err := service.StartCueList(ctx, cueList.ID, nil, nil)
@@ -302,8 +302,8 @@ func TestNextCue_AtEnd_NoLoop(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene}, false)
+	_, look := createTestFixtureWithLook(t, testDB, project)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look}, false)
 
 	// Start cue list
 	err := service.StartCueList(ctx, cueList.ID, nil, nil)
@@ -325,8 +325,8 @@ func TestNextCue_AtEnd_WithLoop(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene}, true) // Loop enabled
+	_, look := createTestFixtureWithLook(t, testDB, project)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look}, true) // Loop enabled
 
 	// Start cue list
 	err := service.StartCueList(ctx, cueList.ID, nil, nil)
@@ -354,18 +354,18 @@ func TestPreviousCue_Integration(t *testing.T) {
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
 
-	// Create two scenes
-	_, scene1 := createTestFixtureWithScene(t, testDB, project)
-	scene2 := &models.Scene{
+	// Create two looks
+	_, look1 := createTestFixtureWithLook(t, testDB, project)
+	look2 := &models.Look{
 		ID:        cuid.New(),
 		ProjectID: project.ID,
-		Name:      "Scene 2",
+		Name:      "Look 2",
 	}
-	if err := testDB.DB.Create(scene2).Error; err != nil {
-		t.Fatalf("Failed to create scene 2: %v", err)
+	if err := testDB.DB.Create(look2).Error; err != nil {
+		t.Fatalf("Failed to create look 2: %v", err)
 	}
 
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene1, scene2}, false)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look1, look2}, false)
 
 	// Start from cue 2
 	startCue := 2.0
@@ -394,8 +394,8 @@ func TestPreviousCue_AtStart_NoLoop(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene}, false)
+	_, look := createTestFixtureWithLook(t, testDB, project)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look}, false)
 
 	// Start cue list
 	err := service.StartCueList(ctx, cueList.ID, nil, nil)
@@ -418,18 +418,18 @@ func TestPreviousCue_AtStart_WithLoop(t *testing.T) {
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
 
-	// Create two scenes
-	_, scene1 := createTestFixtureWithScene(t, testDB, project)
-	scene2 := &models.Scene{
+	// Create two looks
+	_, look1 := createTestFixtureWithLook(t, testDB, project)
+	look2 := &models.Look{
 		ID:        cuid.New(),
 		ProjectID: project.ID,
-		Name:      "Scene 2",
+		Name:      "Look 2",
 	}
-	if err := testDB.DB.Create(scene2).Error; err != nil {
-		t.Fatalf("Failed to create scene 2: %v", err)
+	if err := testDB.DB.Create(look2).Error; err != nil {
+		t.Fatalf("Failed to create look 2: %v", err)
 	}
 
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene1, scene2}, true) // Loop enabled
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look1, look2}, true) // Loop enabled
 
 	// Start at cue 1
 	err := service.StartCueList(ctx, cueList.ID, nil, nil)
@@ -457,14 +457,14 @@ func TestJumpToCue_Integration(t *testing.T) {
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
 
-	// Create three scenes
-	_, scene1 := createTestFixtureWithScene(t, testDB, project)
-	scene2 := &models.Scene{ID: cuid.New(), ProjectID: project.ID, Name: "Scene 2"}
-	scene3 := &models.Scene{ID: cuid.New(), ProjectID: project.ID, Name: "Scene 3"}
-	testDB.DB.Create(scene2)
-	testDB.DB.Create(scene3)
+	// Create three looks
+	_, look1 := createTestFixtureWithLook(t, testDB, project)
+	look2 := &models.Look{ID: cuid.New(), ProjectID: project.ID, Name: "Look 2"}
+	look3 := &models.Look{ID: cuid.New(), ProjectID: project.ID, Name: "Look 3"}
+	testDB.DB.Create(look2)
+	testDB.DB.Create(look3)
 
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene1, scene2, scene3}, false)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look1, look2, look3}, false)
 
 	// Jump to cue index 2
 	err := service.JumpToCue(ctx, cueList.ID, 2, nil)
@@ -485,8 +485,8 @@ func TestJumpToCue_InvalidIndex(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene}, false)
+	_, look := createTestFixtureWithLook(t, testDB, project)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look}, false)
 
 	// Try invalid indices
 	err := service.JumpToCue(ctx, cueList.ID, -1, nil)
@@ -508,12 +508,12 @@ func TestGoToCueNumber_Integration(t *testing.T) {
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
 
-	// Create two scenes
-	_, scene1 := createTestFixtureWithScene(t, testDB, project)
-	scene2 := &models.Scene{ID: cuid.New(), ProjectID: project.ID, Name: "Scene 2"}
-	testDB.DB.Create(scene2)
+	// Create two looks
+	_, look1 := createTestFixtureWithLook(t, testDB, project)
+	look2 := &models.Look{ID: cuid.New(), ProjectID: project.ID, Name: "Look 2"}
+	testDB.DB.Create(look2)
 
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene1, scene2}, false)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look1, look2}, false)
 
 	// Go to cue number 2.0
 	err := service.GoToCueNumber(ctx, cueList.ID, 2.0, nil)
@@ -534,8 +534,8 @@ func TestGoToCueNumber_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene}, false)
+	_, look := createTestFixtureWithLook(t, testDB, project)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look}, false)
 
 	err := service.GoToCueNumber(ctx, cueList.ID, 99.0, nil)
 	if err == nil {
@@ -550,18 +550,18 @@ func TestGoToCueName_Integration(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene}, false)
+	_, look := createTestFixtureWithLook(t, testDB, project)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look}, false)
 
-	// The cue name is the scene name "Test Scene"
-	err := service.GoToCueName(ctx, cueList.ID, "Test Scene", nil)
+	// The cue name is the look name "Test Look"
+	err := service.GoToCueName(ctx, cueList.ID, "Test Look", nil)
 	if err != nil {
 		t.Fatalf("Failed to go to cue name: %v", err)
 	}
 
 	state := service.GetPlaybackState(cueList.ID)
-	if state.CurrentCue == nil || state.CurrentCue.Name != "Test Scene" {
-		t.Errorf("Expected cue name 'Test Scene', got %v", state.CurrentCue)
+	if state.CurrentCue == nil || state.CurrentCue.Name != "Test Look" {
+		t.Errorf("Expected cue name 'Test Look', got %v", state.CurrentCue)
 	}
 }
 
@@ -572,8 +572,8 @@ func TestGoToCueName_NotFound(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene}, false)
+	_, look := createTestFixtureWithLook(t, testDB, project)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look}, false)
 
 	err := service.GoToCueName(ctx, cueList.ID, "Nonexistent", nil)
 	if err == nil {
@@ -588,8 +588,8 @@ func TestExecuteCueDmx_Integration(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene}, false)
+	_, look := createTestFixtureWithLook(t, testDB, project)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look}, false)
 
 	// Get the cue ID
 	var cue models.Cue
@@ -622,8 +622,8 @@ func TestExecuteCueDmx_WithFadeOverride(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene}, false)
+	_, look := createTestFixtureWithLook(t, testDB, project)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look}, false)
 
 	var cue models.Cue
 	testDB.DB.First(&cue, "cue_list_id = ?", cueList.ID)
@@ -643,8 +643,8 @@ func TestStopCueList_Integration(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene}, false)
+	_, look := createTestFixtureWithLook(t, testDB, project)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look}, false)
 
 	// Start cue list
 	err := service.StartCueList(ctx, cueList.ID, nil, nil)
@@ -678,20 +678,20 @@ func TestMultipleCueListsPlayback(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
+	_, look := createTestFixtureWithLook(t, testDB, project)
 
 	// Create two cue lists
-	cueList1 := createTestCueList(t, testDB, project, []*models.Scene{scene}, false)
+	cueList1 := createTestCueList(t, testDB, project, []*models.Look{look}, false)
 
-	scene2 := &models.Scene{ID: cuid.New(), ProjectID: project.ID, Name: "Scene 2"}
-	testDB.DB.Create(scene2)
+	look2 := &models.Look{ID: cuid.New(), ProjectID: project.ID, Name: "Look 2"}
+	testDB.DB.Create(look2)
 	cueList2 := &models.CueList{ID: cuid.New(), ProjectID: project.ID, Name: "CL2"}
 	testDB.DB.Create(cueList2)
 	cue2 := &models.Cue{
 		ID:         cuid.New(),
 		CueListID:  cueList2.ID,
-		SceneID:    scene2.ID,
-		Name:       "Scene 2",
+		LookID:     look2.ID,
+		Name:       "Look 2",
 		CueNumber:  1.0,
 		FadeInTime: 0.1,
 	}
@@ -740,7 +740,7 @@ func TestFadeProgressTracking(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
+	_, look := createTestFixtureWithLook(t, testDB, project)
 
 	// Create cue list with longer fade time
 	cueList := &models.CueList{ID: cuid.New(), ProjectID: project.ID, Name: "Test CL"}
@@ -749,7 +749,7 @@ func TestFadeProgressTracking(t *testing.T) {
 	cue := &models.Cue{
 		ID:         cuid.New(),
 		CueListID:  cueList.ID,
-		SceneID:    scene.ID,
+		LookID:     look.ID,
 		Name:       "Test Cue",
 		CueNumber:  1.0,
 		FadeInTime: 0.5, // 500ms fade
@@ -787,8 +787,8 @@ func TestUpdateCallback_Integration(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene}, false)
+	_, look := createTestFixtureWithLook(t, testDB, project)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look}, false)
 
 	// Set up callback with thread-safe access
 	var mu sync.Mutex
@@ -817,8 +817,8 @@ func TestUpdateCallback_Integration(t *testing.T) {
 	}
 }
 
-// TestExecuteCueDmx_CueWithNoScene tests executing a cue without a scene.
-func TestExecuteCueDmx_CueWithNoScene(t *testing.T) {
+// TestExecuteCueDmx_CueWithNoLook tests executing a cue without a look.
+func TestExecuteCueDmx_CueWithNoLook(t *testing.T) {
 	testDB, service, cleanup := setupPlaybackTest(t)
 	defer cleanup()
 
@@ -829,21 +829,21 @@ func TestExecuteCueDmx_CueWithNoScene(t *testing.T) {
 	cueList := &models.CueList{ID: cuid.New(), ProjectID: project.ID, Name: "Test CL"}
 	testDB.DB.Create(cueList)
 
-	// Create cue without a valid scene
+	// Create cue without a valid look
 	cue := &models.Cue{
 		ID:         cuid.New(),
 		CueListID:  cueList.ID,
-		SceneID:    "nonexistent-scene",
+		LookID:     "nonexistent-look",
 		Name:       "Test Cue",
 		CueNumber:  1.0,
 		FadeInTime: 0.1,
 	}
 	testDB.DB.Create(cue)
 
-	// Execute should fail because scene doesn't exist (cue.Scene will be nil after preload)
+	// Execute should fail because look doesn't exist (cue.Look will be nil after preload)
 	err := service.ExecuteCueDmx(ctx, cue.ID, nil)
 	if err == nil {
-		t.Error("Expected error for cue with no scene")
+		t.Error("Expected error for cue with no look")
 	}
 }
 
@@ -854,8 +854,8 @@ func TestGetFormattedStatus_Integration(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene}, false)
+	_, look := createTestFixtureWithLook(t, testDB, project)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look}, false)
 
 	// Before starting - should show not playing
 	status := service.GetFormattedStatus(cueList.ID)
@@ -892,8 +892,8 @@ func TestStartCueList_WithFadeOverride(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene}, false)
+	_, look := createTestFixtureWithLook(t, testDB, project)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look}, false)
 
 	// Start with custom fade time
 	fadeOverride := 0.2
@@ -919,10 +919,10 @@ func TestNextCue_WithFadeOverride(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene1 := createTestFixtureWithScene(t, testDB, project)
-	scene2 := &models.Scene{ID: cuid.New(), ProjectID: project.ID, Name: "Scene 2"}
-	testDB.DB.Create(scene2)
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene1, scene2}, false)
+	_, look1 := createTestFixtureWithLook(t, testDB, project)
+	look2 := &models.Look{ID: cuid.New(), ProjectID: project.ID, Name: "Look 2"}
+	testDB.DB.Create(look2)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look1, look2}, false)
 
 	// Start
 	err := service.StartCueList(ctx, cueList.ID, nil, nil)
@@ -950,8 +950,8 @@ func TestGoToCueNumber_WithFadeOverride(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
-	cueList := createTestCueList(t, testDB, project, []*models.Scene{scene}, false)
+	_, look := createTestFixtureWithLook(t, testDB, project)
+	cueList := createTestCueList(t, testDB, project, []*models.Look{look}, false)
 
 	fadeOverride := 0.5
 	err := service.GoToCueNumber(ctx, cueList.ID, 1.0, &fadeOverride)
@@ -972,7 +972,7 @@ func TestExecuteCueDmx_WithEasingType(t *testing.T) {
 
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
-	_, scene := createTestFixtureWithScene(t, testDB, project)
+	_, look := createTestFixtureWithLook(t, testDB, project)
 
 	// Create cue list and cue with easing type
 	cueList := &models.CueList{ID: cuid.New(), ProjectID: project.ID, Name: "Test CL"}
@@ -982,7 +982,7 @@ func TestExecuteCueDmx_WithEasingType(t *testing.T) {
 	cue := &models.Cue{
 		ID:         cuid.New(),
 		CueListID:  cueList.ID,
-		SceneID:    scene.ID,
+		LookID:     look.ID,
 		Name:       "Test Cue",
 		CueNumber:  1.0,
 		FadeInTime: 0.1,
@@ -1025,18 +1025,18 @@ func TestExecuteCueDmx_InvalidChannelsJSON(t *testing.T) {
 	}
 	testDB.DB.Create(fixture)
 
-	// Create scene
-	scene := &models.Scene{
+	// Create look
+	look := &models.Look{
 		ID:        cuid.New(),
 		ProjectID: project.ID,
-		Name:      "Scene with invalid JSON",
+		Name:      "Look with invalid JSON",
 	}
-	testDB.DB.Create(scene)
+	testDB.DB.Create(look)
 
 	// Create fixture value with invalid channels JSON
 	fixtureValue := &models.FixtureValue{
 		ID:        cuid.New(),
-		SceneID:   scene.ID,
+		LookID:    look.ID,
 		FixtureID: fixture.ID,
 		Channels:  `not-valid-json`,
 	}
@@ -1049,7 +1049,7 @@ func TestExecuteCueDmx_InvalidChannelsJSON(t *testing.T) {
 	cue := &models.Cue{
 		ID:         cuid.New(),
 		CueListID:  cueList.ID,
-		SceneID:    scene.ID,
+		LookID:     look.ID,
 		Name:       "Test Cue",
 		CueNumber:  1.0,
 		FadeInTime: 0.1,
@@ -1091,19 +1091,19 @@ func TestExecuteCueDmx_DMXChannelOutOfBounds(t *testing.T) {
 	}
 	testDB.DB.Create(fixture)
 
-	// Create scene
-	scene := &models.Scene{
+	// Create look
+	look := &models.Look{
 		ID:        cuid.New(),
 		ProjectID: project.ID,
-		Name:      "Scene with OOB channels",
+		Name:      "Look with OOB channels",
 	}
-	testDB.DB.Create(scene)
+	testDB.DB.Create(look)
 
 	// Create fixture value with channels that will be out of bounds
 	// StartChannel 510 + offset 5 = 515 > 512 (out of bounds)
 	fixtureValue := &models.FixtureValue{
 		ID:        cuid.New(),
-		SceneID:   scene.ID,
+		LookID:    look.ID,
 		FixtureID: fixture.ID,
 		Channels:  `[{"offset":0,"value":255},{"offset":5,"value":128}]`, // offset 5 will be OOB
 	}
@@ -1116,7 +1116,7 @@ func TestExecuteCueDmx_DMXChannelOutOfBounds(t *testing.T) {
 	cue := &models.Cue{
 		ID:         cuid.New(),
 		CueListID:  cueList.ID,
-		SceneID:    scene.ID,
+		LookID:     look.ID,
 		Name:       "Test Cue",
 		CueNumber:  1.0,
 		FadeInTime: 0.1,

@@ -25,7 +25,7 @@ func setupPreviewTest(t *testing.T) (*testutil.TestDB, *Service, func()) {
 	dmxService := dmx.NewService(dmxCfg)
 
 	// Create preview service
-	previewService := NewService(testDB.FixtureRepo, testDB.SceneRepo, dmxService)
+	previewService := NewService(testDB.FixtureRepo, testDB.LookRepo, dmxService)
 
 	cleanup := func() {
 		dmxService.Stop()
@@ -295,25 +295,25 @@ func TestCommitSession_Integration(t *testing.T) {
 	}
 }
 
-// TestInitializeWithScene_Integration tests initializing session with scene values.
-func TestInitializeWithScene_Integration(t *testing.T) {
+// TestInitializeWithLook_Integration tests initializing session with look values.
+func TestInitializeWithLook_Integration(t *testing.T) {
 	testDB, service, cleanup := setupPreviewTest(t)
 	defer cleanup()
 
 	ctx := context.Background()
 	project, fixture := createTestProjectWithFixture(t, testDB)
 
-	// Create scene with fixture values
-	scene := &models.Scene{
+	// Create look with fixture values
+	look := &models.Look{
 		ID:        cuid.New(),
 		ProjectID: project.ID,
-		Name:      "Test Scene",
+		Name:      "Test Look",
 	}
-	testDB.DB.Create(scene)
+	testDB.DB.Create(look)
 
 	fixtureValue := &models.FixtureValue{
 		ID:        cuid.New(),
-		SceneID:   scene.ID,
+		LookID:    look.ID,
 		FixtureID: fixture.ID,
 		Channels:  `[{"offset":0,"value":255},{"offset":1,"value":128},{"offset":2,"value":64},{"offset":3,"value":32}]`,
 	}
@@ -322,10 +322,10 @@ func TestInitializeWithScene_Integration(t *testing.T) {
 	// Start session
 	session, _ := service.StartSession(ctx, project.ID, nil)
 
-	// Initialize with scene
-	success, err := service.InitializeWithScene(ctx, session.ID, scene.ID)
+	// Initialize with look
+	success, err := service.InitializeWithLook(ctx, session.ID, look.ID)
 	if err != nil {
-		t.Fatalf("Failed to initialize with scene: %v", err)
+		t.Fatalf("Failed to initialize with look: %v", err)
 	}
 	if !success {
 		t.Error("Expected initialize to succeed")
@@ -347,22 +347,22 @@ func TestInitializeWithScene_Integration(t *testing.T) {
 	}
 }
 
-// TestInitializeWithScene_NonExistentSession tests initializing non-existent session.
-func TestInitializeWithScene_NonExistentSession(t *testing.T) {
+// TestInitializeWithLook_NonExistentSession tests initializing non-existent session.
+func TestInitializeWithLook_NonExistentSession(t *testing.T) {
 	testDB, service, cleanup := setupPreviewTest(t)
 	defer cleanup()
 
 	ctx := context.Background()
 	project, _ := createTestProjectWithFixture(t, testDB)
 
-	scene := &models.Scene{
+	look := &models.Look{
 		ID:        cuid.New(),
 		ProjectID: project.ID,
-		Name:      "Test Scene",
+		Name:      "Test Look",
 	}
-	testDB.DB.Create(scene)
+	testDB.DB.Create(look)
 
-	success, err := service.InitializeWithScene(ctx, "nonexistent", scene.ID)
+	success, err := service.InitializeWithLook(ctx, "nonexistent", look.ID)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -371,8 +371,8 @@ func TestInitializeWithScene_NonExistentSession(t *testing.T) {
 	}
 }
 
-// TestInitializeWithScene_NonExistentScene tests initializing with non-existent scene.
-func TestInitializeWithScene_NonExistentScene(t *testing.T) {
+// TestInitializeWithLook_NonExistentLook tests initializing with non-existent look.
+func TestInitializeWithLook_NonExistentLook(t *testing.T) {
 	testDB, service, cleanup := setupPreviewTest(t)
 	defer cleanup()
 
@@ -381,12 +381,12 @@ func TestInitializeWithScene_NonExistentScene(t *testing.T) {
 
 	session, _ := service.StartSession(ctx, project.ID, nil)
 
-	success, err := service.InitializeWithScene(ctx, session.ID, "nonexistent-scene")
+	success, err := service.InitializeWithLook(ctx, session.ID, "nonexistent-look")
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 	if success {
-		t.Error("Expected initialize to fail for non-existent scene")
+		t.Error("Expected initialize to fail for non-existent look")
 	}
 }
 
@@ -647,8 +647,8 @@ func TestMultipleUniverses(t *testing.T) {
 	}
 }
 
-// TestInitializeWithScene_MultipleFixtures tests initializing with scene that has multiple fixtures.
-func TestInitializeWithScene_MultipleFixtures(t *testing.T) {
+// TestInitializeWithLook_MultipleFixtures tests initializing with look that has multiple fixtures.
+func TestInitializeWithLook_MultipleFixtures(t *testing.T) {
 	testDB, service, cleanup := setupPreviewTest(t)
 	defer cleanup()
 
@@ -674,23 +674,23 @@ func TestInitializeWithScene_MultipleFixtures(t *testing.T) {
 	}
 	testDB.DB.Create(fixture2)
 
-	// Create scene with both fixtures
-	scene := &models.Scene{
+	// Create look with both fixtures
+	look := &models.Look{
 		ID:        cuid.New(),
 		ProjectID: project.ID,
-		Name:      "Test Scene",
+		Name:      "Test Look",
 	}
-	testDB.DB.Create(scene)
+	testDB.DB.Create(look)
 
 	fixtureValue1 := &models.FixtureValue{
 		ID:        cuid.New(),
-		SceneID:   scene.ID,
+		LookID:    look.ID,
 		FixtureID: fixture1.ID,
 		Channels:  `[{"offset":0,"value":100},{"offset":1,"value":100},{"offset":2,"value":100}]`,
 	}
 	fixtureValue2 := &models.FixtureValue{
 		ID:        cuid.New(),
-		SceneID:   scene.ID,
+		LookID:    look.ID,
 		FixtureID: fixture2.ID,
 		Channels:  `[{"offset":0,"value":200},{"offset":1,"value":200},{"offset":2,"value":200}]`,
 	}
@@ -699,7 +699,7 @@ func TestInitializeWithScene_MultipleFixtures(t *testing.T) {
 
 	// Start session and initialize
 	session, _ := service.StartSession(ctx, project.ID, nil)
-	_, _ = service.InitializeWithScene(ctx, session.ID, scene.ID)
+	_, _ = service.InitializeWithLook(ctx, session.ID, look.ID)
 
 	// Check both fixtures' values
 	session = service.GetSession(session.ID)

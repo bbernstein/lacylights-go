@@ -35,13 +35,13 @@ func setupTestDB(t *testing.T) (*testDB, func()) {
 		&models.ModeChannel{},
 		&models.FixtureInstance{},
 		&models.InstanceChannel{},
-		&models.Scene{},
+		&models.Look{},
 		&models.FixtureValue{},
 		&models.CueList{},
 		&models.Cue{},
 		&models.Setting{},
-		&models.SceneBoard{},
-		&models.SceneBoardButton{},
+		&models.LookBoard{},
+		&models.LookBoardButton{},
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)
@@ -210,29 +210,29 @@ func TestProjectRepository_CountMethods(t *testing.T) {
 		t.Errorf("Expected 1 fixture, got %d", count)
 	}
 
-	// Test CountScenes (should be 0)
-	count, err = repo.CountScenes(ctx, project.ID)
+	// Test CountLooks (should be 0)
+	count, err = repo.CountLooks(ctx, project.ID)
 	if err != nil {
-		t.Fatalf("CountScenes failed: %v", err)
+		t.Fatalf("CountLooks failed: %v", err)
 	}
 	if count != 0 {
-		t.Errorf("Expected 0 scenes, got %d", count)
+		t.Errorf("Expected 0 looks, got %d", count)
 	}
 
-	// Create a scene
-	scene := &models.Scene{
+	// Create a look
+	look := &models.Look{
 		ID:        cuid.New(),
-		Name:      "Test Scene",
+		Name:      "Test Look",
 		ProjectID: project.ID,
 	}
-	testDB.DB.Create(scene)
+	testDB.DB.Create(look)
 
-	count, err = repo.CountScenes(ctx, project.ID)
+	count, err = repo.CountLooks(ctx, project.ID)
 	if err != nil {
-		t.Fatalf("CountScenes failed: %v", err)
+		t.Fatalf("CountLooks failed: %v", err)
 	}
 	if count != 1 {
-		t.Errorf("Expected 1 scene, got %d", count)
+		t.Errorf("Expected 1 look, got %d", count)
 	}
 
 	// Test CountCueLists (should be 0)
@@ -367,12 +367,12 @@ func TestNewSettingRepository(t *testing.T) {
 	}
 }
 
-// TestSceneRepository_CRUD tests basic CRUD operations on the SceneRepository.
-func TestSceneRepository_CRUD(t *testing.T) {
+// TestLookRepository_CRUD tests basic CRUD operations on the LookRepository.
+func TestLookRepository_CRUD(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneRepository(testDB.DB)
+	repo := NewLookRepository(testDB.DB)
 	ctx := context.Background()
 
 	// Create a project first
@@ -380,70 +380,70 @@ func TestSceneRepository_CRUD(t *testing.T) {
 	testDB.DB.Create(project)
 
 	// Test Create
-	scene := &models.Scene{
-		Name:      "Test Scene " + cuid.Slug(),
+	look := &models.Look{
+		Name:      "Test Look " + cuid.Slug(),
 		ProjectID: project.ID,
 	}
-	err := repo.Create(ctx, scene)
+	err := repo.Create(ctx, look)
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
-	if scene.ID == "" {
-		t.Error("Expected scene ID to be set after Create")
+	if look.ID == "" {
+		t.Error("Expected look ID to be set after Create")
 	}
 
 	// Test FindByID
-	found, err := repo.FindByID(ctx, scene.ID)
+	found, err := repo.FindByID(ctx, look.ID)
 	if err != nil {
 		t.Fatalf("FindByID failed: %v", err)
 	}
 	if found == nil {
-		t.Fatal("Expected to find scene")
+		t.Fatal("Expected to find look")
 	}
-	if found.Name != scene.Name {
-		t.Errorf("Name mismatch: got %s, want %s", found.Name, scene.Name)
+	if found.Name != look.Name {
+		t.Errorf("Name mismatch: got %s, want %s", found.Name, look.Name)
 	}
 
 	// Test FindByProjectID
-	scenes, err := repo.FindByProjectID(ctx, project.ID)
+	looks, err := repo.FindByProjectID(ctx, project.ID)
 	if err != nil {
 		t.Fatalf("FindByProjectID failed: %v", err)
 	}
-	if len(scenes) == 0 {
-		t.Error("Expected at least one scene")
+	if len(looks) == 0 {
+		t.Error("Expected at least one look")
 	}
 
 	// Test Update
-	scene.Name = "Updated Scene Name"
-	err = repo.Update(ctx, scene)
+	look.Name = "Updated Look Name"
+	err = repo.Update(ctx, look)
 	if err != nil {
 		t.Fatalf("Update failed: %v", err)
 	}
-	found, _ = repo.FindByID(ctx, scene.ID)
-	if found.Name != "Updated Scene Name" {
+	found, _ = repo.FindByID(ctx, look.ID)
+	if found.Name != "Updated Look Name" {
 		t.Errorf("Update didn't persist: got %s", found.Name)
 	}
 
 	// Test Delete
-	err = repo.Delete(ctx, scene.ID)
+	err = repo.Delete(ctx, look.ID)
 	if err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
-	found, err = repo.FindByID(ctx, scene.ID)
+	found, err = repo.FindByID(ctx, look.ID)
 	if err != nil {
 		t.Fatalf("FindByID after delete failed: %v", err)
 	}
 	if found != nil {
-		t.Error("Expected scene to be deleted")
+		t.Error("Expected look to be deleted")
 	}
 }
 
-// TestSceneRepository_FindByID_NotFound tests FindByID with non-existent ID.
-func TestSceneRepository_FindByID_NotFound(t *testing.T) {
+// TestLookRepository_FindByID_NotFound tests FindByID with non-existent ID.
+func TestLookRepository_FindByID_NotFound(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneRepository(testDB.DB)
+	repo := NewLookRepository(testDB.DB)
 	ctx := context.Background()
 
 	found, err := repo.FindByID(ctx, "nonexistent-id")
@@ -451,23 +451,23 @@ func TestSceneRepository_FindByID_NotFound(t *testing.T) {
 		t.Fatalf("FindByID failed: %v", err)
 	}
 	if found != nil {
-		t.Error("Expected nil for non-existent scene")
+		t.Error("Expected nil for non-existent look")
 	}
 }
 
-// TestSceneRepository_FixtureValueOperations tests fixture value operations.
-func TestSceneRepository_FixtureValueOperations(t *testing.T) {
+// TestLookRepository_FixtureValueOperations tests fixture value operations.
+func TestLookRepository_FixtureValueOperations(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneRepository(testDB.DB)
+	repo := NewLookRepository(testDB.DB)
 	ctx := context.Background()
 
-	// Create project and scene
+	// Create project and look
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
-	testDB.DB.Create(scene)
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	testDB.DB.Create(look)
 
 	// Create fixture definition and fixture
 	fixtureDef := &models.FixtureDefinition{
@@ -488,7 +488,7 @@ func TestSceneRepository_FixtureValueOperations(t *testing.T) {
 	testDB.DB.Create(fixture)
 
 	// Test CountFixtures (should be 0)
-	count, err := repo.CountFixtures(ctx, scene.ID)
+	count, err := repo.CountFixtures(ctx, look.ID)
 	if err != nil {
 		t.Fatalf("CountFixtures failed: %v", err)
 	}
@@ -498,7 +498,7 @@ func TestSceneRepository_FixtureValueOperations(t *testing.T) {
 
 	// Test CreateFixtureValue
 	fv := &models.FixtureValue{
-		SceneID:   scene.ID,
+		LookID:    look.ID,
 		FixtureID: fixture.ID,
 		Channels:  `[{"offset":0,"value":255},{"offset":1,"value":128},{"offset":2,"value":64}]`,
 	}
@@ -507,13 +507,13 @@ func TestSceneRepository_FixtureValueOperations(t *testing.T) {
 		t.Fatalf("CreateFixtureValue failed: %v", err)
 	}
 
-	count, _ = repo.CountFixtures(ctx, scene.ID)
+	count, _ = repo.CountFixtures(ctx, look.ID)
 	if count != 1 {
 		t.Errorf("Expected 1 fixture, got %d", count)
 	}
 
 	// Test GetFixtureValues
-	values, err := repo.GetFixtureValues(ctx, scene.ID)
+	values, err := repo.GetFixtureValues(ctx, look.ID)
 	if err != nil {
 		t.Fatalf("GetFixtureValues failed: %v", err)
 	}
@@ -522,7 +522,7 @@ func TestSceneRepository_FixtureValueOperations(t *testing.T) {
 	}
 
 	// Test GetFixtureValue
-	found, err := repo.GetFixtureValue(ctx, scene.ID, fixture.ID)
+	found, err := repo.GetFixtureValue(ctx, look.ID, fixture.ID)
 	if err != nil {
 		t.Fatalf("GetFixtureValue failed: %v", err)
 	}
@@ -539,28 +539,28 @@ func TestSceneRepository_FixtureValueOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateFixtureValue failed: %v", err)
 	}
-	updated, _ := repo.GetFixtureValue(ctx, scene.ID, fixture.ID)
+	updated, _ := repo.GetFixtureValue(ctx, look.ID, fixture.ID)
 	if updated.Channels != `[{"offset":0,"value":0},{"offset":1,"value":0},{"offset":2,"value":0}]` {
 		t.Errorf("Update didn't persist: got %s", updated.Channels)
 	}
 
 	// Test DeleteFixtureValue
-	err = repo.DeleteFixtureValue(ctx, scene.ID, fixture.ID)
+	err = repo.DeleteFixtureValue(ctx, look.ID, fixture.ID)
 	if err != nil {
 		t.Fatalf("DeleteFixtureValue failed: %v", err)
 	}
-	found, _ = repo.GetFixtureValue(ctx, scene.ID, fixture.ID)
+	found, _ = repo.GetFixtureValue(ctx, look.ID, fixture.ID)
 	if found != nil {
 		t.Error("Expected fixture value to be deleted")
 	}
 }
 
-// TestSceneRepository_CreateWithFixtureValues tests creating scene with values.
-func TestSceneRepository_CreateWithFixtureValues(t *testing.T) {
+// TestLookRepository_CreateWithFixtureValues tests creating look with values.
+func TestLookRepository_CreateWithFixtureValues(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneRepository(testDB.DB)
+	repo := NewLookRepository(testDB.DB)
 	ctx := context.Background()
 
 	// Create project and fixture
@@ -578,41 +578,41 @@ func TestSceneRepository_CreateWithFixtureValues(t *testing.T) {
 	}
 	testDB.DB.Create(fixture)
 
-	// Create scene with fixture values
-	scene := &models.Scene{Name: "Scene with values", ProjectID: project.ID}
+	// Create look with fixture values
+	look := &models.Look{Name: "Look with values", ProjectID: project.ID}
 	values := []models.FixtureValue{
 		{FixtureID: fixture.ID, Channels: `[{"offset":0,"value":255}]`},
 	}
 
-	err := repo.CreateWithFixtureValues(ctx, scene, values)
+	err := repo.CreateWithFixtureValues(ctx, look, values)
 	if err != nil {
 		t.Fatalf("CreateWithFixtureValues failed: %v", err)
 	}
 
-	if scene.ID == "" {
-		t.Error("Expected scene ID to be set")
+	if look.ID == "" {
+		t.Error("Expected look ID to be set")
 	}
 
 	// Verify fixture values were created
-	fvs, _ := repo.GetFixtureValues(ctx, scene.ID)
+	fvs, _ := repo.GetFixtureValues(ctx, look.ID)
 	if len(fvs) != 1 {
 		t.Errorf("Expected 1 fixture value, got %d", len(fvs))
 	}
 }
 
-// TestSceneRepository_CreateFixtureValues tests bulk create.
-func TestSceneRepository_CreateFixtureValues(t *testing.T) {
+// TestLookRepository_CreateFixtureValues tests bulk create.
+func TestLookRepository_CreateFixtureValues(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneRepository(testDB.DB)
+	repo := NewLookRepository(testDB.DB)
 	ctx := context.Background()
 
-	// Create project, scene, fixtures
+	// Create project, look, fixtures
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
-	testDB.DB.Create(scene)
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	testDB.DB.Create(look)
 	fixtureDef := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
 	testDB.DB.Create(fixtureDef)
 
@@ -631,16 +631,16 @@ func TestSceneRepository_CreateFixtureValues(t *testing.T) {
 
 	// Test CreateFixtureValues
 	values := []models.FixtureValue{
-		{SceneID: scene.ID, FixtureID: fixtures[0].ID, Channels: `[{"offset":0,"value":1}]`},
-		{SceneID: scene.ID, FixtureID: fixtures[1].ID, Channels: `[{"offset":0,"value":2}]`},
-		{SceneID: scene.ID, FixtureID: fixtures[2].ID, Channels: `[{"offset":0,"value":3}]`},
+		{LookID: look.ID, FixtureID: fixtures[0].ID, Channels: `[{"offset":0,"value":1}]`},
+		{LookID: look.ID, FixtureID: fixtures[1].ID, Channels: `[{"offset":0,"value":2}]`},
+		{LookID: look.ID, FixtureID: fixtures[2].ID, Channels: `[{"offset":0,"value":3}]`},
 	}
 	err := repo.CreateFixtureValues(ctx, values)
 	if err != nil {
 		t.Fatalf("CreateFixtureValues failed: %v", err)
 	}
 
-	fvs, _ := repo.GetFixtureValues(ctx, scene.ID)
+	fvs, _ := repo.GetFixtureValues(ctx, look.ID)
 	if len(fvs) != 3 {
 		t.Errorf("Expected 3 fixture values, got %d", len(fvs))
 	}
@@ -652,22 +652,22 @@ func TestSceneRepository_CreateFixtureValues(t *testing.T) {
 	}
 
 	// Test DeleteFixtureValues
-	err = repo.DeleteFixtureValues(ctx, scene.ID)
+	err = repo.DeleteFixtureValues(ctx, look.ID)
 	if err != nil {
 		t.Fatalf("DeleteFixtureValues failed: %v", err)
 	}
-	fvs, _ = repo.GetFixtureValues(ctx, scene.ID)
+	fvs, _ = repo.GetFixtureValues(ctx, look.ID)
 	if len(fvs) != 0 {
 		t.Errorf("Expected 0 fixture values after delete, got %d", len(fvs))
 	}
 }
 
-// TestNewSceneRepository tests the constructor.
-func TestNewSceneRepository(t *testing.T) {
+// TestNewLookRepository tests the constructor.
+func TestNewLookRepository(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneRepository(testDB.DB)
+	repo := NewLookRepository(testDB.DB)
 	if repo == nil {
 		t.Error("Expected non-nil repository")
 	}
@@ -759,11 +759,11 @@ func TestCueListRepository_CueOperations(t *testing.T) {
 	repo := NewCueListRepository(testDB.DB)
 	ctx := context.Background()
 
-	// Create project, scene, cue list
+	// Create project, look, cue list
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
-	testDB.DB.Create(scene)
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	testDB.DB.Create(look)
 	cueList := &models.CueList{ID: cuid.New(), Name: "Test CL", ProjectID: project.ID}
 	testDB.DB.Create(cueList)
 
@@ -782,7 +782,7 @@ func TestCueListRepository_CueOperations(t *testing.T) {
 		Name:      "Cue 1",
 		CueNumber: 1.0,
 		CueListID: cueList.ID,
-		SceneID:   scene.ID,
+		LookID:    look.ID,
 	}
 	testDB.DB.Create(cue)
 
@@ -820,11 +820,11 @@ func TestCueRepository_CRUD(t *testing.T) {
 	repo := NewCueRepository(testDB.DB)
 	ctx := context.Background()
 
-	// Create project, scene, cue list
+	// Create project, look, cue list
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
-	testDB.DB.Create(scene)
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	testDB.DB.Create(look)
 	cueList := &models.CueList{ID: cuid.New(), Name: "Test CL", ProjectID: project.ID}
 	testDB.DB.Create(cueList)
 
@@ -833,7 +833,7 @@ func TestCueRepository_CRUD(t *testing.T) {
 		Name:      "Test Cue",
 		CueNumber: 1.0,
 		CueListID: cueList.ID,
-		SceneID:   scene.ID,
+		LookID:    look.ID,
 	}
 	err := repo.Create(ctx, cue)
 	if err != nil {
@@ -904,11 +904,11 @@ func TestCueRepository_DeleteByCueListID(t *testing.T) {
 	repo := NewCueRepository(testDB.DB)
 	ctx := context.Background()
 
-	// Create project, scene, cue list, cues
+	// Create project, look, cue list, cues
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
-	testDB.DB.Create(scene)
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	testDB.DB.Create(look)
 	cueList := &models.CueList{ID: cuid.New(), Name: "Test CL", ProjectID: project.ID}
 	testDB.DB.Create(cueList)
 
@@ -918,7 +918,7 @@ func TestCueRepository_DeleteByCueListID(t *testing.T) {
 			Name:      "Cue",
 			CueNumber: float64(i + 1),
 			CueListID: cueList.ID,
-			SceneID:   scene.ID,
+			LookID:    look.ID,
 		}
 		testDB.DB.Create(cue)
 	}
@@ -950,8 +950,8 @@ func TestNewCueRepository(t *testing.T) {
 	}
 }
 
-// TestCueRepository_FindCueListIDsBySceneID tests finding cue lists that use a given scene.
-func TestCueRepository_FindCueListIDsBySceneID(t *testing.T) {
+// TestCueRepository_FindCueListIDsByLookID tests finding cue lists that use a given look.
+func TestCueRepository_FindCueListIDsByLookID(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -962,11 +962,11 @@ func TestCueRepository_FindCueListIDsBySceneID(t *testing.T) {
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
 
-	// Create two scenes
-	scene1 := &models.Scene{ID: cuid.New(), Name: "Scene 1", ProjectID: project.ID}
-	scene2 := &models.Scene{ID: cuid.New(), Name: "Scene 2", ProjectID: project.ID}
-	testDB.DB.Create(scene1)
-	testDB.DB.Create(scene2)
+	// Create two looks
+	look1 := &models.Look{ID: cuid.New(), Name: "Look 1", ProjectID: project.ID}
+	look2 := &models.Look{ID: cuid.New(), Name: "Look 2", ProjectID: project.ID}
+	testDB.DB.Create(look1)
+	testDB.DB.Create(look2)
 
 	// Create three cue lists
 	cueList1 := &models.CueList{ID: cuid.New(), Name: "Cue List 1", ProjectID: project.ID}
@@ -976,23 +976,23 @@ func TestCueRepository_FindCueListIDsBySceneID(t *testing.T) {
 	testDB.DB.Create(cueList2)
 	testDB.DB.Create(cueList3)
 
-	// Create cues: scene1 is used in cueList1 and cueList2, scene2 only in cueList3
-	cue1 := &models.Cue{ID: cuid.New(), Name: "Cue 1", CueNumber: 1.0, CueListID: cueList1.ID, SceneID: scene1.ID}
-	cue2 := &models.Cue{ID: cuid.New(), Name: "Cue 2", CueNumber: 2.0, CueListID: cueList1.ID, SceneID: scene1.ID} // scene1 used twice in same cue list
-	cue3 := &models.Cue{ID: cuid.New(), Name: "Cue 3", CueNumber: 1.0, CueListID: cueList2.ID, SceneID: scene1.ID}
-	cue4 := &models.Cue{ID: cuid.New(), Name: "Cue 4", CueNumber: 1.0, CueListID: cueList3.ID, SceneID: scene2.ID}
+	// Create cues: look1 is used in cueList1 and cueList2, look2 only in cueList3
+	cue1 := &models.Cue{ID: cuid.New(), Name: "Cue 1", CueNumber: 1.0, CueListID: cueList1.ID, LookID: look1.ID}
+	cue2 := &models.Cue{ID: cuid.New(), Name: "Cue 2", CueNumber: 2.0, CueListID: cueList1.ID, LookID: look1.ID} // look1 used twice in same cue list
+	cue3 := &models.Cue{ID: cuid.New(), Name: "Cue 3", CueNumber: 1.0, CueListID: cueList2.ID, LookID: look1.ID}
+	cue4 := &models.Cue{ID: cuid.New(), Name: "Cue 4", CueNumber: 1.0, CueListID: cueList3.ID, LookID: look2.ID}
 	testDB.DB.Create(cue1)
 	testDB.DB.Create(cue2)
 	testDB.DB.Create(cue3)
 	testDB.DB.Create(cue4)
 
-	// Test: Find cue lists using scene1 - should return cueList1 and cueList2 (distinct)
-	cueListIDs, err := repo.FindCueListIDsBySceneID(ctx, scene1.ID)
+	// Test: Find cue lists using look1 - should return cueList1 and cueList2 (distinct)
+	cueListIDs, err := repo.FindCueListIDsByLookID(ctx, look1.ID)
 	if err != nil {
-		t.Fatalf("FindCueListIDsBySceneID failed: %v", err)
+		t.Fatalf("FindCueListIDsByLookID failed: %v", err)
 	}
 	if len(cueListIDs) != 2 {
-		t.Errorf("Expected 2 cue list IDs for scene1, got %d", len(cueListIDs))
+		t.Errorf("Expected 2 cue list IDs for look1, got %d", len(cueListIDs))
 	}
 	// Check that both cueList1 and cueList2 are in the result
 	foundCueList1, foundCueList2 := false, false
@@ -1005,32 +1005,32 @@ func TestCueRepository_FindCueListIDsBySceneID(t *testing.T) {
 		}
 	}
 	if !foundCueList1 {
-		t.Error("Expected cueList1.ID in results for scene1")
+		t.Error("Expected cueList1.ID in results for look1")
 	}
 	if !foundCueList2 {
-		t.Error("Expected cueList2.ID in results for scene1")
+		t.Error("Expected cueList2.ID in results for look1")
 	}
 
-	// Test: Find cue lists using scene2 - should return only cueList3
-	cueListIDs, err = repo.FindCueListIDsBySceneID(ctx, scene2.ID)
+	// Test: Find cue lists using look2 - should return only cueList3
+	cueListIDs, err = repo.FindCueListIDsByLookID(ctx, look2.ID)
 	if err != nil {
-		t.Fatalf("FindCueListIDsBySceneID failed: %v", err)
+		t.Fatalf("FindCueListIDsByLookID failed: %v", err)
 	}
 	if len(cueListIDs) != 1 {
-		t.Errorf("Expected 1 cue list ID for scene2, got %d", len(cueListIDs))
+		t.Errorf("Expected 1 cue list ID for look2, got %d", len(cueListIDs))
 	}
 	if len(cueListIDs) > 0 && cueListIDs[0] != cueList3.ID {
-		t.Errorf("Expected cueList3.ID for scene2, got %s", cueListIDs[0])
+		t.Errorf("Expected cueList3.ID for look2, got %s", cueListIDs[0])
 	}
 
-	// Test: Find cue lists for non-existent scene - should return empty slice
-	nonExistentSceneID := cuid.New()
-	cueListIDs, err = repo.FindCueListIDsBySceneID(ctx, nonExistentSceneID)
+	// Test: Find cue lists for non-existent look - should return empty slice
+	nonExistentLookID := cuid.New()
+	cueListIDs, err = repo.FindCueListIDsByLookID(ctx, nonExistentLookID)
 	if err != nil {
-		t.Fatalf("FindCueListIDsBySceneID failed for non-existent scene: %v", err)
+		t.Fatalf("FindCueListIDsByLookID failed for non-existent look: %v", err)
 	}
 	if len(cueListIDs) != 0 {
-		t.Errorf("Expected 0 cue list IDs for non-existent scene, got %d", len(cueListIDs))
+		t.Errorf("Expected 0 cue list IDs for non-existent look, got %d", len(cueListIDs))
 	}
 }
 
@@ -1954,12 +1954,12 @@ func TestFixtureRepository_CountDefinitions(t *testing.T) {
 	}
 }
 
-// TestNewSceneBoardRepository tests the constructor.
-func TestNewSceneBoardRepository(t *testing.T) {
+// TestNewLookBoardRepository tests the constructor.
+func TestNewLookBoardRepository(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneBoardRepository(testDB.DB)
+	repo := NewLookBoardRepository(testDB.DB)
 	if repo == nil {
 		t.Fatal("Expected non-nil repository")
 	}
@@ -1968,12 +1968,12 @@ func TestNewSceneBoardRepository(t *testing.T) {
 	}
 }
 
-// TestSceneBoardRepository_CRUD tests basic CRUD operations.
-func TestSceneBoardRepository_CRUD(t *testing.T) {
+// TestLookBoardRepository_CRUD tests basic CRUD operations.
+func TestLookBoardRepository_CRUD(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneBoardRepository(testDB.DB)
+	repo := NewLookBoardRepository(testDB.DB)
 	ctx := context.Background()
 
 	// Create project
@@ -1981,7 +1981,7 @@ func TestSceneBoardRepository_CRUD(t *testing.T) {
 	testDB.DB.Create(project)
 
 	// Test Create without ID (should auto-generate)
-	board := &models.SceneBoard{
+	board := &models.LookBoard{
 		Name:      "Test Board " + cuid.Slug(),
 		ProjectID: project.ID,
 	}
@@ -2039,12 +2039,12 @@ func TestSceneBoardRepository_CRUD(t *testing.T) {
 	}
 }
 
-// TestSceneBoardRepository_Create_WithID tests Create with pre-set ID.
-func TestSceneBoardRepository_Create_WithID(t *testing.T) {
+// TestLookBoardRepository_Create_WithID tests Create with pre-set ID.
+func TestLookBoardRepository_Create_WithID(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneBoardRepository(testDB.DB)
+	repo := NewLookBoardRepository(testDB.DB)
 	ctx := context.Background()
 
 	// Create project
@@ -2052,7 +2052,7 @@ func TestSceneBoardRepository_Create_WithID(t *testing.T) {
 	testDB.DB.Create(project)
 
 	customID := cuid.New()
-	board := &models.SceneBoard{
+	board := &models.LookBoard{
 		ID:        customID,
 		Name:      "Board with custom ID",
 		ProjectID: project.ID,
@@ -2066,12 +2066,12 @@ func TestSceneBoardRepository_Create_WithID(t *testing.T) {
 	}
 }
 
-// TestSceneBoardRepository_FindByID_NotFound tests FindByID with non-existent ID.
-func TestSceneBoardRepository_FindByID_NotFound(t *testing.T) {
+// TestLookBoardRepository_FindByID_NotFound tests FindByID with non-existent ID.
+func TestLookBoardRepository_FindByID_NotFound(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneBoardRepository(testDB.DB)
+	repo := NewLookBoardRepository(testDB.DB)
 	ctx := context.Background()
 
 	found, err := repo.FindByID(ctx, "nonexistent-id")
@@ -2083,12 +2083,12 @@ func TestSceneBoardRepository_FindByID_NotFound(t *testing.T) {
 	}
 }
 
-// TestSceneBoardRepository_FindByProjectID_EmptyResult tests FindByProjectID with no boards.
-func TestSceneBoardRepository_FindByProjectID_EmptyResult(t *testing.T) {
+// TestLookBoardRepository_FindByProjectID_EmptyResult tests FindByProjectID with no boards.
+func TestLookBoardRepository_FindByProjectID_EmptyResult(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneBoardRepository(testDB.DB)
+	repo := NewLookBoardRepository(testDB.DB)
 	ctx := context.Background()
 
 	// Create project without boards
@@ -2104,22 +2104,22 @@ func TestSceneBoardRepository_FindByProjectID_EmptyResult(t *testing.T) {
 	}
 }
 
-// TestSceneBoardRepository_ButtonOperations tests button-related operations.
-func TestSceneBoardRepository_ButtonOperations(t *testing.T) {
+// TestLookBoardRepository_ButtonOperations tests button-related operations.
+func TestLookBoardRepository_ButtonOperations(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneBoardRepository(testDB.DB)
+	repo := NewLookBoardRepository(testDB.DB)
 	ctx := context.Background()
 
-	// Create project and scene
+	// Create project and look
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
-	testDB.DB.Create(scene)
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	testDB.DB.Create(look)
 
 	// Create board
-	board := &models.SceneBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	board := &models.LookBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
 	testDB.DB.Create(board)
 
 	// Test GetButtons with no buttons
@@ -2132,9 +2132,9 @@ func TestSceneBoardRepository_ButtonOperations(t *testing.T) {
 	}
 
 	// Test CreateButton without ID (should auto-generate)
-	button := &models.SceneBoardButton{
-		SceneBoardID: board.ID,
-		SceneID:      scene.ID,
+	button := &models.LookBoardButton{
+		LookBoardID: board.ID,
+		LookID:      look.ID,
 		LayoutX:      100,
 		LayoutY:      200,
 	}
@@ -2169,27 +2169,27 @@ func TestSceneBoardRepository_ButtonOperations(t *testing.T) {
 	}
 }
 
-// TestSceneBoardRepository_CreateButton_WithID tests CreateButton with pre-set ID.
-func TestSceneBoardRepository_CreateButton_WithID(t *testing.T) {
+// TestLookBoardRepository_CreateButton_WithID tests CreateButton with pre-set ID.
+func TestLookBoardRepository_CreateButton_WithID(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneBoardRepository(testDB.DB)
+	repo := NewLookBoardRepository(testDB.DB)
 	ctx := context.Background()
 
-	// Create project, scene, and board
+	// Create project, look, and board
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
-	testDB.DB.Create(scene)
-	board := &models.SceneBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	testDB.DB.Create(look)
+	board := &models.LookBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
 	testDB.DB.Create(board)
 
 	customID := cuid.New()
-	button := &models.SceneBoardButton{
+	button := &models.LookBoardButton{
 		ID:           customID,
-		SceneBoardID: board.ID,
-		SceneID:      scene.ID,
+		LookBoardID: board.ID,
+		LookID:      look.ID,
 		LayoutX:      50,
 		LayoutY:      50,
 	}
@@ -2202,37 +2202,37 @@ func TestSceneBoardRepository_CreateButton_WithID(t *testing.T) {
 	}
 }
 
-// TestSceneBoardRepository_CreateButtons tests bulk button creation.
-func TestSceneBoardRepository_CreateButtons(t *testing.T) {
+// TestLookBoardRepository_CreateButtons tests bulk button creation.
+func TestLookBoardRepository_CreateButtons(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneBoardRepository(testDB.DB)
+	repo := NewLookBoardRepository(testDB.DB)
 	ctx := context.Background()
 
-	// Create project, scenes, and board
+	// Create project, looks, and board
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	scene1 := &models.Scene{ID: cuid.New(), Name: "Scene 1", ProjectID: project.ID}
-	scene2 := &models.Scene{ID: cuid.New(), Name: "Scene 2", ProjectID: project.ID}
-	scene3 := &models.Scene{ID: cuid.New(), Name: "Scene 3", ProjectID: project.ID}
-	testDB.DB.Create(scene1)
-	testDB.DB.Create(scene2)
-	testDB.DB.Create(scene3)
-	board := &models.SceneBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	look1 := &models.Look{ID: cuid.New(), Name: "Look 1", ProjectID: project.ID}
+	look2 := &models.Look{ID: cuid.New(), Name: "Look 2", ProjectID: project.ID}
+	look3 := &models.Look{ID: cuid.New(), Name: "Look 3", ProjectID: project.ID}
+	testDB.DB.Create(look1)
+	testDB.DB.Create(look2)
+	testDB.DB.Create(look3)
+	board := &models.LookBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
 	testDB.DB.Create(board)
 
 	// Test CreateButtons with empty slice (should be no-op)
-	err := repo.CreateButtons(ctx, []models.SceneBoardButton{})
+	err := repo.CreateButtons(ctx, []models.LookBoardButton{})
 	if err != nil {
 		t.Errorf("CreateButtons with empty slice failed: %v", err)
 	}
 
 	// Test CreateButtons without IDs (should auto-generate)
-	buttons := []models.SceneBoardButton{
-		{SceneBoardID: board.ID, SceneID: scene1.ID, LayoutX: 0, LayoutY: 0},
-		{SceneBoardID: board.ID, SceneID: scene2.ID, LayoutX: 100, LayoutY: 0},
-		{SceneBoardID: board.ID, SceneID: scene3.ID, LayoutX: 200, LayoutY: 0},
+	buttons := []models.LookBoardButton{
+		{LookBoardID: board.ID, LookID: look1.ID, LayoutX: 0, LayoutY: 0},
+		{LookBoardID: board.ID, LookID: look2.ID, LayoutX: 100, LayoutY: 0},
+		{LookBoardID: board.ID, LookID: look3.ID, LayoutX: 200, LayoutY: 0},
 	}
 	err = repo.CreateButtons(ctx, buttons)
 	if err != nil {
@@ -2253,28 +2253,28 @@ func TestSceneBoardRepository_CreateButtons(t *testing.T) {
 	}
 }
 
-// TestSceneBoardRepository_CreateButtons_WithIDs tests bulk creation with pre-set IDs.
-func TestSceneBoardRepository_CreateButtons_WithIDs(t *testing.T) {
+// TestLookBoardRepository_CreateButtons_WithIDs tests bulk creation with pre-set IDs.
+func TestLookBoardRepository_CreateButtons_WithIDs(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneBoardRepository(testDB.DB)
+	repo := NewLookBoardRepository(testDB.DB)
 	ctx := context.Background()
 
-	// Create project, scene, and board
+	// Create project, look, and board
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
-	testDB.DB.Create(scene)
-	board := &models.SceneBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	testDB.DB.Create(look)
+	board := &models.LookBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
 	testDB.DB.Create(board)
 
 	// Test CreateButtons with pre-set IDs
 	id1 := cuid.New()
 	id2 := cuid.New()
-	buttons := []models.SceneBoardButton{
-		{ID: id1, SceneBoardID: board.ID, SceneID: scene.ID, LayoutX: 0, LayoutY: 0},
-		{ID: id2, SceneBoardID: board.ID, SceneID: scene.ID, LayoutX: 100, LayoutY: 0},
+	buttons := []models.LookBoardButton{
+		{ID: id1, LookBoardID: board.ID, LookID: look.ID, LayoutX: 0, LayoutY: 0},
+		{ID: id2, LookBoardID: board.ID, LookID: look.ID, LayoutX: 100, LayoutY: 0},
 	}
 	err := repo.CreateButtons(ctx, buttons)
 	if err != nil {
@@ -2290,30 +2290,30 @@ func TestSceneBoardRepository_CreateButtons_WithIDs(t *testing.T) {
 	}
 }
 
-// TestSceneBoardRepository_CreateWithButtons tests transactional board creation with buttons.
-func TestSceneBoardRepository_CreateWithButtons(t *testing.T) {
+// TestLookBoardRepository_CreateWithButtons tests transactional board creation with buttons.
+func TestLookBoardRepository_CreateWithButtons(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneBoardRepository(testDB.DB)
+	repo := NewLookBoardRepository(testDB.DB)
 	ctx := context.Background()
 
-	// Create project and scenes
+	// Create project and looks
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	scene1 := &models.Scene{ID: cuid.New(), Name: "Scene 1", ProjectID: project.ID}
-	scene2 := &models.Scene{ID: cuid.New(), Name: "Scene 2", ProjectID: project.ID}
-	testDB.DB.Create(scene1)
-	testDB.DB.Create(scene2)
+	look1 := &models.Look{ID: cuid.New(), Name: "Look 1", ProjectID: project.ID}
+	look2 := &models.Look{ID: cuid.New(), Name: "Look 2", ProjectID: project.ID}
+	testDB.DB.Create(look1)
+	testDB.DB.Create(look2)
 
 	// Test CreateWithButtons without IDs (should auto-generate)
-	board := &models.SceneBoard{
+	board := &models.LookBoard{
 		Name:      "Board with buttons",
 		ProjectID: project.ID,
 	}
-	buttons := []models.SceneBoardButton{
-		{SceneID: scene1.ID, LayoutX: 0, LayoutY: 0},
-		{SceneID: scene2.ID, LayoutX: 100, LayoutY: 0},
+	buttons := []models.LookBoardButton{
+		{LookID: look1.ID, LayoutX: 0, LayoutY: 0},
+		{LookID: look2.ID, LayoutX: 100, LayoutY: 0},
 	}
 
 	err := repo.CreateWithButtons(ctx, board, buttons)
@@ -2326,13 +2326,13 @@ func TestSceneBoardRepository_CreateWithButtons(t *testing.T) {
 		t.Error("Expected board ID to be auto-generated")
 	}
 
-	// Verify button IDs were auto-generated and SceneBoardID was set
+	// Verify button IDs were auto-generated and LookBoardID was set
 	for i, btn := range buttons {
 		if btn.ID == "" {
 			t.Errorf("Button %d: expected ID to be auto-generated", i)
 		}
-		if btn.SceneBoardID != board.ID {
-			t.Errorf("Button %d: expected SceneBoardID %s, got %s", i, board.ID, btn.SceneBoardID)
+		if btn.LookBoardID != board.ID {
+			t.Errorf("Button %d: expected LookBoardID %s, got %s", i, board.ID, btn.LookBoardID)
 		}
 	}
 
@@ -2349,30 +2349,30 @@ func TestSceneBoardRepository_CreateWithButtons(t *testing.T) {
 	}
 }
 
-// TestSceneBoardRepository_CreateWithButtons_PresetIDs tests transactional creation with preset IDs.
-func TestSceneBoardRepository_CreateWithButtons_PresetIDs(t *testing.T) {
+// TestLookBoardRepository_CreateWithButtons_PresetIDs tests transactional creation with preset IDs.
+func TestLookBoardRepository_CreateWithButtons_PresetIDs(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneBoardRepository(testDB.DB)
+	repo := NewLookBoardRepository(testDB.DB)
 	ctx := context.Background()
 
-	// Create project and scene
+	// Create project and look
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
-	testDB.DB.Create(scene)
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	testDB.DB.Create(look)
 
 	// Test CreateWithButtons with pre-set IDs
 	boardID := cuid.New()
 	buttonID := cuid.New()
-	board := &models.SceneBoard{
+	board := &models.LookBoard{
 		ID:        boardID,
 		Name:      "Board with preset IDs",
 		ProjectID: project.ID,
 	}
-	buttons := []models.SceneBoardButton{
-		{ID: buttonID, SceneID: scene.ID, LayoutX: 50, LayoutY: 50},
+	buttons := []models.LookBoardButton{
+		{ID: buttonID, LookID: look.ID, LayoutX: 50, LayoutY: 50},
 	}
 
 	err := repo.CreateWithButtons(ctx, board, buttons)
@@ -2389,12 +2389,12 @@ func TestSceneBoardRepository_CreateWithButtons_PresetIDs(t *testing.T) {
 	}
 }
 
-// TestSceneBoardRepository_CreateWithButtons_NoButtons tests transactional creation with no buttons.
-func TestSceneBoardRepository_CreateWithButtons_NoButtons(t *testing.T) {
+// TestLookBoardRepository_CreateWithButtons_NoButtons tests transactional creation with no buttons.
+func TestLookBoardRepository_CreateWithButtons_NoButtons(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneBoardRepository(testDB.DB)
+	repo := NewLookBoardRepository(testDB.DB)
 	ctx := context.Background()
 
 	// Create project
@@ -2402,7 +2402,7 @@ func TestSceneBoardRepository_CreateWithButtons_NoButtons(t *testing.T) {
 	testDB.DB.Create(project)
 
 	// Test CreateWithButtons with empty buttons slice
-	board := &models.SceneBoard{
+	board := &models.LookBoard{
 		Name:      "Board with no buttons",
 		ProjectID: project.ID,
 	}
@@ -2429,29 +2429,29 @@ func TestSceneBoardRepository_CreateWithButtons_NoButtons(t *testing.T) {
 	}
 }
 
-// TestSceneBoardRepository_GetButtons_Ordering tests that buttons are ordered by position.
-func TestSceneBoardRepository_GetButtons_Ordering(t *testing.T) {
+// TestLookBoardRepository_GetButtons_Ordering tests that buttons are ordered by position.
+func TestLookBoardRepository_GetButtons_Ordering(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneBoardRepository(testDB.DB)
+	repo := NewLookBoardRepository(testDB.DB)
 	ctx := context.Background()
 
-	// Create project, scene, and board
+	// Create project, look, and board
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
-	testDB.DB.Create(scene)
-	board := &models.SceneBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	testDB.DB.Create(look)
+	board := &models.LookBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
 	testDB.DB.Create(board)
 
 	// Create buttons in non-ordered way
 	// Buttons should be ordered by Y first, then X
-	buttons := []models.SceneBoardButton{
-		{ID: cuid.New(), SceneBoardID: board.ID, SceneID: scene.ID, LayoutX: 200, LayoutY: 100}, // 3rd (row 1, col 2)
-		{ID: cuid.New(), SceneBoardID: board.ID, SceneID: scene.ID, LayoutX: 100, LayoutY: 0},   // 2nd (row 0, col 1)
-		{ID: cuid.New(), SceneBoardID: board.ID, SceneID: scene.ID, LayoutX: 0, LayoutY: 0},     // 1st (row 0, col 0)
-		{ID: cuid.New(), SceneBoardID: board.ID, SceneID: scene.ID, LayoutX: 0, LayoutY: 100},   // 4th (row 1, col 0)
+	buttons := []models.LookBoardButton{
+		{ID: cuid.New(), LookBoardID: board.ID, LookID: look.ID, LayoutX: 200, LayoutY: 100}, // 3rd (row 1, col 2)
+		{ID: cuid.New(), LookBoardID: board.ID, LookID: look.ID, LayoutX: 100, LayoutY: 0},   // 2nd (row 0, col 1)
+		{ID: cuid.New(), LookBoardID: board.ID, LookID: look.ID, LayoutX: 0, LayoutY: 0},     // 1st (row 0, col 0)
+		{ID: cuid.New(), LookBoardID: board.ID, LookID: look.ID, LayoutX: 0, LayoutY: 100},   // 4th (row 1, col 0)
 	}
 	for _, btn := range buttons {
 		testDB.DB.Create(&btn)
@@ -2481,26 +2481,26 @@ func TestSceneBoardRepository_GetButtons_Ordering(t *testing.T) {
 	}
 }
 
-// TestSceneBoardRepository_Delete_CascadesButtons tests that Delete removes associated buttons.
-func TestSceneBoardRepository_Delete_CascadesButtons(t *testing.T) {
+// TestLookBoardRepository_Delete_CascadesButtons tests that Delete removes associated buttons.
+func TestLookBoardRepository_Delete_CascadesButtons(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	repo := NewSceneBoardRepository(testDB.DB)
+	repo := NewLookBoardRepository(testDB.DB)
 	ctx := context.Background()
 
-	// Create project and scene
+	// Create project and look
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	scene := &models.Scene{ID: cuid.New(), Name: "Test Scene", ProjectID: project.ID}
-	testDB.DB.Create(scene)
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	testDB.DB.Create(look)
 
 	// Create board with buttons
-	board := &models.SceneBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
-	buttons := []models.SceneBoardButton{
-		{SceneID: scene.ID, LayoutX: 0, LayoutY: 0},
-		{SceneID: scene.ID, LayoutX: 100, LayoutY: 0},
-		{SceneID: scene.ID, LayoutX: 0, LayoutY: 100},
+	board := &models.LookBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	buttons := []models.LookBoardButton{
+		{LookID: look.ID, LayoutX: 0, LayoutY: 0},
+		{LookID: look.ID, LayoutX: 100, LayoutY: 0},
+		{LookID: look.ID, LayoutX: 0, LayoutY: 100},
 	}
 	err := repo.CreateWithButtons(ctx, board, buttons)
 	if err != nil {
@@ -2515,7 +2515,7 @@ func TestSceneBoardRepository_Delete_CascadesButtons(t *testing.T) {
 
 	// Count all buttons in DB before delete
 	var buttonCountBefore int64
-	testDB.DB.Model(&models.SceneBoardButton{}).Count(&buttonCountBefore)
+	testDB.DB.Model(&models.LookBoardButton{}).Count(&buttonCountBefore)
 	if buttonCountBefore != 3 {
 		t.Fatalf("Expected 3 buttons in DB before delete, got %d", buttonCountBefore)
 	}
@@ -2534,8 +2534,123 @@ func TestSceneBoardRepository_Delete_CascadesButtons(t *testing.T) {
 
 	// Verify buttons are also deleted (cascade delete)
 	var buttonCountAfter int64
-	testDB.DB.Model(&models.SceneBoardButton{}).Count(&buttonCountAfter)
+	testDB.DB.Model(&models.LookBoardButton{}).Count(&buttonCountAfter)
 	if buttonCountAfter != 0 {
 		t.Errorf("Expected 0 buttons in DB after cascade delete, got %d", buttonCountAfter)
+	}
+}
+
+func TestLookBoardRepository_FindButtonByID(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := NewLookBoardRepository(testDB.DB)
+
+	// Create project and look
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	testDB.DB.Create(look)
+
+	// Create board and button
+	board := &models.LookBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	_ = repo.Create(ctx, board)
+	button := &models.LookBoardButton{LookBoardID: board.ID, LookID: look.ID, LayoutX: 100, LayoutY: 200}
+	_ = repo.CreateButton(ctx, button)
+
+	// Find by ID
+	found, err := repo.FindButtonByID(ctx, button.ID)
+	if err != nil {
+		t.Fatalf("FindButtonByID failed: %v", err)
+	}
+	if found == nil {
+		t.Fatal("Expected button to be found")
+	}
+	if found.LayoutX != 100 || found.LayoutY != 200 {
+		t.Errorf("Button position mismatch: got (%d, %d)", found.LayoutX, found.LayoutY)
+	}
+
+	// Find non-existent button
+	notFound, err := repo.FindButtonByID(ctx, "non-existent-id")
+	if err != nil {
+		t.Fatalf("FindButtonByID for non-existent should not error: %v", err)
+	}
+	if notFound != nil {
+		t.Error("Expected nil for non-existent button")
+	}
+}
+
+func TestLookBoardRepository_UpdateButton(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := NewLookBoardRepository(testDB.DB)
+
+	// Create project and look
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	testDB.DB.Create(look)
+
+	// Create board and button
+	board := &models.LookBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	_ = repo.Create(ctx, board)
+	button := &models.LookBoardButton{LookBoardID: board.ID, LookID: look.ID, LayoutX: 100, LayoutY: 200}
+	_ = repo.CreateButton(ctx, button)
+
+	// Update button
+	button.LayoutX = 300
+	button.LayoutY = 400
+	color := "#FF0000"
+	button.Color = &color
+	err := repo.UpdateButton(ctx, button)
+	if err != nil {
+		t.Fatalf("UpdateButton failed: %v", err)
+	}
+
+	// Verify update
+	found, _ := repo.FindButtonByID(ctx, button.ID)
+	if found.LayoutX != 300 || found.LayoutY != 400 {
+		t.Errorf("Expected position (300, 400), got (%d, %d)", found.LayoutX, found.LayoutY)
+	}
+	if found.Color == nil || *found.Color != "#FF0000" {
+		t.Errorf("Expected color #FF0000, got %v", found.Color)
+	}
+}
+
+func TestLookBoardRepository_DeleteButton(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := NewLookBoardRepository(testDB.DB)
+
+	// Create project and look
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	testDB.DB.Create(look)
+
+	// Create board and button
+	board := &models.LookBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	_ = repo.Create(ctx, board)
+	button := &models.LookBoardButton{LookBoardID: board.ID, LookID: look.ID, LayoutX: 100, LayoutY: 200}
+	_ = repo.CreateButton(ctx, button)
+
+	// Verify button exists
+	found, _ := repo.FindButtonByID(ctx, button.ID)
+	if found == nil {
+		t.Fatal("Button should exist before delete")
+	}
+
+	// Delete button
+	err := repo.DeleteButton(ctx, button.ID)
+	if err != nil {
+		t.Fatalf("DeleteButton failed: %v", err)
+	}
+
+	// Verify button is deleted
+	deleted, _ := repo.FindButtonByID(ctx, button.ID)
+	if deleted != nil {
+		t.Error("Button should be deleted")
 	}
 }

@@ -521,55 +521,55 @@ func TestSparseChannelsEqual_DuplicateOffsets(t *testing.T) {
 	}
 }
 
-// Test helpers for reapplyActiveSceneIfNeeded - these use the testSetup from dmx_integration_test.go
+// Test helpers for reapplyActiveLookIfNeeded - these use the testSetup from dmx_integration_test.go
 // Note: These tests require the test infrastructure from dmx_integration_test.go to be available
 
-func TestReapplyActiveSceneIfNeeded_SceneNotActive(t *testing.T) {
+func TestReapplyActiveLookIfNeeded_LookNotActive(t *testing.T) {
 	_, resolver, cleanup := testSetup(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// When no scene is active, the function should return nil immediately
-	err := resolver.reapplyActiveSceneIfNeeded(ctx, "non-existent-scene-id")
+	// When no look is active, the function should return nil immediately
+	err := resolver.reapplyActiveLookIfNeeded(ctx, "non-existent-look-id")
 	if err != nil {
-		t.Errorf("Expected nil error when scene is not active, got: %v", err)
+		t.Errorf("Expected nil error when look is not active, got: %v", err)
 	}
 }
 
-func TestReapplyActiveSceneIfNeeded_ActiveSceneDifferentID(t *testing.T) {
+func TestReapplyActiveLookIfNeeded_ActiveLookDifferentID(t *testing.T) {
 	_, resolver, cleanup := testSetup(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// Set an active scene ID
-	resolver.DMXService.SetActiveScene("scene-123")
+	// Set an active look ID
+	resolver.DMXService.SetActiveLook("look-123")
 
-	// Try to re-apply a different scene - should return nil without error
-	err := resolver.reapplyActiveSceneIfNeeded(ctx, "different-scene-456")
+	// Try to re-apply a different look - should return nil without error
+	err := resolver.reapplyActiveLookIfNeeded(ctx, "different-look-456")
 	if err != nil {
-		t.Errorf("Expected nil error when scene ID doesn't match active scene, got: %v", err)
+		t.Errorf("Expected nil error when look ID doesn't match active look, got: %v", err)
 	}
 }
 
-func TestReapplyActiveSceneIfNeeded_ActiveSceneNotInDB(t *testing.T) {
+func TestReapplyActiveLookIfNeeded_ActiveLookNotInDB(t *testing.T) {
 	_, resolver, cleanup := testSetup(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
-	// Set an active scene ID that doesn't exist in the database
-	resolver.DMXService.SetActiveScene("non-existent-scene")
+	// Set an active look ID that doesn't exist in the database
+	resolver.DMXService.SetActiveLook("non-existent-look")
 
-	// Try to re-apply - should return error because scene doesn't exist
-	err := resolver.reapplyActiveSceneIfNeeded(ctx, "non-existent-scene")
+	// Try to re-apply - should return error because look doesn't exist
+	err := resolver.reapplyActiveLookIfNeeded(ctx, "non-existent-look")
 	if err == nil {
-		t.Error("Expected error when active scene doesn't exist in database, got nil")
+		t.Error("Expected error when active look doesn't exist in database, got nil")
 	}
 }
 
-func TestReapplyActiveSceneIfNeeded_ActiveSceneReapplied(t *testing.T) {
+func TestReapplyActiveLookIfNeeded_ActiveLookReapplied(t *testing.T) {
 	_, resolver, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -608,33 +608,33 @@ func TestReapplyActiveSceneIfNeeded_ActiveSceneReapplied(t *testing.T) {
 		t.Fatalf("Failed to create fixture instance: %v", err)
 	}
 
-	// Create a scene with fixture values
-	scene := &models.Scene{
-		ID:        "test-scene-1",
-		Name:      "Test Scene",
+	// Create a look with fixture values
+	look := &models.Look{
+		ID:        "test-look-1",
+		Name:      "Test Look",
 		ProjectID: project.ID,
 	}
-	if err := resolver.SceneRepo.Create(ctx, scene); err != nil {
-		t.Fatalf("Failed to create scene: %v", err)
+	if err := resolver.LookRepo.Create(ctx, look); err != nil {
+		t.Fatalf("Failed to create look: %v", err)
 	}
 
-	// Create fixture values for the scene
+	// Create fixture values for the look
 	fixtureValue := &models.FixtureValue{
-		SceneID:   scene.ID,
+		LookID:    look.ID,
 		FixtureID: fixture.ID,
 		Channels:  `[{"offset":0,"value":200},{"offset":1,"value":100}]`,
 	}
-	if err := resolver.SceneRepo.CreateFixtureValue(ctx, fixtureValue); err != nil {
+	if err := resolver.LookRepo.CreateFixtureValue(ctx, fixtureValue); err != nil {
 		t.Fatalf("Failed to create fixture value: %v", err)
 	}
 
-	// Set this scene as active
-	resolver.DMXService.SetActiveScene(scene.ID)
+	// Set this look as active
+	resolver.DMXService.SetActiveLook(look.ID)
 
-	// Re-apply the scene
-	err := resolver.reapplyActiveSceneIfNeeded(ctx, scene.ID)
+	// Re-apply the look
+	err := resolver.reapplyActiveLookIfNeeded(ctx, look.ID)
 	if err != nil {
-		t.Fatalf("Failed to re-apply active scene: %v", err)
+		t.Fatalf("Failed to re-apply active look: %v", err)
 	}
 
 	// Verify the DMX values were set
@@ -651,7 +651,7 @@ func TestReapplyActiveSceneIfNeeded_ActiveSceneReapplied(t *testing.T) {
 	}
 }
 
-func TestReapplyActiveSceneIfNeeded_InvalidChannelJSON(t *testing.T) {
+func TestReapplyActiveLookIfNeeded_InvalidChannelJSON(t *testing.T) {
 	_, resolver, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -690,31 +690,31 @@ func TestReapplyActiveSceneIfNeeded_InvalidChannelJSON(t *testing.T) {
 		t.Fatalf("Failed to create fixture instance: %v", err)
 	}
 
-	// Create a scene with invalid JSON in fixture values
-	scene := &models.Scene{
-		ID:        "test-scene-2",
-		Name:      "Test Scene 2",
+	// Create a look with invalid JSON in fixture values
+	look := &models.Look{
+		ID:        "test-look-2",
+		Name:      "Test Look 2",
 		ProjectID: project.ID,
 	}
-	if err := resolver.SceneRepo.Create(ctx, scene); err != nil {
-		t.Fatalf("Failed to create scene: %v", err)
+	if err := resolver.LookRepo.Create(ctx, look); err != nil {
+		t.Fatalf("Failed to create look: %v", err)
 	}
 
 	// Create fixture values with invalid JSON
 	fixtureValue := &models.FixtureValue{
-		SceneID:   scene.ID,
+		LookID:    look.ID,
 		FixtureID: fixture.ID,
 		Channels:  `invalid json`,
 	}
-	if err := resolver.SceneRepo.CreateFixtureValue(ctx, fixtureValue); err != nil {
+	if err := resolver.LookRepo.CreateFixtureValue(ctx, fixtureValue); err != nil {
 		t.Fatalf("Failed to create fixture value: %v", err)
 	}
 
-	// Set this scene as active
-	resolver.DMXService.SetActiveScene(scene.ID)
+	// Set this look as active
+	resolver.DMXService.SetActiveLook(look.ID)
 
 	// Re-apply should succeed (gracefully handle invalid JSON with logging)
-	err := resolver.reapplyActiveSceneIfNeeded(ctx, scene.ID)
+	err := resolver.reapplyActiveLookIfNeeded(ctx, look.ID)
 	if err != nil {
 		t.Errorf("Expected function to succeed despite invalid JSON (with warning logged), got: %v", err)
 	}

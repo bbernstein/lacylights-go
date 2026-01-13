@@ -69,11 +69,11 @@ func (r *ProjectRepository) CountFixtures(ctx context.Context, projectID string)
 	return count, result.Error
 }
 
-// CountScenes returns the number of scenes in a project.
-func (r *ProjectRepository) CountScenes(ctx context.Context, projectID string) (int64, error) {
+// CountLooks returns the number of looks in a project.
+func (r *ProjectRepository) CountLooks(ctx context.Context, projectID string) (int64, error) {
 	var count int64
 	result := r.db.WithContext(ctx).
-		Model(&models.Scene{}).
+		Model(&models.Look{}).
 		Where("project_id = ?", projectID).
 		Count(&count)
 	return count, result.Error

@@ -9,9 +9,9 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 )
 
-// TestSparseChannels_CreateScene tests creating a scene with sparse channel format
+// TestSparseChannels_CreateLook tests creating a look with sparse channel format
 // instead of the full channel array. Only specified channels are stored.
-func TestSparseChannels_CreateScene(t *testing.T) {
+func TestSparseChannels_CreateLook(t *testing.T) {
 	c, _, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -74,17 +74,17 @@ func TestSparseChannels_CreateScene(t *testing.T) {
 		t.Fatalf("CreateFixtureInstance mutation failed: %v", err)
 	}
 
-	// Create scene with SPARSE channels format
+	// Create look with SPARSE channels format
 	// Only setting Red=255, Blue=128, Dimmer=200 (offsets 0, 2, 4)
 	var sceneResp struct {
-		CreateScene struct {
+		CreateLook struct {
 			ID          string `json:"id"`
 			Name        string `json:"name"`
 			Description string `json:"description"`
-		} `json:"createScene"`
+		} `json:"createLook"`
 	}
 	err = c.Post(`mutation($projectId: ID!, $fixtureId: ID!) {
-		createScene(input: {
+		createLook(input: {
 			name: "Sparse Channel Scene"
 			description: "Only Red, Blue, and Dimmer set"
 			projectId: $projectId
@@ -108,19 +108,19 @@ func TestSparseChannels_CreateScene(t *testing.T) {
 		client.Var("fixtureId", instanceResp.CreateFixtureInstance.ID))
 
 	if err != nil {
-		t.Fatalf("CreateScene mutation with sparse channels failed: %v", err)
+		t.Fatalf("CreateLook mutation with sparse channels failed: %v", err)
 	}
 
-	if sceneResp.CreateScene.ID == "" {
-		t.Error("Expected scene ID to be set")
+	if sceneResp.CreateLook.ID == "" {
+		t.Error("Expected look ID to be set")
 	}
-	if sceneResp.CreateScene.Name != "Sparse Channel Scene" {
-		t.Errorf("Expected name 'Sparse Channel Scene', got '%s'", sceneResp.CreateScene.Name)
+	if sceneResp.CreateLook.Name != "Sparse Channel Scene" {
+		t.Errorf("Expected name 'Sparse Channel Scene', got '%s'", sceneResp.CreateLook.Name)
 	}
 }
 
-// TestSparseChannels_QueryScene tests that querying a scene returns sparse channels
-func TestSparseChannels_QueryScene(t *testing.T) {
+// TestSparseChannels_QueryLook tests that querying a look returns sparse channels
+func TestSparseChannels_QueryLook(t *testing.T) {
 	c, resolver, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -149,8 +149,8 @@ func TestSparseChannels_QueryScene(t *testing.T) {
 	}
 	resolver.db.Create(fixture)
 
-	// Create a scene (in the new format, this will use sparse storage)
-	scene := &models.Scene{
+	// Create a look (in the new format, this will use sparse storage)
+	scene := &models.Look{
 		ID:        "test-scene-sparse-query",
 		Name:      "Test Scene",
 		ProjectID: project.ID,
@@ -161,16 +161,16 @@ func TestSparseChannels_QueryScene(t *testing.T) {
 	// Using new sparse format - only store non-zero channels
 	fixtureValue := &models.FixtureValue{
 		ID:        "fv-sparse-query",
-		SceneID:   scene.ID,
+		LookID:   scene.ID,
 		FixtureID: fixture.ID,
 		// New sparse format: only specify non-zero channels
 		Channels: `[{"offset":1,"value":100},{"offset":3,"value":200}]`,
 	}
 	resolver.db.Create(fixtureValue)
 
-	// Query the scene and expect sparse channels back
+	// Query the look and expect sparse channels back
 	var readResp struct {
-		Scene struct {
+		Look struct {
 			ID            string `json:"id"`
 			Name          string `json:"name"`
 			FixtureValues []struct {
@@ -182,10 +182,10 @@ func TestSparseChannels_QueryScene(t *testing.T) {
 					Value  int `json:"value"`
 				} `json:"channels"`
 			} `json:"fixtureValues"`
-		} `json:"scene"`
+		} `json:"look"`
 	}
 	err := c.Post(`query($id: ID!) {
-		scene(id: $id) {
+		look(id: $id) {
 			id
 			name
 			fixtureValues {
@@ -201,19 +201,19 @@ func TestSparseChannels_QueryScene(t *testing.T) {
 	}`, &readResp, client.Var("id", scene.ID))
 
 	if err != nil {
-		t.Fatalf("Scene query failed: %v", err)
+		t.Fatalf("Look query failed: %v", err)
 	}
 
-	if readResp.Scene.ID != scene.ID {
-		t.Errorf("Expected scene ID %s, got %s", scene.ID, readResp.Scene.ID)
+	if readResp.Look.ID != scene.ID {
+		t.Errorf("Expected look ID %s, got %s", scene.ID, readResp.Look.ID)
 	}
 
 	// Verify sparse channel format in response
-	if len(readResp.Scene.FixtureValues) != 1 {
-		t.Fatalf("Expected 1 fixture value, got %d", len(readResp.Scene.FixtureValues))
+	if len(readResp.Look.FixtureValues) != 1 {
+		t.Fatalf("Expected 1 fixture value, got %d", len(readResp.Look.FixtureValues))
 	}
 
-	channels := readResp.Scene.FixtureValues[0].Channels
+	channels := readResp.Look.FixtureValues[0].Channels
 	if len(channels) != 2 {
 		t.Errorf("Expected 2 sparse channels (only non-zero values), got %d", len(channels))
 	}
@@ -235,12 +235,12 @@ func TestSparseChannels_QueryScene(t *testing.T) {
 	}
 }
 
-// TestSparseChannels_UpdateScene tests updating a scene with sparse channels
-func TestSparseChannels_UpdateScene(t *testing.T) {
+// TestSparseChannels_UpdateLook tests updating a look with sparse channels
+func TestSparseChannels_UpdateLook(t *testing.T) {
 	c, resolver, cleanup := testSetup(t)
 	defer cleanup()
 
-	// Create project, fixture, and initial scene
+	// Create project, fixture, and initial look
 	project := &models.Project{
 		ID:   "test-project-sparse-update",
 		Name: "Test Project",
@@ -265,7 +265,7 @@ func TestSparseChannels_UpdateScene(t *testing.T) {
 	}
 	resolver.db.Create(fixture)
 
-	scene := &models.Scene{
+	scene := &models.Look{
 		ID:        "test-scene-sparse-update",
 		Name:      "Original Scene",
 		ProjectID: project.ID,
@@ -275,21 +275,21 @@ func TestSparseChannels_UpdateScene(t *testing.T) {
 	// Initial values: only offset 0 = 255 (sparse format)
 	fixtureValue := &models.FixtureValue{
 		ID:        "fv-sparse-update",
-		SceneID:   scene.ID,
+		LookID:   scene.ID,
 		FixtureID: fixture.ID,
 		Channels:  `[{"offset":0,"value":255}]`,
 	}
 	resolver.db.Create(fixtureValue)
 
-	// Update scene with sparse channels - change offset 0 to 128, add offset 2 to 64
+	// Update look with sparse channels - change offset 0 to 128, add offset 2 to 64
 	var updateResp struct {
-		UpdateScene struct {
+		UpdateLook struct {
 			ID   string `json:"id"`
 			Name string `json:"name"`
-		} `json:"updateScene"`
+		} `json:"updateLook"`
 	}
 	err := c.Post(`mutation($id: ID!, $fixtureId: ID!) {
-		updateScene(id: $id, input: {
+		updateLook(id: $id, input: {
 			name: "Updated Scene"
 			fixtureValues: [
 				{
@@ -309,16 +309,16 @@ func TestSparseChannels_UpdateScene(t *testing.T) {
 		client.Var("fixtureId", fixture.ID))
 
 	if err != nil {
-		t.Fatalf("UpdateScene mutation with sparse channels failed: %v", err)
+		t.Fatalf("UpdateLook mutation with sparse channels failed: %v", err)
 	}
 
-	if updateResp.UpdateScene.Name != "Updated Scene" {
-		t.Errorf("Expected name 'Updated Scene', got '%s'", updateResp.UpdateScene.Name)
+	if updateResp.UpdateLook.Name != "Updated Scene" {
+		t.Errorf("Expected name 'Updated Scene', got '%s'", updateResp.UpdateLook.Name)
 	}
 }
 
-// TestSparseChannels_AddFixturesToScene tests adding fixtures with sparse channels
-func TestSparseChannels_AddFixturesToScene(t *testing.T) {
+// TestSparseChannels_AddFixturesToLook tests adding fixtures with sparse channels
+func TestSparseChannels_AddFixturesToLook(t *testing.T) {
 	c, resolver, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -357,8 +357,8 @@ func TestSparseChannels_AddFixturesToScene(t *testing.T) {
 	}
 	resolver.db.Create(fixture2)
 
-	// Create scene with only fixture1
-	scene := &models.Scene{
+	// Create look with only fixture1
+	scene := &models.Look{
 		ID:        "test-scene-sparse-add",
 		Name:      "Test Scene",
 		ProjectID: project.ID,
@@ -367,21 +367,21 @@ func TestSparseChannels_AddFixturesToScene(t *testing.T) {
 
 	fixtureValue := &models.FixtureValue{
 		ID:        "fv-1-sparse-add",
-		SceneID:   scene.ID,
+		LookID:   scene.ID,
 		FixtureID: fixture1.ID,
 		Channels:  `[{"offset":0,"value":255}]`,
 	}
 	resolver.db.Create(fixtureValue)
 
-	// Add fixture2 to scene with sparse channels
+	// Add fixture2 to look with sparse channels
 	var addResp struct {
-		AddFixturesToScene struct {
+		AddFixturesToLook struct {
 			ID string `json:"id"`
-		} `json:"addFixturesToScene"`
+		} `json:"addFixturesToLook"`
 	}
-	err := c.Post(`mutation($sceneId: ID!, $fixtureId: ID!) {
-		addFixturesToScene(
-			sceneId: $sceneId
+	err := c.Post(`mutation($lookId: ID!, $fixtureId: ID!) {
+		addFixturesToLook(
+			lookId: $lookId
 			fixtureValues: [
 				{
 					fixtureId: $fixtureId
@@ -395,20 +395,20 @@ func TestSparseChannels_AddFixturesToScene(t *testing.T) {
 			id
 		}
 	}`, &addResp,
-		client.Var("sceneId", scene.ID),
+		client.Var("lookId", scene.ID),
 		client.Var("fixtureId", fixture2.ID))
 
 	if err != nil {
-		t.Fatalf("AddFixturesToScene mutation with sparse channels failed: %v", err)
+		t.Fatalf("AddFixturesToLook mutation with sparse channels failed: %v", err)
 	}
 
-	if addResp.AddFixturesToScene.ID != scene.ID {
-		t.Errorf("Expected scene ID %s, got %s", scene.ID, addResp.AddFixturesToScene.ID)
+	if addResp.AddFixturesToLook.ID != scene.ID {
+		t.Errorf("Expected look ID %s, got %s", scene.ID, addResp.AddFixturesToLook.ID)
 	}
 }
 
-// TestSparseChannels_UpdateScenePartial tests partial scene updates with sparse channels
-func TestSparseChannels_UpdateScenePartial(t *testing.T) {
+// TestSparseChannels_UpdateLookPartial tests partial look updates with sparse channels
+func TestSparseChannels_UpdateLookPartial(t *testing.T) {
 	c, resolver, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -437,8 +437,8 @@ func TestSparseChannels_UpdateScenePartial(t *testing.T) {
 	}
 	resolver.db.Create(fixture)
 
-	// Create scene with initial values
-	scene := &models.Scene{
+	// Create look with initial values
+	scene := &models.Look{
 		ID:        "test-scene-sparse-partial",
 		Name:      "Original Name",
 		ProjectID: project.ID,
@@ -448,7 +448,7 @@ func TestSparseChannels_UpdateScenePartial(t *testing.T) {
 	// Initial sparse values: offset 0=255, offset 2=128
 	fixtureValue := &models.FixtureValue{
 		ID:        "fv-sparse-partial",
-		SceneID:   scene.ID,
+		LookID:   scene.ID,
 		FixtureID: fixture.ID,
 		Channels:  `[{"offset":0,"value":255},{"offset":2,"value":128}]`,
 	}
@@ -456,14 +456,14 @@ func TestSparseChannels_UpdateScenePartial(t *testing.T) {
 
 	// Partial update - only change offset 1, preserve others
 	var updateResp struct {
-		UpdateScenePartial struct {
+		UpdateLookPartial struct {
 			ID   string `json:"id"`
 			Name string `json:"name"`
-		} `json:"updateScenePartial"`
+		} `json:"updateLookPartial"`
 	}
-	err := c.Post(`mutation($sceneId: ID!, $fixtureId: ID!) {
-		updateScenePartial(
-			sceneId: $sceneId
+	err := c.Post(`mutation($lookId: ID!, $fixtureId: ID!) {
+		updateLookPartial(
+			lookId: $lookId
 			name: "Updated Name"
 			fixtureValues: [
 				{
@@ -479,23 +479,23 @@ func TestSparseChannels_UpdateScenePartial(t *testing.T) {
 			name
 		}
 	}`, &updateResp,
-		client.Var("sceneId", scene.ID),
+		client.Var("lookId", scene.ID),
 		client.Var("fixtureId", fixture.ID))
 
 	if err != nil {
-		t.Fatalf("UpdateScenePartial mutation with sparse channels failed: %v", err)
+		t.Fatalf("UpdateLookPartial mutation with sparse channels failed: %v", err)
 	}
 
-	if updateResp.UpdateScenePartial.Name != "Updated Name" {
-		t.Errorf("Expected name 'Updated Name', got '%s'", updateResp.UpdateScenePartial.Name)
+	if updateResp.UpdateLookPartial.Name != "Updated Name" {
+		t.Errorf("Expected name 'Updated Name', got '%s'", updateResp.UpdateLookPartial.Name)
 	}
 }
 
-// TestSparseChannels_SceneActivation_OnlyAffectsSpecifiedChannels tests that
-// when activating a scene with sparse channels, only the specified channels
+// TestSparseChannels_LookActivation_OnlyAffectsSpecifiedChannels tests that
+// when activating a look with sparse channels, only the specified channels
 // are modified on the DMX output. Other channels should remain at their
 // previous values.
-func TestSparseChannels_SceneActivation_OnlyAffectsSpecifiedChannels(t *testing.T) {
+func TestSparseChannels_LookActivation_OnlyAffectsSpecifiedChannels(t *testing.T) {
 	c, resolver, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -529,9 +529,9 @@ func TestSparseChannels_SceneActivation_OnlyAffectsSpecifiedChannels(t *testing.
 		resolver.DMXService.SetChannelValue(1, i, 50) // All start at 50
 	}
 
-	// Create scene with sparse channels - only set channels at offsets 1, 3, 5
+	// Create look with sparse channels - only set channels at offsets 1, 3, 5
 	// (DMX channels 11, 13, 15)
-	scene := &models.Scene{
+	scene := &models.Look{
 		ID:        "test-scene-sparse-dmx",
 		Name:      "Sparse DMX Scene",
 		ProjectID: project.ID,
@@ -542,30 +542,30 @@ func TestSparseChannels_SceneActivation_OnlyAffectsSpecifiedChannels(t *testing.
 	// Using new sparse format - only store the channels we're setting
 	fixtureValue := &models.FixtureValue{
 		ID:        "fv-sparse-dmx",
-		SceneID:   scene.ID,
+		LookID:   scene.ID,
 		FixtureID: fixture.ID,
 		// New sparse format: only specify channels we want to set
 		Channels: `[{"offset":1,"value":100},{"offset":3,"value":150},{"offset":5,"value":200}]`,
 	}
 	resolver.db.Create(fixtureValue)
 
-	// Activate the scene
+	// Activate the look
 	var resp struct {
-		SetSceneLive bool `json:"setSceneLive"`
+		SetLookLive bool `json:"setLookLive"`
 	}
-	err := c.Post(`mutation($sceneId: ID!) {
-		setSceneLive(sceneId: $sceneId)
-	}`, &resp, client.Var("sceneId", scene.ID))
+	err := c.Post(`mutation($lookId: ID!) {
+		setLookLive(lookId: $lookId)
+	}`, &resp, client.Var("lookId", scene.ID))
 
 	if err != nil {
-		t.Fatalf("SetSceneLive mutation failed: %v", err)
+		t.Fatalf("SetLookLive mutation failed: %v", err)
 	}
 
-	if !resp.SetSceneLive {
-		t.Error("Expected setSceneLive to return true")
+	if !resp.SetLookLive {
+		t.Error("Expected setLookLive to return true")
 	}
 
-	// Wait for scene to be applied (no fade, should be instant)
+	// Wait for look to be applied (no fade, should be instant)
 	time.Sleep(50 * time.Millisecond)
 
 	// Verify DMX values:
@@ -615,8 +615,8 @@ func TestSparseChannels_SceneActivation_OnlyAffectsSpecifiedChannels(t *testing.
 }
 
 // TestSparseChannels_EmptyChannelsArray tests that a fixture can be included
-// in a scene with an empty channels array, meaning the fixture is part of
-// the scene but no channels are controlled (useful for scene templates or
+// in a look with an empty channels array, meaning the fixture is part of
+// the look but no channels are controlled (useful for look templates or
 // organizational purposes)
 func TestSparseChannels_EmptyChannelsArray(t *testing.T) {
 	c, resolver, cleanup := testSetup(t)
@@ -647,15 +647,15 @@ func TestSparseChannels_EmptyChannelsArray(t *testing.T) {
 	}
 	resolver.db.Create(fixture)
 
-	// Create scene with empty channels array
+	// Create look with empty channels array
 	var sceneResp struct {
-		CreateScene struct {
+		CreateLook struct {
 			ID   string `json:"id"`
 			Name string `json:"name"`
-		} `json:"createScene"`
+		} `json:"createLook"`
 	}
 	err := c.Post(`mutation($projectId: ID!, $fixtureId: ID!) {
-		createScene(input: {
+		createLook(input: {
 			name: "Empty Channels Scene"
 			projectId: $projectId
 			fixtureValues: [
@@ -673,16 +673,16 @@ func TestSparseChannels_EmptyChannelsArray(t *testing.T) {
 		client.Var("fixtureId", fixture.ID))
 
 	if err != nil {
-		t.Fatalf("CreateScene mutation with empty channels array failed: %v", err)
+		t.Fatalf("CreateLook mutation with empty channels array failed: %v", err)
 	}
 
-	if sceneResp.CreateScene.ID == "" {
-		t.Error("Expected scene ID to be set")
+	if sceneResp.CreateLook.ID == "" {
+		t.Error("Expected look ID to be set")
 	}
 
-	// Query the scene back
+	// Query the look back
 	var queryResp struct {
-		Scene struct {
+		Look struct {
 			FixtureValues []struct {
 				Fixture struct {
 					ID string `json:"id"`
@@ -692,10 +692,10 @@ func TestSparseChannels_EmptyChannelsArray(t *testing.T) {
 					Value  int `json:"value"`
 				} `json:"channels"`
 			} `json:"fixtureValues"`
-		} `json:"scene"`
+		} `json:"look"`
 	}
 	err = c.Post(`query($id: ID!) {
-		scene(id: $id) {
+		look(id: $id) {
 			fixtureValues {
 				fixture {
 					id
@@ -706,38 +706,38 @@ func TestSparseChannels_EmptyChannelsArray(t *testing.T) {
 				}
 			}
 		}
-	}`, &queryResp, client.Var("id", sceneResp.CreateScene.ID))
+	}`, &queryResp, client.Var("id", sceneResp.CreateLook.ID))
 
 	if err != nil {
-		t.Fatalf("Scene query failed: %v", err)
+		t.Fatalf("Look query failed: %v", err)
 	}
 
 	// Should have one fixture value with empty channels array
-	if len(queryResp.Scene.FixtureValues) != 1 {
-		t.Fatalf("Expected 1 fixture value, got %d", len(queryResp.Scene.FixtureValues))
+	if len(queryResp.Look.FixtureValues) != 1 {
+		t.Fatalf("Expected 1 fixture value, got %d", len(queryResp.Look.FixtureValues))
 	}
 
-	if queryResp.Scene.FixtureValues[0].Fixture.ID != fixture.ID {
-		t.Errorf("Expected fixture ID %s, got %s", fixture.ID, queryResp.Scene.FixtureValues[0].Fixture.ID)
+	if queryResp.Look.FixtureValues[0].Fixture.ID != fixture.ID {
+		t.Errorf("Expected fixture ID %s, got %s", fixture.ID, queryResp.Look.FixtureValues[0].Fixture.ID)
 	}
 
-	if len(queryResp.Scene.FixtureValues[0].Channels) != 0 {
-		t.Errorf("Expected 0 channels, got %d", len(queryResp.Scene.FixtureValues[0].Channels))
+	if len(queryResp.Look.FixtureValues[0].Channels) != 0 {
+		t.Errorf("Expected 0 channels, got %d", len(queryResp.Look.FixtureValues[0].Channels))
 	}
 
-	// Activate the scene - should not modify any DMX values
+	// Activate the look - should not modify any DMX values
 	resolver.DMXService.SetChannelValue(1, 1, 100)
 	resolver.DMXService.SetChannelValue(1, 2, 150)
 
 	var activateResp struct {
-		SetSceneLive bool `json:"setSceneLive"`
+		SetLookLive bool `json:"setLookLive"`
 	}
-	err = c.Post(`mutation($sceneId: ID!) {
-		setSceneLive(sceneId: $sceneId)
-	}`, &activateResp, client.Var("sceneId", sceneResp.CreateScene.ID))
+	err = c.Post(`mutation($lookId: ID!) {
+		setLookLive(lookId: $lookId)
+	}`, &activateResp, client.Var("lookId", sceneResp.CreateLook.ID))
 
 	if err != nil {
-		t.Fatalf("SetSceneLive mutation failed: %v", err)
+		t.Fatalf("SetLookLive mutation failed: %v", err)
 	}
 
 	time.Sleep(50 * time.Millisecond)
@@ -751,8 +751,8 @@ func TestSparseChannels_EmptyChannelsArray(t *testing.T) {
 	}
 }
 
-// TestSparseChannels_BulkUpdateScenesPartial tests bulk partial scene updates with sparse channels
-func TestSparseChannels_BulkUpdateScenesPartial(t *testing.T) {
+// TestSparseChannels_BulkUpdateLooksPartial tests bulk partial look updates with sparse channels
+func TestSparseChannels_BulkUpdateLooksPartial(t *testing.T) {
 	c, resolver, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -781,13 +781,13 @@ func TestSparseChannels_BulkUpdateScenesPartial(t *testing.T) {
 	}
 	resolver.db.Create(fixture)
 
-	// Create two scenes with initial values
-	scene1 := &models.Scene{
+	// Create two looks with initial values
+	scene1 := &models.Look{
 		ID:        "test-scene-bulk-partial-1",
 		Name:      "Scene 1",
 		ProjectID: project.ID,
 	}
-	scene2 := &models.Scene{
+	scene2 := &models.Look{
 		ID:        "test-scene-bulk-partial-2",
 		Name:      "Scene 2",
 		ProjectID: project.ID,
@@ -795,34 +795,34 @@ func TestSparseChannels_BulkUpdateScenesPartial(t *testing.T) {
 	resolver.db.Create(scene1)
 	resolver.db.Create(scene2)
 
-	// Initial fixture values for both scenes: offset 0=255, offset 1=128
+	// Initial fixture values for both looks: offset 0=255, offset 1=128
 	fixtureValue1 := &models.FixtureValue{
 		ID:        "fv-bulk-partial-1",
-		SceneID:   scene1.ID,
+		LookID:   scene1.ID,
 		FixtureID: fixture.ID,
 		Channels:  `[{"offset":0,"value":255},{"offset":1,"value":128}]`,
 	}
 	fixtureValue2 := &models.FixtureValue{
 		ID:        "fv-bulk-partial-2",
-		SceneID:   scene2.ID,
+		LookID:   scene2.ID,
 		FixtureID: fixture.ID,
 		Channels:  `[{"offset":0,"value":255},{"offset":1,"value":128}]`,
 	}
 	resolver.db.Create(fixtureValue1)
 	resolver.db.Create(fixtureValue2)
 
-	// Bulk update - change offset 1 value to 64 in both scenes
+	// Bulk update - change offset 1 value to 64 in both looks
 	var updateResp struct {
-		BulkUpdateScenesPartial []struct {
+		BulkUpdateLooksPartial []struct {
 			ID   string `json:"id"`
 			Name string `json:"name"`
-		} `json:"bulkUpdateScenesPartial"`
+		} `json:"bulkUpdateLooksPartial"`
 	}
-	err := c.Post(`mutation($scene1Id: ID!, $scene2Id: ID!, $fixtureId: ID!) {
-		bulkUpdateScenesPartial(input: {
-			scenes: [
+	err := c.Post(`mutation($look1Id: ID!, $look2Id: ID!, $fixtureId: ID!) {
+		bulkUpdateLooksPartial(input: {
+			looks: [
 				{
-					sceneId: $scene1Id
+					lookId: $look1Id
 					name: "Scene 1 Updated"
 					fixtureValues: [
 						{
@@ -834,7 +834,7 @@ func TestSparseChannels_BulkUpdateScenesPartial(t *testing.T) {
 					]
 				}
 				{
-					sceneId: $scene2Id
+					lookId: $look2Id
 					name: "Scene 2 Updated"
 					fixtureValues: [
 						{
@@ -851,31 +851,31 @@ func TestSparseChannels_BulkUpdateScenesPartial(t *testing.T) {
 			name
 		}
 	}`, &updateResp,
-		client.Var("scene1Id", scene1.ID),
-		client.Var("scene2Id", scene2.ID),
+		client.Var("look1Id", scene1.ID),
+		client.Var("look2Id", scene2.ID),
 		client.Var("fixtureId", fixture.ID))
 
 	if err != nil {
-		t.Fatalf("BulkUpdateScenesPartial mutation failed: %v", err)
+		t.Fatalf("BulkUpdateLooksPartial mutation failed: %v", err)
 	}
 
-	// Verify both scenes were updated
-	if len(updateResp.BulkUpdateScenesPartial) != 2 {
-		t.Fatalf("Expected 2 scenes updated, got %d", len(updateResp.BulkUpdateScenesPartial))
+	// Verify both looks were updated
+	if len(updateResp.BulkUpdateLooksPartial) != 2 {
+		t.Fatalf("Expected 2 looks updated, got %d", len(updateResp.BulkUpdateLooksPartial))
 	}
 
-	if updateResp.BulkUpdateScenesPartial[0].Name != "Scene 1 Updated" {
-		t.Errorf("Expected 'Scene 1 Updated', got '%s'", updateResp.BulkUpdateScenesPartial[0].Name)
+	if updateResp.BulkUpdateLooksPartial[0].Name != "Scene 1 Updated" {
+		t.Errorf("Expected 'Scene 1 Updated', got '%s'", updateResp.BulkUpdateLooksPartial[0].Name)
 	}
-	if updateResp.BulkUpdateScenesPartial[1].Name != "Scene 2 Updated" {
-		t.Errorf("Expected 'Scene 2 Updated', got '%s'", updateResp.BulkUpdateScenesPartial[1].Name)
+	if updateResp.BulkUpdateLooksPartial[1].Name != "Scene 2 Updated" {
+		t.Errorf("Expected 'Scene 2 Updated', got '%s'", updateResp.BulkUpdateLooksPartial[1].Name)
 	}
 
 	// Verify fixture values were updated (channels array is replaced, not merged at channel level)
 	// mergeFixtures=true means: keep fixtures not mentioned, update fixtures that are mentioned
 	// When updating a fixture, the channels array provided replaces the old one
 	var updatedFV1 models.FixtureValue
-	resolver.db.First(&updatedFV1, "scene_id = ? AND fixture_id = ?", scene1.ID, fixture.ID)
+	resolver.db.First(&updatedFV1, "look_id = ? AND fixture_id = ?", scene1.ID, fixture.ID)
 
 	// Scene 1: channels should be the new value [offset 1 = 64]
 	expectedChannels1 := `[{"offset":1,"value":64}]`
@@ -884,7 +884,7 @@ func TestSparseChannels_BulkUpdateScenesPartial(t *testing.T) {
 	}
 
 	var updatedFV2 models.FixtureValue
-	resolver.db.First(&updatedFV2, "scene_id = ? AND fixture_id = ?", scene2.ID, fixture.ID)
+	resolver.db.First(&updatedFV2, "look_id = ? AND fixture_id = ?", scene2.ID, fixture.ID)
 
 	// Scene 2: channels should be the new value [offset 1 = 32]
 	expectedChannels2 := `[{"offset":1,"value":32}]`
@@ -893,8 +893,8 @@ func TestSparseChannels_BulkUpdateScenesPartial(t *testing.T) {
 	}
 }
 
-// TestSparseChannels_BulkUpdateScenesPartial_MergeFixturesFalse tests bulk partial scene updates with replace mode
-func TestSparseChannels_BulkUpdateScenesPartial_MergeFixturesFalse(t *testing.T) {
+// TestSparseChannels_BulkUpdateLooksPartial_MergeFixturesFalse tests bulk partial look updates with replace mode
+func TestSparseChannels_BulkUpdateLooksPartial_MergeFixturesFalse(t *testing.T) {
 	c, resolver, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -932,8 +932,8 @@ func TestSparseChannels_BulkUpdateScenesPartial_MergeFixturesFalse(t *testing.T)
 	resolver.db.Create(fixture1)
 	resolver.db.Create(fixture2)
 
-	// Create scene with two fixtures
-	scene := &models.Scene{
+	// Create look with two fixtures
+	scene := &models.Look{
 		ID:        "test-scene-bulk-replace",
 		Name:      "Original Scene",
 		ProjectID: project.ID,
@@ -943,13 +943,13 @@ func TestSparseChannels_BulkUpdateScenesPartial_MergeFixturesFalse(t *testing.T)
 	// Both fixtures have values
 	fv1 := &models.FixtureValue{
 		ID:        "fv-bulk-replace-1",
-		SceneID:   scene.ID,
+		LookID:   scene.ID,
 		FixtureID: fixture1.ID,
 		Channels:  `[{"offset":0,"value":255}]`,
 	}
 	fv2 := &models.FixtureValue{
 		ID:        "fv-bulk-replace-2",
-		SceneID:   scene.ID,
+		LookID:   scene.ID,
 		FixtureID: fixture2.ID,
 		Channels:  `[{"offset":0,"value":128}]`,
 	}
@@ -958,16 +958,16 @@ func TestSparseChannels_BulkUpdateScenesPartial_MergeFixturesFalse(t *testing.T)
 
 	// Bulk update with mergeFixtures=false - should replace all fixtures with only fixture1
 	var updateResp struct {
-		BulkUpdateScenesPartial []struct {
+		BulkUpdateLooksPartial []struct {
 			ID   string `json:"id"`
 			Name string `json:"name"`
-		} `json:"bulkUpdateScenesPartial"`
+		} `json:"bulkUpdateLooksPartial"`
 	}
-	err := c.Post(`mutation($sceneId: ID!, $fixtureId: ID!) {
-		bulkUpdateScenesPartial(input: {
-			scenes: [
+	err := c.Post(`mutation($lookId: ID!, $fixtureId: ID!) {
+		bulkUpdateLooksPartial(input: {
+			looks: [
 				{
-					sceneId: $sceneId
+					lookId: $lookId
 					fixtureValues: [
 						{
 							fixtureId: $fixtureId
@@ -984,23 +984,23 @@ func TestSparseChannels_BulkUpdateScenesPartial_MergeFixturesFalse(t *testing.T)
 			name
 		}
 	}`, &updateResp,
-		client.Var("sceneId", scene.ID),
+		client.Var("lookId", scene.ID),
 		client.Var("fixtureId", fixture1.ID))
 
 	if err != nil {
-		t.Fatalf("BulkUpdateScenesPartial with mergeFixtures=false failed: %v", err)
+		t.Fatalf("BulkUpdateLooksPartial with mergeFixtures=false failed: %v", err)
 	}
 
 	// Verify fixture2 was removed (mergeFixtures=false deletes all and replaces)
 	var count int64
-	resolver.db.Model(&models.FixtureValue{}).Where("scene_id = ?", scene.ID).Count(&count)
+	resolver.db.Model(&models.FixtureValue{}).Where("look_id = ?", scene.ID).Count(&count)
 	if count != 1 {
 		t.Errorf("Expected 1 fixture value (fixture2 should be removed), got %d", count)
 	}
 
 	// Verify fixture1 has the new value
 	var updatedFV models.FixtureValue
-	resolver.db.First(&updatedFV, "scene_id = ? AND fixture_id = ?", scene.ID, fixture1.ID)
+	resolver.db.First(&updatedFV, "look_id = ? AND fixture_id = ?", scene.ID, fixture1.ID)
 
 	expectedChannels := `[{"offset":0,"value":100}]`
 	if !sparseChannelsEqual(updatedFV.Channels, expectedChannels) {

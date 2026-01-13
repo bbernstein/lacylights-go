@@ -18,9 +18,11 @@ type ExportedProject struct {
 	Project            *ExportProjectInfo          `json:"project,omitempty"`
 	FixtureDefinitions []ExportedFixtureDefinition `json:"fixtureDefinitions"`
 	FixtureInstances   []ExportedFixtureInstance   `json:"fixtureInstances"`
-	Scenes             []ExportedScene             `json:"scenes"`
+	Looks              []ExportedLook              `json:"looks"`
+	Scenes             []ExportedLook              `json:"scenes,omitempty"` // Deprecated: backward compatibility, use Looks
 	CueLists           []ExportedCueList           `json:"cueLists"`
-	SceneBoards        []ExportedSceneBoard        `json:"sceneBoards,omitempty"`
+	LookBoards         []ExportedLookBoard         `json:"lookBoards,omitempty"`
+	SceneBoards        []ExportedLookBoard         `json:"sceneBoards,omitempty"` // Deprecated: backward compatibility, use LookBoards
 }
 
 // ExportMetadata contains export metadata.
@@ -112,8 +114,8 @@ type ExportedInstanceChannel struct {
 	IsDiscrete   bool   `json:"isDiscrete,omitempty"`
 }
 
-// ExportedScene represents an exported scene.
-type ExportedScene struct {
+// ExportedLook represents an exported look.
+type ExportedLook struct {
 	RefID         string                 `json:"refId"`
 	OriginalID    string                 `json:"originalId,omitempty"`
 	Name          string                 `json:"name"`
@@ -129,12 +131,13 @@ type ExportedChannelValue struct {
 	Value  int `json:"value"`
 }
 
-// ExportedFixtureValue represents exported fixture values in a scene.
+// ExportedFixtureValue represents exported fixture values in a look.
 type ExportedFixtureValue struct {
 	FixtureRefID  string                 `json:"fixtureRefId"`
 	Channels      []ExportedChannelValue `json:"channels"`
 	ChannelValues []int                  `json:"channelValues,omitempty"` // Read-only: used to import legacy dense array format, not populated on export
-	SceneOrder    *int                   `json:"sceneOrder,omitempty"`
+	LookOrder     *int                   `json:"lookOrder,omitempty"`
+	SceneOrder    *int                   `json:"sceneOrder,omitempty"` // Deprecated: backward compatibility, use LookOrder
 }
 
 // ExportedCueList represents an exported cue list.
@@ -154,7 +157,8 @@ type ExportedCue struct {
 	OriginalID  string   `json:"originalId,omitempty"`
 	Name        string   `json:"name"`
 	CueNumber   float64  `json:"cueNumber"`
-	SceneRefID  string   `json:"sceneRefId"`
+	LookRefID   string   `json:"lookRefId"`
+	SceneRefID  string   `json:"sceneRefId,omitempty"` // Deprecated: backward compatibility, use LookRefID
 	FadeInTime  float64  `json:"fadeInTime"`
 	FadeOutTime float64  `json:"fadeOutTime"`
 	FollowTime  *float64 `json:"followTime,omitempty"`
@@ -164,123 +168,128 @@ type ExportedCue struct {
 	UpdatedAt   string   `json:"updatedAt,omitempty"`
 }
 
-// ExportedSceneBoard represents an exported scene board.
-type ExportedSceneBoard struct {
-	RefID           string                      `json:"refId"`
-	OriginalID      string                      `json:"originalId,omitempty"`
-	Name            string                      `json:"name"`
-	Description     *string                     `json:"description,omitempty"`
-	DefaultFadeTime float64                     `json:"defaultFadeTime"`
-	GridSize        *int                        `json:"gridSize,omitempty"`
-	CanvasWidth     int                         `json:"canvasWidth"`
-	CanvasHeight    int                         `json:"canvasHeight"`
-	Buttons         []ExportedSceneBoardButton  `json:"buttons,omitempty"`
-	CreatedAt       string                      `json:"createdAt,omitempty"`
-	UpdatedAt       string                      `json:"updatedAt,omitempty"`
+// ExportedLookBoard represents an exported look board.
+type ExportedLookBoard struct {
+	RefID           string                    `json:"refId"`
+	OriginalID      string                    `json:"originalId,omitempty"`
+	Name            string                    `json:"name"`
+	Description     *string                   `json:"description,omitempty"`
+	DefaultFadeTime float64                   `json:"defaultFadeTime"`
+	GridSize        *int                      `json:"gridSize,omitempty"`
+	CanvasWidth     int                       `json:"canvasWidth"`
+	CanvasHeight    int                       `json:"canvasHeight"`
+	Buttons         []ExportedLookBoardButton `json:"buttons,omitempty"`
+	CreatedAt       string                    `json:"createdAt,omitempty"`
+	UpdatedAt       string                    `json:"updatedAt,omitempty"`
 }
 
-// ExportedSceneBoardButton represents an exported scene board button.
-type ExportedSceneBoardButton struct {
-	OriginalID string  `json:"originalId,omitempty"`
-	SceneRefID string  `json:"sceneRefId"`
-	LayoutX    int     `json:"layoutX"`
-	LayoutY    int     `json:"layoutY"`
-	Width      *int    `json:"width,omitempty"`
-	Height     *int    `json:"height,omitempty"`
-	Color      *string `json:"color,omitempty"`
-	Label      *string `json:"label,omitempty"`
-	CreatedAt  string  `json:"createdAt,omitempty"`
-	UpdatedAt  string  `json:"updatedAt,omitempty"`
+// ExportedLookBoardButton represents an exported look board button.
+type ExportedLookBoardButton struct {
+	OriginalID  string  `json:"originalId,omitempty"`
+	LookRefID   string  `json:"lookRefId"`
+	SceneRefID  string  `json:"sceneRefId,omitempty"` // Deprecated: backward compatibility, use LookRefID
+	LayoutX     int     `json:"layoutX"`
+	LayoutY     int     `json:"layoutY"`
+	Width       *int    `json:"width,omitempty"`
+	Height      *int    `json:"height,omitempty"`
+	Color       *string `json:"color,omitempty"`
+	Label       *string `json:"label,omitempty"`
+	CreatedAt   string  `json:"createdAt,omitempty"`
+	UpdatedAt   string  `json:"updatedAt,omitempty"`
 }
 
 // ExportStats contains statistics about an export.
 type ExportStats struct {
 	FixtureDefinitionsCount int
 	FixtureInstancesCount   int
-	ScenesCount             int
+	LooksCount              int
+	ScenesCount             int // Deprecated: use LooksCount
 	CueListsCount           int
 	CuesCount               int
-	SceneBoardsCount        int
+	LookBoardsCount         int
+	SceneBoardsCount        int // Deprecated: use LookBoardsCount
 }
 
 // ExportOptions contains options for project export.
 type ExportOptions struct {
-	IncludeFixtures    bool // Include fixture definitions and instances
-	IncludeScenes      bool // Include scenes with fixture values
-	IncludeCueLists    bool // Include cue lists with cues
-	IncludeSceneBoards bool // Include scene boards with buttons (defaults to true)
+	IncludeFixtures   bool // Include fixture definitions and instances
+	IncludeLooks      bool // Include looks with fixture values
+	IncludeScenes     bool // Deprecated: use IncludeLooks
+	IncludeCueLists   bool // Include cue lists with cues
+	IncludeLookBoards bool // Include look boards with buttons (defaults to true)
+	IncludeSceneBoards bool // Deprecated: use IncludeLookBoards
 }
 
 // DefaultExportOptions returns the default export options (all true).
 func DefaultExportOptions() ExportOptions {
 	return ExportOptions{
-		IncludeFixtures:    true,
-		IncludeScenes:      true,
-		IncludeCueLists:    true,
-		IncludeSceneBoards: true,
+		IncludeFixtures:   true,
+		IncludeLooks:      true,
+		IncludeCueLists:   true,
+		IncludeLookBoards: true,
 	}
 }
 
 // Service handles project export operations.
 type Service struct {
-	projectRepo    *repositories.ProjectRepository
-	fixtureRepo    *repositories.FixtureRepository
-	sceneRepo      *repositories.SceneRepository
-	cueListRepo    *repositories.CueListRepository
-	cueRepo        *repositories.CueRepository
-	sceneBoardRepo *repositories.SceneBoardRepository
+	projectRepo   *repositories.ProjectRepository
+	fixtureRepo   *repositories.FixtureRepository
+	lookRepo      *repositories.LookRepository
+	cueListRepo   *repositories.CueListRepository
+	cueRepo       *repositories.CueRepository
+	lookBoardRepo *repositories.LookBoardRepository
 }
 
 // NewService creates a new export service.
 func NewService(
 	projectRepo *repositories.ProjectRepository,
 	fixtureRepo *repositories.FixtureRepository,
-	sceneRepo *repositories.SceneRepository,
+	lookRepo *repositories.LookRepository,
 	cueListRepo *repositories.CueListRepository,
 	cueRepo *repositories.CueRepository,
 ) *Service {
 	return &Service{
-		projectRepo:  projectRepo,
-		fixtureRepo:  fixtureRepo,
-		sceneRepo:    sceneRepo,
-		cueListRepo:  cueListRepo,
-		cueRepo:      cueRepo,
+		projectRepo: projectRepo,
+		fixtureRepo: fixtureRepo,
+		lookRepo:    lookRepo,
+		cueListRepo: cueListRepo,
+		cueRepo:     cueRepo,
 	}
 }
 
-// NewServiceWithSceneBoards creates a new export service with scene board support.
-func NewServiceWithSceneBoards(
+// NewServiceWithLookBoards creates a new export service with look board support.
+func NewServiceWithLookBoards(
 	projectRepo *repositories.ProjectRepository,
 	fixtureRepo *repositories.FixtureRepository,
-	sceneRepo *repositories.SceneRepository,
+	lookRepo *repositories.LookRepository,
 	cueListRepo *repositories.CueListRepository,
 	cueRepo *repositories.CueRepository,
-	sceneBoardRepo *repositories.SceneBoardRepository,
+	lookBoardRepo *repositories.LookBoardRepository,
 ) *Service {
 	return &Service{
-		projectRepo:    projectRepo,
-		fixtureRepo:    fixtureRepo,
-		sceneRepo:      sceneRepo,
-		cueListRepo:    cueListRepo,
-		cueRepo:        cueRepo,
-		sceneBoardRepo: sceneBoardRepo,
+		projectRepo:   projectRepo,
+		fixtureRepo:   fixtureRepo,
+		lookRepo:      lookRepo,
+		cueListRepo:   cueListRepo,
+		cueRepo:       cueRepo,
+		lookBoardRepo: lookBoardRepo,
 	}
 }
 
 // ExportProject exports a project to JSON.
 // Deprecated: Use ExportProjectWithOptions for cleaner API.
-func (s *Service) ExportProject(ctx context.Context, projectID string, includeFixtures, includeScenes, includeCueLists bool, includeSceneBoards ...bool) (*ExportedProject, *ExportStats, error) {
-	// Check if scene boards should be included (defaults to true if not specified)
-	exportSceneBoards := true
-	if len(includeSceneBoards) > 0 {
-		exportSceneBoards = includeSceneBoards[0]
+func (s *Service) ExportProject(ctx context.Context, projectID string, includeFixtures, includeLooks, includeCueLists bool, includeLookBoards ...bool) (*ExportedProject, *ExportStats, error) {
+	// Check if look boards should be included (defaults to true if not specified)
+	exportLookBoards := true
+	if len(includeLookBoards) > 0 {
+		exportLookBoards = includeLookBoards[0]
 	}
 
 	opts := ExportOptions{
-		IncludeFixtures:    includeFixtures,
-		IncludeScenes:      includeScenes,
-		IncludeCueLists:    includeCueLists,
-		IncludeSceneBoards: exportSceneBoards,
+		IncludeFixtures:   includeFixtures,
+		IncludeLooks:      includeLooks,
+		IncludeCueLists:   includeCueLists,
+		IncludeLookBoards: exportLookBoards,
 	}
 	return s.ExportProjectWithOptions(ctx, projectID, opts)
 }
@@ -297,7 +306,7 @@ func (s *Service) ExportProjectWithOptions(ctx context.Context, projectID string
 	}
 
 	exported := &ExportedProject{
-		Version: "1.0",
+		Version: "2.0",
 		Project: &ExportProjectInfo{
 			OriginalID:  project.ID,
 			Name:        project.Name,
@@ -444,30 +453,30 @@ func (s *Service) ExportProjectWithOptions(ctx context.Context, projectID string
 		}
 	}
 
-	// Export scenes
-	if opts.IncludeScenes {
-		scenes, err := s.sceneRepo.FindByProjectID(ctx, projectID)
+	// Export looks
+	if opts.IncludeLooks || opts.IncludeScenes {
+		looks, err := s.lookRepo.FindByProjectID(ctx, projectID)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		for _, scene := range scenes {
-			fixtureValues, err := s.sceneRepo.GetFixtureValues(ctx, scene.ID)
+		for _, look := range looks {
+			fixtureValues, err := s.lookRepo.GetFixtureValues(ctx, look.ID)
 			if err != nil {
 				return nil, nil, err
 			}
 
-			exportedScene := ExportedScene{
-				RefID:       scene.ID,
-				OriginalID:  scene.ID,
-				Name:        scene.Name,
-				Description: scene.Description,
+			exportedLook := ExportedLook{
+				RefID:       look.ID,
+				OriginalID:  look.ID,
+				Name:        look.Name,
+				Description: look.Description,
 			}
 
 			for _, fv := range fixtureValues {
 				var channels []models.ChannelValue
 				if err := json.Unmarshal([]byte(fv.Channels), &channels); err != nil {
-					log.Printf("Warning: failed to unmarshal channels for fixture %s in scene %s: %v", fv.FixtureID, scene.ID, err)
+					log.Printf("Warning: failed to unmarshal channels for fixture %s in look %s: %v", fv.FixtureID, look.ID, err)
 					continue // Skip this fixture value
 				}
 
@@ -480,15 +489,15 @@ func (s *Service) ExportProjectWithOptions(ctx context.Context, projectID string
 					}
 				}
 
-				exportedScene.FixtureValues = append(exportedScene.FixtureValues, ExportedFixtureValue{
+				exportedLook.FixtureValues = append(exportedLook.FixtureValues, ExportedFixtureValue{
 					FixtureRefID: fv.FixtureID,
 					Channels:     exportedChannels,
-					SceneOrder:   fv.SceneOrder,
+					LookOrder:    fv.LookOrder,
 				})
 			}
 
-			exported.Scenes = append(exported.Scenes, exportedScene)
-			stats.ScenesCount++
+			exported.Looks = append(exported.Looks, exportedLook)
+			stats.LooksCount++
 		}
 	}
 
@@ -518,7 +527,7 @@ func (s *Service) ExportProjectWithOptions(ctx context.Context, projectID string
 					OriginalID:  cue.ID,
 					Name:        cue.Name,
 					CueNumber:   cue.CueNumber,
-					SceneRefID:  cue.SceneID,
+					LookRefID:   cue.LookID,
 					FadeInTime:  cue.FadeInTime,
 					FadeOutTime: cue.FadeOutTime,
 					FollowTime:  cue.FollowTime,
@@ -533,20 +542,20 @@ func (s *Service) ExportProjectWithOptions(ctx context.Context, projectID string
 		}
 	}
 
-	// Export scene boards
-	if opts.IncludeSceneBoards && s.sceneBoardRepo != nil {
-		boards, err := s.sceneBoardRepo.FindByProjectID(ctx, projectID)
+	// Export look boards
+	if (opts.IncludeLookBoards || opts.IncludeSceneBoards) && s.lookBoardRepo != nil {
+		boards, err := s.lookBoardRepo.FindByProjectID(ctx, projectID)
 		if err != nil {
 			return nil, nil, err
 		}
 
 		for _, board := range boards {
-			buttons, err := s.sceneBoardRepo.GetButtons(ctx, board.ID)
+			buttons, err := s.lookBoardRepo.GetButtons(ctx, board.ID)
 			if err != nil {
 				return nil, nil, err
 			}
 
-			exportedBoard := ExportedSceneBoard{
+			exportedBoard := ExportedLookBoard{
 				RefID:           board.ID,
 				OriginalID:      board.ID,
 				Name:            board.Name,
@@ -558,9 +567,9 @@ func (s *Service) ExportProjectWithOptions(ctx context.Context, projectID string
 			}
 
 			for _, btn := range buttons {
-				exportedBoard.Buttons = append(exportedBoard.Buttons, ExportedSceneBoardButton{
+				exportedBoard.Buttons = append(exportedBoard.Buttons, ExportedLookBoardButton{
 					OriginalID: btn.ID,
-					SceneRefID: btn.SceneID,
+					LookRefID:  btn.LookID,
 					LayoutX:    btn.LayoutX,
 					LayoutY:    btn.LayoutY,
 					Width:      btn.Width,
@@ -570,10 +579,14 @@ func (s *Service) ExportProjectWithOptions(ctx context.Context, projectID string
 				})
 			}
 
-			exported.SceneBoards = append(exported.SceneBoards, exportedBoard)
-			stats.SceneBoardsCount++
+			exported.LookBoards = append(exported.LookBoards, exportedBoard)
+			stats.LookBoardsCount++
 		}
 	}
+
+	// Populate deprecated fields for backward compatibility
+	stats.ScenesCount = stats.LooksCount
+	stats.SceneBoardsCount = stats.LookBoardsCount
 
 	return exported, stats, nil
 }
@@ -588,11 +601,23 @@ func (e *ExportedProject) ToJSON() (string, error) {
 }
 
 // ParseExportedProject parses JSON into an ExportedProject.
+// Handles backward compatibility for legacy "scenes" and "sceneBoards" JSON keys.
 func ParseExportedProject(jsonContent string) (*ExportedProject, error) {
 	var exported ExportedProject
 	if err := json.Unmarshal([]byte(jsonContent), &exported); err != nil {
 		return nil, err
 	}
+
+	// Backward compatibility: copy legacy "scenes" to "looks" if needed
+	if len(exported.Looks) == 0 && len(exported.Scenes) > 0 {
+		exported.Looks = exported.Scenes
+	}
+
+	// Backward compatibility: copy legacy "sceneBoards" to "lookBoards" if needed
+	if len(exported.LookBoards) == 0 && len(exported.SceneBoards) > 0 {
+		exported.LookBoards = exported.SceneBoards
+	}
+
 	return &exported, nil
 }
 

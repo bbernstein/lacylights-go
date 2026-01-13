@@ -17,14 +17,14 @@ func TestTableNames(t *testing.T) {
 		{"ModeChannel", ModeChannel{}, "mode_channels"},
 		{"FixtureInstance", FixtureInstance{}, "fixture_instances"},
 		{"InstanceChannel", InstanceChannel{}, "instance_channels"},
-		{"Scene", Scene{}, "scenes"},
+		{"Look", Look{}, "looks"},
 		{"FixtureValue", FixtureValue{}, "fixture_values"},
 		{"CueList", CueList{}, "cue_lists"},
 		{"Cue", Cue{}, "cues"},
 		{"PreviewSession", PreviewSession{}, "preview_sessions"},
 		{"Setting", Setting{}, "settings"},
-		{"SceneBoard", SceneBoard{}, "scene_boards"},
-		{"SceneBoardButton", SceneBoardButton{}, "scene_board_buttons"},
+		{"LookBoard", LookBoard{}, "look_boards"},
+		{"LookBoardButton", LookBoardButton{}, "look_board_buttons"},
 		{"OFLImportMeta", OFLImportMeta{}, "ofl_import_meta"},
 	}
 

@@ -17,7 +17,7 @@ func TestExportProject_EmptyProject(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -45,8 +45,8 @@ func TestExportProject_EmptyProject(t *testing.T) {
 	}
 
 	// Verify export structure
-	if exported.Version != "1.0" {
-		t.Errorf("Expected version '1.0', got '%s'", exported.Version)
+	if exported.Version != "2.0" {
+		t.Errorf("Expected version '2.0', got '%s'", exported.Version)
 	}
 	if exported.Project == nil {
 		t.Fatal("Expected non-nil project info")
@@ -65,8 +65,8 @@ func TestExportProject_EmptyProject(t *testing.T) {
 	if stats.FixtureInstancesCount != 0 {
 		t.Errorf("Expected 0 fixture instances, got %d", stats.FixtureInstancesCount)
 	}
-	if stats.ScenesCount != 0 {
-		t.Errorf("Expected 0 scenes, got %d", stats.ScenesCount)
+	if stats.LooksCount != 0 {
+		t.Errorf("Expected 0 looks, got %d", stats.LooksCount)
 	}
 	if stats.CueListsCount != 0 {
 		t.Errorf("Expected 0 cue lists, got %d", stats.CueListsCount)
@@ -83,7 +83,7 @@ func TestExportProject_ProjectNotFound(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -110,7 +110,7 @@ func TestExportProject_WithFixtures(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -214,14 +214,14 @@ func TestExportProject_WithFixtures(t *testing.T) {
 	}
 }
 
-func TestExportProject_WithScenes(t *testing.T) {
+func TestExportProject_WithLooks(t *testing.T) {
 	testDB, cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -230,7 +230,7 @@ func TestExportProject_WithScenes(t *testing.T) {
 
 	// Create project
 	project := &models.Project{
-		Name: testutil.UniqueProjectName("TestExportScenes"),
+		Name: testutil.UniqueProjectName("TestExportLooks"),
 	}
 	if err := testDB.ProjectRepo.Create(ctx, project); err != nil {
 		t.Fatalf("Failed to create project: %v", err)
@@ -239,7 +239,7 @@ func TestExportProject_WithScenes(t *testing.T) {
 	// Create fixture definition and instance
 	def := &models.FixtureDefinition{
 		Manufacturer: "TestMfg",
-		Model:        testutil.UniqueFixtureName("SceneModel"),
+		Model:        testutil.UniqueFixtureName("LookModel"),
 		Type:         "LED",
 		IsBuiltIn:    false,
 	}
@@ -269,9 +269,9 @@ func TestExportProject_WithScenes(t *testing.T) {
 		t.Fatalf("Failed to create fixture: %v", err)
 	}
 
-	// Create scene with fixture values
+	// Create look with fixture values
 	channelData, _ := json.Marshal([]models.ChannelValue{{Offset: 0, Value: 255}})
-	scene := &models.Scene{
+	look := &models.Look{
 		Name:      "Full On",
 		ProjectID: project.ID,
 	}
@@ -282,27 +282,27 @@ func TestExportProject_WithScenes(t *testing.T) {
 			Channels:  string(channelData),
 		},
 	}
-	if err := testDB.SceneRepo.CreateWithFixtureValues(ctx, scene, fixtureValues); err != nil {
-		t.Fatalf("Failed to create scene: %v", err)
+	if err := testDB.LookRepo.CreateWithFixtureValues(ctx, look, fixtureValues); err != nil {
+		t.Fatalf("Failed to create look: %v", err)
 	}
 
-	// Export with scenes
+	// Export with looks
 	exported, stats, err := service.ExportProject(ctx, project.ID, true, true, false)
 	if err != nil {
 		t.Fatalf("ExportProject failed: %v", err)
 	}
 
-	if stats.ScenesCount != 1 {
-		t.Errorf("Expected 1 scene, got %d", stats.ScenesCount)
+	if stats.LooksCount != 1 {
+		t.Errorf("Expected 1 look, got %d", stats.LooksCount)
 	}
-	if len(exported.Scenes) != 1 {
-		t.Fatalf("Expected 1 scene in export, got %d", len(exported.Scenes))
+	if len(exported.Looks) != 1 {
+		t.Fatalf("Expected 1 look in export, got %d", len(exported.Looks))
 	}
-	if exported.Scenes[0].Name != "Full On" {
-		t.Errorf("Expected scene name 'Full On', got '%s'", exported.Scenes[0].Name)
+	if exported.Looks[0].Name != "Full On" {
+		t.Errorf("Expected look name 'Full On', got '%s'", exported.Looks[0].Name)
 	}
-	if len(exported.Scenes[0].FixtureValues) != 1 {
-		t.Errorf("Expected 1 fixture value, got %d", len(exported.Scenes[0].FixtureValues))
+	if len(exported.Looks[0].FixtureValues) != 1 {
+		t.Errorf("Expected 1 fixture value, got %d", len(exported.Looks[0].FixtureValues))
 	}
 }
 
@@ -313,7 +313,7 @@ func TestExportProject_WithCueLists(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -328,7 +328,7 @@ func TestExportProject_WithCueLists(t *testing.T) {
 		t.Fatalf("Failed to create project: %v", err)
 	}
 
-	// Create fixture and scene
+	// Create fixture and look
 	def := &models.FixtureDefinition{
 		Manufacturer: "TestMfg",
 		Model:        testutil.UniqueFixtureName("CueListModel"),
@@ -362,7 +362,7 @@ func TestExportProject_WithCueLists(t *testing.T) {
 	}
 
 	channelData, _ := json.Marshal([]models.ChannelValue{{Offset: 0, Value: 255}})
-	scene := &models.Scene{
+	look := &models.Look{
 		Name:      "Full",
 		ProjectID: project.ID,
 	}
@@ -373,8 +373,8 @@ func TestExportProject_WithCueLists(t *testing.T) {
 			Channels:  string(channelData),
 		},
 	}
-	if err := testDB.SceneRepo.CreateWithFixtureValues(ctx, scene, fixtureValues); err != nil {
-		t.Fatalf("Failed to create scene: %v", err)
+	if err := testDB.LookRepo.CreateWithFixtureValues(ctx, look, fixtureValues); err != nil {
+		t.Fatalf("Failed to create look: %v", err)
 	}
 
 	// Create cue list with cues
@@ -391,7 +391,7 @@ func TestExportProject_WithCueLists(t *testing.T) {
 		Name:        "Cue 1",
 		CueNumber:   1.0,
 		CueListID:   cueList.ID,
-		SceneID:     scene.ID,
+		LookID:     look.ID,
 		FadeInTime:  2.0,
 		FadeOutTime: 1.0,
 	}
@@ -403,7 +403,7 @@ func TestExportProject_WithCueLists(t *testing.T) {
 		Name:        "Cue 2",
 		CueNumber:   2.0,
 		CueListID:   cueList.ID,
-		SceneID:     scene.ID,
+		LookID:     look.ID,
 		FadeInTime:  1.0,
 		FadeOutTime: 0.5,
 	}
@@ -444,7 +444,7 @@ func TestExportProject_SelectiveExport(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -492,10 +492,10 @@ func TestExportProject_SelectiveExport(t *testing.T) {
 		t.Fatalf("Failed to create fixture: %v", err)
 	}
 
-	// Create scene
+	// Create look
 	channelData, _ := json.Marshal([]models.ChannelValue{{Offset: 0, Value: 255}})
-	scene := &models.Scene{
-		Name:      "Test Scene",
+	look := &models.Look{
+		Name:      "Test Look",
 		ProjectID: project.ID,
 	}
 	fixtureValues := []models.FixtureValue{
@@ -505,8 +505,8 @@ func TestExportProject_SelectiveExport(t *testing.T) {
 			Channels:  string(channelData),
 		},
 	}
-	if err := testDB.SceneRepo.CreateWithFixtureValues(ctx, scene, fixtureValues); err != nil {
-		t.Fatalf("Failed to create scene: %v", err)
+	if err := testDB.LookRepo.CreateWithFixtureValues(ctx, look, fixtureValues); err != nil {
+		t.Fatalf("Failed to create look: %v", err)
 	}
 
 	// Create cue list
@@ -518,7 +518,7 @@ func TestExportProject_SelectiveExport(t *testing.T) {
 		t.Fatalf("Failed to create cue list: %v", err)
 	}
 
-	// Test: Export only fixtures (no scenes, no cue lists)
+	// Test: Export only fixtures (no looks, no cue lists)
 	_, stats, err := service.ExportProject(ctx, project.ID, true, false, false)
 	if err != nil {
 		t.Fatalf("ExportProject failed: %v", err)
@@ -527,14 +527,14 @@ func TestExportProject_SelectiveExport(t *testing.T) {
 	if stats.FixtureInstancesCount != 1 {
 		t.Errorf("Expected 1 fixture instance, got %d", stats.FixtureInstancesCount)
 	}
-	if stats.ScenesCount != 0 {
-		t.Errorf("Expected 0 scenes (not requested), got %d", stats.ScenesCount)
+	if stats.LooksCount != 0 {
+		t.Errorf("Expected 0 looks (not requested), got %d", stats.LooksCount)
 	}
 	if stats.CueListsCount != 0 {
 		t.Errorf("Expected 0 cue lists (not requested), got %d", stats.CueListsCount)
 	}
 
-	// Test: Export only scenes (no fixtures, no cue lists)
+	// Test: Export only looks (no fixtures, no cue lists)
 	var exported *ExportedProject
 	exported, stats, err = service.ExportProject(ctx, project.ID, false, true, false)
 	if err != nil {
@@ -544,8 +544,8 @@ func TestExportProject_SelectiveExport(t *testing.T) {
 	if stats.FixtureInstancesCount != 0 {
 		t.Errorf("Expected 0 fixture instances (not requested), got %d", stats.FixtureInstancesCount)
 	}
-	if stats.ScenesCount != 1 {
-		t.Errorf("Expected 1 scene, got %d", stats.ScenesCount)
+	if stats.LooksCount != 1 {
+		t.Errorf("Expected 1 look, got %d", stats.LooksCount)
 	}
 	if stats.CueListsCount != 0 {
 		t.Errorf("Expected 0 cue lists (not requested), got %d", stats.CueListsCount)
@@ -567,7 +567,7 @@ func TestExportProject_ToJSON_RoundTrip(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -661,7 +661,7 @@ func TestExportProject_WithTags(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -735,7 +735,7 @@ func TestExportProject_InvalidTags(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -807,7 +807,7 @@ func TestExportProject_InvalidChannels(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -854,17 +854,17 @@ func TestExportProject_InvalidChannels(t *testing.T) {
 		t.Fatalf("Failed to create fixture: %v", err)
 	}
 
-	// Create scene
-	scene := &models.Scene{
-		Name:      "Test Scene",
+	// Create look
+	look := &models.Look{
+		Name:      "Test Look",
 		ProjectID: project.ID,
 	}
-	testDB.DB.Create(scene)
+	testDB.DB.Create(look)
 
 	// Create fixture value with INVALID channels JSON
 	fixtureValue := &models.FixtureValue{
 		ID:        cuid.New(),
-		SceneID:   scene.ID,
+		LookID:   look.ID,
 		FixtureID: fixture.ID,
 		Channels:  "not-valid-json",
 	}
@@ -876,15 +876,15 @@ func TestExportProject_InvalidChannels(t *testing.T) {
 		t.Fatalf("ExportProject failed: %v", err)
 	}
 
-	if stats.ScenesCount != 1 {
-		t.Errorf("Expected 1 scene, got %d", stats.ScenesCount)
+	if stats.LooksCount != 1 {
+		t.Errorf("Expected 1 look, got %d", stats.LooksCount)
 	}
-	if len(exported.Scenes) != 1 {
-		t.Fatalf("Expected 1 scene, got %d", len(exported.Scenes))
+	if len(exported.Looks) != 1 {
+		t.Fatalf("Expected 1 look, got %d", len(exported.Looks))
 	}
 	// Fixture value should be skipped due to invalid JSON
-	if len(exported.Scenes[0].FixtureValues) != 0 {
-		t.Errorf("Expected 0 fixture values (invalid JSON should be skipped), got %d", len(exported.Scenes[0].FixtureValues))
+	if len(exported.Looks[0].FixtureValues) != 0 {
+		t.Errorf("Expected 0 fixture values (invalid JSON should be skipped), got %d", len(exported.Looks[0].FixtureValues))
 	}
 }
 
@@ -896,7 +896,7 @@ func TestExportProject_EmptyChannels(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -943,17 +943,17 @@ func TestExportProject_EmptyChannels(t *testing.T) {
 		t.Fatalf("Failed to create fixture: %v", err)
 	}
 
-	// Create scene
-	scene := &models.Scene{
-		Name:      "Test Scene",
+	// Create look
+	look := &models.Look{
+		Name:      "Test Look",
 		ProjectID: project.ID,
 	}
-	testDB.DB.Create(scene)
+	testDB.DB.Create(look)
 
 	// Create fixture value with empty channels array
 	fixtureValue := &models.FixtureValue{
 		ID:        cuid.New(),
-		SceneID:   scene.ID,
+		LookID:   look.ID,
 		FixtureID: fixture.ID,
 		Channels:  "[]",
 	}
@@ -965,18 +965,18 @@ func TestExportProject_EmptyChannels(t *testing.T) {
 		t.Fatalf("ExportProject failed: %v", err)
 	}
 
-	if stats.ScenesCount != 1 {
-		t.Errorf("Expected 1 scene, got %d", stats.ScenesCount)
+	if stats.LooksCount != 1 {
+		t.Errorf("Expected 1 look, got %d", stats.LooksCount)
 	}
-	if len(exported.Scenes) != 1 {
-		t.Fatalf("Expected 1 scene, got %d", len(exported.Scenes))
+	if len(exported.Looks) != 1 {
+		t.Fatalf("Expected 1 look, got %d", len(exported.Looks))
 	}
 	// Fixture value should be present with empty channels
-	if len(exported.Scenes[0].FixtureValues) != 1 {
-		t.Errorf("Expected 1 fixture value, got %d", len(exported.Scenes[0].FixtureValues))
+	if len(exported.Looks[0].FixtureValues) != 1 {
+		t.Errorf("Expected 1 fixture value, got %d", len(exported.Looks[0].FixtureValues))
 	}
-	if len(exported.Scenes[0].FixtureValues[0].Channels) != 0 {
-		t.Errorf("Expected 0 channels, got %d", len(exported.Scenes[0].FixtureValues[0].Channels))
+	if len(exported.Looks[0].FixtureValues[0].Channels) != 0 {
+		t.Errorf("Expected 0 channels, got %d", len(exported.Looks[0].FixtureValues[0].Channels))
 	}
 }
 
@@ -988,7 +988,7 @@ func TestExportProject_SparseChannels(t *testing.T) {
 	service := NewService(
 		testDB.ProjectRepo,
 		testDB.FixtureRepo,
-		testDB.SceneRepo,
+		testDB.LookRepo,
 		testDB.CueListRepo,
 		testDB.CueRepo,
 	)
@@ -1041,12 +1041,12 @@ func TestExportProject_SparseChannels(t *testing.T) {
 		t.Fatalf("Failed to create fixture: %v", err)
 	}
 
-	// Create scene
-	scene := &models.Scene{
-		Name:      "Red Only Scene",
+	// Create look
+	look := &models.Look{
+		Name:      "Red Only Look",
 		ProjectID: project.ID,
 	}
-	testDB.DB.Create(scene)
+	testDB.DB.Create(look)
 
 	// Create fixture value with sparse channels (only dimmer and red)
 	channelData, _ := json.Marshal([]models.ChannelValue{
@@ -1056,7 +1056,7 @@ func TestExportProject_SparseChannels(t *testing.T) {
 	})
 	fixtureValue := &models.FixtureValue{
 		ID:        cuid.New(),
-		SceneID:   scene.ID,
+		LookID:   look.ID,
 		FixtureID: fixture.ID,
 		Channels:  string(channelData),
 	}
@@ -1068,18 +1068,18 @@ func TestExportProject_SparseChannels(t *testing.T) {
 		t.Fatalf("ExportProject failed: %v", err)
 	}
 
-	if stats.ScenesCount != 1 {
-		t.Errorf("Expected 1 scene, got %d", stats.ScenesCount)
+	if stats.LooksCount != 1 {
+		t.Errorf("Expected 1 look, got %d", stats.LooksCount)
 	}
-	if len(exported.Scenes) != 1 {
-		t.Fatalf("Expected 1 scene, got %d", len(exported.Scenes))
+	if len(exported.Looks) != 1 {
+		t.Fatalf("Expected 1 look, got %d", len(exported.Looks))
 	}
-	if len(exported.Scenes[0].FixtureValues) != 1 {
-		t.Fatalf("Expected 1 fixture value, got %d", len(exported.Scenes[0].FixtureValues))
+	if len(exported.Looks[0].FixtureValues) != 1 {
+		t.Fatalf("Expected 1 fixture value, got %d", len(exported.Looks[0].FixtureValues))
 	}
 
 	// Verify sparse channels were exported correctly
-	channels := exported.Scenes[0].FixtureValues[0].Channels
+	channels := exported.Looks[0].FixtureValues[0].Channels
 	if len(channels) != 2 {
 		t.Errorf("Expected 2 channels (sparse), got %d", len(channels))
 	}

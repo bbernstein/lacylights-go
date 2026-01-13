@@ -41,12 +41,12 @@ func testSetup(t *testing.T) (*client.Client, *Resolver, func()) {
 		&models.ModeChannel{},
 		&models.FixtureInstance{},
 		&models.InstanceChannel{},
-		&models.Scene{},
+		&models.Look{},
 		&models.FixtureValue{},
 		&models.CueList{},
 		&models.Cue{},
-		&models.SceneBoard{},
-		&models.SceneBoardButton{},
+		&models.LookBoard{},
+		&models.LookBoardButton{},
 		&models.Setting{},
 	)
 	if err != nil {
@@ -328,49 +328,49 @@ func TestSetSceneLive_WithFixture(t *testing.T) {
 	}
 	resolver.db.Create(fixture)
 
-	// Create a scene
-	sceneDesc := "Test scene with fixture values"
-	scene := &models.Scene{
-		ID:          "test-scene-1",
-		Name:        "Test Scene",
+	// Create a look
+	lookDesc := "Test look with fixture values"
+	look := &models.Look{
+		ID:          "test-look-1",
+		Name:        "Test Look",
 		ProjectID:   project.ID,
-		Description: &sceneDesc,
+		Description: &lookDesc,
 	}
-	resolver.db.Create(scene)
+	resolver.db.Create(look)
 
-	// Create fixture values for the scene using sparse format
+	// Create fixture values for the look using sparse format
 	fixtureValues := []models.FixtureValue{
-		{ID: "fv-1", SceneID: scene.ID, FixtureID: fixture.ID, Channels: `[{"offset":0,"value":255},{"offset":1,"value":128},{"offset":2,"value":64},{"offset":3,"value":32}]`},
+		{ID: "fv-1", LookID: look.ID, FixtureID: fixture.ID, Channels: `[{"offset":0,"value":255},{"offset":1,"value":128},{"offset":2,"value":64},{"offset":3,"value":32}]`},
 	}
 	for _, fv := range fixtureValues {
 		resolver.db.Create(&fv)
 	}
 
 	var resp struct {
-		SetSceneLive bool `json:"setSceneLive"`
+		SetLookLive bool `json:"setLookLive"`
 	}
 
-	// Activate the scene
-	err := c.Post(`mutation($sceneId: ID!) {
-		setSceneLive(sceneId: $sceneId)
-	}`, &resp, client.Var("sceneId", scene.ID))
+	// Activate the look
+	err := c.Post(`mutation($lookId: ID!) {
+		setLookLive(lookId: $lookId)
+	}`, &resp, client.Var("lookId", look.ID))
 
 	if err != nil {
-		t.Fatalf("SetSceneLive mutation failed: %v", err)
+		t.Fatalf("SetLookLive mutation failed: %v", err)
 	}
 
-	if !resp.SetSceneLive {
-		t.Error("Expected setSceneLive to return true")
+	if !resp.SetLookLive {
+		t.Error("Expected setLookLive to return true")
 	}
 
 	// Wait for values to be applied
 	time.Sleep(50 * time.Millisecond)
 
 	// Verify the DMX values were set (1-indexed channels)
-	// Note: The exact behavior depends on how setSceneLive is implemented
-	activeSceneID := resolver.DMXService.GetActiveSceneID()
-	if activeSceneID == nil || *activeSceneID != scene.ID {
-		t.Errorf("Expected active scene to be %s, got %v", scene.ID, activeSceneID)
+	// Note: The exact behavior depends on how setLookLive is implemented
+	activeLookID := resolver.DMXService.GetActiveLookID()
+	if activeLookID == nil || *activeLookID != look.ID {
+		t.Errorf("Expected active look to be %s, got %v", look.ID, activeLookID)
 	}
 
 	// Verify fixture values were applied
@@ -381,38 +381,38 @@ func TestSetSceneLive_WithFixture(t *testing.T) {
 	_ = ctx // Suppress unused variable warning
 }
 
-func TestCurrentActiveScene_Query(t *testing.T) {
+func TestCurrentActiveLook_Query(t *testing.T) {
 	c, resolver, cleanup := testSetup(t)
 	defer cleanup()
 
-	// Initially no active scene
+	// Initially no active look
 	var resp struct {
-		CurrentActiveScene *struct {
+		CurrentActiveLook *struct {
 			ID   string `json:"id"`
 			Name string `json:"name"`
-		} `json:"currentActiveScene"`
+		} `json:"currentActiveLook"`
 	}
 
 	err := c.Post(`query {
-		currentActiveScene {
+		currentActiveLook {
 			id
 			name
 		}
 	}`, &resp)
 
 	if err != nil {
-		t.Fatalf("CurrentActiveScene query failed: %v", err)
+		t.Fatalf("CurrentActiveLook query failed: %v", err)
 	}
 
-	if resp.CurrentActiveScene != nil {
-		t.Error("Expected currentActiveScene to be nil initially")
+	if resp.CurrentActiveLook != nil {
+		t.Error("Expected currentActiveLook to be nil initially")
 	}
 
-	// Set an active scene (manually, since we don't have a full scene in test)
-	resolver.DMXService.SetActiveScene("test-scene-id")
+	// Set an active look (manually, since we don't have a full look in test)
+	resolver.DMXService.SetActiveLook("test-look-id")
 
-	// Now the query should still work (though it may return nil if scene doesn't exist in DB)
-	// This tests that the resolver handles missing scenes gracefully
+	// Now the query should still work (though it may return nil if look doesn't exist in DB)
+	// This tests that the resolver handles missing looks gracefully
 }
 
 // Note: dmxStatus query doesn't exist in schema - using systemInfo and allDmxOutput instead
@@ -542,10 +542,10 @@ func TestConcurrentChannelOperations(t *testing.T) {
 	_ = resolver // Just verify resolver is still accessible
 }
 
-// TestSceneBoardFadeBehavior tests that when activating a scene from the scene board,
+// TestLookBoardFadeBehavior tests that when activating a look from the look board,
 // channels with SNAP behavior jump immediately while channels with FADE behavior interpolate smoothly.
 // This tests the fix for the bug where all channels were being faded regardless of their FadeBehavior.
-func TestSceneBoardFadeBehavior(t *testing.T) {
+func TestLookBoardFadeBehavior(t *testing.T) {
 	c, resolver, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -595,44 +595,44 @@ func TestSceneBoardFadeBehavior(t *testing.T) {
 		resolver.db.Create(&ch)
 	}
 
-	// Create a scene board
-	sceneBoard := &models.SceneBoard{
+	// Create a look board
+	lookBoard := &models.LookBoard{
 		ID:              "test-board-fade",
 		Name:            "Test Board",
 		ProjectID:       project.ID,
 		DefaultFadeTime: 0.5, // 500ms fade time
 	}
-	resolver.db.Create(sceneBoard)
+	resolver.db.Create(lookBoard)
 
-	// Create a scene with fixture values
-	scene := &models.Scene{
-		ID:        "test-scene-fade",
-		Name:      "Test Scene",
+	// Create a look with fixture values
+	look := &models.Look{
+		ID:        "test-look-fade",
+		Name:      "Test Look",
 		ProjectID: project.ID,
 	}
-	resolver.db.Create(scene)
+	resolver.db.Create(look)
 
 	// Create fixture values: [Dimmer=200, R=150, G=100, B=50, ColorMacro=180, Strobe=255]
 	// Using sparse format (all channels are specified in this case)
 	fixtureValue := &models.FixtureValue{
 		ID:        "fv-fade-test",
-		SceneID:   scene.ID,
+		LookID:    look.ID,
 		FixtureID: fixture.ID,
 		Channels:  `[{"offset":0,"value":200},{"offset":1,"value":150},{"offset":2,"value":100},{"offset":3,"value":50},{"offset":4,"value":180},{"offset":5,"value":255}]`,
 	}
 	resolver.db.Create(fixtureValue)
 
-	// Create a scene board button for this scene
+	// Create a look board button for this look
 	width := 100
 	height := 100
-	button := &models.SceneBoardButton{
-		ID:           "btn-fade-test",
-		SceneBoardID: sceneBoard.ID,
-		SceneID:      scene.ID,
-		LayoutX:      0,
-		LayoutY:      0,
-		Width:        &width,
-		Height:       &height,
+	button := &models.LookBoardButton{
+		ID:          "btn-fade-test",
+		LookBoardID: lookBoard.ID,
+		LookID:      look.ID,
+		LayoutX:     0,
+		LayoutY:     0,
+		Width:       &width,
+		Height:      &height,
 	}
 	resolver.db.Create(button)
 
@@ -641,24 +641,24 @@ func TestSceneBoardFadeBehavior(t *testing.T) {
 		resolver.DMXService.SetChannelValue(1, i, 0)
 	}
 
-	// Activate the scene from the scene board with a fade
+	// Activate the look from the look board with a fade
 	var resp struct {
-		ActivateSceneFromBoard bool `json:"activateSceneFromBoard"`
+		ActivateLookFromBoard bool `json:"activateLookFromBoard"`
 	}
 
-	err := c.Post(`mutation($boardId: ID!, $sceneId: ID!) {
-		activateSceneFromBoard(sceneBoardId: $boardId, sceneId: $sceneId)
+	err := c.Post(`mutation($boardId: ID!, $lookId: ID!) {
+		activateLookFromBoard(lookBoardId: $boardId, lookId: $lookId)
 	}`, &resp,
-		client.Var("boardId", sceneBoard.ID),
-		client.Var("sceneId", scene.ID),
+		client.Var("boardId", lookBoard.ID),
+		client.Var("lookId", look.ID),
 	)
 
 	if err != nil {
-		t.Fatalf("ActivateSceneFromBoard mutation failed: %v", err)
+		t.Fatalf("ActivateLookFromBoard mutation failed: %v", err)
 	}
 
-	if !resp.ActivateSceneFromBoard {
-		t.Error("Expected activateSceneFromBoard to return true")
+	if !resp.ActivateLookFromBoard {
+		t.Error("Expected activateLookFromBoard to return true")
 	}
 
 	// Wait for ~50% of the fade (250ms into a 500ms fade)
@@ -713,7 +713,7 @@ func TestSceneBoardFadeBehavior(t *testing.T) {
 		t.Errorf("Blue should be at target 50 after fade, got %d", resolver.DMXService.GetChannelValue(1, 4))
 	}
 
-	t.Logf("Test passed - SNAP channels (Color Macro, Strobe) jumped immediately, FADE channels (Dimmer, RGB) interpolated smoothly")
+	t.Logf("Test passed - SNAP channels (Color Macro, Strobe) jumped immediately, FADE channels (Dimmer, RGB) interpolated smoothly for look board activation")
 }
 
 func TestFadeUpdateRate_QueryAndMutation(t *testing.T) {
