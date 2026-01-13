@@ -112,7 +112,7 @@ func TestSparseChannels_CreateLook(t *testing.T) {
 	}
 
 	if sceneResp.CreateLook.ID == "" {
-		t.Error("Expected scene ID to be set")
+		t.Error("Expected look ID to be set")
 	}
 	if sceneResp.CreateLook.Name != "Sparse Channel Scene" {
 		t.Errorf("Expected name 'Sparse Channel Scene', got '%s'", sceneResp.CreateLook.Name)
@@ -205,7 +205,7 @@ func TestSparseChannels_QueryLook(t *testing.T) {
 	}
 
 	if readResp.Look.ID != scene.ID {
-		t.Errorf("Expected scene ID %s, got %s", scene.ID, readResp.Look.ID)
+		t.Errorf("Expected look ID %s, got %s", scene.ID, readResp.Look.ID)
 	}
 
 	// Verify sparse channel format in response
@@ -403,7 +403,7 @@ func TestSparseChannels_AddFixturesToLook(t *testing.T) {
 	}
 
 	if addResp.AddFixturesToLook.ID != scene.ID {
-		t.Errorf("Expected scene ID %s, got %s", scene.ID, addResp.AddFixturesToLook.ID)
+		t.Errorf("Expected look ID %s, got %s", scene.ID, addResp.AddFixturesToLook.ID)
 	}
 }
 
@@ -677,7 +677,7 @@ func TestSparseChannels_EmptyChannelsArray(t *testing.T) {
 	}
 
 	if sceneResp.CreateLook.ID == "" {
-		t.Error("Expected scene ID to be set")
+		t.Error("Expected look ID to be set")
 	}
 
 	// Query the look back

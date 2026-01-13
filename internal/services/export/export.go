@@ -584,6 +584,10 @@ func (s *Service) ExportProjectWithOptions(ctx context.Context, projectID string
 		}
 	}
 
+	// Populate deprecated fields for backward compatibility
+	stats.ScenesCount = stats.LooksCount
+	stats.SceneBoardsCount = stats.LookBoardsCount
+
 	return exported, stats, nil
 }
 

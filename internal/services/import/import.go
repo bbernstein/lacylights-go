@@ -770,5 +770,9 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 		}
 	}
 
+	// Populate deprecated fields for backward compatibility
+	stats.ScenesCreated = stats.LooksCreated
+	stats.SceneBoardsCreated = stats.LookBoardsCreated
+
 	return projectID, stats, warnings, nil
 }
