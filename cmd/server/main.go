@@ -75,28 +75,64 @@ func main() {
 
 	// Auto-migrate database schema
 	log.Println("Running database migrations...")
+
+	// Tables without FOREIGN KEY constraints in the database can be migrated normally
 	if err := db.AutoMigrate(
 		&models.User{},
 		&models.Project{},
 		&models.ProjectUser{},
-		&models.FixtureDefinition{},
-		&models.ChannelDefinition{},
-		&models.FixtureMode{},
-		&models.ModeChannel{},
-		&models.FixtureInstance{},
-		&models.InstanceChannel{},
-		&models.Look{},
-		&models.FixtureValue{},
-		&models.CueList{},
-		&models.Cue{},
 		&models.PreviewSession{},
 		&models.Setting{},
-		&models.LookBoard{},
-		&models.LookBoardButton{},
 		&models.OFLImportMeta{},
 	); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
+
+	// GORM SQLite migrator bug workaround:
+	// When a table has FOREIGN KEY constraints in its schema, the migrator incorrectly
+	// parses "FOREIGN" as a column name, causing migration failures.
+	// For tables with FK constraints, we skip AutoMigrate if the table already exists
+	// with the required columns.
+	tablesWithFK := []struct {
+		table      string
+		model      interface{}
+		keyColumns []string // columns that must exist for schema to be considered complete
+	}{
+		{"fixture_definitions", &models.FixtureDefinition{}, []string{"id"}},
+		{"channel_definitions", &models.ChannelDefinition{}, []string{"id", "definition_id"}},
+		{"fixture_modes", &models.FixtureMode{}, []string{"id", "definition_id"}},
+		{"mode_channels", &models.ModeChannel{}, []string{"id", "mode_id", "channel_id"}},
+		{"fixture_instances", &models.FixtureInstance{}, []string{"id", "project_id"}},
+		{"instance_channels", &models.InstanceChannel{}, []string{"id", "fixture_id"}},
+		{"looks", &models.Look{}, []string{"id", "project_id"}},
+		{"cue_lists", &models.CueList{}, []string{"id", "project_id"}},
+		{"cues", &models.Cue{}, []string{"id", "look_id", "cue_list_id"}},
+		{"look_boards", &models.LookBoard{}, []string{"id", "project_id"}},
+		{"look_board_buttons", &models.LookBoardButton{}, []string{"id", "look_board_id", "look_id"}},
+		{"fixture_values", &models.FixtureValue{}, []string{"id", "look_id", "fixture_id"}},
+	}
+
+	for _, t := range tablesWithFK {
+		needsMigration := false
+		if !db.Migrator().HasTable(t.table) {
+			needsMigration = true
+		} else {
+			// Check if all key columns exist
+			for _, col := range t.keyColumns {
+				if !db.Migrator().HasColumn(t.table, col) {
+					needsMigration = true
+					break
+				}
+			}
+		}
+
+		if needsMigration {
+			if err := db.AutoMigrate(t.model); err != nil {
+				log.Fatalf("Failed to migrate %s: %v", t.table, err)
+			}
+		}
+	}
+
 	log.Println("Database migrations complete")
 
 	// Migrate scene terminology to look terminology
