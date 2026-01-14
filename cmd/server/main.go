@@ -32,7 +32,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 	"github.com/bbernstein/lacylights-go/internal/graphql/resolvers"
 	"github.com/bbernstein/lacylights-go/internal/services/dmx"
-	"github.com/bbernstein/lacylights-go/internal/services/fade"
+	"github.com/bbernstein/lacylights-go/internal/services/modulator"
 	"github.com/bbernstein/lacylights-go/internal/services/ofl"
 	"github.com/bbernstein/lacylights-go/internal/services/playback"
 	"github.com/bbernstein/lacylights-go/internal/services/version"
@@ -221,8 +221,8 @@ func main() {
 			log.Printf("Warning: invalid saved fade update rate: %s", savedRate.Value)
 		}
 	}
-	fadeEngine := fade.NewEngine(dmxService, fadeUpdateRate)
-	fadeEngine.Start()
+	fadeEngine := modulator.NewEngine(dmxService, fadeUpdateRate)
+	_ = fadeEngine.Start()
 
 	// Create playback service
 	playbackService := playback.NewService(db, dmxService, fadeEngine)
@@ -319,7 +319,7 @@ func main() {
 
 	// Cleanup services in reverse order
 	playbackService.Cleanup()
-	fadeEngine.Stop()
+	_ = fadeEngine.Stop()
 	dmxService.Stop()
 
 	// Graceful shutdown with timeout

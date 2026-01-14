@@ -11,7 +11,7 @@ import (
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/services/dmx"
-	"github.com/bbernstein/lacylights-go/internal/services/fade"
+	"github.com/bbernstein/lacylights-go/internal/services/modulator"
 	"github.com/bbernstein/lacylights-go/internal/services/preview"
 	"gorm.io/gorm"
 )
@@ -73,7 +73,7 @@ type Service struct {
 
 	db         *gorm.DB
 	dmxService *dmx.Service
-	fadeEngine *fade.Engine
+	fadeEngine *modulator.Engine
 
 	// Preview service for canceling preview sessions when cues are executed
 	previewService *preview.Service
@@ -94,7 +94,7 @@ type Service struct {
 }
 
 // NewService creates a new playback service.
-func NewService(db *gorm.DB, dmxService *dmx.Service, fadeEngine *fade.Engine) *Service {
+func NewService(db *gorm.DB, dmxService *dmx.Service, fadeEngine *modulator.Engine) *Service {
 	return &Service{
 		db:                  db,
 		dmxService:          dmxService,
@@ -381,7 +381,7 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 	}
 
 	// Build look channels for fade engine
-	var lookChannels []fade.LookChannel
+	var lookChannels []modulator.LookChannel
 
 	for _, fixtureValue := range cue.Look.FixtureValues {
 		fixture := fixtureMap[fixtureValue.FixtureID]
@@ -409,7 +409,7 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 			}
 
 			// Get fade behavior from channel definition (if available)
-			fadeBehavior := fade.FadeBehaviorFade // Default to FADE
+			fadeBehavior := modulator.FadeBehaviorFade // Default to FADE
 			// Find the channel definition with matching offset
 			for _, chanDef := range fixture.Channels {
 				if chanDef.Offset == ch.Offset {
@@ -420,7 +420,7 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 				}
 			}
 
-			lookChannels = append(lookChannels, fade.LookChannel{
+			lookChannels = append(lookChannels, modulator.LookChannel{
 				Universe:     fixture.Universe,
 				Channel:      dmxChannel,
 				Value:        ch.Value,
@@ -430,9 +430,9 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 	}
 
 	// Get easing type
-	easingType := fade.EasingInOutSine
+	easingType := modulator.EasingInOutSine
 	if cue.EasingType != nil && *cue.EasingType != "" {
-		easingType = fade.EasingType(*cue.EasingType)
+		easingType = modulator.EasingType(*cue.EasingType)
 	}
 
 	// Execute fade

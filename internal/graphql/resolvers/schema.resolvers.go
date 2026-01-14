@@ -15,8 +15,8 @@ import (
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
-	"github.com/bbernstein/lacylights-go/internal/services/fade"
 	importservice "github.com/bbernstein/lacylights-go/internal/services/import"
+	"github.com/bbernstein/lacylights-go/internal/services/modulator"
 	"github.com/bbernstein/lacylights-go/internal/services/network"
 	"github.com/bbernstein/lacylights-go/internal/services/ofl"
 	"github.com/bbernstein/lacylights-go/internal/services/pubsub"
@@ -2225,7 +2225,7 @@ func (r *mutationResolver) ActivateLookFromBoard(ctx context.Context, lookBoardI
 	}
 
 	// Build look channels for fade engine
-	var lookChannels []fade.LookChannel
+	var lookChannels []modulator.LookChannel
 	for _, fixtureValue := range look.FixtureValues {
 		fixture := fixtureMap[fixtureValue.FixtureID]
 		if fixture == nil {
@@ -2249,7 +2249,7 @@ func (r *mutationResolver) ActivateLookFromBoard(ctx context.Context, lookBoardI
 			}
 
 			// Get fade behavior from channel definition (if available)
-			fadeBehavior := fade.FadeBehaviorFade // Default to FADE
+			fadeBehavior := modulator.FadeBehaviorFade // Default to FADE
 			for _, chanDef := range fixture.Channels {
 				if chanDef.Offset == ch.Offset {
 					if chanDef.FadeBehavior != "" {
@@ -2259,7 +2259,7 @@ func (r *mutationResolver) ActivateLookFromBoard(ctx context.Context, lookBoardI
 				}
 			}
 
-			lookChannels = append(lookChannels, fade.LookChannel{
+			lookChannels = append(lookChannels, modulator.LookChannel{
 				Universe:     fixture.Universe,
 				Channel:      dmxChannel,
 				Value:        ch.Value,
@@ -2270,7 +2270,7 @@ func (r *mutationResolver) ActivateLookFromBoard(ctx context.Context, lookBoardI
 
 	// Execute fade
 	fadeID := fmt.Sprintf("board-%s-look-%s", lookBoardID, lookID)
-	r.FadeEngine.FadeToLook(lookChannels, time.Duration(fadeTime*float64(time.Second)), fadeID, fade.EasingInOutSine)
+	r.FadeEngine.FadeToLook(lookChannels, time.Duration(fadeTime*float64(time.Second)), fadeID, modulator.EasingInOutSine)
 
 	// Track the active look
 	r.DMXService.SetActiveLook(lookID)
@@ -3099,7 +3099,9 @@ func (r *mutationResolver) UpdateFadeUpdateRate(ctx context.Context, rateHz int)
 	}
 
 	// Update the fade engine
-	r.FadeEngine.SetUpdateRate(rateHz)
+	if err := r.FadeEngine.SetUpdateRate(rateHz); err != nil {
+		return false, fmt.Errorf("failed to update fade engine rate: %w", err)
+	}
 
 	// Save the setting to the database
 	_, err := r.SettingRepo.Upsert(ctx, "fade_update_rate_hz", fmt.Sprintf("%d", rateHz))

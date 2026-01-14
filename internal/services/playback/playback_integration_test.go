@@ -8,7 +8,7 @@ import (
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/services/dmx"
-	"github.com/bbernstein/lacylights-go/internal/services/fade"
+	"github.com/bbernstein/lacylights-go/internal/services/modulator"
 	"github.com/bbernstein/lacylights-go/internal/services/testutil"
 	"github.com/lucsky/cuid"
 )
@@ -25,15 +25,15 @@ func setupPlaybackTest(t *testing.T) (*testutil.TestDB, *Service, func()) {
 	dmxService := dmx.NewService(dmxCfg)
 
 	// Create fade engine (60Hz for testing)
-	fadeEngine := fade.NewEngine(dmxService, 60)
-	fadeEngine.Start()
+	fadeEngine := modulator.NewEngine(dmxService, 60)
+	_ = fadeEngine.Start()
 
 	// Create playback service
 	playbackService := NewService(testDB.DB, dmxService, fadeEngine)
 
 	cleanup := func() {
 		playbackService.Cleanup()
-		fadeEngine.Stop()
+		_ = fadeEngine.Stop()
 		dmxService.Stop()
 		cleanupDB()
 	}
