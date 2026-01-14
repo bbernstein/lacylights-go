@@ -110,6 +110,10 @@ func main() {
 		{"look_boards", &models.LookBoard{}, []string{"id", "project_id"}},
 		{"look_board_buttons", &models.LookBoardButton{}, []string{"id", "look_board_id", "look_id"}},
 		{"fixture_values", &models.FixtureValue{}, []string{"id", "look_id", "fixture_id"}},
+		{"effects", &models.Effect{}, []string{"id", "project_id"}},
+		{"effect_fixtures", &models.EffectFixture{}, []string{"id", "effect_id", "fixture_id"}},
+		{"effect_channels", &models.EffectChannel{}, []string{"id", "effect_fixture_id"}},
+		{"cue_effects", &models.CueEffect{}, []string{"id", "cue_id", "effect_id"}},
 	}
 
 	for _, t := range tablesWithFK {

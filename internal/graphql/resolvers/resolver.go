@@ -32,10 +32,11 @@ type Resolver struct {
 	ProjectRepo    *repositories.ProjectRepository
 	SettingRepo    *repositories.SettingRepository
 	FixtureRepo    *repositories.FixtureRepository
-	LookRepo      *repositories.LookRepository
-	CueListRepo   *repositories.CueListRepository
-	CueRepo       *repositories.CueRepository
-	LookBoardRepo *repositories.LookBoardRepository
+	LookRepo       *repositories.LookRepository
+	CueListRepo    *repositories.CueListRepository
+	CueRepo        *repositories.CueRepository
+	LookBoardRepo  *repositories.LookBoardRepository
+	EffectRepo     *repositories.EffectRepository
 
 	// Services
 	DMXService      *dmx.Service
@@ -59,6 +60,7 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *modulator.Eng
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
 	lookBoardRepo := repositories.NewLookBoardRepository(db)
+	effectRepo := repositories.NewEffectRepository(db)
 
 	ps := pubsub.New()
 
@@ -74,6 +76,7 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *modulator.Eng
 		CueListRepo:     cueListRepo,
 		CueRepo:         cueRepo,
 		LookBoardRepo:   lookBoardRepo,
+		EffectRepo:      effectRepo,
 		DMXService:      dmxService,
 		FadeEngine:      fadeEngine,
 		PlaybackService: playbackService,

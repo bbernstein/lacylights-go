@@ -58,6 +58,11 @@ func (r *cueResolver) EasingType(ctx context.Context, obj *models.Cue) (*generat
 	return &et, nil
 }
 
+// OnCueChange is the resolver for the onCueChange field.
+func (r *cueEffectResolver) OnCueChange(ctx context.Context, obj *models.CueEffect) (*generated.TransitionBehavior, error) {
+	return ResolveOnCueChangeCueEffect(obj)
+}
+
 // Project is the resolver for the project field.
 func (r *cueListResolver) Project(ctx context.Context, obj *models.CueList) (*models.Project, error) {
 	return r.ProjectRepo.FindByID(ctx, obj.ProjectID)
@@ -105,6 +110,41 @@ func (r *cueListResolver) CreatedAt(ctx context.Context, obj *models.CueList) (s
 
 // UpdatedAt is the resolver for the updatedAt field.
 func (r *cueListResolver) UpdatedAt(ctx context.Context, obj *models.CueList) (string, error) {
+	return obj.UpdatedAt.Format("2006-01-02T15:04:05.000Z"), nil
+}
+
+// EffectType is the resolver for the effectType field.
+func (r *effectResolver) EffectType(ctx context.Context, obj *models.Effect) (generated.EffectType, error) {
+	return ResolveEffectType(obj)
+}
+
+// PriorityBand is the resolver for the priorityBand field.
+func (r *effectResolver) PriorityBand(ctx context.Context, obj *models.Effect) (generated.PriorityBand, error) {
+	return ResolvePriorityBand(obj)
+}
+
+// CompositionMode is the resolver for the compositionMode field.
+func (r *effectResolver) CompositionMode(ctx context.Context, obj *models.Effect) (generated.CompositionMode, error) {
+	return ResolveCompositionMode(obj)
+}
+
+// OnCueChange is the resolver for the onCueChange field.
+func (r *effectResolver) OnCueChange(ctx context.Context, obj *models.Effect) (generated.TransitionBehavior, error) {
+	return ResolveOnCueChangeEffect(obj)
+}
+
+// Waveform is the resolver for the waveform field.
+func (r *effectResolver) Waveform(ctx context.Context, obj *models.Effect) (*generated.WaveformType, error) {
+	return ResolveWaveform(obj)
+}
+
+// CreatedAt is the resolver for the createdAt field.
+func (r *effectResolver) CreatedAt(ctx context.Context, obj *models.Effect) (string, error) {
+	return obj.CreatedAt.Format("2006-01-02T15:04:05.000Z"), nil
+}
+
+// UpdatedAt is the resolver for the updatedAt field.
+func (r *effectResolver) UpdatedAt(ctx context.Context, obj *models.Effect) (string, error) {
 	return obj.UpdatedAt.Format("2006-01-02T15:04:05.000Z"), nil
 }
 
@@ -3358,6 +3398,66 @@ func (r *mutationResolver) CancelOFLImport(ctx context.Context) (bool, error) {
 	return r.OFLManager.CancelImport(), nil
 }
 
+// CreateEffect is the resolver for the createEffect field.
+func (r *mutationResolver) CreateEffect(ctx context.Context, input generated.CreateEffectInput) (*models.Effect, error) {
+	return r.ResolveCreateEffect(ctx, input)
+}
+
+// UpdateEffect is the resolver for the updateEffect field.
+func (r *mutationResolver) UpdateEffect(ctx context.Context, id string, input generated.UpdateEffectInput) (*models.Effect, error) {
+	return r.ResolveUpdateEffect(ctx, id, input)
+}
+
+// DeleteEffect is the resolver for the deleteEffect field.
+func (r *mutationResolver) DeleteEffect(ctx context.Context, id string) (bool, error) {
+	return r.ResolveDeleteEffect(ctx, id)
+}
+
+// AddFixtureToEffect is the resolver for the addFixtureToEffect field.
+func (r *mutationResolver) AddFixtureToEffect(ctx context.Context, input generated.AddFixtureToEffectInput) (*models.EffectFixture, error) {
+	return r.ResolveAddFixtureToEffect(ctx, input)
+}
+
+// RemoveFixtureFromEffect is the resolver for the removeFixtureFromEffect field.
+func (r *mutationResolver) RemoveFixtureFromEffect(ctx context.Context, effectID string, fixtureID string) (bool, error) {
+	return r.ResolveRemoveFixtureFromEffect(ctx, effectID, fixtureID)
+}
+
+// AddEffectToCue is the resolver for the addEffectToCue field.
+func (r *mutationResolver) AddEffectToCue(ctx context.Context, input generated.AddEffectToCueInput) (*models.CueEffect, error) {
+	return r.ResolveAddEffectToCue(ctx, input)
+}
+
+// RemoveEffectFromCue is the resolver for the removeEffectFromCue field.
+func (r *mutationResolver) RemoveEffectFromCue(ctx context.Context, cueID string, effectID string) (bool, error) {
+	return r.ResolveRemoveEffectFromCue(ctx, cueID, effectID)
+}
+
+// ActivateEffect is the resolver for the activateEffect field.
+func (r *mutationResolver) ActivateEffect(ctx context.Context, effectID string, fadeTime *float64) (bool, error) {
+	return r.ResolveActivateEffect(ctx, effectID, fadeTime)
+}
+
+// StopEffect is the resolver for the stopEffect field.
+func (r *mutationResolver) StopEffect(ctx context.Context, effectID string, fadeTime *float64) (bool, error) {
+	return r.ResolveStopEffect(ctx, effectID, fadeTime)
+}
+
+// ActivateBlackout is the resolver for the activateBlackout field.
+func (r *mutationResolver) ActivateBlackout(ctx context.Context, fadeTime *float64) (bool, error) {
+	return r.ResolveActivateBlackout(ctx, fadeTime)
+}
+
+// ReleaseBlackout is the resolver for the releaseBlackout field.
+func (r *mutationResolver) ReleaseBlackout(ctx context.Context, fadeTime *float64) (bool, error) {
+	return r.ResolveReleaseBlackout(ctx, fadeTime)
+}
+
+// SetGrandMaster is the resolver for the setGrandMaster field.
+func (r *mutationResolver) SetGrandMaster(ctx context.Context, value float64) (bool, error) {
+	return r.ResolveSetGrandMaster(ctx, value)
+}
+
 // Project is the resolver for the project field.
 func (r *previewSessionResolver) Project(ctx context.Context, obj *models.PreviewSession) (*models.Project, error) {
 	return r.ProjectRepo.FindByID(ctx, obj.ProjectID)
@@ -4814,6 +4914,21 @@ func (r *queryResolver) CheckOFLUpdates(ctx context.Context) (*generated.OFLUpda
 	}, nil
 }
 
+// Effect is the resolver for the effect field.
+func (r *queryResolver) Effect(ctx context.Context, id string) (*models.Effect, error) {
+	return r.ResolveEffect(ctx, id)
+}
+
+// Effects is the resolver for the effects field.
+func (r *queryResolver) Effects(ctx context.Context, projectID string) ([]*models.Effect, error) {
+	return r.ResolveEffects(ctx, projectID)
+}
+
+// ModulatorStatus is the resolver for the modulatorStatus field.
+func (r *queryResolver) ModulatorStatus(ctx context.Context) (*generated.ModulatorStatus, error) {
+	return r.ResolveModulatorStatus(ctx)
+}
+
 // FixturesByIds is the resolver for the fixturesByIds field.
 func (r *queryResolver) FixturesByIds(ctx context.Context, ids []string) ([]*models.FixtureInstance, error) {
 	var fixtures []*models.FixtureInstance
@@ -5383,8 +5498,14 @@ func (r *Resolver) ChannelDefinition() generated.ChannelDefinitionResolver {
 // Cue returns generated.CueResolver implementation.
 func (r *Resolver) Cue() generated.CueResolver { return &cueResolver{r} }
 
+// CueEffect returns generated.CueEffectResolver implementation.
+func (r *Resolver) CueEffect() generated.CueEffectResolver { return &cueEffectResolver{r} }
+
 // CueList returns generated.CueListResolver implementation.
 func (r *Resolver) CueList() generated.CueListResolver { return &cueListResolver{r} }
+
+// Effect returns generated.EffectResolver implementation.
+func (r *Resolver) Effect() generated.EffectResolver { return &effectResolver{r} }
 
 // FixtureDefinition returns generated.FixtureDefinitionResolver implementation.
 func (r *Resolver) FixtureDefinition() generated.FixtureDefinitionResolver {
@@ -5449,7 +5570,9 @@ func (r *Resolver) User() generated.UserResolver { return &userResolver{r} }
 
 type channelDefinitionResolver struct{ *Resolver }
 type cueResolver struct{ *Resolver }
+type cueEffectResolver struct{ *Resolver }
 type cueListResolver struct{ *Resolver }
+type effectResolver struct{ *Resolver }
 type fixtureDefinitionResolver struct{ *Resolver }
 type fixtureInstanceResolver struct{ *Resolver }
 type fixtureModeResolver struct{ *Resolver }

@@ -28,6 +28,36 @@ type APConfig struct {
 	MinutesRemaining *int   `json:"minutesRemaining,omitempty"`
 }
 
+// Status of an active effect at runtime.
+type ActiveEffectStatus struct {
+	EffectID   string     `json:"effectId"`
+	EffectName string     `json:"effectName"`
+	EffectType EffectType `json:"effectType"`
+	// Current intensity (0-100)
+	Intensity float64 `json:"intensity"`
+	// Current phase for waveforms (0-360)
+	Phase float64 `json:"phase"`
+	// Whether the effect has completed
+	IsComplete bool   `json:"isComplete"`
+	StartTime  string `json:"startTime"`
+}
+
+type AddEffectToCueInput struct {
+	CueID       string                                 `json:"cueId"`
+	EffectID    string                                 `json:"effectId"`
+	Intensity   graphql.Omittable[*float64]            `json:"intensity,omitempty"`
+	Speed       graphql.Omittable[*float64]            `json:"speed,omitempty"`
+	OnCueChange graphql.Omittable[*TransitionBehavior] `json:"onCueChange,omitempty"`
+}
+
+type AddFixtureToEffectInput struct {
+	EffectID       string                      `json:"effectId"`
+	FixtureID      string                      `json:"fixtureId"`
+	PhaseOffset    graphql.Omittable[*float64] `json:"phaseOffset,omitempty"`
+	AmplitudeScale graphql.Omittable[*float64] `json:"amplitudeScale,omitempty"`
+	EffectOrder    graphql.Omittable[*int]     `json:"effectOrder,omitempty"`
+}
+
 type ArtNetStatus struct {
 	Enabled          bool   `json:"enabled"`
 	BroadcastAddress string `json:"broadcastAddress"`
@@ -199,6 +229,24 @@ type CreateCueListInput struct {
 	Description graphql.Omittable[*string] `json:"description,omitempty"`
 	Loop        graphql.Omittable[*bool]   `json:"loop,omitempty"`
 	ProjectID   string                     `json:"projectId"`
+}
+
+type CreateEffectInput struct {
+	Name            string                                 `json:"name"`
+	Description     graphql.Omittable[*string]             `json:"description,omitempty"`
+	ProjectID       string                                 `json:"projectId"`
+	EffectType      EffectType                             `json:"effectType"`
+	PriorityBand    graphql.Omittable[*PriorityBand]       `json:"priorityBand,omitempty"`
+	PrioritySub     graphql.Omittable[*int]                `json:"prioritySub,omitempty"`
+	CompositionMode graphql.Omittable[*CompositionMode]    `json:"compositionMode,omitempty"`
+	OnCueChange     graphql.Omittable[*TransitionBehavior] `json:"onCueChange,omitempty"`
+	FadeDuration    graphql.Omittable[*float64]            `json:"fadeDuration,omitempty"`
+	Waveform        graphql.Omittable[*WaveformType]       `json:"waveform,omitempty"`
+	Frequency       graphql.Omittable[*float64]            `json:"frequency,omitempty"`
+	Amplitude       graphql.Omittable[*float64]            `json:"amplitude,omitempty"`
+	Offset          graphql.Omittable[*float64]            `json:"offset,omitempty"`
+	PhaseOffset     graphql.Omittable[*float64]            `json:"phaseOffset,omitempty"`
+	MasterValue     graphql.Omittable[*float64]            `json:"masterValue,omitempty"`
 }
 
 type CreateFixtureDefinitionInput struct {
@@ -600,6 +648,21 @@ type LookUsage struct {
 	Cues     []*CueUsageSummary `json:"cues"`
 }
 
+// Status of the modulator engine.
+type ModulatorStatus struct {
+	IsRunning         bool                  `json:"isRunning"`
+	UpdateRateHz      int                   `json:"updateRateHz"`
+	ActiveEffectCount int                   `json:"activeEffectCount"`
+	ActiveEffects     []*ActiveEffectStatus `json:"activeEffects"`
+	IsBlackoutActive  bool                  `json:"isBlackoutActive"`
+	BlackoutIntensity float64               `json:"blackoutIntensity"`
+	GrandMasterValue  float64               `json:"grandMasterValue"`
+	// Whether there's an active crossfade transition
+	HasActiveTransition bool `json:"hasActiveTransition"`
+	// Progress of the active transition (0-100)
+	TransitionProgress float64 `json:"transitionProgress"`
+}
+
 type Mutation struct {
 }
 
@@ -805,6 +868,23 @@ type UniverseOutput struct {
 	Channels []int `json:"channels"`
 }
 
+type UpdateEffectInput struct {
+	Name            graphql.Omittable[*string]             `json:"name,omitempty"`
+	Description     graphql.Omittable[*string]             `json:"description,omitempty"`
+	EffectType      graphql.Omittable[*EffectType]         `json:"effectType,omitempty"`
+	PriorityBand    graphql.Omittable[*PriorityBand]       `json:"priorityBand,omitempty"`
+	PrioritySub     graphql.Omittable[*int]                `json:"prioritySub,omitempty"`
+	CompositionMode graphql.Omittable[*CompositionMode]    `json:"compositionMode,omitempty"`
+	OnCueChange     graphql.Omittable[*TransitionBehavior] `json:"onCueChange,omitempty"`
+	FadeDuration    graphql.Omittable[*float64]            `json:"fadeDuration,omitempty"`
+	Waveform        graphql.Omittable[*WaveformType]       `json:"waveform,omitempty"`
+	Frequency       graphql.Omittable[*float64]            `json:"frequency,omitempty"`
+	Amplitude       graphql.Omittable[*float64]            `json:"amplitude,omitempty"`
+	Offset          graphql.Omittable[*float64]            `json:"offset,omitempty"`
+	PhaseOffset     graphql.Omittable[*float64]            `json:"phaseOffset,omitempty"`
+	MasterValue     graphql.Omittable[*float64]            `json:"masterValue,omitempty"`
+}
+
 type UpdateFixtureInstanceInput struct {
 	Name           graphql.Omittable[*string]  `json:"name,omitempty"`
 	Description    graphql.Omittable[*string]  `json:"description,omitempty"`
@@ -993,6 +1073,67 @@ func (e ChannelType) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// How multiple effects combine their values.
+// OVERRIDE - Higher priority effect completely replaces lower
+// ADDITIVE - Effects add their values together
+// MULTIPLY - Effects multiply their values together
+type CompositionMode string
+
+const (
+	CompositionModeOverride CompositionMode = "OVERRIDE"
+	CompositionModeAdditive CompositionMode = "ADDITIVE"
+	CompositionModeMultiply CompositionMode = "MULTIPLY"
+)
+
+var AllCompositionMode = []CompositionMode{
+	CompositionModeOverride,
+	CompositionModeAdditive,
+	CompositionModeMultiply,
+}
+
+func (e CompositionMode) IsValid() bool {
+	switch e {
+	case CompositionModeOverride, CompositionModeAdditive, CompositionModeMultiply:
+		return true
+	}
+	return false
+}
+
+func (e CompositionMode) String() string {
+	return string(e)
+}
+
+func (e *CompositionMode) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = CompositionMode(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid CompositionMode", str)
+	}
+	return nil
+}
+
+func (e CompositionMode) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *CompositionMode) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e CompositionMode) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 type CueListDataChangeType string
 
 const (
@@ -1171,6 +1312,70 @@ func (e *EasingType) UnmarshalJSON(b []byte) error {
 }
 
 func (e EasingType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Type of effect, determining its calculation behavior.
+// WAVEFORM - LFO-based continuous modulation using waveforms
+// CROSSFADE - Interpolates between channel states over time
+// STATIC - Sets channels to fixed values without modulation
+// MASTER - Multiplier effect for intensity scaling (grand master)
+type EffectType string
+
+const (
+	EffectTypeWaveform  EffectType = "WAVEFORM"
+	EffectTypeCrossfade EffectType = "CROSSFADE"
+	EffectTypeStatic    EffectType = "STATIC"
+	EffectTypeMaster    EffectType = "MASTER"
+)
+
+var AllEffectType = []EffectType{
+	EffectTypeWaveform,
+	EffectTypeCrossfade,
+	EffectTypeStatic,
+	EffectTypeMaster,
+}
+
+func (e EffectType) IsValid() bool {
+	switch e {
+	case EffectTypeWaveform, EffectTypeCrossfade, EffectTypeStatic, EffectTypeMaster:
+		return true
+	}
+	return false
+}
+
+func (e EffectType) String() string {
+	return string(e)
+}
+
+func (e *EffectType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = EffectType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid EffectType", str)
+	}
+	return nil
+}
+
+func (e EffectType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *EffectType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e EffectType) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
@@ -1593,6 +1798,67 @@ func (e OFLImportPhase) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Priority band determines effect processing order.
+// Effects in higher bands (SYSTEM) override effects in lower bands (BASE).
+type PriorityBand string
+
+const (
+	PriorityBandBase   PriorityBand = "BASE"
+	PriorityBandUser   PriorityBand = "USER"
+	PriorityBandCue    PriorityBand = "CUE"
+	PriorityBandSystem PriorityBand = "SYSTEM"
+)
+
+var AllPriorityBand = []PriorityBand{
+	PriorityBandBase,
+	PriorityBandUser,
+	PriorityBandCue,
+	PriorityBandSystem,
+}
+
+func (e PriorityBand) IsValid() bool {
+	switch e {
+	case PriorityBandBase, PriorityBandUser, PriorityBandCue, PriorityBandSystem:
+		return true
+	}
+	return false
+}
+
+func (e PriorityBand) String() string {
+	return string(e)
+}
+
+func (e *PriorityBand) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = PriorityBand(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid PriorityBand", str)
+	}
+	return nil
+}
+
+func (e PriorityBand) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *PriorityBand) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e PriorityBand) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 type ProjectRole string
 
 const (
@@ -1650,6 +1916,70 @@ func (e ProjectRole) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// How an effect behaves when a cue change occurs.
+// FADE_OUT - Effect fades out when cue changes
+// PERSIST - Effect persists across cue changes
+// SNAP_OFF - Effect immediately stops when cue changes
+// CROSSFADE_PARAMS - Effect parameters crossfade to new values
+type TransitionBehavior string
+
+const (
+	TransitionBehaviorFadeOut         TransitionBehavior = "FADE_OUT"
+	TransitionBehaviorPersist         TransitionBehavior = "PERSIST"
+	TransitionBehaviorSnapOff         TransitionBehavior = "SNAP_OFF"
+	TransitionBehaviorCrossfadeParams TransitionBehavior = "CROSSFADE_PARAMS"
+)
+
+var AllTransitionBehavior = []TransitionBehavior{
+	TransitionBehaviorFadeOut,
+	TransitionBehaviorPersist,
+	TransitionBehaviorSnapOff,
+	TransitionBehaviorCrossfadeParams,
+}
+
+func (e TransitionBehavior) IsValid() bool {
+	switch e {
+	case TransitionBehaviorFadeOut, TransitionBehaviorPersist, TransitionBehaviorSnapOff, TransitionBehaviorCrossfadeParams:
+		return true
+	}
+	return false
+}
+
+func (e TransitionBehavior) String() string {
+	return string(e)
+}
+
+func (e *TransitionBehavior) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = TransitionBehavior(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid TransitionBehavior", str)
+	}
+	return nil
+}
+
+func (e TransitionBehavior) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *TransitionBehavior) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e TransitionBehavior) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 type UserRole string
 
 const (
@@ -1700,6 +2030,70 @@ func (e *UserRole) UnmarshalJSON(b []byte) error {
 }
 
 func (e UserRole) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Waveform type for LFO-based effects.
+type WaveformType string
+
+const (
+	WaveformTypeSine     WaveformType = "SINE"
+	WaveformTypeCosine   WaveformType = "COSINE"
+	WaveformTypeSquare   WaveformType = "SQUARE"
+	WaveformTypeSawtooth WaveformType = "SAWTOOTH"
+	WaveformTypeTriangle WaveformType = "TRIANGLE"
+	WaveformTypeRandom   WaveformType = "RANDOM"
+)
+
+var AllWaveformType = []WaveformType{
+	WaveformTypeSine,
+	WaveformTypeCosine,
+	WaveformTypeSquare,
+	WaveformTypeSawtooth,
+	WaveformTypeTriangle,
+	WaveformTypeRandom,
+}
+
+func (e WaveformType) IsValid() bool {
+	switch e {
+	case WaveformTypeSine, WaveformTypeCosine, WaveformTypeSquare, WaveformTypeSawtooth, WaveformTypeTriangle, WaveformTypeRandom:
+		return true
+	}
+	return false
+}
+
+func (e WaveformType) String() string {
+	return string(e)
+}
+
+func (e *WaveformType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = WaveformType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid WaveformType", str)
+	}
+	return nil
+}
+
+func (e WaveformType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *WaveformType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e WaveformType) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

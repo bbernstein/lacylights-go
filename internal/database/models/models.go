@@ -37,6 +37,7 @@ type Project struct {
 	Looks      []Look            `gorm:"foreignKey:ProjectID"`
 	CueLists   []CueList         `gorm:"foreignKey:ProjectID"`
 	LookBoards []LookBoard       `gorm:"foreignKey:ProjectID"`
+	Effects    []Effect          `gorm:"foreignKey:ProjectID"`
 }
 
 func (Project) TableName() string { return "projects" }
@@ -237,7 +238,8 @@ type Cue struct {
 	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime"`
 
 	// Relations
-	Look *Look `gorm:"foreignKey:LookID"`
+	Look    *Look       `gorm:"foreignKey:LookID"`
+	Effects []CueEffect `gorm:"foreignKey:CueID"`
 }
 
 func (Cue) TableName() string { return "cues" }
@@ -307,6 +309,98 @@ type LookBoardButton struct {
 }
 
 func (LookBoardButton) TableName() string { return "look_board_buttons" }
+
+// Effect represents an FX Engine effect definition.
+// Effects can be WAVEFORM (oscillating), CROSSFADE, STATIC, or MASTER types.
+// Table: effects
+type Effect struct {
+	ID          string  `gorm:"column:id;primaryKey"`
+	Name        string  `gorm:"column:name"`
+	Description *string `gorm:"column:description"`
+	ProjectID   string  `gorm:"column:project_id;index"`
+	Project     *Project
+
+	EffectType      string `gorm:"column:effect_type;default:WAVEFORM"`   // WAVEFORM, CROSSFADE, STATIC, MASTER
+	PriorityBand    string `gorm:"column:priority_band;default:USER"`     // BASE, USER, CUE, SYSTEM
+	PrioritySub     int    `gorm:"column:priority_sub;default:50"`        // 0-100
+	CompositionMode string `gorm:"column:composition_mode;default:OVERRIDE"` // OVERRIDE, ADDITIVE, MULTIPLY
+	OnCueChange     string `gorm:"column:on_cue_change;default:FADE_OUT"` // FADE_OUT, PERSIST, SNAP_OFF, CROSSFADE_PARAMS
+	FadeDuration    *float64 `gorm:"column:fade_duration"`
+
+	// For WAVEFORM effects
+	EasingType  *string  `gorm:"column:easing_type"`
+	Waveform    *string  `gorm:"column:waveform"`                  // SINE, COSINE, SQUARE, SAWTOOTH, TRIANGLE, RANDOM
+	Frequency   float64  `gorm:"column:frequency;default:1.0"`     // Hz
+	Amplitude   float64  `gorm:"column:amplitude;default:100.0"`   // Percentage
+	Offset      float64  `gorm:"column:offset;default:50.0"`       // Percentage (center value)
+	PhaseOffset float64  `gorm:"column:phase_offset;default:0.0"`  // Degrees
+
+	// For MASTER effects
+	MasterValue *float64 `gorm:"column:master_value"` // 0.0-1.0
+
+	// Relations
+	Fixtures []EffectFixture `gorm:"foreignKey:EffectID;constraint:OnDelete:CASCADE"`
+
+	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt time.Time `gorm:"column:updated_at;autoUpdateTime"`
+}
+
+func (Effect) TableName() string { return "effects" }
+
+// EffectFixture links effects to fixtures with per-fixture settings.
+// Table: effect_fixtures
+type EffectFixture struct {
+	ID        string           `gorm:"column:id;primaryKey"`
+	EffectID  string           `gorm:"column:effect_id;index"`
+	FixtureID string           `gorm:"column:fixture_id;index"`
+	Fixture   *FixtureInstance `gorm:"foreignKey:FixtureID"`
+
+	PhaseOffset    *float64 `gorm:"column:phase_offset"`    // Per-fixture phase offset
+	AmplitudeScale *float64 `gorm:"column:amplitude_scale"` // Per-fixture amplitude multiplier
+	EffectOrder    *int     `gorm:"column:effect_order"`    // Order in the effect
+
+	// Relations
+	Channels []EffectChannel `gorm:"foreignKey:EffectFixtureID;constraint:OnDelete:CASCADE"`
+
+	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime"`
+}
+
+func (EffectFixture) TableName() string { return "effect_fixtures" }
+
+// EffectChannel defines per-channel overrides within an EffectFixture.
+// Table: effect_channels
+type EffectChannel struct {
+	ID              string `gorm:"column:id;primaryKey"`
+	EffectFixtureID string `gorm:"column:effect_fixture_id;index"`
+
+	ChannelOffset *int    `gorm:"column:channel_offset"` // Which channel (offset from fixture start)
+	ChannelType   *string `gorm:"column:channel_type"`   // INTENSITY, COLOR, PAN, TILT, etc.
+
+	AmplitudeScale *float64 `gorm:"column:amplitude_scale"` // Per-channel amplitude
+	FrequencyScale *float64 `gorm:"column:frequency_scale"` // Per-channel frequency multiplier
+
+	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime"`
+}
+
+func (EffectChannel) TableName() string { return "effect_channels" }
+
+// CueEffect links effects to cues with runtime parameters.
+// Table: cue_effects
+type CueEffect struct {
+	ID       string  `gorm:"column:id;primaryKey"`
+	CueID    string  `gorm:"column:cue_id;index"`
+	Cue      *Cue    `gorm:"foreignKey:CueID"`
+	EffectID string  `gorm:"column:effect_id;index"`
+	Effect   *Effect `gorm:"foreignKey:EffectID"`
+
+	Intensity   float64 `gorm:"column:intensity;default:100.0"` // 0-100
+	Speed       float64 `gorm:"column:speed;default:1.0"`       // Frequency multiplier
+	OnCueChange *string `gorm:"column:on_cue_change"`           // Override effect's default behavior
+
+	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime"`
+}
+
+func (CueEffect) TableName() string { return "cue_effects" }
 
 // OFLImportMeta tracks the history of OFL imports.
 // Table: ofl_import_meta
