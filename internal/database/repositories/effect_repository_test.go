@@ -970,3 +970,70 @@ func TestEffectRepository_FindCueEffectByID_NotFound(t *testing.T) {
 func strPtr(s string) *string {
 	return &s
 }
+
+// TestEffectRepository_FindEffectChannelByID tests finding effect channel by ID.
+func TestEffectRepository_FindEffectChannelByID(t *testing.T) {
+	db, cleanup := setupEffectTestDB(t)
+	defer cleanup()
+
+	repo := NewEffectRepository(db)
+	ctx := context.Background()
+
+	project, fixtures := createTestProjectAndFixtures(t, db)
+
+	// Create effect with fixture and channel
+	effect := &models.Effect{
+		ID:         cuid.New(),
+		Name:       "Effect for FindChannelByID",
+		ProjectID:  project.ID,
+		EffectType: "WAVEFORM",
+	}
+	db.Create(effect)
+
+	err := repo.AddFixtureToEffect(ctx, effect.ID, fixtures[0].ID, nil, nil)
+	if err != nil {
+		t.Fatalf("AddFixtureToEffect failed: %v", err)
+	}
+
+	effectFixture, _ := repo.GetEffectFixture(ctx, effect.ID, fixtures[0].ID)
+
+	channelOffset := 0
+	channelType := "INTENSITY"
+	err = repo.AddChannelToEffectFixture(ctx, effectFixture.ID, &channelOffset, &channelType)
+	if err != nil {
+		t.Fatalf("AddChannelToEffectFixture failed: %v", err)
+	}
+
+	// Get the channel that was created
+	channels, err := repo.GetEffectChannels(ctx, effectFixture.ID)
+	if err != nil {
+		t.Fatalf("GetEffectChannels failed: %v", err)
+	}
+	if len(channels) != 1 {
+		t.Fatalf("Expected 1 channel, got %d", len(channels))
+	}
+
+	// Test FindEffectChannelByID
+	found, err := repo.FindEffectChannelByID(ctx, channels[0].ID)
+	if err != nil {
+		t.Fatalf("FindEffectChannelByID failed: %v", err)
+	}
+	if found == nil {
+		t.Fatal("Expected to find effect channel")
+	}
+	if found.ID != channels[0].ID {
+		t.Errorf("ID mismatch: got %s, want %s", found.ID, channels[0].ID)
+	}
+	if found.ChannelOffset == nil || *found.ChannelOffset != 0 {
+		t.Errorf("ChannelOffset mismatch: got %v, want 0", found.ChannelOffset)
+	}
+
+	// Test not found
+	notFound, err := repo.FindEffectChannelByID(ctx, "nonexistent-id")
+	if err != nil {
+		t.Fatalf("FindEffectChannelByID for non-existent failed: %v", err)
+	}
+	if notFound != nil {
+		t.Error("Expected nil for non-existent effect channel")
+	}
+}

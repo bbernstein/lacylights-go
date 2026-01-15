@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
+	"github.com/bbernstein/lacylights-go/internal/services/modulator"
 )
 
 func TestCueForPlayback(t *testing.T) {
@@ -1653,5 +1654,448 @@ func TestFindPreviousNonSkippedCue_SingleCue(t *testing.T) {
 	result = findPreviousNonSkippedCue(cues, 0, false)
 	if result != -1 {
 		t.Errorf("Expected -1 for single skipped cue, got %d", result)
+	}
+}
+
+// Tests for effect conversion and parsing functions
+
+func TestParseEffectPriority(t *testing.T) {
+	tests := []struct {
+		name         string
+		band         string
+		sub          int
+		wantBand     modulator.PriorityBand
+		wantSubPrior int
+	}{
+		{"BASE band", "BASE", 10, modulator.PriorityBandBase, 10},
+		{"USER band", "USER", 20, modulator.PriorityBandUser, 20},
+		{"CUE band", "CUE", 30, modulator.PriorityBandCue, 30},
+		{"SYSTEM band", "SYSTEM", 40, modulator.PriorityBandSystem, 40},
+		{"Unknown band defaults to USER", "UNKNOWN", 50, modulator.PriorityBandUser, 50},
+		{"Empty band defaults to USER", "", 0, modulator.PriorityBandUser, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseEffectPriority(tt.band, tt.sub)
+			if got.Band != tt.wantBand {
+				t.Errorf("parseEffectPriority(%q, %d).Band = %v, want %v", tt.band, tt.sub, got.Band, tt.wantBand)
+			}
+			if got.SubPriority != tt.wantSubPrior {
+				t.Errorf("parseEffectPriority(%q, %d).SubPriority = %d, want %d", tt.band, tt.sub, got.SubPriority, tt.wantSubPrior)
+			}
+		})
+	}
+}
+
+func TestParseCompositionMode(t *testing.T) {
+	tests := []struct {
+		name string
+		mode string
+		want string
+	}{
+		{"OVERRIDE mode", "OVERRIDE", "OVERRIDE"},
+		{"ADDITIVE mode", "ADDITIVE", "ADDITIVE"},
+		{"MULTIPLY mode", "MULTIPLY", "MULTIPLY"},
+		{"Unknown mode defaults to OVERRIDE", "UNKNOWN", "OVERRIDE"},
+		{"Empty mode defaults to OVERRIDE", "", "OVERRIDE"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseCompositionMode(tt.mode)
+			if got.String() != tt.want {
+				t.Errorf("parseCompositionMode(%q) = %s, want %s", tt.mode, got.String(), tt.want)
+			}
+		})
+	}
+}
+
+func TestParseTransitionBehavior(t *testing.T) {
+	tests := []struct {
+		name     string
+		behavior string
+		want     string
+	}{
+		{"FADE_OUT behavior", "FADE_OUT", "FADE_OUT"},
+		{"PERSIST behavior", "PERSIST", "PERSIST"},
+		{"SNAP_OFF behavior", "SNAP_OFF", "SNAP_OFF"},
+		{"CROSSFADE_PARAMS behavior", "CROSSFADE_PARAMS", "CROSSFADE_PARAMS"},
+		{"Unknown behavior defaults to FADE_OUT", "UNKNOWN", "FADE_OUT"},
+		{"Empty behavior defaults to FADE_OUT", "", "FADE_OUT"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseTransitionBehavior(tt.behavior)
+			if got.String() != tt.want {
+				t.Errorf("parseTransitionBehavior(%q) = %s, want %s", tt.behavior, got.String(), tt.want)
+			}
+		})
+	}
+}
+
+func TestSetPreviewService(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	// Initially nil
+	if service.previewService != nil {
+		t.Error("Expected previewService to be nil initially")
+	}
+
+	// Set a nil preview service (valid use case for disabling)
+	service.SetPreviewService(nil)
+	if service.previewService != nil {
+		t.Error("Expected previewService to remain nil after setting nil")
+	}
+}
+
+func TestConvertToModulatorEffect_BasicFields(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	// Create a basic effect
+	dbEffect := &models.Effect{
+		ID:              "effect-1",
+		Name:            "Test Effect",
+		ProjectID:       "project-1",
+		EffectType:      "WAVEFORM",
+		PriorityBand:    "USER",
+		PrioritySub:     10,
+		CompositionMode: "ADDITIVE",
+		OnCueChange:     "FADE_OUT",
+		Frequency:       2.0,
+		Amplitude:       50.0,
+		Offset:          25.0,
+		PhaseOffset:     0.5,
+	}
+
+	result := service.convertToModulatorEffect(dbEffect)
+
+	if result.ID != "effect-1" {
+		t.Errorf("Expected ID 'effect-1', got %s", result.ID)
+	}
+	if result.Name != "Test Effect" {
+		t.Errorf("Expected Name 'Test Effect', got %s", result.Name)
+	}
+	if result.ProjectID != "project-1" {
+		t.Errorf("Expected ProjectID 'project-1', got %s", result.ProjectID)
+	}
+	if result.Frequency != 2.0 {
+		t.Errorf("Expected Frequency 2.0, got %f", result.Frequency)
+	}
+	if result.Amplitude != 50.0 {
+		t.Errorf("Expected Amplitude 50.0, got %f", result.Amplitude)
+	}
+	if result.Offset != 25.0 {
+		t.Errorf("Expected Offset 25.0, got %f", result.Offset)
+	}
+	if result.PhaseOffset != 0.5 {
+		t.Errorf("Expected PhaseOffset 0.5, got %f", result.PhaseOffset)
+	}
+}
+
+func TestConvertToModulatorEffect_OptionalFields(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	description := "A test effect"
+	fadeDuration := 3.0
+	waveform := "SINE"
+	masterValue := 80.0
+
+	dbEffect := &models.Effect{
+		ID:              "effect-2",
+		Name:            "Effect with optional fields",
+		ProjectID:       "project-1",
+		EffectType:      "WAVEFORM",
+		PriorityBand:    "CUE",
+		PrioritySub:     50,
+		CompositionMode: "OVERRIDE",
+		OnCueChange:     "PERSIST",
+		Frequency:       1.0,
+		Amplitude:       100.0,
+		Offset:          0.0,
+		PhaseOffset:     0.0,
+		Description:     &description,
+		FadeDuration:    &fadeDuration,
+		Waveform:        &waveform,
+		MasterValue:     &masterValue,
+	}
+
+	result := service.convertToModulatorEffect(dbEffect)
+
+	if result.Description != "A test effect" {
+		t.Errorf("Expected Description 'A test effect', got %s", result.Description)
+	}
+	if result.FadeDuration == nil || *result.FadeDuration != 3.0 {
+		t.Errorf("Expected FadeDuration 3.0, got %v", result.FadeDuration)
+	}
+	if result.MasterValue != 80.0 {
+		t.Errorf("Expected MasterValue 80.0, got %f", result.MasterValue)
+	}
+}
+
+func TestConvertToModulatorEffect_WithFixtures(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	channelOffset := 0
+	amplitudeScale := 0.5
+	frequencyScale := 2.0
+	fixturePhaseOffset := 0.25
+
+	dbEffect := &models.Effect{
+		ID:              "effect-3",
+		Name:            "Effect with fixtures",
+		ProjectID:       "project-1",
+		EffectType:      "WAVEFORM",
+		PriorityBand:    "USER",
+		PrioritySub:     0,
+		CompositionMode: "ADDITIVE",
+		OnCueChange:     "FADE_OUT",
+		Frequency:       1.0,
+		Amplitude:       100.0,
+		Offset:          50.0,
+		PhaseOffset:     0.0,
+		Fixtures: []models.EffectFixture{
+			{
+				ID:             "ef-1",
+				EffectID:       "effect-3",
+				FixtureID:      "fixture-1",
+				PhaseOffset:    &fixturePhaseOffset,
+				AmplitudeScale: &amplitudeScale,
+				Fixture: &models.FixtureInstance{
+					ID:           "fixture-1",
+					Universe:     1,
+					StartChannel: 10,
+				},
+				Channels: []models.EffectChannel{
+					{
+						ID:              "ec-1",
+						EffectFixtureID: "ef-1",
+						ChannelOffset:   &channelOffset,
+						AmplitudeScale:  nil, // Will use fixture-level scale
+						FrequencyScale:  &frequencyScale,
+					},
+				},
+			},
+		},
+	}
+
+	result := service.convertToModulatorEffect(dbEffect)
+
+	if len(result.TargetChannels) != 1 {
+		t.Errorf("Expected 1 target channel, got %d", len(result.TargetChannels))
+	}
+
+	if len(result.TargetChannels) > 0 {
+		tc := result.TargetChannels[0]
+		if tc.Universe != 1 {
+			t.Errorf("Expected Universe 1, got %d", tc.Universe)
+		}
+		if tc.Channel != 10 {
+			t.Errorf("Expected Channel 10, got %d", tc.Channel)
+		}
+		if tc.PhaseOffset == nil || *tc.PhaseOffset != 0.25 {
+			t.Errorf("Expected PhaseOffset 0.25, got %v", tc.PhaseOffset)
+		}
+		if tc.AmplitudeScale == nil || *tc.AmplitudeScale != 0.5 {
+			t.Errorf("Expected AmplitudeScale 0.5, got %v", tc.AmplitudeScale)
+		}
+		if tc.FrequencyScale == nil || *tc.FrequencyScale != 2.0 {
+			t.Errorf("Expected FrequencyScale 2.0, got %v", tc.FrequencyScale)
+		}
+	}
+}
+
+func TestConvertToModulatorEffect_ChannelMinMaxValues(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	channelOffset := 0
+	minValue := 50.0
+	maxValue := 200.0
+
+	dbEffect := &models.Effect{
+		ID:              "effect-4",
+		Name:            "Effect with min/max",
+		ProjectID:       "project-1",
+		EffectType:      "WAVEFORM",
+		PriorityBand:    "USER",
+		PrioritySub:     0,
+		CompositionMode: "OVERRIDE",
+		OnCueChange:     "FADE_OUT",
+		Frequency:       1.0,
+		Amplitude:       100.0,
+		Offset:          50.0,
+		PhaseOffset:     0.0,
+		Fixtures: []models.EffectFixture{
+			{
+				ID:        "ef-1",
+				EffectID:  "effect-4",
+				FixtureID: "fixture-1",
+				Fixture: &models.FixtureInstance{
+					ID:           "fixture-1",
+					Universe:     1,
+					StartChannel: 1,
+				},
+				Channels: []models.EffectChannel{
+					{
+						ID:              "ec-1",
+						EffectFixtureID: "ef-1",
+						ChannelOffset:   &channelOffset,
+						MinValue:        &minValue,
+						MaxValue:        &maxValue,
+					},
+				},
+			},
+		},
+	}
+
+	result := service.convertToModulatorEffect(dbEffect)
+
+	if len(result.TargetChannels) != 1 {
+		t.Fatalf("Expected 1 target channel, got %d", len(result.TargetChannels))
+	}
+
+	tc := result.TargetChannels[0]
+
+	// When minValue and maxValue are set, offset and amplitude should be calculated
+	expectedOffset := (minValue + maxValue) / 2    // 125
+	expectedAmplitude := (maxValue - minValue) / 2 // 75
+
+	if tc.Offset == nil || *tc.Offset != expectedOffset {
+		t.Errorf("Expected Offset %f, got %v", expectedOffset, tc.Offset)
+	}
+	if tc.Amplitude == nil || *tc.Amplitude != expectedAmplitude {
+		t.Errorf("Expected Amplitude %f, got %v", expectedAmplitude, tc.Amplitude)
+	}
+	// AmplitudeScale should be nil when min/max are used
+	if tc.AmplitudeScale != nil {
+		t.Errorf("Expected AmplitudeScale nil when min/max used, got %v", tc.AmplitudeScale)
+	}
+}
+
+func TestConvertToModulatorEffect_ChannelAmplitudeScalePrecedence(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	channelOffset := 0
+	fixtureAmplitudeScale := 0.5
+	channelAmplitudeScale := 0.8 // Should take precedence
+
+	dbEffect := &models.Effect{
+		ID:              "effect-5",
+		Name:            "Effect with amplitude scales",
+		ProjectID:       "project-1",
+		EffectType:      "WAVEFORM",
+		PriorityBand:    "USER",
+		PrioritySub:     0,
+		CompositionMode: "OVERRIDE",
+		OnCueChange:     "FADE_OUT",
+		Frequency:       1.0,
+		Amplitude:       100.0,
+		Offset:          50.0,
+		PhaseOffset:     0.0,
+		Fixtures: []models.EffectFixture{
+			{
+				ID:             "ef-1",
+				EffectID:       "effect-5",
+				FixtureID:      "fixture-1",
+				AmplitudeScale: &fixtureAmplitudeScale,
+				Fixture: &models.FixtureInstance{
+					ID:           "fixture-1",
+					Universe:     1,
+					StartChannel: 1,
+				},
+				Channels: []models.EffectChannel{
+					{
+						ID:              "ec-1",
+						EffectFixtureID: "ef-1",
+						ChannelOffset:   &channelOffset,
+						AmplitudeScale:  &channelAmplitudeScale, // Takes precedence
+					},
+				},
+			},
+		},
+	}
+
+	result := service.convertToModulatorEffect(dbEffect)
+
+	if len(result.TargetChannels) != 1 {
+		t.Fatalf("Expected 1 target channel, got %d", len(result.TargetChannels))
+	}
+
+	tc := result.TargetChannels[0]
+
+	// Channel-level amplitude scale should take precedence over fixture-level
+	if tc.AmplitudeScale == nil || *tc.AmplitudeScale != 0.8 {
+		t.Errorf("Expected channel AmplitudeScale 0.8 to take precedence, got %v", tc.AmplitudeScale)
+	}
+}
+
+func TestConvertToModulatorEffect_NilFixture(t *testing.T) {
+	service := &Service{
+		states:              make(map[string]*PlaybackState),
+		fadeProgressTickers: make(map[string]*time.Ticker),
+		followTimers:        make(map[string]*time.Timer),
+		fadeCompleteTimers:  make(map[string]*time.Timer),
+	}
+
+	// Effect with fixture entry but nil Fixture pointer
+	dbEffect := &models.Effect{
+		ID:              "effect-6",
+		Name:            "Effect with nil fixture",
+		ProjectID:       "project-1",
+		EffectType:      "WAVEFORM",
+		PriorityBand:    "USER",
+		PrioritySub:     0,
+		CompositionMode: "OVERRIDE",
+		OnCueChange:     "FADE_OUT",
+		Frequency:       1.0,
+		Amplitude:       100.0,
+		Offset:          50.0,
+		PhaseOffset:     0.0,
+		Fixtures: []models.EffectFixture{
+			{
+				ID:        "ef-1",
+				EffectID:  "effect-6",
+				FixtureID: "fixture-1",
+				Fixture:   nil, // Nil fixture should be skipped
+			},
+		},
+	}
+
+	result := service.convertToModulatorEffect(dbEffect)
+
+	// Should have no target channels since fixture is nil
+	if len(result.TargetChannels) != 0 {
+		t.Errorf("Expected 0 target channels when fixture is nil, got %d", len(result.TargetChannels))
 	}
 }
