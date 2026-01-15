@@ -12,8 +12,8 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 	"github.com/bbernstein/lacylights-go/internal/services/dmx"
 	"github.com/bbernstein/lacylights-go/internal/services/export"
-	"github.com/bbernstein/lacylights-go/internal/services/fade"
 	importservice "github.com/bbernstein/lacylights-go/internal/services/import"
+	"github.com/bbernstein/lacylights-go/internal/services/modulator"
 	"github.com/bbernstein/lacylights-go/internal/services/ofl"
 	"github.com/bbernstein/lacylights-go/internal/services/playback"
 	"github.com/bbernstein/lacylights-go/internal/services/preview"
@@ -32,14 +32,15 @@ type Resolver struct {
 	ProjectRepo    *repositories.ProjectRepository
 	SettingRepo    *repositories.SettingRepository
 	FixtureRepo    *repositories.FixtureRepository
-	LookRepo      *repositories.LookRepository
-	CueListRepo   *repositories.CueListRepository
-	CueRepo       *repositories.CueRepository
-	LookBoardRepo *repositories.LookBoardRepository
+	LookRepo       *repositories.LookRepository
+	CueListRepo    *repositories.CueListRepository
+	CueRepo        *repositories.CueRepository
+	LookBoardRepo  *repositories.LookBoardRepository
+	EffectRepo     *repositories.EffectRepository
 
 	// Services
 	DMXService      *dmx.Service
-	FadeEngine      *fade.Engine
+	FadeEngine      *modulator.Engine
 	PlaybackService *playback.Service
 	ExportService   *export.Service
 	ImportService   *importservice.Service
@@ -52,13 +53,14 @@ type Resolver struct {
 }
 
 // NewResolver creates a new Resolver instance with all dependencies.
-func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *fade.Engine, playbackService *playback.Service, oflCachePath string) *Resolver {
+func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *modulator.Engine, playbackService *playback.Service, oflCachePath string) *Resolver {
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
 	lookRepo := repositories.NewLookRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
 	lookBoardRepo := repositories.NewLookBoardRepository(db)
+	effectRepo := repositories.NewEffectRepository(db)
 
 	ps := pubsub.New()
 
@@ -74,6 +76,7 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *fade.Engine, 
 		CueListRepo:     cueListRepo,
 		CueRepo:         cueRepo,
 		LookBoardRepo:   lookBoardRepo,
+		EffectRepo:      effectRepo,
 		DMXService:      dmxService,
 		FadeEngine:      fadeEngine,
 		PlaybackService: playbackService,

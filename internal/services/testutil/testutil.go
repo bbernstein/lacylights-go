@@ -52,6 +52,10 @@ func SetupTestDB(t *testing.T) (*TestDB, func()) {
 		&models.LookBoard{},
 		&models.LookBoardButton{},
 		&models.Setting{},
+		&models.Effect{},
+		&models.EffectFixture{},
+		&models.EffectChannel{},
+		&models.CueEffect{},
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)

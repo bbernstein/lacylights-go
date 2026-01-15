@@ -32,7 +32,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 	"github.com/bbernstein/lacylights-go/internal/graphql/resolvers"
 	"github.com/bbernstein/lacylights-go/internal/services/dmx"
-	"github.com/bbernstein/lacylights-go/internal/services/fade"
+	"github.com/bbernstein/lacylights-go/internal/services/modulator"
 	"github.com/bbernstein/lacylights-go/internal/services/ofl"
 	"github.com/bbernstein/lacylights-go/internal/services/playback"
 	"github.com/bbernstein/lacylights-go/internal/services/version"
@@ -110,6 +110,10 @@ func main() {
 		{"look_boards", &models.LookBoard{}, []string{"id", "project_id"}},
 		{"look_board_buttons", &models.LookBoardButton{}, []string{"id", "look_board_id", "look_id"}},
 		{"fixture_values", &models.FixtureValue{}, []string{"id", "look_id", "fixture_id"}},
+		{"effects", &models.Effect{}, []string{"id", "project_id"}},
+		{"effect_fixtures", &models.EffectFixture{}, []string{"id", "effect_id", "fixture_id"}},
+		{"effect_channels", &models.EffectChannel{}, []string{"id", "effect_fixture_id"}},
+		{"cue_effects", &models.CueEffect{}, []string{"id", "cue_id", "effect_id"}},
 	}
 
 	for _, t := range tablesWithFK {
@@ -148,6 +152,11 @@ func main() {
 	// Backfill default layout canvas dimensions for existing projects
 	if err := backfillLayoutCanvasDimensions(db); err != nil {
 		log.Printf("Warning: layout canvas backfill failed: %v", err)
+	}
+
+	// Add min_value and max_value columns to effect_channels table
+	if err := migrateEffectChannelMinMax(db); err != nil {
+		log.Printf("Warning: effect channel min/max migration failed: %v", err)
 	}
 
 	// Load Open Fixture Library if enabled and database is empty
@@ -221,8 +230,8 @@ func main() {
 			log.Printf("Warning: invalid saved fade update rate: %s", savedRate.Value)
 		}
 	}
-	fadeEngine := fade.NewEngine(dmxService, fadeUpdateRate)
-	fadeEngine.Start()
+	fadeEngine := modulator.NewEngine(dmxService, fadeUpdateRate)
+	_ = fadeEngine.Start()
 
 	// Create playback service
 	playbackService := playback.NewService(db, dmxService, fadeEngine)
@@ -319,7 +328,7 @@ func main() {
 
 	// Cleanup services in reverse order
 	playbackService.Cleanup()
-	fadeEngine.Stop()
+	_ = fadeEngine.Stop()
 	dmxService.Stop()
 
 	// Graceful shutdown with timeout
@@ -478,6 +487,31 @@ func backfillLayoutCanvasDimensions(db *gorm.DB) error {
 	log.Printf("✅ Backfilled layout canvas dimensions for %d projects", count)
 	return nil
 }
+
+// migrateEffectChannelMinMax adds min_value and max_value columns to the effect_channels table.
+// These columns allow per-channel min/max range specification for waveform effects.
+func migrateEffectChannelMinMax(db *gorm.DB) error {
+	// Check if the min_value column already exists
+	if db.Migrator().HasColumn("effect_channels", "min_value") {
+		return nil // Columns already exist, nothing to migrate
+	}
+
+	log.Println("🔄 Adding min_value and max_value columns to effect_channels table...")
+
+	// Add min_value column
+	if err := db.Exec("ALTER TABLE effect_channels ADD COLUMN min_value REAL").Error; err != nil {
+		return fmt.Errorf("failed to add min_value column: %w", err)
+	}
+
+	// Add max_value column
+	if err := db.Exec("ALTER TABLE effect_channels ADD COLUMN max_value REAL").Error; err != nil {
+		return fmt.Errorf("failed to add max_value column: %w", err)
+	}
+
+	log.Println("✅ Added min_value and max_value columns to effect_channels table")
+	return nil
+}
+
 // migrateSceneToLook handles the schema migration from "scene" terminology to "look" terminology.
 // This is a one-time migration that runs on startup to rename tables and columns.
 // SQLite doesn't support renaming columns directly, so we use ALTER TABLE RENAME TO for tables

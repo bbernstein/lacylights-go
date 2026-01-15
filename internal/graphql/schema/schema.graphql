@@ -138,6 +138,73 @@ enum CueListDataChangeType {
   LOOK_NAME_CHANGED
 }
 
+# =============================================================================
+# EFFECT ENUMS
+# =============================================================================
+
+"""
+Type of effect, determining its calculation behavior.
+WAVEFORM - LFO-based continuous modulation using waveforms
+CROSSFADE - Interpolates between channel states over time
+STATIC - Sets channels to fixed values without modulation
+MASTER - Multiplier effect for intensity scaling (grand master)
+"""
+enum EffectType {
+  WAVEFORM
+  CROSSFADE
+  STATIC
+  MASTER
+}
+
+"""
+Priority band determines effect processing order.
+Effects in higher bands (SYSTEM) override effects in lower bands (BASE).
+"""
+enum PriorityBand {
+  BASE
+  USER
+  CUE
+  SYSTEM
+}
+
+"""
+How an effect behaves when a cue change occurs.
+FADE_OUT - Effect fades out when cue changes
+PERSIST - Effect persists across cue changes
+SNAP_OFF - Effect immediately stops when cue changes
+CROSSFADE_PARAMS - Effect parameters crossfade to new values
+"""
+enum TransitionBehavior {
+  FADE_OUT
+  PERSIST
+  SNAP_OFF
+  CROSSFADE_PARAMS
+}
+
+"""
+Waveform type for LFO-based effects.
+"""
+enum WaveformType {
+  SINE
+  COSINE
+  SQUARE
+  SAWTOOTH
+  TRIANGLE
+  RANDOM
+}
+
+"""
+How multiple effects combine their values.
+OVERRIDE - Higher priority effect completely replaces lower
+ADDITIVE - Effects add their values together
+MULTIPLY - Effects multiply their values together
+"""
+enum CompositionMode {
+  OVERRIDE
+  ADDITIVE
+  MULTIPLY
+}
+
 "Payload for cue list data change notifications"
 type CueListDataChangedPayload {
   cueListId: ID!
@@ -337,6 +404,8 @@ type Cue {
   notes: String
   "When true, this cue is skipped during playback but remains visible in the UI"
   skip: Boolean!
+  "Effects associated with this cue"
+  effects: [CueEffect!]!
 }
 
 type CueListPlaybackStatus {
@@ -376,6 +445,133 @@ type GlobalPlaybackStatus {
   "Fade progress percentage (0-100)"
   fadeProgress: Float
   lastUpdated: String!
+}
+
+# =============================================================================
+# EFFECT TYPES
+# =============================================================================
+
+"""
+Effect definition for DMX modulation.
+Effects can be waveform-based (LFO), crossfades, static values, or master faders.
+"""
+type Effect {
+  id: ID!
+  name: String!
+  description: String
+  projectId: ID!
+
+  effectType: EffectType!
+  priorityBand: PriorityBand!
+  prioritySub: Int!
+  compositionMode: CompositionMode!
+  onCueChange: TransitionBehavior!
+  fadeDuration: Float
+
+  "Waveform type for WAVEFORM effects"
+  waveform: WaveformType
+  "Frequency in Hz"
+  frequency: Float!
+  "Amplitude as percentage (0-100)"
+  amplitude: Float!
+  "Offset/baseline as percentage (0-100)"
+  offset: Float!
+  "Phase offset in degrees (0-360)"
+  phaseOffset: Float!
+
+  "Master value for MASTER effects (0.0-1.0)"
+  masterValue: Float
+
+  fixtures: [EffectFixture!]!
+
+  createdAt: String!
+  updatedAt: String!
+}
+
+"""
+Links an effect to a fixture with per-fixture settings.
+"""
+type EffectFixture {
+  id: ID!
+  effectId: ID!
+  fixtureId: ID!
+  fixture: FixtureInstance
+  "Per-fixture phase offset in degrees"
+  phaseOffset: Float
+  "Per-fixture amplitude multiplier"
+  amplitudeScale: Float
+  "Order of this fixture in the effect"
+  effectOrder: Int
+  channels: [EffectChannel!]!
+}
+
+"""
+Per-channel overrides within an EffectFixture.
+"""
+type EffectChannel {
+  id: ID!
+  effectFixtureId: ID!
+  "Channel offset from fixture start address"
+  channelOffset: Int
+  "Channel type (INTENSITY, RED, etc.)"
+  channelType: String
+  "Per-channel amplitude multiplier (used when minValue/maxValue not set)"
+  amplitudeScale: Float
+  "Per-channel frequency multiplier"
+  frequencyScale: Float
+  "Minimum value for oscillation (0-100%). When set with maxValue, defines oscillation range."
+  minValue: Float
+  "Maximum value for oscillation (0-100%). When set with minValue, defines oscillation range."
+  maxValue: Float
+}
+
+"""
+Links an effect to a cue with runtime parameters.
+"""
+type CueEffect {
+  id: ID!
+  cueId: ID!
+  effectId: ID!
+  effect: Effect
+  "Intensity override (0-100)"
+  intensity: Float!
+  "Speed/frequency multiplier"
+  speed: Float!
+  "Override effect's default cue change behavior"
+  onCueChange: TransitionBehavior
+}
+
+"""
+Status of an active effect at runtime.
+"""
+type ActiveEffectStatus {
+  effectId: ID!
+  effectName: String!
+  effectType: EffectType!
+  "Current intensity (0-100)"
+  intensity: Float!
+  "Current phase for waveforms (0-360)"
+  phase: Float!
+  "Whether the effect has completed"
+  isComplete: Boolean!
+  startTime: String!
+}
+
+"""
+Status of the modulator engine.
+"""
+type ModulatorStatus {
+  isRunning: Boolean!
+  updateRateHz: Int!
+  activeEffectCount: Int!
+  activeEffects: [ActiveEffectStatus!]!
+  isBlackoutActive: Boolean!
+  blackoutIntensity: Float!
+  grandMasterValue: Float!
+  "Whether there's an active crossfade transition"
+  hasActiveTransition: Boolean!
+  "Progress of the active transition (0-100)"
+  transitionProgress: Float!
 }
 
 type User {
@@ -1297,6 +1493,92 @@ input OFLImportOptionsInput {
 }
 
 # =============================================================================
+# EFFECT INPUTS
+# =============================================================================
+
+input CreateEffectInput {
+  name: String!
+  description: String
+  projectId: ID!
+  effectType: EffectType!
+  priorityBand: PriorityBand = USER
+  prioritySub: Int = 50
+  compositionMode: CompositionMode = OVERRIDE
+  onCueChange: TransitionBehavior = FADE_OUT
+  fadeDuration: Float
+  waveform: WaveformType = SINE
+  frequency: Float = 1.0
+  amplitude: Float = 100.0
+  offset: Float = 50.0
+  phaseOffset: Float = 0.0
+  masterValue: Float
+}
+
+input UpdateEffectInput {
+  name: String
+  description: String
+  effectType: EffectType
+  priorityBand: PriorityBand
+  prioritySub: Int
+  compositionMode: CompositionMode
+  onCueChange: TransitionBehavior
+  fadeDuration: Float
+  waveform: WaveformType
+  frequency: Float
+  amplitude: Float
+  offset: Float
+  phaseOffset: Float
+  masterValue: Float
+}
+
+input AddFixtureToEffectInput {
+  effectId: ID!
+  fixtureId: ID!
+  phaseOffset: Float
+  amplitudeScale: Float
+  effectOrder: Int
+}
+
+input AddEffectToCueInput {
+  cueId: ID!
+  effectId: ID!
+  intensity: Float = 100.0
+  speed: Float = 1.0
+  onCueChange: TransitionBehavior
+}
+
+"""
+Input for adding or updating a channel within an effect fixture.
+Target by offset OR type (not both).
+"""
+input EffectChannelInput {
+  "Target by DMX offset (0-based). Null if targeting by type."
+  channelOffset: Int
+  "Target by channel type. Null if targeting by offset."
+  channelType: ChannelType
+  "Amplitude scale for this channel (0-200%). Ignored if minValue/maxValue are set."
+  amplitudeScale: Float
+  "Frequency scale for this channel. Null uses effect's frequency."
+  frequencyScale: Float
+  "Minimum value for oscillation (0-100%). Use with maxValue to define range."
+  minValue: Float
+  "Maximum value for oscillation (0-100%). Use with minValue to define range."
+  maxValue: Float
+}
+
+"""
+Input for updating an effect fixture's settings.
+"""
+input UpdateEffectFixtureInput {
+  "Phase offset override for this fixture (degrees)."
+  phaseOffset: Float
+  "Amplitude scale for this fixture (0-200%)."
+  amplitudeScale: Float
+  "Order for auto-phase distribution."
+  effectOrder: Int
+}
+
+# =============================================================================
 # QUERIES
 # =============================================================================
 
@@ -1421,6 +1703,14 @@ type Query {
   oflImportStatus: OFLImportStatus!
   "Check for available OFL updates without importing"
   checkOFLUpdates: OFLUpdateCheckResult!
+
+  # Effects
+  "Get a single effect by ID"
+  effect(id: ID!): Effect
+  "List all effects in a project"
+  effects(projectId: ID!): [Effect!]!
+  "Get the current status of the modulator engine"
+  modulatorStatus: ModulatorStatus!
 
   # Bulk Read Queries
   fixturesByIds(ids: [ID!]!): [FixtureInstance!]!
@@ -1632,6 +1922,50 @@ type Mutation {
   triggerOFLImport(options: OFLImportOptionsInput): OFLImportResult!
   "Cancel an ongoing OFL import"
   cancelOFLImport: Boolean!
+
+  # Effect Management
+  "Create a new effect"
+  createEffect(input: CreateEffectInput!): Effect!
+  "Update an existing effect"
+  updateEffect(id: ID!, input: UpdateEffectInput!): Effect!
+  "Delete an effect"
+  deleteEffect(id: ID!): Boolean!
+
+  # Effect-Fixture Association
+  "Add a fixture to an effect with optional per-fixture settings"
+  addFixtureToEffect(input: AddFixtureToEffectInput!): EffectFixture!
+  "Remove a fixture from an effect"
+  removeFixtureFromEffect(effectId: ID!, fixtureId: ID!): Boolean!
+  "Update fixture-specific settings in an effect"
+  updateEffectFixture(id: ID!, input: UpdateEffectFixtureInput!): EffectFixture!
+
+  # Effect Channel Management
+  "Add a channel to an effect fixture"
+  addChannelToEffectFixture(effectFixtureId: ID!, input: EffectChannelInput!): EffectChannel!
+  "Update an effect channel"
+  updateEffectChannel(id: ID!, input: EffectChannelInput!): EffectChannel!
+  "Remove a channel from an effect fixture"
+  removeChannelFromEffectFixture(id: ID!): Boolean!
+
+  # Effect-Cue Association
+  "Add an effect to a cue with runtime parameters"
+  addEffectToCue(input: AddEffectToCueInput!): CueEffect!
+  "Remove an effect from a cue"
+  removeEffectFromCue(cueId: ID!, effectId: ID!): Boolean!
+
+  # Effect Playback Controls
+  "Activate an effect with optional fade time"
+  activateEffect(effectId: ID!, fadeTime: Float): Boolean!
+  "Stop an active effect with optional fade time"
+  stopEffect(effectId: ID!, fadeTime: Float): Boolean!
+
+  # System Effect Controls
+  "Activate the system blackout with optional fade time"
+  activateBlackout(fadeTime: Float): Boolean!
+  "Release the system blackout with optional fade time"
+  releaseBlackout(fadeTime: Float): Boolean!
+  "Set the grand master level (0.0-1.0)"
+  setGrandMaster(value: Float!): Boolean!
 }
 
 # =============================================================================

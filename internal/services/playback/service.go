@@ -11,7 +11,7 @@ import (
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/services/dmx"
-	"github.com/bbernstein/lacylights-go/internal/services/fade"
+	"github.com/bbernstein/lacylights-go/internal/services/modulator"
 	"github.com/bbernstein/lacylights-go/internal/services/preview"
 	"gorm.io/gorm"
 )
@@ -73,7 +73,7 @@ type Service struct {
 
 	db         *gorm.DB
 	dmxService *dmx.Service
-	fadeEngine *fade.Engine
+	fadeEngine *modulator.Engine
 
 	// Preview service for canceling preview sessions when cues are executed
 	previewService *preview.Service
@@ -94,7 +94,7 @@ type Service struct {
 }
 
 // NewService creates a new playback service.
-func NewService(db *gorm.DB, dmxService *dmx.Service, fadeEngine *fade.Engine) *Service {
+func NewService(db *gorm.DB, dmxService *dmx.Service, fadeEngine *modulator.Engine) *Service {
 	return &Service{
 		db:                  db,
 		dmxService:          dmxService,
@@ -333,10 +333,12 @@ func (s *Service) StartCue(cueListID string, cueListName string, cueCount int, c
 
 // ExecuteCueDmx executes a cue's DMX output.
 func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOverride *float64) error {
-	// Load the cue with its look and fixture values
+	// Load the cue with its look, fixture values, and effects
 	var cue models.Cue
 	result := s.db.WithContext(ctx).
 		Preload("Look.FixtureValues").
+		Preload("Effects.Effect.Fixtures.Fixture").
+		Preload("Effects.Effect.Fixtures.Channels").
 		First(&cue, "id = ?", cueID)
 	if result.Error != nil {
 		return fmt.Errorf("cue not found: %w", result.Error)
@@ -381,7 +383,7 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 	}
 
 	// Build look channels for fade engine
-	var lookChannels []fade.LookChannel
+	var lookChannels []modulator.LookChannel
 
 	for _, fixtureValue := range cue.Look.FixtureValues {
 		fixture := fixtureMap[fixtureValue.FixtureID]
@@ -409,7 +411,7 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 			}
 
 			// Get fade behavior from channel definition (if available)
-			fadeBehavior := fade.FadeBehaviorFade // Default to FADE
+			fadeBehavior := modulator.FadeBehaviorFade // Default to FADE
 			// Find the channel definition with matching offset
 			for _, chanDef := range fixture.Channels {
 				if chanDef.Offset == ch.Offset {
@@ -420,7 +422,7 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 				}
 			}
 
-			lookChannels = append(lookChannels, fade.LookChannel{
+			lookChannels = append(lookChannels, modulator.LookChannel{
 				Universe:     fixture.Universe,
 				Channel:      dmxChannel,
 				Value:        ch.Value,
@@ -430,19 +432,127 @@ func (s *Service) ExecuteCueDmx(ctx context.Context, cueID string, fadeInTimeOve
 	}
 
 	// Get easing type
-	easingType := fade.EasingInOutSine
+	easingType := modulator.EasingInOutSine
 	if cue.EasingType != nil && *cue.EasingType != "" {
-		easingType = fade.EasingType(*cue.EasingType)
+		easingType = modulator.EasingType(*cue.EasingType)
 	}
 
 	// Execute fade
 	fadeID := fmt.Sprintf("cue-%s", cueID)
-	s.fadeEngine.FadeToLook(lookChannels, time.Duration(actualFadeTime*float64(time.Second)), fadeID, easingType)
+	fadeDuration := time.Duration(actualFadeTime * float64(time.Second))
+	s.fadeEngine.FadeToLook(lookChannels, fadeDuration, fadeID, easingType)
 
 	// Track the active look
 	s.dmxService.SetActiveLook(cue.LookID)
 
+	// Handle effect transitions for this cue
+	s.handleCueEffectTransitions(cue.Effects, actualFadeTime, easingType)
+
 	return nil
+}
+
+// handleCueEffectTransitions manages effect lifecycle during cue transitions.
+// It fades out effects not in the new cue and fades in effects that are new.
+func (s *Service) handleCueEffectTransitions(cueEffects []models.CueEffect, fadeTime float64, easingType modulator.EasingType) {
+	fadeDuration := time.Duration(fadeTime * float64(time.Second))
+
+	// Build a map of effect IDs that should be active after this cue
+	newEffectIDs := make(map[string]*models.CueEffect)
+	for i := range cueEffects {
+		if cueEffects[i].Effect != nil {
+			newEffectIDs[cueEffects[i].EffectID] = &cueEffects[i]
+		}
+	}
+
+	// Get currently active CUE band waveform effects (cue-triggered effects)
+	// We filter by both band (CUE) and type (WAVEFORM) to exclude crossfade effects
+	allCueEffects := s.fadeEngine.GetEffectsByBand(modulator.PriorityBandCue)
+	activeEffectIDs := make(map[string]*modulator.ActiveEffect)
+	for _, active := range allCueEffects {
+		// Only include waveform effects (not crossfades)
+		if active.Effect.EffectType == modulator.EffectTypeWaveform {
+			activeEffectIDs[active.Effect.ID] = active
+		}
+	}
+
+	// Fade out effects that are NOT in the new cue
+	for effectID, activeEffect := range activeEffectIDs {
+		if _, shouldContinue := newEffectIDs[effectID]; !shouldContinue {
+			// This effect should stop - fade out its output contribution
+			// Using FadeOutputTo (not FadeIntensityTo) so the oscillation continues
+			// while the effect's contribution to the final output fades to 0
+			if fadeDuration > 0 {
+				activeEffect.FadeOutputTo(0, fadeDuration, easingType)
+			} else {
+				// Instant removal
+				s.fadeEngine.RemoveEffect(effectID)
+			}
+		}
+	}
+
+	// Add or update effects that should be active
+	for effectID, cueEffect := range newEffectIDs {
+		if activeEffect, alreadyActive := activeEffectIDs[effectID]; alreadyActive {
+			// Effect is already running - update parameters if needed
+			targetIntensity := cueEffect.Intensity
+			if activeEffect.Intensity != targetIntensity {
+				if fadeDuration > 0 {
+					activeEffect.FadeIntensityTo(targetIntensity, fadeDuration, easingType)
+				} else {
+					activeEffect.Intensity = targetIntensity
+				}
+			}
+			// Note: Speed changes would require more complex handling
+		} else {
+			// New effect - add with fade in
+			modulatorEffect := s.convertToModulatorEffect(cueEffect.Effect)
+
+			// Override priority band to CUE so effects operate alongside crossfades
+			// (USER band effects would be overridden by the higher-priority CUE band crossfade)
+			// Use sub-priority 60 to process AFTER the crossfade (which uses sub-priority 50)
+			// Higher sub-priority = processed later = can modulate the crossfade output
+			modulatorEffect.Priority = modulator.NewEffectPriority(modulator.PriorityBandCue, 60)
+
+			// Use MODULATE composition mode so the oscillation adds to the crossfade output
+			// (instead of OVERRIDE which would replace it)
+			modulatorEffect.CompositionMode = modulator.ComposeModeModulate
+
+			// Set offset to 50% (128) - the neutral point for MODULATE mode
+			// The amplitude determines how much it oscillates above/below
+			modulatorEffect.Offset = 50.0
+
+			// Apply cue-specific speed
+			if cueEffect.Speed != 1.0 {
+				modulatorEffect.Frequency *= cueEffect.Speed
+			}
+
+			// Override OnCueChange if specified
+			if cueEffect.OnCueChange != nil && *cueEffect.OnCueChange != "" {
+				modulatorEffect.OnCueChange = parseTransitionBehavior(*cueEffect.OnCueChange)
+			}
+
+			// Add effect to the engine
+			newActive := s.fadeEngine.AddEffect(modulatorEffect)
+
+			// Set target intensity immediately
+			targetIntensity := cueEffect.Intensity
+			newActive.Intensity = targetIntensity
+
+			// For smooth blend-in, capture current channel values and blend entire effect output
+			// This prevents jarring snaps to offset values
+			if fadeDuration > 0 {
+				// Capture current DMX values for all target channels
+				fromValues := make(map[modulator.ChannelKey]int)
+				for _, tc := range modulatorEffect.TargetChannels {
+					key := modulator.ChannelKey{Universe: tc.Universe, Channel: tc.Channel}
+					currentValue := int(s.dmxService.GetChannelValue(tc.Universe, tc.Channel))
+					fromValues[key] = currentValue
+				}
+				// Use FadeBlendIn to smoothly transition from current values to effect output
+				newActive.FadeBlendIn(fromValues, fadeDuration, easingType)
+			}
+		}
+	}
 }
 
 // handleFollowTime handles automatic follow to the next cue, skipping any cues marked as skip=true.
@@ -1087,4 +1197,121 @@ func (s *Service) Cleanup() {
 	s.followTimers = make(map[string]*time.Timer)
 	s.fadeCompleteTimers = make(map[string]*time.Timer)
 	s.states = make(map[string]*PlaybackState)
+}
+
+// convertToModulatorEffect converts a database Effect model to a modulator Effect.
+func (s *Service) convertToModulatorEffect(dbEffect *models.Effect) *modulator.Effect {
+	effect := &modulator.Effect{
+		ID:              dbEffect.ID,
+		Name:            dbEffect.Name,
+		ProjectID:       dbEffect.ProjectID,
+		EffectType:      modulator.ParseEffectType(dbEffect.EffectType),
+		Priority:        parseEffectPriority(dbEffect.PriorityBand, dbEffect.PrioritySub),
+		CompositionMode: parseCompositionMode(dbEffect.CompositionMode),
+		OnCueChange:     parseTransitionBehavior(dbEffect.OnCueChange),
+		Frequency:       dbEffect.Frequency,
+		Amplitude:       dbEffect.Amplitude,
+		Offset:          dbEffect.Offset,
+		PhaseOffset:     dbEffect.PhaseOffset,
+	}
+
+	if dbEffect.Description != nil {
+		effect.Description = *dbEffect.Description
+	}
+	if dbEffect.FadeDuration != nil {
+		effect.FadeDuration = dbEffect.FadeDuration
+	}
+	if dbEffect.Waveform != nil {
+		effect.Waveform = modulator.ParseWaveformType(*dbEffect.Waveform)
+	}
+	if dbEffect.MasterValue != nil {
+		effect.MasterValue = *dbEffect.MasterValue
+	}
+
+	// Convert fixtures to target channels
+	for _, fixture := range dbEffect.Fixtures {
+		if fixture.Fixture != nil {
+			for _, channel := range fixture.Channels {
+				effectChannel := modulator.EffectChannel{
+					Universe: fixture.Fixture.Universe,
+				}
+				if channel.ChannelOffset != nil {
+					effectChannel.Channel = fixture.Fixture.StartChannel + *channel.ChannelOffset
+				}
+				if fixture.PhaseOffset != nil {
+					effectChannel.PhaseOffset = fixture.PhaseOffset
+				}
+				// Channel-level amplitude scale takes precedence over fixture-level
+				if channel.AmplitudeScale != nil {
+					effectChannel.AmplitudeScale = channel.AmplitudeScale
+				} else if fixture.AmplitudeScale != nil {
+					effectChannel.AmplitudeScale = fixture.AmplitudeScale
+				}
+				if channel.FrequencyScale != nil {
+					effectChannel.FrequencyScale = channel.FrequencyScale
+				}
+
+				// If minValue and maxValue are set, calculate per-channel offset/amplitude
+				if channel.MinValue != nil && channel.MaxValue != nil {
+					offset := (*channel.MinValue + *channel.MaxValue) / 2
+					amplitude := (*channel.MaxValue - *channel.MinValue) / 2
+					effectChannel.Offset = &offset
+					effectChannel.Amplitude = &amplitude
+					effectChannel.AmplitudeScale = nil
+				}
+
+				effect.TargetChannels = append(effect.TargetChannels, effectChannel)
+			}
+		}
+	}
+
+	return effect
+}
+
+// parseEffectPriority converts priority band and sub priority to an EffectPriority.
+func parseEffectPriority(band string, sub int) modulator.EffectPriority {
+	var priorityBand modulator.PriorityBand
+	switch band {
+	case "BASE":
+		priorityBand = modulator.PriorityBandBase
+	case "USER":
+		priorityBand = modulator.PriorityBandUser
+	case "CUE":
+		priorityBand = modulator.PriorityBandCue
+	case "SYSTEM":
+		priorityBand = modulator.PriorityBandSystem
+	default:
+		priorityBand = modulator.PriorityBandUser
+	}
+	return modulator.NewEffectPriority(priorityBand, sub)
+}
+
+// parseCompositionMode converts a string to a CompositionMode.
+func parseCompositionMode(mode string) modulator.CompositionMode {
+	switch mode {
+	case "OVERRIDE":
+		return modulator.ComposeModeOverride
+	case "ADDITIVE":
+		return modulator.ComposeModeAdditive
+	case "MULTIPLY":
+		return modulator.ComposeModeMultiply
+	default:
+		return modulator.ComposeModeOverride
+	}
+}
+
+// parseTransitionBehavior converts a string to a TransitionBehavior.
+func parseTransitionBehavior(behavior string) modulator.TransitionBehavior {
+	switch behavior {
+	case "FADE_OUT":
+		return modulator.TransitionFadeOut
+	case "PERSIST":
+		return modulator.TransitionPersist
+	case "SNAP_OFF":
+		return modulator.TransitionSnapOff
+	case "CROSSFADE_PARAMS":
+		return modulator.TransitionCrossfadeParams
+	default:
+		return modulator.TransitionFadeOut
+	}
 }

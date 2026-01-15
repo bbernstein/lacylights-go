@@ -1,86 +1,39 @@
 // Package fade provides fade engine functionality for smooth DMX transitions.
+// Easing functions are delegated to the modulator package for shared use.
 package fade
 
 import (
-	"math"
+	"github.com/bbernstein/lacylights-go/internal/services/modulator"
 )
 
 // EasingType represents the type of easing function to use for fades.
-type EasingType string
+// This is an alias to the modulator package's EasingType for backward compatibility.
+type EasingType = modulator.EasingType
 
+// Easing type constants - re-exported from modulator for backward compatibility.
 const (
 	// EasingLinear provides constant rate of change.
-	EasingLinear EasingType = "LINEAR"
+	EasingLinear EasingType = modulator.EasingLinear
 	// EasingInOutCubic provides smooth acceleration and deceleration.
-	EasingInOutCubic EasingType = "EASE_IN_OUT_CUBIC"
+	EasingInOutCubic EasingType = modulator.EasingInOutCubic
 	// EasingInOutSine provides gentle sine wave easing.
-	EasingInOutSine EasingType = "EASE_IN_OUT_SINE"
+	EasingInOutSine EasingType = modulator.EasingInOutSine
 	// EasingOutExponential provides sharp start, smooth end.
-	EasingOutExponential EasingType = "EASE_OUT_EXPONENTIAL"
+	EasingOutExponential EasingType = modulator.EasingOutExponential
 	// EasingBezier provides bezier curve easing.
-	EasingBezier EasingType = "BEZIER"
+	EasingBezier EasingType = modulator.EasingBezier
 	// EasingSCurve provides sigmoid function easing.
-	EasingSCurve EasingType = "S_CURVE"
+	EasingSCurve EasingType = modulator.EasingSCurve
 )
 
 // ApplyEasing applies an easing function to a progress value (0-1).
+// Delegates to the modulator package.
 func ApplyEasing(progress float64, easingType EasingType) float64 {
-	switch easingType {
-	case EasingLinear:
-		return progress
-
-	case EasingInOutCubic:
-		if progress < 0.5 {
-			return 4 * progress * progress * progress
-		}
-		temp := -2*progress + 2
-		return 1 - temp*temp*temp/2
-
-	case EasingInOutSine:
-		return -(math.Cos(math.Pi*progress) - 1) / 2
-
-	case EasingOutExponential:
-		if progress == 1 {
-			return 1
-		}
-		return 1 - math.Pow(2, -10*progress)
-
-	case EasingBezier:
-		// Standard ease-in-out bezier curve (0.42, 0, 0.58, 1)
-		return cubicBezier(0.42, 0, 0.58, 1, progress)
-
-	case EasingSCurve:
-		// Sigmoid function normalized to 0-1 range
-		k := 10.0 // Steepness factor
-		return 1 / (1 + math.Exp(-k*(progress-0.5)))
-
-	default:
-		return progress
-	}
-}
-
-// cubicBezier calculates the y value for a cubic bezier curve.
-func cubicBezier(p1x, p1y, p2x, p2y, t float64) float64 {
-	// Simplified cubic bezier implementation
-	// For a more complete implementation, we'd use Newton-Raphson method
-	_ = p1x // Control points x values not used in simplified implementation
-	_ = p2x
-
-	cy := 3 * p1y
-	by := 3*(p2y-p1y) - cy
-	ay := 1 - cy - by
-
-	tSquared := t * t
-	tCubed := tSquared * t
-
-	return ay*tCubed + by*tSquared + cy*t
+	return modulator.ApplyEasing(progress, easingType)
 }
 
 // Interpolate calculates an interpolated value between start and end.
+// Delegates to the modulator package.
 func Interpolate(start, end, progress float64, easingType EasingType) float64 {
-	if easingType == "" {
-		easingType = EasingInOutSine // Default easing
-	}
-	easedProgress := ApplyEasing(progress, easingType)
-	return start + (end-start)*easedProgress
+	return modulator.Interpolate(start, end, progress, easingType)
 }

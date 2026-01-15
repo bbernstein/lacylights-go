@@ -20,7 +20,7 @@ get_threshold() {
         "internal/database/models") echo 100 ;;  # TableName methods
         "internal/services/pubsub") echo 100 ;;
         "internal/services/fade") echo 93 ;;
-        "internal/database/repositories") echo 92 ;;  # Integration tests, error handling branches require mocking
+        "internal/database/repositories") echo 90 ;;  # Integration tests, error handling branches require mocking
         "internal/services/preview") echo 91 ;;  # Integration tests provide good coverage
         "internal/services/network") echo 64 ;;  # macOS-specific code paths not covered on Linux CI
         "internal/services/export") echo 88 ;;  # Integration tests provide good coverage

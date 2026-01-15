@@ -25,6 +25,10 @@ func TestTableNames(t *testing.T) {
 		{"Setting", Setting{}, "settings"},
 		{"LookBoard", LookBoard{}, "look_boards"},
 		{"LookBoardButton", LookBoardButton{}, "look_board_buttons"},
+		{"Effect", Effect{}, "effects"},
+		{"EffectFixture", EffectFixture{}, "effect_fixtures"},
+		{"EffectChannel", EffectChannel{}, "effect_channels"},
+		{"CueEffect", CueEffect{}, "cue_effects"},
 		{"OFLImportMeta", OFLImportMeta{}, "ofl_import_meta"},
 	}
 
