@@ -156,6 +156,7 @@ type ComplexityRoot struct {
 		CueList     func(childComplexity int) int
 		CueNumber   func(childComplexity int) int
 		EasingType  func(childComplexity int) int
+		Effects     func(childComplexity int) int
 		FadeInTime  func(childComplexity int) int
 		FadeOutTime func(childComplexity int) int
 		FollowTime  func(childComplexity int) int
@@ -263,6 +264,8 @@ type ComplexityRoot struct {
 		EffectFixtureID func(childComplexity int) int
 		FrequencyScale  func(childComplexity int) int
 		ID              func(childComplexity int) int
+		MaxValue        func(childComplexity int) int
+		MinValue        func(childComplexity int) int
 	}
 
 	EffectFixture struct {
@@ -522,6 +525,7 @@ type ComplexityRoot struct {
 		ActivateBlackout                       func(childComplexity int, fadeTime *float64) int
 		ActivateEffect                         func(childComplexity int, effectID string, fadeTime *float64) int
 		ActivateLookFromBoard                  func(childComplexity int, lookBoardID string, lookID string, fadeTimeOverride *float64) int
+		AddChannelToEffectFixture              func(childComplexity int, effectFixtureID string, input EffectChannelInput) int
 		AddEffectToCue                         func(childComplexity int, input AddEffectToCueInput) int
 		AddFixtureToEffect                     func(childComplexity int, input AddFixtureToEffectInput) int
 		AddFixturesToLook                      func(childComplexity int, lookID string, fixtureValues []*FixtureValueInput, overwriteExisting *bool) int
@@ -588,6 +592,7 @@ type ComplexityRoot struct {
 		PlayCue                                func(childComplexity int, cueID string, fadeInTime *float64) int
 		PreviousCue                            func(childComplexity int, cueListID string, fadeInTime *float64) int
 		ReleaseBlackout                        func(childComplexity int, fadeTime *float64) int
+		RemoveChannelFromEffectFixture         func(childComplexity int, id string) int
 		RemoveEffectFromCue                    func(childComplexity int, cueID string, effectID string) int
 		RemoveFixtureFromEffect                func(childComplexity int, effectID string, fixtureID string) int
 		RemoveFixturesFromLook                 func(childComplexity int, lookID string, fixtureIds []string) int
@@ -614,6 +619,8 @@ type ComplexityRoot struct {
 		UpdateCue                              func(childComplexity int, id string, input CreateCueInput) int
 		UpdateCueList                          func(childComplexity int, id string, input CreateCueListInput) int
 		UpdateEffect                           func(childComplexity int, id string, input UpdateEffectInput) int
+		UpdateEffectChannel                    func(childComplexity int, id string, input EffectChannelInput) int
+		UpdateEffectFixture                    func(childComplexity int, id string, input UpdateEffectFixtureInput) int
 		UpdateFadeUpdateRate                   func(childComplexity int, rateHz int) int
 		UpdateFixtureDefinition                func(childComplexity int, id string, input CreateFixtureDefinitionInput) int
 		UpdateFixtureInstance                  func(childComplexity int, id string, input UpdateFixtureInstanceInput) int
@@ -948,6 +955,8 @@ type CueResolver interface {
 	CueList(ctx context.Context, obj *models.Cue) (*models.CueList, error)
 
 	EasingType(ctx context.Context, obj *models.Cue) (*EasingType, error)
+
+	Effects(ctx context.Context, obj *models.Cue) ([]*models.CueEffect, error)
 }
 type CueEffectResolver interface {
 	OnCueChange(ctx context.Context, obj *models.CueEffect) (*TransitionBehavior, error)
@@ -1130,6 +1139,10 @@ type MutationResolver interface {
 	DeleteEffect(ctx context.Context, id string) (bool, error)
 	AddFixtureToEffect(ctx context.Context, input AddFixtureToEffectInput) (*models.EffectFixture, error)
 	RemoveFixtureFromEffect(ctx context.Context, effectID string, fixtureID string) (bool, error)
+	UpdateEffectFixture(ctx context.Context, id string, input UpdateEffectFixtureInput) (*models.EffectFixture, error)
+	AddChannelToEffectFixture(ctx context.Context, effectFixtureID string, input EffectChannelInput) (*models.EffectChannel, error)
+	UpdateEffectChannel(ctx context.Context, id string, input EffectChannelInput) (*models.EffectChannel, error)
+	RemoveChannelFromEffectFixture(ctx context.Context, id string) (bool, error)
 	AddEffectToCue(ctx context.Context, input AddEffectToCueInput) (*models.CueEffect, error)
 	RemoveEffectFromCue(ctx context.Context, cueID string, effectID string) (bool, error)
 	ActivateEffect(ctx context.Context, effectID string, fadeTime *float64) (bool, error)
@@ -1591,6 +1604,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Cue.EasingType(childComplexity), true
+	case "Cue.effects":
+		if e.complexity.Cue.Effects == nil {
+			break
+		}
+
+		return e.complexity.Cue.Effects(childComplexity), true
 	case "Cue.fadeInTime":
 		if e.complexity.Cue.FadeInTime == nil {
 			break
@@ -2080,6 +2099,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.EffectChannel.ID(childComplexity), true
+	case "EffectChannel.maxValue":
+		if e.complexity.EffectChannel.MaxValue == nil {
+			break
+		}
+
+		return e.complexity.EffectChannel.MaxValue(childComplexity), true
+	case "EffectChannel.minValue":
+		if e.complexity.EffectChannel.MinValue == nil {
+			break
+		}
+
+		return e.complexity.EffectChannel.MinValue(childComplexity), true
 
 	case "EffectFixture.amplitudeScale":
 		if e.complexity.EffectFixture.AmplitudeScale == nil {
@@ -3156,6 +3187,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.ActivateLookFromBoard(childComplexity, args["lookBoardId"].(string), args["lookId"].(string), args["fadeTimeOverride"].(*float64)), true
+	case "Mutation.addChannelToEffectFixture":
+		if e.complexity.Mutation.AddChannelToEffectFixture == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_addChannelToEffectFixture_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.AddChannelToEffectFixture(childComplexity, args["effectFixtureId"].(string), args["input"].(EffectChannelInput)), true
 	case "Mutation.addEffectToCue":
 		if e.complexity.Mutation.AddEffectToCue == nil {
 			break
@@ -3872,6 +3914,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.ReleaseBlackout(childComplexity, args["fadeTime"].(*float64)), true
+	case "Mutation.removeChannelFromEffectFixture":
+		if e.complexity.Mutation.RemoveChannelFromEffectFixture == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_removeChannelFromEffectFixture_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.RemoveChannelFromEffectFixture(childComplexity, args["id"].(string)), true
 	case "Mutation.removeEffectFromCue":
 		if e.complexity.Mutation.RemoveEffectFromCue == nil {
 			break
@@ -4143,6 +4196,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.UpdateEffect(childComplexity, args["id"].(string), args["input"].(UpdateEffectInput)), true
+	case "Mutation.updateEffectChannel":
+		if e.complexity.Mutation.UpdateEffectChannel == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateEffectChannel_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UpdateEffectChannel(childComplexity, args["id"].(string), args["input"].(EffectChannelInput)), true
+	case "Mutation.updateEffectFixture":
+		if e.complexity.Mutation.UpdateEffectFixture == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateEffectFixture_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UpdateEffectFixture(childComplexity, args["id"].(string), args["input"].(UpdateEffectFixtureInput)), true
 	case "Mutation.updateFadeUpdateRate":
 		if e.complexity.Mutation.UpdateFadeUpdateRate == nil {
 			break
@@ -5905,6 +5980,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCreateProjectInput,
 		ec.unmarshalInputCueListUpdateItem,
 		ec.unmarshalInputCueOrderInput,
+		ec.unmarshalInputEffectChannelInput,
 		ec.unmarshalInputExportOptionsInput,
 		ec.unmarshalInputFixtureDefinitionFilter,
 		ec.unmarshalInputFixtureDefinitionUpdateItem,
@@ -5925,6 +6001,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputLookUpdateItem,
 		ec.unmarshalInputOFLImportOptionsInput,
 		ec.unmarshalInputProjectUpdateItem,
+		ec.unmarshalInputUpdateEffectFixtureInput,
 		ec.unmarshalInputUpdateEffectInput,
 		ec.unmarshalInputUpdateFixtureInstanceInput,
 		ec.unmarshalInputUpdateLookBoardButtonInput,
@@ -6451,6 +6528,8 @@ type Cue {
   notes: String
   "When true, this cue is skipped during playback but remains visible in the UI"
   skip: Boolean!
+  "Effects associated with this cue"
+  effects: [CueEffect!]!
 }
 
 type CueListPlaybackStatus {
@@ -6560,10 +6639,14 @@ type EffectChannel {
   channelOffset: Int
   "Channel type (INTENSITY, RED, etc.)"
   channelType: String
-  "Per-channel amplitude multiplier"
+  "Per-channel amplitude multiplier (used when minValue/maxValue not set)"
   amplitudeScale: Float
   "Per-channel frequency multiplier"
   frequencyScale: Float
+  "Minimum value for oscillation (0-100%). When set with maxValue, defines oscillation range."
+  minValue: Float
+  "Maximum value for oscillation (0-100%). When set with minValue, defines oscillation range."
+  maxValue: Float
 }
 
 """
@@ -7588,6 +7671,37 @@ input AddEffectToCueInput {
   onCueChange: TransitionBehavior
 }
 
+"""
+Input for adding or updating a channel within an effect fixture.
+Target by offset OR type (not both).
+"""
+input EffectChannelInput {
+  "Target by DMX offset (0-based). Null if targeting by type."
+  channelOffset: Int
+  "Target by channel type. Null if targeting by offset."
+  channelType: ChannelType
+  "Amplitude scale for this channel (0-200%). Ignored if minValue/maxValue are set."
+  amplitudeScale: Float
+  "Frequency scale for this channel. Null uses effect's frequency."
+  frequencyScale: Float
+  "Minimum value for oscillation (0-100%). Use with maxValue to define range."
+  minValue: Float
+  "Maximum value for oscillation (0-100%). Use with minValue to define range."
+  maxValue: Float
+}
+
+"""
+Input for updating an effect fixture's settings.
+"""
+input UpdateEffectFixtureInput {
+  "Phase offset override for this fixture (degrees)."
+  phaseOffset: Float
+  "Amplitude scale for this fixture (0-200%)."
+  amplitudeScale: Float
+  "Order for auto-phase distribution."
+  effectOrder: Int
+}
+
 # =============================================================================
 # QUERIES
 # =============================================================================
@@ -7946,6 +8060,16 @@ type Mutation {
   addFixtureToEffect(input: AddFixtureToEffectInput!): EffectFixture!
   "Remove a fixture from an effect"
   removeFixtureFromEffect(effectId: ID!, fixtureId: ID!): Boolean!
+  "Update fixture-specific settings in an effect"
+  updateEffectFixture(id: ID!, input: UpdateEffectFixtureInput!): EffectFixture!
+
+  # Effect Channel Management
+  "Add a channel to an effect fixture"
+  addChannelToEffectFixture(effectFixtureId: ID!, input: EffectChannelInput!): EffectChannel!
+  "Update an effect channel"
+  updateEffectChannel(id: ID!, input: EffectChannelInput!): EffectChannel!
+  "Remove a channel from an effect fixture"
+  removeChannelFromEffectFixture(id: ID!): Boolean!
 
   # Effect-Cue Association
   "Add an effect to a cue with runtime parameters"
@@ -8040,6 +8164,22 @@ func (ec *executionContext) field_Mutation_activateLookFromBoard_args(ctx contex
 		return nil, err
 	}
 	args["fadeTimeOverride"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_addChannelToEffectFixture_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "effectFixtureId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["effectFixtureId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNEffectChannelInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEffectChannelInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
 	return args, nil
 }
 
@@ -8817,6 +8957,17 @@ func (ec *executionContext) field_Mutation_releaseBlackout_args(ctx context.Cont
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_removeChannelFromEffectFixture_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_removeEffectFromCue_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -9122,6 +9273,38 @@ func (ec *executionContext) field_Mutation_updateCue_args(ctx context.Context, r
 	}
 	args["id"] = arg0
 	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateCueInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateCueInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateEffectChannel_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNEffectChannelInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEffectChannelInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateEffectFixture_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateEffectFixtureInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUpdateEffectFixtureInput)
 	if err != nil {
 		return nil, err
 	}
@@ -11872,6 +12055,51 @@ func (ec *executionContext) fieldContext_Cue_skip(_ context.Context, field graph
 	return fc, nil
 }
 
+func (ec *executionContext) _Cue_effects(ctx context.Context, field graphql.CollectedField, obj *models.Cue) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Cue_effects,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Cue().Effects(ctx, obj)
+		},
+		nil,
+		ec.marshalNCueEffect2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐCueEffectᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Cue_effects(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Cue",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_CueEffect_id(ctx, field)
+			case "cueId":
+				return ec.fieldContext_CueEffect_cueId(ctx, field)
+			case "effectId":
+				return ec.fieldContext_CueEffect_effectId(ctx, field)
+			case "effect":
+				return ec.fieldContext_CueEffect_effect(ctx, field)
+			case "intensity":
+				return ec.fieldContext_CueEffect_intensity(ctx, field)
+			case "speed":
+				return ec.fieldContext_CueEffect_speed(ctx, field)
+			case "onCueChange":
+				return ec.fieldContext_CueEffect_onCueChange(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CueEffect", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _CueEffect_id(ctx context.Context, field graphql.CollectedField, obj *models.CueEffect) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -12338,6 +12566,8 @@ func (ec *executionContext) fieldContext_CueList_cues(_ context.Context, field g
 				return ec.fieldContext_Cue_notes(ctx, field)
 			case "skip":
 				return ec.fieldContext_Cue_skip(ctx, field)
+			case "effects":
+				return ec.fieldContext_Cue_effects(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -12826,6 +13056,8 @@ func (ec *executionContext) fieldContext_CueListPlaybackStatus_currentCue(_ cont
 				return ec.fieldContext_Cue_notes(ctx, field)
 			case "skip":
 				return ec.fieldContext_Cue_skip(ctx, field)
+			case "effects":
+				return ec.fieldContext_Cue_effects(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -12879,6 +13111,8 @@ func (ec *executionContext) fieldContext_CueListPlaybackStatus_nextCue(_ context
 				return ec.fieldContext_Cue_notes(ctx, field)
 			case "skip":
 				return ec.fieldContext_Cue_skip(ctx, field)
+			case "effects":
+				return ec.fieldContext_Cue_effects(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -12932,6 +13166,8 @@ func (ec *executionContext) fieldContext_CueListPlaybackStatus_previousCue(_ con
 				return ec.fieldContext_Cue_notes(ctx, field)
 			case "skip":
 				return ec.fieldContext_Cue_skip(ctx, field)
+			case "effects":
+				return ec.fieldContext_Cue_effects(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -13246,6 +13482,8 @@ func (ec *executionContext) fieldContext_CuePage_cues(_ context.Context, field g
 				return ec.fieldContext_Cue_notes(ctx, field)
 			case "skip":
 				return ec.fieldContext_Cue_skip(ctx, field)
+			case "effects":
+				return ec.fieldContext_Cue_effects(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -14182,6 +14420,64 @@ func (ec *executionContext) fieldContext_EffectChannel_frequencyScale(_ context.
 	return fc, nil
 }
 
+func (ec *executionContext) _EffectChannel_minValue(ctx context.Context, field graphql.CollectedField, obj *models.EffectChannel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EffectChannel_minValue,
+		func(ctx context.Context) (any, error) {
+			return obj.MinValue, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_EffectChannel_minValue(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EffectChannel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EffectChannel_maxValue(ctx context.Context, field graphql.CollectedField, obj *models.EffectChannel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EffectChannel_maxValue,
+		func(ctx context.Context) (any, error) {
+			return obj.MaxValue, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_EffectChannel_maxValue(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EffectChannel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _EffectFixture_id(ctx context.Context, field graphql.CollectedField, obj *models.EffectFixture) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -14461,6 +14757,10 @@ func (ec *executionContext) fieldContext_EffectFixture_channels(_ context.Contex
 				return ec.fieldContext_EffectChannel_amplitudeScale(ctx, field)
 			case "frequencyScale":
 				return ec.fieldContext_EffectChannel_frequencyScale(ctx, field)
+			case "minValue":
+				return ec.fieldContext_EffectChannel_minValue(ctx, field)
+			case "maxValue":
+				return ec.fieldContext_EffectChannel_maxValue(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type EffectChannel", field.Name)
 		},
@@ -22892,6 +23192,8 @@ func (ec *executionContext) fieldContext_Mutation_createCue(ctx context.Context,
 				return ec.fieldContext_Cue_notes(ctx, field)
 			case "skip":
 				return ec.fieldContext_Cue_skip(ctx, field)
+			case "effects":
+				return ec.fieldContext_Cue_effects(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -22957,6 +23259,8 @@ func (ec *executionContext) fieldContext_Mutation_updateCue(ctx context.Context,
 				return ec.fieldContext_Cue_notes(ctx, field)
 			case "skip":
 				return ec.fieldContext_Cue_skip(ctx, field)
+			case "effects":
+				return ec.fieldContext_Cue_effects(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -23104,6 +23408,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkCreateCues(ctx context.Con
 				return ec.fieldContext_Cue_notes(ctx, field)
 			case "skip":
 				return ec.fieldContext_Cue_skip(ctx, field)
+			case "effects":
+				return ec.fieldContext_Cue_effects(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -23169,6 +23475,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkUpdateCues(ctx context.Con
 				return ec.fieldContext_Cue_notes(ctx, field)
 			case "skip":
 				return ec.fieldContext_Cue_skip(ctx, field)
+			case "effects":
+				return ec.fieldContext_Cue_effects(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -23281,6 +23589,8 @@ func (ec *executionContext) fieldContext_Mutation_toggleCueSkip(ctx context.Cont
 				return ec.fieldContext_Cue_notes(ctx, field)
 			case "skip":
 				return ec.fieldContext_Cue_skip(ctx, field)
+			case "effects":
+				return ec.fieldContext_Cue_effects(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -25059,6 +25369,224 @@ func (ec *executionContext) fieldContext_Mutation_removeFixtureFromEffect(ctx co
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_removeFixtureFromEffect_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateEffectFixture(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateEffectFixture,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UpdateEffectFixture(ctx, fc.Args["id"].(string), fc.Args["input"].(UpdateEffectFixtureInput))
+		},
+		nil,
+		ec.marshalNEffectFixture2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐEffectFixture,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateEffectFixture(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_EffectFixture_id(ctx, field)
+			case "effectId":
+				return ec.fieldContext_EffectFixture_effectId(ctx, field)
+			case "fixtureId":
+				return ec.fieldContext_EffectFixture_fixtureId(ctx, field)
+			case "fixture":
+				return ec.fieldContext_EffectFixture_fixture(ctx, field)
+			case "phaseOffset":
+				return ec.fieldContext_EffectFixture_phaseOffset(ctx, field)
+			case "amplitudeScale":
+				return ec.fieldContext_EffectFixture_amplitudeScale(ctx, field)
+			case "effectOrder":
+				return ec.fieldContext_EffectFixture_effectOrder(ctx, field)
+			case "channels":
+				return ec.fieldContext_EffectFixture_channels(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type EffectFixture", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateEffectFixture_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_addChannelToEffectFixture(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_addChannelToEffectFixture,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().AddChannelToEffectFixture(ctx, fc.Args["effectFixtureId"].(string), fc.Args["input"].(EffectChannelInput))
+		},
+		nil,
+		ec.marshalNEffectChannel2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐEffectChannel,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_addChannelToEffectFixture(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_EffectChannel_id(ctx, field)
+			case "effectFixtureId":
+				return ec.fieldContext_EffectChannel_effectFixtureId(ctx, field)
+			case "channelOffset":
+				return ec.fieldContext_EffectChannel_channelOffset(ctx, field)
+			case "channelType":
+				return ec.fieldContext_EffectChannel_channelType(ctx, field)
+			case "amplitudeScale":
+				return ec.fieldContext_EffectChannel_amplitudeScale(ctx, field)
+			case "frequencyScale":
+				return ec.fieldContext_EffectChannel_frequencyScale(ctx, field)
+			case "minValue":
+				return ec.fieldContext_EffectChannel_minValue(ctx, field)
+			case "maxValue":
+				return ec.fieldContext_EffectChannel_maxValue(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type EffectChannel", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_addChannelToEffectFixture_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateEffectChannel(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateEffectChannel,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UpdateEffectChannel(ctx, fc.Args["id"].(string), fc.Args["input"].(EffectChannelInput))
+		},
+		nil,
+		ec.marshalNEffectChannel2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐEffectChannel,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateEffectChannel(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_EffectChannel_id(ctx, field)
+			case "effectFixtureId":
+				return ec.fieldContext_EffectChannel_effectFixtureId(ctx, field)
+			case "channelOffset":
+				return ec.fieldContext_EffectChannel_channelOffset(ctx, field)
+			case "channelType":
+				return ec.fieldContext_EffectChannel_channelType(ctx, field)
+			case "amplitudeScale":
+				return ec.fieldContext_EffectChannel_amplitudeScale(ctx, field)
+			case "frequencyScale":
+				return ec.fieldContext_EffectChannel_frequencyScale(ctx, field)
+			case "minValue":
+				return ec.fieldContext_EffectChannel_minValue(ctx, field)
+			case "maxValue":
+				return ec.fieldContext_EffectChannel_maxValue(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type EffectChannel", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateEffectChannel_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_removeChannelFromEffectFixture(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_removeChannelFromEffectFixture,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().RemoveChannelFromEffectFixture(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_removeChannelFromEffectFixture(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_removeChannelFromEffectFixture_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -29864,6 +30392,8 @@ func (ec *executionContext) fieldContext_Query_cue(ctx context.Context, field gr
 				return ec.fieldContext_Cue_notes(ctx, field)
 			case "skip":
 				return ec.fieldContext_Cue_skip(ctx, field)
+			case "effects":
+				return ec.fieldContext_Cue_effects(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -31244,6 +31774,8 @@ func (ec *executionContext) fieldContext_Query_cuesByIds(ctx context.Context, fi
 				return ec.fieldContext_Cue_notes(ctx, field)
 			case "skip":
 				return ec.fieldContext_Cue_skip(ctx, field)
+			case "effects":
+				return ec.fieldContext_Cue_effects(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Cue", field.Name)
 		},
@@ -36903,6 +37435,68 @@ func (ec *executionContext) unmarshalInputCueOrderInput(ctx context.Context, obj
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputEffectChannelInput(ctx context.Context, obj any) (EffectChannelInput, error) {
+	var it EffectChannelInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"channelOffset", "channelType", "amplitudeScale", "frequencyScale", "minValue", "maxValue"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "channelOffset":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channelOffset"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ChannelOffset = graphql.OmittableOf(data)
+		case "channelType":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channelType"))
+			data, err := ec.unmarshalOChannelType2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐChannelType(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ChannelType = graphql.OmittableOf(data)
+		case "amplitudeScale":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("amplitudeScale"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AmplitudeScale = graphql.OmittableOf(data)
+		case "frequencyScale":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("frequencyScale"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FrequencyScale = graphql.OmittableOf(data)
+		case "minValue":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("minValue"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MinValue = graphql.OmittableOf(data)
+		case "maxValue":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("maxValue"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MaxValue = graphql.OmittableOf(data)
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputExportOptionsInput(ctx context.Context, obj any) (ExportOptionsInput, error) {
 	var it ExportOptionsInput
 	asMap := map[string]any{}
@@ -37934,6 +38528,47 @@ func (ec *executionContext) unmarshalInputProjectUpdateItem(ctx context.Context,
 				return it, err
 			}
 			it.LayoutCanvasHeight = graphql.OmittableOf(data)
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateEffectFixtureInput(ctx context.Context, obj any) (UpdateEffectFixtureInput, error) {
+	var it UpdateEffectFixtureInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"phaseOffset", "amplitudeScale", "effectOrder"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "phaseOffset":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("phaseOffset"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PhaseOffset = graphql.OmittableOf(data)
+		case "amplitudeScale":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("amplitudeScale"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AmplitudeScale = graphql.OmittableOf(data)
+		case "effectOrder":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("effectOrder"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.EffectOrder = graphql.OmittableOf(data)
 		}
 	}
 
@@ -39223,6 +39858,42 @@ func (ec *executionContext) _Cue(ctx context.Context, sel ast.SelectionSet, obj 
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "effects":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Cue_effects(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -40263,6 +40934,10 @@ func (ec *executionContext) _EffectChannel(ctx context.Context, sel ast.Selectio
 			out.Values[i] = ec._EffectChannel_amplitudeScale(ctx, field, obj)
 		case "frequencyScale":
 			out.Values[i] = ec._EffectChannel_frequencyScale(ctx, field, obj)
+		case "minValue":
+			out.Values[i] = ec._EffectChannel_minValue(ctx, field, obj)
+		case "maxValue":
+			out.Values[i] = ec._EffectChannel_maxValue(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -43689,6 +44364,34 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "removeFixtureFromEffect":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_removeFixtureFromEffect(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateEffectFixture":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateEffectFixture(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "addChannelToEffectFixture":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_addChannelToEffectFixture(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateEffectChannel":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateEffectChannel(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "removeChannelFromEffectFixture":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_removeChannelFromEffectFixture(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -48501,6 +49204,50 @@ func (ec *executionContext) marshalNCueEffect2githubᚗcomᚋbbernsteinᚋlacyli
 	return ec._CueEffect(ctx, sel, &v)
 }
 
+func (ec *executionContext) marshalNCueEffect2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐCueEffectᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.CueEffect) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNCueEffect2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐCueEffect(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
 func (ec *executionContext) marshalNCueEffect2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐCueEffect(ctx context.Context, sel ast.SelectionSet, v *models.CueEffect) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -48883,6 +49630,21 @@ func (ec *executionContext) marshalNEffectChannel2ᚕgithubᚗcomᚋbbernstein�
 	}
 
 	return ret
+}
+
+func (ec *executionContext) marshalNEffectChannel2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐEffectChannel(ctx context.Context, sel ast.SelectionSet, v *models.EffectChannel) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._EffectChannel(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNEffectChannelInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEffectChannelInput(ctx context.Context, v any) (EffectChannelInput, error) {
+	res, err := ec.unmarshalInputEffectChannelInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNEffectFixture2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐEffectFixture(ctx context.Context, sel ast.SelectionSet, v models.EffectFixture) graphql.Marshaler {
@@ -51202,6 +51964,11 @@ func (ec *executionContext) marshalNUniverseOutput2ᚖgithubᚗcomᚋbbernstein�
 	return ec._UniverseOutput(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNUpdateEffectFixtureInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUpdateEffectFixtureInput(ctx context.Context, v any) (UpdateEffectFixtureInput, error) {
+	res, err := ec.unmarshalInputUpdateEffectFixtureInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNUpdateEffectInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUpdateEffectInput(ctx context.Context, v any) (UpdateEffectInput, error) {
 	res, err := ec.unmarshalInputUpdateEffectInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -51830,6 +52597,22 @@ func (ec *executionContext) marshalOChannelType2ᚕgithubᚗcomᚋbbernsteinᚋl
 	}
 
 	return ret
+}
+
+func (ec *executionContext) unmarshalOChannelType2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐChannelType(ctx context.Context, v any) (*ChannelType, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(ChannelType)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOChannelType2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐChannelType(ctx context.Context, sel ast.SelectionSet, v *ChannelType) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) marshalOChannelUsage2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐChannelUsage(ctx context.Context, sel ast.SelectionSet, v *ChannelUsage) graphql.Marshaler {

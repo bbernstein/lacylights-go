@@ -17,6 +17,11 @@ const (
 	// The effect value is treated as a multiplier: 255 = 1.0, 0 = 0.0.
 	// Used for grand master and dimmer curves.
 	ComposeModeMultiply CompositionMode = "MULTIPLY"
+
+	// ComposeModeModulate means the effect modulates the existing value.
+	// The effect value is centered at 128: 128 = no change, 255 = +127, 0 = -128.
+	// Perfect for LFO waveforms that oscillate around the underlying value.
+	ComposeModeModulate CompositionMode = "MODULATE"
 )
 
 // String returns the string representation of the composition mode.
@@ -33,6 +38,8 @@ func ParseCompositionMode(s string) CompositionMode {
 		return ComposeModeAdditive
 	case "MULTIPLY":
 		return ComposeModeMultiply
+	case "MODULATE":
+		return ComposeModeModulate
 	default:
 		return ComposeModeOverride
 	}
@@ -41,7 +48,7 @@ func ParseCompositionMode(s string) CompositionMode {
 // IsValid returns true if the composition mode is a known valid mode.
 func (c CompositionMode) IsValid() bool {
 	switch c {
-	case ComposeModeOverride, ComposeModeAdditive, ComposeModeMultiply:
+	case ComposeModeOverride, ComposeModeAdditive, ComposeModeMultiply, ComposeModeModulate:
 		return true
 	default:
 		return false
@@ -80,6 +87,12 @@ func ApplyComposition(existing, effectValue int, mode CompositionMode, hasExisti
 		multiplier := float64(effectValue) / 255.0
 		return clamp(int(float64(existing)*multiplier), 0, 255)
 
+	case ComposeModeModulate:
+		// Effect value centered at 128: 128 = no change, 255 = +127, 0 = -128
+		// This is ideal for LFO waveforms that modulate underlying values
+		modulation := effectValue - 128
+		return clamp(existing+modulation, 0, 255)
+
 	default:
 		// Unknown mode defaults to override
 		return clamp(effectValue, 0, 255)
@@ -103,6 +116,11 @@ func ApplyCompositionFloat(existing, effectValue float64, mode CompositionMode, 
 	case ComposeModeMultiply:
 		multiplier := effectValue / 255.0
 		return clampFloat(existing*multiplier, 0, 255)
+
+	case ComposeModeModulate:
+		// Effect value centered at 128: 128 = no change, 255 = +127, 0 = -128
+		modulation := effectValue - 128
+		return clampFloat(existing+modulation, 0, 255)
 
 	default:
 		return clampFloat(effectValue, 0, 255)

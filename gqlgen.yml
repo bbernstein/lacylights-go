@@ -67,6 +67,8 @@ models:
     fields:
       look:
         resolver: true
+      effects:
+        resolver: true
   Look:
     fields:
       fixtureValues:

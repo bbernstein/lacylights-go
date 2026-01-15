@@ -229,6 +229,19 @@ func (r *EffectRepository) DeleteEffectChannel(ctx context.Context, channelID st
 	return r.db.WithContext(ctx).Delete(&models.EffectChannel{}, "id = ?", channelID).Error
 }
 
+// FindEffectChannelByID returns an effect channel by its ID.
+func (r *EffectRepository) FindEffectChannelByID(ctx context.Context, id string) (*models.EffectChannel, error) {
+	var channel models.EffectChannel
+	result := r.db.WithContext(ctx).First(&channel, "id = ?", id)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &channel, nil
+}
+
 // UpdateEffectChannel updates an existing effect channel.
 func (r *EffectRepository) UpdateEffectChannel(ctx context.Context, channel *models.EffectChannel) error {
 	return r.db.WithContext(ctx).Save(channel).Error

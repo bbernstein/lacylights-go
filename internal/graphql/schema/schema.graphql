@@ -404,6 +404,8 @@ type Cue {
   notes: String
   "When true, this cue is skipped during playback but remains visible in the UI"
   skip: Boolean!
+  "Effects associated with this cue"
+  effects: [CueEffect!]!
 }
 
 type CueListPlaybackStatus {
@@ -513,10 +515,14 @@ type EffectChannel {
   channelOffset: Int
   "Channel type (INTENSITY, RED, etc.)"
   channelType: String
-  "Per-channel amplitude multiplier"
+  "Per-channel amplitude multiplier (used when minValue/maxValue not set)"
   amplitudeScale: Float
   "Per-channel frequency multiplier"
   frequencyScale: Float
+  "Minimum value for oscillation (0-100%). When set with maxValue, defines oscillation range."
+  minValue: Float
+  "Maximum value for oscillation (0-100%). When set with minValue, defines oscillation range."
+  maxValue: Float
 }
 
 """
@@ -1541,6 +1547,37 @@ input AddEffectToCueInput {
   onCueChange: TransitionBehavior
 }
 
+"""
+Input for adding or updating a channel within an effect fixture.
+Target by offset OR type (not both).
+"""
+input EffectChannelInput {
+  "Target by DMX offset (0-based). Null if targeting by type."
+  channelOffset: Int
+  "Target by channel type. Null if targeting by offset."
+  channelType: ChannelType
+  "Amplitude scale for this channel (0-200%). Ignored if minValue/maxValue are set."
+  amplitudeScale: Float
+  "Frequency scale for this channel. Null uses effect's frequency."
+  frequencyScale: Float
+  "Minimum value for oscillation (0-100%). Use with maxValue to define range."
+  minValue: Float
+  "Maximum value for oscillation (0-100%). Use with minValue to define range."
+  maxValue: Float
+}
+
+"""
+Input for updating an effect fixture's settings.
+"""
+input UpdateEffectFixtureInput {
+  "Phase offset override for this fixture (degrees)."
+  phaseOffset: Float
+  "Amplitude scale for this fixture (0-200%)."
+  amplitudeScale: Float
+  "Order for auto-phase distribution."
+  effectOrder: Int
+}
+
 # =============================================================================
 # QUERIES
 # =============================================================================
@@ -1899,6 +1936,16 @@ type Mutation {
   addFixtureToEffect(input: AddFixtureToEffectInput!): EffectFixture!
   "Remove a fixture from an effect"
   removeFixtureFromEffect(effectId: ID!, fixtureId: ID!): Boolean!
+  "Update fixture-specific settings in an effect"
+  updateEffectFixture(id: ID!, input: UpdateEffectFixtureInput!): EffectFixture!
+
+  # Effect Channel Management
+  "Add a channel to an effect fixture"
+  addChannelToEffectFixture(effectFixtureId: ID!, input: EffectChannelInput!): EffectChannel!
+  "Update an effect channel"
+  updateEffectChannel(id: ID!, input: EffectChannelInput!): EffectChannel!
+  "Remove a channel from an effect fixture"
+  removeChannelFromEffectFixture(id: ID!): Boolean!
 
   # Effect-Cue Association
   "Add an effect to a cue with runtime parameters"

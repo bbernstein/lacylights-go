@@ -58,6 +58,11 @@ func (r *cueResolver) EasingType(ctx context.Context, obj *models.Cue) (*generat
 	return &et, nil
 }
 
+// Effects is the resolver for the effects field.
+func (r *cueResolver) Effects(ctx context.Context, obj *models.Cue) ([]*models.CueEffect, error) {
+	return r.EffectRepo.FindEffectsByCueID(ctx, obj.ID)
+}
+
 // OnCueChange is the resolver for the onCueChange field.
 func (r *cueEffectResolver) OnCueChange(ctx context.Context, obj *models.CueEffect) (*generated.TransitionBehavior, error) {
 	return ResolveOnCueChangeCueEffect(obj)
@@ -3421,6 +3426,26 @@ func (r *mutationResolver) AddFixtureToEffect(ctx context.Context, input generat
 // RemoveFixtureFromEffect is the resolver for the removeFixtureFromEffect field.
 func (r *mutationResolver) RemoveFixtureFromEffect(ctx context.Context, effectID string, fixtureID string) (bool, error) {
 	return r.ResolveRemoveFixtureFromEffect(ctx, effectID, fixtureID)
+}
+
+// UpdateEffectFixture is the resolver for the updateEffectFixture field.
+func (r *mutationResolver) UpdateEffectFixture(ctx context.Context, id string, input generated.UpdateEffectFixtureInput) (*models.EffectFixture, error) {
+	return r.ResolveUpdateEffectFixture(ctx, id, input)
+}
+
+// AddChannelToEffectFixture is the resolver for the addChannelToEffectFixture field.
+func (r *mutationResolver) AddChannelToEffectFixture(ctx context.Context, effectFixtureID string, input generated.EffectChannelInput) (*models.EffectChannel, error) {
+	return r.ResolveAddChannelToEffectFixture(ctx, effectFixtureID, input)
+}
+
+// UpdateEffectChannel is the resolver for the updateEffectChannel field.
+func (r *mutationResolver) UpdateEffectChannel(ctx context.Context, id string, input generated.EffectChannelInput) (*models.EffectChannel, error) {
+	return r.ResolveUpdateEffectChannel(ctx, id, input)
+}
+
+// RemoveChannelFromEffectFixture is the resolver for the removeChannelFromEffectFixture field.
+func (r *mutationResolver) RemoveChannelFromEffectFixture(ctx context.Context, id string) (bool, error) {
+	return r.ResolveRemoveChannelFromEffectFixture(ctx, id)
 }
 
 // AddEffectToCue is the resolver for the addEffectToCue field.

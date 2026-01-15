@@ -374,6 +374,23 @@ type CueUsageSummary struct {
 	CueListName string  `json:"cueListName"`
 }
 
+// Input for adding or updating a channel within an effect fixture.
+// Target by offset OR type (not both).
+type EffectChannelInput struct {
+	// Target by DMX offset (0-based). Null if targeting by type.
+	ChannelOffset graphql.Omittable[*int] `json:"channelOffset,omitempty"`
+	// Target by channel type. Null if targeting by offset.
+	ChannelType graphql.Omittable[*ChannelType] `json:"channelType,omitempty"`
+	// Amplitude scale for this channel (0-200%). Ignored if minValue/maxValue are set.
+	AmplitudeScale graphql.Omittable[*float64] `json:"amplitudeScale,omitempty"`
+	// Frequency scale for this channel. Null uses effect's frequency.
+	FrequencyScale graphql.Omittable[*float64] `json:"frequencyScale,omitempty"`
+	// Minimum value for oscillation (0-100%). Use with maxValue to define range.
+	MinValue graphql.Omittable[*float64] `json:"minValue,omitempty"`
+	// Maximum value for oscillation (0-100%). Use with minValue to define range.
+	MaxValue graphql.Omittable[*float64] `json:"maxValue,omitempty"`
+}
+
 type ExportOptionsInput struct {
 	Description     graphql.Omittable[*string] `json:"description,omitempty"`
 	IncludeFixtures graphql.Omittable[*bool]   `json:"includeFixtures,omitempty"`
@@ -866,6 +883,16 @@ type UniverseChannelMap struct {
 type UniverseOutput struct {
 	Universe int   `json:"universe"`
 	Channels []int `json:"channels"`
+}
+
+// Input for updating an effect fixture's settings.
+type UpdateEffectFixtureInput struct {
+	// Phase offset override for this fixture (degrees).
+	PhaseOffset graphql.Omittable[*float64] `json:"phaseOffset,omitempty"`
+	// Amplitude scale for this fixture (0-200%).
+	AmplitudeScale graphql.Omittable[*float64] `json:"amplitudeScale,omitempty"`
+	// Order for auto-phase distribution.
+	EffectOrder graphql.Omittable[*int] `json:"effectOrder,omitempty"`
 }
 
 type UpdateEffectInput struct {

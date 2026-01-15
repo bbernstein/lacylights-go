@@ -154,29 +154,62 @@ func CalculateWaveformValues(active *ActiveEffect, elapsed time.Duration) map[Ch
 		// Generate waveform value (0-1)
 		waveValue := GenerateWaveform(channelPhase, effect.Waveform)
 
-		// Get amplitude (scale if per-channel override)
-		amplitude := effect.Amplitude
-		if target.AmplitudeScale != nil {
-			amplitude *= *target.AmplitudeScale
+		// Get amplitude and offset
+		// Per-channel absolute values take precedence over effect defaults
+		// If absolute values aren't set, use effect base with optional scaling
+		var amplitude float64
+		var offset float64
+
+		if target.Amplitude != nil {
+			// Use per-channel absolute amplitude
+			amplitude = *target.Amplitude
+		} else {
+			// Use effect base amplitude, optionally scaled
+			amplitude = effect.Amplitude
+			if target.AmplitudeScale != nil {
+				amplitude *= *target.AmplitudeScale
+			}
+		}
+
+		if target.Offset != nil {
+			// Use per-channel absolute offset
+			offset = *target.Offset
+		} else {
+			// Use effect base offset
+			offset = effect.Offset
 		}
 
 		// Apply amplitude and offset
 		// amplitude = modulation range (e.g., 50 means ±50% of 255)
 		// offset = center point (e.g., 50% means center at 127)
 		amplitudeRange := amplitude / 100.0 * 255.0
-		offsetValue := effect.Offset / 100.0 * 255.0
+		offsetValue := offset / 100.0 * 255.0
 
 		// Scale by intensity
 		intensity := active.GetCurrentIntensity() / 100.0
 
-		// Calculate final value
+		// Calculate full effect value at current intensity
 		// waveValue is 0-1, convert to -1 to +1, then scale by amplitude
 		modulation := (waveValue - 0.5) * 2 * amplitudeRange * intensity
-		finalValue := int(offsetValue + modulation)
-		finalValue = clamp(finalValue, 0, 255)
+		effectValue := int(offsetValue + modulation)
+		effectValue = clamp(effectValue, 0, 255)
 
 		key := ChannelKey{Universe: target.Universe, Channel: target.Channel}
-		values[key] = finalValue
+
+		// Handle blend-in mode: blend between base value and effect output
+		blendFactor := active.GetBlendFactor()
+		if blendFactor < 1.0 {
+			// Get the base value to blend from
+			baseValue, hasBase := active.GetBlendFromValue(key)
+			if !hasBase {
+				baseValue = 0 // Default to 0 if no base value
+			}
+			// Linear interpolation: result = base + (effect - base) * blendFactor
+			finalValue := float64(baseValue) + float64(effectValue-baseValue)*blendFactor
+			values[key] = clamp(int(finalValue), 0, 255)
+		} else {
+			values[key] = effectValue
+		}
 	}
 
 	return values
@@ -193,6 +226,9 @@ func MergeWaveformValues(
 		return
 	}
 
+	// Get output contribution factor (1.0 = full effect, 0.0 = no effect)
+	outputContribution := active.GetOutputContribution()
+
 	for key, value := range values {
 		existingState, hasExisting := existing[key]
 
@@ -203,8 +239,21 @@ func MergeWaveformValues(
 			hasExisting,
 		)
 
+		// Apply output contribution for fade-out
+		// When fading out, blend from effect output back to underlying values
+		finalValue := composedValue
+		if outputContribution < 1.0 {
+			underlyingValue := existingState.Value
+			if !hasExisting {
+				underlyingValue = 0
+			}
+			// Blend: underlying + (effect - underlying) * contribution
+			finalValue = underlyingValue + int(float64(composedValue-underlyingValue)*outputContribution)
+			finalValue = clamp(finalValue, 0, 255)
+		}
+
 		existing[key] = ChannelState{
-			Value:           composedValue,
+			Value:           finalValue,
 			OwnerEffectID:   active.Effect.ID,
 			CompositionMode: active.Effect.CompositionMode,
 		}

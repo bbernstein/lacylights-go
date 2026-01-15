@@ -154,6 +154,11 @@ func main() {
 		log.Printf("Warning: layout canvas backfill failed: %v", err)
 	}
 
+	// Add min_value and max_value columns to effect_channels table
+	if err := migrateEffectChannelMinMax(db); err != nil {
+		log.Printf("Warning: effect channel min/max migration failed: %v", err)
+	}
+
 	// Load Open Fixture Library if enabled and database is empty
 	if cfg.OFLImportEnabled {
 		fixtureRepo := repositories.NewFixtureRepository(db)
@@ -482,6 +487,31 @@ func backfillLayoutCanvasDimensions(db *gorm.DB) error {
 	log.Printf("✅ Backfilled layout canvas dimensions for %d projects", count)
 	return nil
 }
+
+// migrateEffectChannelMinMax adds min_value and max_value columns to the effect_channels table.
+// These columns allow per-channel min/max range specification for waveform effects.
+func migrateEffectChannelMinMax(db *gorm.DB) error {
+	// Check if the min_value column already exists
+	if db.Migrator().HasColumn("effect_channels", "min_value") {
+		return nil // Columns already exist, nothing to migrate
+	}
+
+	log.Println("🔄 Adding min_value and max_value columns to effect_channels table...")
+
+	// Add min_value column
+	if err := db.Exec("ALTER TABLE effect_channels ADD COLUMN min_value REAL").Error; err != nil {
+		return fmt.Errorf("failed to add min_value column: %w", err)
+	}
+
+	// Add max_value column
+	if err := db.Exec("ALTER TABLE effect_channels ADD COLUMN max_value REAL").Error; err != nil {
+		return fmt.Errorf("failed to add max_value column: %w", err)
+	}
+
+	log.Println("✅ Added min_value and max_value columns to effect_channels table")
+	return nil
+}
+
 // migrateSceneToLook handles the schema migration from "scene" terminology to "look" terminology.
 // This is a one-time migration that runs on startup to rename tables and columns.
 // SQLite doesn't support renaming columns directly, so we use ALTER TABLE RENAME TO for tables

@@ -379,6 +379,11 @@ type EffectChannel struct {
 	AmplitudeScale *float64 `gorm:"column:amplitude_scale"` // Per-channel amplitude
 	FrequencyScale *float64 `gorm:"column:frequency_scale"` // Per-channel frequency multiplier
 
+	// Min/Max define oscillation range (0-100%). When set, internally convert to offset/amplitude:
+	// offset = (min + max) / 2, amplitude = (max - min) / 2
+	MinValue *float64 `gorm:"column:min_value"` // Minimum oscillation value (0-100%)
+	MaxValue *float64 `gorm:"column:max_value"` // Maximum oscillation value (0-100%)
+
 	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime"`
 }
 
