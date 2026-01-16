@@ -250,27 +250,25 @@ func main() {
 	// 3. HTTP server timeouts (ReadTimeout, WriteTimeout, IdleTimeout) protect against slow clients
 	// 4. WebSocket keepalive (10s ping interval) handles connection health
 
-	// CORS
-	var corsMiddleware *cors.Cors
+	// CORS - prevent CORS_ALLOW_ALL in production for security
+	if cfg.CORSAllowAll && cfg.IsProduction() {
+		log.Fatal("CORS_ALLOW_ALL cannot be enabled in production - this is a security risk")
+	}
+
+	corsOptions := cors.Options{
+		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		AllowCredentials: true,
+		Debug:            cfg.IsDevelopment(),
+	}
 	if cfg.CORSAllowAll {
 		// Allow all origins (for E2E testing only)
 		log.Println("⚠️  CORS_ALLOW_ALL is enabled - allowing all origins (E2E testing mode)")
-		corsMiddleware = cors.New(cors.Options{
-			AllowOriginFunc:  func(origin string) bool { return true },
-			AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
-			AllowCredentials: true,
-			Debug:            cfg.IsDevelopment(),
-		})
+		corsOptions.AllowOriginFunc = func(origin string) bool { return true }
 	} else {
-		corsMiddleware = cors.New(cors.Options{
-			AllowedOrigins:   []string{cfg.CORSOrigin, "http://localhost:3000", "http://localhost:4000"},
-			AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
-			AllowCredentials: true,
-			Debug:            cfg.IsDevelopment(),
-		})
+		corsOptions.AllowedOrigins = []string{cfg.CORSOrigin, "http://localhost:3000", "http://localhost:4000"}
 	}
+	corsMiddleware := cors.New(corsOptions)
 	router.Use(corsMiddleware.Handler)
 
 	// Create resolver with dependencies

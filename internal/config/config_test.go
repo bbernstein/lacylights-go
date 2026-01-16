@@ -56,6 +56,7 @@ func TestLoad_CustomEnvironment(t *testing.T) {
 	t.Setenv("DMX_DRIFT_THROTTLE", "10000")
 	t.Setenv("NON_INTERACTIVE", "true")
 	t.Setenv("CORS_ORIGIN", "http://example.com")
+	t.Setenv("CORS_ALLOW_ALL", "true")
 	t.Setenv("FADE_UPDATE_RATE", "120")
 
 	cfg := Load()
@@ -101,6 +102,9 @@ func TestLoad_CustomEnvironment(t *testing.T) {
 	}
 	if cfg.CORSOrigin != "http://example.com" {
 		t.Errorf("Expected CORSOrigin to be 'http://example.com', got '%s'", cfg.CORSOrigin)
+	}
+	if cfg.CORSAllowAll != true {
+		t.Errorf("Expected CORSAllowAll to be true, got %v", cfg.CORSAllowAll)
 	}
 	if cfg.FadeUpdateRateHz != 120 {
 		t.Errorf("Expected FadeUpdateRateHz to be 120, got %d", cfg.FadeUpdateRateHz)
@@ -277,6 +281,7 @@ func TestConfig_StructFields(t *testing.T) {
 		DMXDriftThrottle:    5000,
 		NonInteractive:      false,
 		CORSOrigin:          "http://localhost",
+		CORSAllowAll:        true,
 	}
 
 	if cfg.Port != "4000" {
@@ -300,5 +305,32 @@ func TestLoad_FadeUpdateRateHz_DefaultValue(t *testing.T) {
 
 	if cfg.FadeUpdateRateHz != 60 {
 		t.Errorf("Expected default FadeUpdateRateHz to be 60, got %d", cfg.FadeUpdateRateHz)
+	}
+}
+
+func TestLoad_CORSAllowAll(t *testing.T) {
+	tests := []struct {
+		name     string
+		envValue string
+		expected bool
+		setEnv   bool
+	}{
+		{"enabled_true", "true", true, true},
+		{"enabled_1", "1", true, true},
+		{"disabled_false", "false", false, true},
+		{"disabled_0", "0", false, true},
+		{"default_not_set", "", false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setEnv {
+				t.Setenv("CORS_ALLOW_ALL", tt.envValue)
+			}
+			cfg := Load()
+			if cfg.CORSAllowAll != tt.expected {
+				t.Errorf("CORSAllowAll = %v, want %v for env value '%s'", cfg.CORSAllowAll, tt.expected, tt.envValue)
+			}
+		})
 	}
 }
