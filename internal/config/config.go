@@ -38,7 +38,8 @@ type Config struct {
 	NonInteractive bool
 
 	// CORS configuration
-	CORSOrigin string
+	CORSOrigin   string
+	CORSAllowAll bool // Allow all origins (for E2E testing only, not production)
 
 	// OFL (Open Fixture Library) import configuration
 	OFLImportEnabled bool   // Enable automatic OFL import on startup
@@ -77,7 +78,8 @@ func Load() *Config {
 		NonInteractive: getEnvBool("NON_INTERACTIVE", false),
 
 		// CORS
-		CORSOrigin: getEnv("CORS_ORIGIN", "http://localhost:3000"),
+		CORSOrigin:   getEnv("CORS_ORIGIN", "http://localhost:3000"),
+		CORSAllowAll: getEnvBool("CORS_ALLOW_ALL", false),
 
 		// OFL Import
 		OFLImportEnabled: getEnvBool("OFL_IMPORT_ENABLED", true),
