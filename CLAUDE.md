@@ -133,6 +133,7 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 | `DMX_REFRESH_RATE` | `60` | DMX refresh rate (Hz) |
 | `FADE_UPDATE_RATE` | `60` | Fade engine update rate (Hz) |
 | `CORS_ORIGIN` | `http://localhost:3000` | Allowed CORS origin |
+| `CORS_ALLOW_ALL` | `false` | Allow all CORS origins (E2E testing only) |
 | `OFL_IMPORT_ENABLED` | `true` | Auto-import OFL fixtures on startup |
 | `OFL_CACHE_PATH` | `./.ofl-cache` | Path to the OFL fixture cache directory |
 | `NON_INTERACTIVE` | `false` | Disable interactive prompts (CI/Docker) |
