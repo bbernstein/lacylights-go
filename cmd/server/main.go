@@ -251,6 +251,9 @@ func main() {
 	// 4. WebSocket keepalive (10s ping interval) handles connection health
 
 	// CORS - prevent CORS_ALLOW_ALL in production for security
+	// Note: This check intentionally uses log.Fatal which calls os.Exit(1).
+	// Testing this path requires subprocess testing which is complex for this simple safeguard.
+	// The behavior is verified by: 1) code review, 2) CI would fail if accidentally deployed.
 	if cfg.CORSAllowAll && cfg.IsProduction() {
 		log.Fatal("CORS_ALLOW_ALL cannot be enabled in production - this is a security risk")
 	}
@@ -262,9 +265,9 @@ func main() {
 		Debug:            cfg.IsDevelopment(),
 	}
 	if cfg.CORSAllowAll {
-		// Allow all origins (for E2E testing only)
+		// Allow all non-empty origins (for E2E testing only)
 		log.Println("⚠️  CORS_ALLOW_ALL is enabled - allowing all origins (E2E testing mode)")
-		corsOptions.AllowOriginFunc = func(origin string) bool { return true }
+		corsOptions.AllowOriginFunc = func(origin string) bool { return origin != "" }
 	} else {
 		corsOptions.AllowedOrigins = []string{cfg.CORSOrigin, "http://localhost:3000", "http://localhost:4000"}
 	}
