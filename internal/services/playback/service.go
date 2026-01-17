@@ -29,6 +29,7 @@ type CueForPlayback struct {
 // PlaybackState represents the current state of cue list playback.
 type PlaybackState struct {
 	CueListID       string
+	ProjectID       string // Cached project ID (used for project-scoped playback control)
 	CueListName     string // Cached cue list name (avoids DB query on status updates)
 	CueCount        int    // Cached count of cues in the list (avoids DB query on status updates)
 	CurrentCueIndex *int
@@ -259,8 +260,11 @@ func (s *Service) GetGlobalPlaybackStatus(ctx context.Context) *GlobalPlaybackSt
 }
 
 // StartCue starts playing a cue.
-// cueListName and cueCount are cached to avoid DB queries during status updates.
-func (s *Service) StartCue(cueListID string, cueListName string, cueCount int, cueIndex int, cue *CueForPlayback) {
+// projectID, cueListName and cueCount are cached to avoid DB queries during status updates.
+func (s *Service) StartCue(cueListID string, projectID string, cueListName string, cueCount int, cueIndex int, cue *CueForPlayback) {
+	// Stop any other playing cue lists in the same project (only one cue list can play at a time per project)
+	s.stopOtherPlayingCueLists(cueListID, projectID)
+
 	// Stop any existing playback for this cue list
 	s.StopCueList(cueListID)
 
@@ -268,6 +272,7 @@ func (s *Service) StartCue(cueListID string, cueListName string, cueCount int, c
 	now := time.Now()
 	state := &PlaybackState{
 		CueListID:       cueListID,
+		ProjectID:       projectID,
 		CueListName:     cueListName,
 		CueCount:        cueCount,
 		CurrentCueIndex: &cueIndex,
@@ -614,7 +619,7 @@ func (s *Service) handleFollowTime(cueListID string, currentCueIndex int) {
 		FadeOutTime: nextCue.FadeOutTime,
 		FollowTime:  nextCue.FollowTime,
 	}
-	s.StartCue(cueListID, cueList.Name, len(cueList.Cues), nextCueIndex, cueForPlayback)
+	s.StartCue(cueListID, cueList.ProjectID, cueList.Name, len(cueList.Cues), nextCueIndex, cueForPlayback)
 }
 
 // StopCueList stops playback for a cue list.
@@ -652,6 +657,27 @@ func (s *Service) StopCueList(cueListID string) {
 	s.mu.Unlock()
 
 	s.emitUpdate(cueListID)
+}
+
+// stopOtherPlayingCueLists stops all currently playing cue lists in the same project except the one being started.
+// This ensures only one cue list can be playing at a time within a project.
+func (s *Service) stopOtherPlayingCueLists(excludeCueListID string, projectID string) {
+	// First, collect the IDs of cue lists that need to be stopped
+	// (read operation under read lock)
+	s.mu.RLock()
+	var toStop []string
+	for cueListID, state := range s.states {
+		// Only stop cue lists from the same project
+		if cueListID != excludeCueListID && state.ProjectID == projectID && (state.IsPlaying || state.IsFading) {
+			toStop = append(toStop, cueListID)
+		}
+	}
+	s.mu.RUnlock()
+
+	// Now stop each one (StopCueList handles its own locking)
+	for _, cueListID := range toStop {
+		s.StopCueList(cueListID)
+	}
 }
 
 // PauseCueList pauses the cue list playback, preserving the current cue position.
@@ -797,7 +823,7 @@ func (s *Service) JumpToCue(ctx context.Context, cueListID string, cueIndex int,
 		FollowTime:  cue.FollowTime,
 	}
 
-	s.StartCue(cueListID, cueList.Name, len(cueList.Cues), cueIndex, cueForPlayback)
+	s.StartCue(cueListID, cueList.ProjectID, cueList.Name, len(cueList.Cues), cueIndex, cueForPlayback)
 	return nil
 }
 
@@ -846,7 +872,7 @@ func (s *Service) NextCue(ctx context.Context, cueListID string, fadeInTimeOverr
 		FadeOutTime: cue.FadeOutTime,
 		FollowTime:  cue.FollowTime,
 	}
-	s.StartCue(cueListID, cueList.Name, len(cueList.Cues), nextIndex, cueForPlayback)
+	s.StartCue(cueListID, cueList.ProjectID, cueList.Name, len(cueList.Cues), nextIndex, cueForPlayback)
 
 	return nil
 }
@@ -896,7 +922,7 @@ func (s *Service) PreviousCue(ctx context.Context, cueListID string, fadeInTimeO
 		FadeOutTime: cue.FadeOutTime,
 		FollowTime:  cue.FollowTime,
 	}
-	s.StartCue(cueListID, cueList.Name, len(cueList.Cues), prevIndex, cueForPlayback)
+	s.StartCue(cueListID, cueList.ProjectID, cueList.Name, len(cueList.Cues), prevIndex, cueForPlayback)
 
 	return nil
 }
@@ -944,7 +970,7 @@ func (s *Service) GoToCueNumber(ctx context.Context, cueListID string, cueNumber
 		FadeOutTime: cue.FadeOutTime,
 		FollowTime:  cue.FollowTime,
 	}
-	s.StartCue(cueListID, cueList.Name, len(cueList.Cues), cueIndex, cueForPlayback)
+	s.StartCue(cueListID, cueList.ProjectID, cueList.Name, len(cueList.Cues), cueIndex, cueForPlayback)
 
 	return nil
 }
@@ -992,7 +1018,7 @@ func (s *Service) GoToCueName(ctx context.Context, cueListID string, cueName str
 		FadeOutTime: cue.FadeOutTime,
 		FollowTime:  cue.FollowTime,
 	}
-	s.StartCue(cueListID, cueList.Name, len(cueList.Cues), cueIndex, cueForPlayback)
+	s.StartCue(cueListID, cueList.ProjectID, cueList.Name, len(cueList.Cues), cueIndex, cueForPlayback)
 
 	return nil
 }
@@ -1048,7 +1074,7 @@ func (s *Service) StartCueList(ctx context.Context, cueListID string, startFromC
 		FadeOutTime: cue.FadeOutTime,
 		FollowTime:  cue.FollowTime,
 	}
-	s.StartCue(cueListID, cueList.Name, len(cueList.Cues), startIndex, cueForPlayback)
+	s.StartCue(cueListID, cueList.ProjectID, cueList.Name, len(cueList.Cues), startIndex, cueForPlayback)
 
 	return nil
 }
