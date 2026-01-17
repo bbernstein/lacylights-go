@@ -261,6 +261,9 @@ func (s *Service) GetGlobalPlaybackStatus(ctx context.Context) *GlobalPlaybackSt
 // StartCue starts playing a cue.
 // cueListName and cueCount are cached to avoid DB queries during status updates.
 func (s *Service) StartCue(cueListID string, cueListName string, cueCount int, cueIndex int, cue *CueForPlayback) {
+	// Stop any other playing cue lists (only one cue list can play at a time)
+	s.stopOtherPlayingCueLists(cueListID)
+
 	// Stop any existing playback for this cue list
 	s.StopCueList(cueListID)
 
@@ -652,6 +655,26 @@ func (s *Service) StopCueList(cueListID string) {
 	s.mu.Unlock()
 
 	s.emitUpdate(cueListID)
+}
+
+// stopOtherPlayingCueLists stops all currently playing cue lists except the one being started.
+// This ensures only one cue list can be playing at a time within a project.
+func (s *Service) stopOtherPlayingCueLists(excludeCueListID string) {
+	// First, collect the IDs of cue lists that need to be stopped
+	// (read operation under read lock)
+	s.mu.RLock()
+	var toStop []string
+	for cueListID, state := range s.states {
+		if cueListID != excludeCueListID && (state.IsPlaying || state.IsFading) {
+			toStop = append(toStop, cueListID)
+		}
+	}
+	s.mu.RUnlock()
+
+	// Now stop each one (StopCueList handles its own locking)
+	for _, cueListID := range toStop {
+		s.StopCueList(cueListID)
+	}
 }
 
 // PauseCueList pauses the cue list playback, preserving the current cue position.
