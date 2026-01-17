@@ -1223,3 +1223,94 @@ func TestStartCueList_StopsPreviousCueList(t *testing.T) {
 		t.Error("Expected cue list 1 to not be fading after starting cue list 2")
 	}
 }
+
+// TestStartCueList_CrossProjectPlayback tests that cue lists from different projects can play simultaneously.
+func TestStartCueList_CrossProjectPlayback(t *testing.T) {
+	testDB, service, cleanup := setupPlaybackTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create first project with a cue list
+	project1 := createTestProject(t, testDB)
+	_, look1 := createTestFixtureWithLook(t, testDB, project1)
+	cueList1 := createTestCueList(t, testDB, project1, []*models.Look{look1}, false)
+
+	// Create second project with a cue list
+	project2 := &models.Project{
+		ID:   cuid.New(),
+		Name: testutil.UniqueProjectName("playback-test-2"),
+	}
+	if err := testDB.DB.Create(project2).Error; err != nil {
+		t.Fatalf("Failed to create project 2: %v", err)
+	}
+
+	look2 := &models.Look{
+		ID:        cuid.New(),
+		ProjectID: project2.ID,
+		Name:      "Look 2",
+	}
+	if err := testDB.DB.Create(look2).Error; err != nil {
+		t.Fatalf("Failed to create look 2: %v", err)
+	}
+
+	cueList2 := &models.CueList{
+		ID:        cuid.New(),
+		ProjectID: project2.ID,
+		Name:      "Test Cue List 2",
+	}
+	if err := testDB.DB.Create(cueList2).Error; err != nil {
+		t.Fatalf("Failed to create cue list 2: %v", err)
+	}
+	cue2 := &models.Cue{
+		ID:          cuid.New(),
+		CueListID:   cueList2.ID,
+		LookID:      look2.ID,
+		Name:        look2.Name,
+		CueNumber:   1.0,
+		FadeInTime:  0.1,
+		FadeOutTime: 0.05,
+	}
+	if err := testDB.DB.Create(cue2).Error; err != nil {
+		t.Fatalf("Failed to create cue 2: %v", err)
+	}
+
+	// Start cue list from project 1
+	err := service.StartCueList(ctx, cueList1.ID, nil, nil)
+	if err != nil {
+		t.Fatalf("Failed to start cue list 1: %v", err)
+	}
+
+	// Verify cue list 1 is playing
+	state1 := service.GetPlaybackState(cueList1.ID)
+	if state1 == nil {
+		t.Fatal("Expected state for cue list 1 to exist")
+	}
+	if !state1.IsPlaying {
+		t.Error("Expected cue list 1 to be playing")
+	}
+
+	// Start cue list from project 2 - this should NOT stop cue list 1 (different project)
+	err = service.StartCueList(ctx, cueList2.ID, nil, nil)
+	if err != nil {
+		t.Fatalf("Failed to start cue list 2: %v", err)
+	}
+
+	// Verify cue list 2 is playing
+	state2 := service.GetPlaybackState(cueList2.ID)
+	if state2 == nil {
+		t.Fatal("Expected state for cue list 2 to exist")
+	}
+	if !state2.IsPlaying {
+		t.Error("Expected cue list 2 to be playing")
+	}
+
+	// Verify cue list 1 is STILL playing (different project, should not be stopped)
+	state1After := service.GetPlaybackState(cueList1.ID)
+	if state1After == nil {
+		t.Fatal("Expected state for cue list 1 to still exist")
+	}
+	if !state1After.IsPlaying {
+		t.Error("Expected cue list 1 to still be playing (different project)")
+	}
+}
