@@ -313,6 +313,7 @@ func TestIsFadingTransitions(t *testing.T) {
 	}
 
 	cueListID := "test-cue-list"
+	projectID := "test-project"
 	cueListName := "Test Cue List"
 	cueCount := 1
 	cueIndex := 0
@@ -326,7 +327,7 @@ func TestIsFadingTransitions(t *testing.T) {
 	}
 
 	// Start the cue
-	service.StartCue(cueListID, cueListName, cueCount, cueIndex, cue)
+	service.StartCue(cueListID, projectID, cueListName, cueCount, cueIndex, cue)
 
 	// Immediately check: both should be true at start
 	state := service.GetPlaybackState(cueListID)
@@ -360,6 +361,7 @@ func TestIsPlayingStaysAfterFade(t *testing.T) {
 	}
 
 	cueListID := "test-cue-list"
+	projectID := "test-project"
 	cueListName := "Test Cue List"
 	cueCount := 1
 	cueIndex := 0
@@ -373,7 +375,7 @@ func TestIsPlayingStaysAfterFade(t *testing.T) {
 	}
 
 	// Start the cue
-	service.StartCue(cueListID, cueListName, cueCount, cueIndex, cue)
+	service.StartCue(cueListID, projectID, cueListName, cueCount, cueIndex, cue)
 
 	// Check state during fade (within first 150ms)
 	time.Sleep(50 * time.Millisecond)
@@ -458,6 +460,7 @@ func TestStopCueListCleansFadeCompleteTimer(t *testing.T) {
 	}
 
 	cueListID := "test-cue-list"
+	projectID := "test-project"
 	cueListName := "Test Cue List"
 	cueCount := 1
 	cueIndex := 0
@@ -471,7 +474,7 @@ func TestStopCueListCleansFadeCompleteTimer(t *testing.T) {
 	}
 
 	// Start the cue - this should create a fade completion timer
-	service.StartCue(cueListID, cueListName, cueCount, cueIndex, cue)
+	service.StartCue(cueListID, projectID, cueListName, cueCount, cueIndex, cue)
 
 	// Verify the fade completion timer was created
 	if _, exists := service.fadeCompleteTimers[cueListID]; !exists {
@@ -506,6 +509,7 @@ func TestFadeCompleteTimerDoesNotFireAfterStop(t *testing.T) {
 	}
 
 	cueListID := "test-cue-list"
+	projectID := "test-project"
 	cueListName := "Test Cue List"
 	cueCount := 1
 	cueIndex := 0
@@ -519,7 +523,7 @@ func TestFadeCompleteTimerDoesNotFireAfterStop(t *testing.T) {
 	}
 
 	// Start a cue
-	service.StartCue(cueListID, cueListName, cueCount, cueIndex, cue)
+	service.StartCue(cueListID, projectID, cueListName, cueCount, cueIndex, cue)
 
 	// Immediately stop it (before fade completes)
 	service.StopCueList(cueListID)
