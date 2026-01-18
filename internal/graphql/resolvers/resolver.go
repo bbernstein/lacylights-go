@@ -18,6 +18,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/services/playback"
 	"github.com/bbernstein/lacylights-go/internal/services/preview"
 	"github.com/bbernstein/lacylights-go/internal/services/pubsub"
+	"github.com/bbernstein/lacylights-go/internal/services/undo"
 	"github.com/bbernstein/lacylights-go/internal/services/version"
 	"github.com/bbernstein/lacylights-go/internal/services/wifi"
 	"gorm.io/gorm"
@@ -37,6 +38,7 @@ type Resolver struct {
 	CueRepo        *repositories.CueRepository
 	LookBoardRepo  *repositories.LookBoardRepository
 	EffectRepo     *repositories.EffectRepository
+	OperationRepo  *repositories.OperationRepository
 
 	// Services
 	DMXService      *dmx.Service
@@ -49,6 +51,7 @@ type Resolver struct {
 	PreviewService  *preview.Service
 	VersionService  *version.Service
 	WiFiService     *wifi.Service
+	UndoService     *undo.Service
 	PubSub          *pubsub.PubSub
 }
 
@@ -61,11 +64,25 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *modulator.Eng
 	cueRepo := repositories.NewCueRepository(db)
 	lookBoardRepo := repositories.NewLookBoardRepository(db)
 	effectRepo := repositories.NewEffectRepository(db)
+	operationRepo := repositories.NewOperationRepository(db)
 
 	ps := pubsub.New()
 
 	// Create PubSub first so it can be passed to OFLManager
 	oflManager := ofl.NewManager(db, fixtureRepo, ps, oflCachePath)
+
+	// Create undo service
+	undoService := undo.NewService(
+		operationRepo,
+		lookRepo,
+		fixtureRepo,
+		cueRepo,
+		cueListRepo,
+		lookBoardRepo,
+		effectRepo,
+		projectRepo,
+		ps,
+	)
 
 	r := &Resolver{
 		db:              db,
@@ -77,6 +94,7 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *modulator.Eng
 		CueRepo:         cueRepo,
 		LookBoardRepo:   lookBoardRepo,
 		EffectRepo:      effectRepo,
+		OperationRepo:   operationRepo,
 		DMXService:      dmxService,
 		FadeEngine:      fadeEngine,
 		PlaybackService: playbackService,
@@ -87,8 +105,12 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *modulator.Eng
 		PreviewService:  preview.NewService(fixtureRepo, lookRepo, dmxService),
 		VersionService:  version.NewService(),
 		WiFiService:     wifi.NewService(),
+		UndoService:     undoService,
 		PubSub:          ps,
 	}
+
+	// Wire up playback controller for undo/redo of cue playback operations
+	r.UndoService.SetPlaybackController(playbackService)
 
 	// Wire up PubSub publishing from services
 	r.wirePubSub()
@@ -280,4 +302,52 @@ func (r *Resolver) notifyLookNameChange(ctx context.Context, lookID, newName str
 		newNameCopy := newName
 		r.publishCueListDataChanged(cueListID, generated.CueListDataChangeTypeLookNameChanged, nil, &lookIDCopy, &newNameCopy)
 	}
+}
+
+// publishOperationHistoryChanged publishes an undo/redo status update to subscribers.
+// This is called after any undo, redo, or new operation is recorded.
+func (r *Resolver) publishOperationHistoryChanged(ctx context.Context, projectID string) {
+	status, err := r.OperationRepo.GetUndoRedoStatus(ctx, projectID)
+	if err != nil {
+		log.Printf("Warning: failed to get undo/redo status for publish: %v", err)
+		return
+	}
+
+	gqlStatus := &generated.UndoRedoStatus{
+		ProjectID:       status.ProjectID,
+		CanUndo:         status.CanUndo,
+		CanRedo:         status.CanRedo,
+		CurrentSequence: status.CurrentSequence,
+		TotalOperations: int(status.TotalOperations),
+	}
+
+	if status.UndoDescription != "" {
+		gqlStatus.UndoDescription = &status.UndoDescription
+	}
+	if status.RedoDescription != "" {
+		gqlStatus.RedoDescription = &status.RedoDescription
+	}
+
+	r.PubSub.Publish(pubsub.TopicOperationHistoryChanged, projectID, gqlStatus)
+}
+
+// captureCuePlaybackState captures the current playback state for undo/redo.
+func (r *Resolver) captureCuePlaybackState(cueListID, projectID, cueListName string) *undo.CuePlaybackSnapshot {
+	status := r.PlaybackService.GetFormattedStatus(cueListID)
+
+	snapshot := &undo.CuePlaybackSnapshot{
+		CueListID:   cueListID,
+		ProjectID:   projectID,
+		IsPlaying:   status.IsPlaying,
+		CueListName: cueListName,
+	}
+
+	if status.CurrentCue != nil {
+		snapshot.CueID = &status.CurrentCue.ID
+		snapshot.CueNumber = &status.CurrentCue.CueNumber
+		snapshot.CueName = &status.CurrentCue.Name
+		snapshot.FadeInTime = &status.CurrentCue.FadeInTime
+	}
+
+	return snapshot
 }

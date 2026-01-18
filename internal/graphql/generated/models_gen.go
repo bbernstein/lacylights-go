@@ -795,6 +795,25 @@ type OFLUpdateCheckResult struct {
 	CheckedAt string `json:"checkedAt"`
 }
 
+// Paginated operation history for a project.
+type OperationHistoryPage struct {
+	Operations      []*OperationSummary `json:"operations"`
+	Pagination      PaginationInfo      `json:"pagination"`
+	CurrentSequence int                 `json:"currentSequence"`
+}
+
+// Summary view of an operation for history display.
+type OperationSummary struct {
+	ID            string         `json:"id"`
+	Description   string         `json:"description"`
+	OperationType OperationType  `json:"operationType"`
+	EntityType    UndoEntityType `json:"entityType"`
+	Sequence      int            `json:"sequence"`
+	CreatedAt     string         `json:"createdAt"`
+	// True if this operation is at the current position in history
+	IsCurrent bool `json:"isCurrent"`
+}
+
 type PaginationInfo struct {
 	Total      int  `json:"total"`
 	Page       int  `json:"page"`
@@ -870,6 +889,28 @@ type SystemVersionInfo struct {
 	Repositories               []*RepositoryVersion `json:"repositories"`
 	LastChecked                string               `json:"lastChecked"`
 	VersionManagementSupported bool                 `json:"versionManagementSupported"`
+}
+
+// Result of an undo or redo operation.
+type UndoRedoResult struct {
+	Success   bool              `json:"success"`
+	Operation *models.Operation `json:"operation,omitempty"`
+	Message   *string           `json:"message,omitempty"`
+	// ID of the entity that was restored
+	RestoredEntityID *string `json:"restoredEntityId,omitempty"`
+}
+
+// Current status of undo/redo for a project.
+type UndoRedoStatus struct {
+	ProjectID       string `json:"projectId"`
+	CanUndo         bool   `json:"canUndo"`
+	CanRedo         bool   `json:"canRedo"`
+	CurrentSequence int    `json:"currentSequence"`
+	TotalOperations int    `json:"totalOperations"`
+	// Description of what would be undone
+	UndoDescription *string `json:"undoDescription,omitempty"`
+	// Description of what would be redone
+	RedoDescription *string `json:"redoDescription,omitempty"`
 }
 
 type UniverseChannelMap struct {
@@ -1825,6 +1866,66 @@ func (e OFLImportPhase) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Type of operation recorded for undo/redo.
+type OperationType string
+
+const (
+	OperationTypeCreate OperationType = "CREATE"
+	OperationTypeUpdate OperationType = "UPDATE"
+	OperationTypeDelete OperationType = "DELETE"
+	OperationTypeBulk   OperationType = "BULK"
+)
+
+var AllOperationType = []OperationType{
+	OperationTypeCreate,
+	OperationTypeUpdate,
+	OperationTypeDelete,
+	OperationTypeBulk,
+}
+
+func (e OperationType) IsValid() bool {
+	switch e {
+	case OperationTypeCreate, OperationTypeUpdate, OperationTypeDelete, OperationTypeBulk:
+		return true
+	}
+	return false
+}
+
+func (e OperationType) String() string {
+	return string(e)
+}
+
+func (e *OperationType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = OperationType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid OperationType", str)
+	}
+	return nil
+}
+
+func (e OperationType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *OperationType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e OperationType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 // Priority band determines effect processing order.
 // Effects in higher bands (SYSTEM) override effects in lower bands (BASE).
 type PriorityBand string
@@ -2002,6 +2103,76 @@ func (e *TransitionBehavior) UnmarshalJSON(b []byte) error {
 }
 
 func (e TransitionBehavior) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Type of entity being operated on.
+type UndoEntityType string
+
+const (
+	UndoEntityTypeLook            UndoEntityType = "Look"
+	UndoEntityTypeFixtureInstance UndoEntityType = "FixtureInstance"
+	UndoEntityTypeCue             UndoEntityType = "Cue"
+	UndoEntityTypeCueList         UndoEntityType = "CueList"
+	UndoEntityTypeLookBoard       UndoEntityType = "LookBoard"
+	UndoEntityTypeLookBoardButton UndoEntityType = "LookBoardButton"
+	UndoEntityTypeEffect          UndoEntityType = "Effect"
+	UndoEntityTypeProject         UndoEntityType = "Project"
+	UndoEntityTypeCuePlayback     UndoEntityType = "CuePlayback"
+)
+
+var AllUndoEntityType = []UndoEntityType{
+	UndoEntityTypeLook,
+	UndoEntityTypeFixtureInstance,
+	UndoEntityTypeCue,
+	UndoEntityTypeCueList,
+	UndoEntityTypeLookBoard,
+	UndoEntityTypeLookBoardButton,
+	UndoEntityTypeEffect,
+	UndoEntityTypeProject,
+	UndoEntityTypeCuePlayback,
+}
+
+func (e UndoEntityType) IsValid() bool {
+	switch e {
+	case UndoEntityTypeLook, UndoEntityTypeFixtureInstance, UndoEntityTypeCue, UndoEntityTypeCueList, UndoEntityTypeLookBoard, UndoEntityTypeLookBoardButton, UndoEntityTypeEffect, UndoEntityTypeProject, UndoEntityTypeCuePlayback:
+		return true
+	}
+	return false
+}
+
+func (e UndoEntityType) String() string {
+	return string(e)
+}
+
+func (e *UndoEntityType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = UndoEntityType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid UndoEntityType", str)
+	}
+	return nil
+}
+
+func (e UndoEntityType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *UndoEntityType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e UndoEntityType) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

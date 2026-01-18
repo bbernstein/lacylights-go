@@ -123,6 +123,35 @@ enum ImportMode {
   MERGE
 }
 
+# =============================================================================
+# UNDO/REDO ENUMS
+# =============================================================================
+
+"""
+Type of operation recorded for undo/redo.
+"""
+enum OperationType {
+  CREATE
+  UPDATE
+  DELETE
+  BULK
+}
+
+"""
+Type of entity being operated on.
+"""
+enum UndoEntityType {
+  Look
+  FixtureInstance
+  Cue
+  CueList
+  LookBoard
+  LookBoardButton
+  Effect
+  Project
+  CuePlayback
+}
+
 enum FixtureConflictStrategy {
   SKIP
   REPLACE
@@ -870,6 +899,75 @@ type OFLImportResult {
   stats: OFLImportStats!
   errorMessage: String
   oflVersion: String!
+}
+
+# =============================================================================
+# UNDO/REDO TYPES
+# =============================================================================
+
+"""
+Represents a recorded operation in the undo/redo history.
+"""
+type Operation {
+  id: ID!
+  projectId: ID!
+  operationType: OperationType!
+  entityType: UndoEntityType!
+  entityId: ID!
+  description: String!
+  sequence: Int!
+  createdAt: String!
+  "JSON array of related entity IDs for bulk operations"
+  relatedIds: [ID!]
+}
+
+"""
+Summary view of an operation for history display.
+"""
+type OperationSummary {
+  id: ID!
+  description: String!
+  operationType: OperationType!
+  entityType: UndoEntityType!
+  sequence: Int!
+  createdAt: String!
+  "True if this operation is at the current position in history"
+  isCurrent: Boolean!
+}
+
+"""
+Result of an undo or redo operation.
+"""
+type UndoRedoResult {
+  success: Boolean!
+  operation: Operation
+  message: String
+  "ID of the entity that was restored"
+  restoredEntityId: ID
+}
+
+"""
+Current status of undo/redo for a project.
+"""
+type UndoRedoStatus {
+  projectId: ID!
+  canUndo: Boolean!
+  canRedo: Boolean!
+  currentSequence: Int!
+  totalOperations: Int!
+  "Description of what would be undone"
+  undoDescription: String
+  "Description of what would be redone"
+  redoDescription: String
+}
+
+"""
+Paginated operation history for a project.
+"""
+type OperationHistoryPage {
+  operations: [OperationSummary!]!
+  pagination: PaginationInfo!
+  currentSequence: Int!
 }
 
 # =============================================================================
@@ -1720,6 +1818,14 @@ type Query {
   lookBoardsByIds(ids: [ID!]!): [LookBoard!]!
   fixtureDefinitionsByIds(ids: [ID!]!): [FixtureDefinition!]!
   projectsByIds(ids: [ID!]!): [Project!]!
+
+  # Undo/Redo
+  "Get current undo/redo status for a project"
+  undoRedoStatus(projectId: ID!): UndoRedoStatus!
+  "Get paginated operation history for a project"
+  operationHistory(projectId: ID!, page: Int = 1, perPage: Int = 50): OperationHistoryPage!
+  "Get a specific operation by ID"
+  operation(operationId: ID!): Operation
 }
 
 # =============================================================================
@@ -1966,6 +2072,16 @@ type Mutation {
   releaseBlackout(fadeTime: Float): Boolean!
   "Set the grand master level (0.0-1.0)"
   setGrandMaster(value: Float!): Boolean!
+
+  # Undo/Redo Operations
+  "Undo the last operation for a project"
+  undo(projectId: ID!): UndoRedoResult!
+  "Redo the last undone operation for a project"
+  redo(projectId: ID!): UndoRedoResult!
+  "Jump to a specific operation in history"
+  jumpToOperation(projectId: ID!, operationId: ID!): UndoRedoResult!
+  "Clear all operation history for a project"
+  clearOperationHistory(projectId: ID!, confirmClear: Boolean!): Boolean!
 }
 
 # =============================================================================
@@ -1986,4 +2102,6 @@ type Subscription {
   wifiModeChanged: WiFiMode!
   "Real-time updates during OFL import"
   oflImportProgress: OFLImportStatus!
+  "Real-time updates when operation history changes (after undo/redo or new operations)"
+  operationHistoryChanged(projectId: ID!): UndoRedoStatus!
 }

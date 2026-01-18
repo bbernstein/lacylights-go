@@ -53,6 +53,7 @@ type ResolverRoot interface {
 	LookBoardButton() LookBoardButtonResolver
 	ModeChannel() ModeChannelResolver
 	Mutation() MutationResolver
+	Operation() OperationResolver
 	PreviewSession() PreviewSessionResolver
 	Project() ProjectResolver
 	ProjectUser() ProjectUserResolver
@@ -558,6 +559,7 @@ type ComplexityRoot struct {
 		BulkUpdateProjects                     func(childComplexity int, input BulkProjectUpdateInput) int
 		CancelOFLImport                        func(childComplexity int) int
 		CancelPreviewSession                   func(childComplexity int, sessionID string) int
+		ClearOperationHistory                  func(childComplexity int, projectID string, confirmClear bool) int
 		CloneLook                              func(childComplexity int, lookID string, newName string) int
 		CommitPreviewSession                   func(childComplexity int, sessionID string) int
 		ConnectWiFi                            func(childComplexity int, ssid string, password *string) int
@@ -588,9 +590,11 @@ type ComplexityRoot struct {
 		ImportProject                          func(childComplexity int, jsonContent string, options ImportOptionsInput) int
 		ImportProjectFromQlc                   func(childComplexity int, xmlContent string, originalFileName string) int
 		InitializePreviewWithLook              func(childComplexity int, sessionID string, lookID string) int
+		JumpToOperation                        func(childComplexity int, projectID string, operationID string) int
 		NextCue                                func(childComplexity int, cueListID string, fadeInTime *float64) int
 		PlayCue                                func(childComplexity int, cueID string, fadeInTime *float64) int
 		PreviousCue                            func(childComplexity int, cueListID string, fadeInTime *float64) int
+		Redo                                   func(childComplexity int, projectID string) int
 		ReleaseBlackout                        func(childComplexity int, fadeTime *float64) int
 		RemoveChannelFromEffectFixture         func(childComplexity int, id string) int
 		RemoveEffectFromCue                    func(childComplexity int, cueID string, effectID string) int
@@ -615,6 +619,7 @@ type ComplexityRoot struct {
 		StopEffect                             func(childComplexity int, effectID string, fadeTime *float64) int
 		ToggleCueSkip                          func(childComplexity int, cueID string) int
 		TriggerOFLImport                       func(childComplexity int, options *OFLImportOptionsInput) int
+		Undo                                   func(childComplexity int, projectID string) int
 		UpdateAllRepositories                  func(childComplexity int) int
 		UpdateCue                              func(childComplexity int, id string, input CreateCueInput) int
 		UpdateCueList                          func(childComplexity int, id string, input CreateCueListInput) int
@@ -699,6 +704,34 @@ type ComplexityRoot struct {
 		NewFixtureCount     func(childComplexity int) int
 		OflFixtureCount     func(childComplexity int) int
 		OflVersion          func(childComplexity int) int
+	}
+
+	Operation struct {
+		CreatedAt     func(childComplexity int) int
+		Description   func(childComplexity int) int
+		EntityID      func(childComplexity int) int
+		EntityType    func(childComplexity int) int
+		ID            func(childComplexity int) int
+		OperationType func(childComplexity int) int
+		ProjectID     func(childComplexity int) int
+		RelatedIds    func(childComplexity int) int
+		Sequence      func(childComplexity int) int
+	}
+
+	OperationHistoryPage struct {
+		CurrentSequence func(childComplexity int) int
+		Operations      func(childComplexity int) int
+		Pagination      func(childComplexity int) int
+	}
+
+	OperationSummary struct {
+		CreatedAt     func(childComplexity int) int
+		Description   func(childComplexity int) int
+		EntityType    func(childComplexity int) int
+		ID            func(childComplexity int) int
+		IsCurrent     func(childComplexity int) int
+		OperationType func(childComplexity int) int
+		Sequence      func(childComplexity int) int
 	}
 
 	PaginationInfo struct {
@@ -821,6 +854,8 @@ type ComplexityRoot struct {
 		ModulatorStatus                 func(childComplexity int) int
 		NetworkInterfaceOptions         func(childComplexity int) int
 		OflImportStatus                 func(childComplexity int) int
+		Operation                       func(childComplexity int, operationID string) int
+		OperationHistory                func(childComplexity int, projectID string, page *int, perPage *int) int
 		PreviewSession                  func(childComplexity int, sessionID string) int
 		Project                         func(childComplexity int, id string) int
 		Projects                        func(childComplexity int) int
@@ -834,6 +869,7 @@ type ComplexityRoot struct {
 		SuggestChannelAssignment        func(childComplexity int, input ChannelAssignmentInput) int
 		SystemInfo                      func(childComplexity int) int
 		SystemVersions                  func(childComplexity int) int
+		UndoRedoStatus                  func(childComplexity int, projectID string) int
 		WifiMode                        func(childComplexity int) int
 		WifiNetworks                    func(childComplexity int, rescan *bool, deduplicate *bool) int
 		WifiStatus                      func(childComplexity int) int
@@ -860,6 +896,7 @@ type ComplexityRoot struct {
 		DmxOutputChanged            func(childComplexity int, universe *int) int
 		GlobalPlaybackStatusUpdated func(childComplexity int) int
 		OflImportProgress           func(childComplexity int) int
+		OperationHistoryChanged     func(childComplexity int, projectID string) int
 		PreviewSessionUpdated       func(childComplexity int, projectID string) int
 		ProjectUpdated              func(childComplexity int, projectID string) int
 		SystemInfoUpdated           func(childComplexity int) int
@@ -877,6 +914,23 @@ type ComplexityRoot struct {
 		LastChecked                func(childComplexity int) int
 		Repositories               func(childComplexity int) int
 		VersionManagementSupported func(childComplexity int) int
+	}
+
+	UndoRedoResult struct {
+		Message          func(childComplexity int) int
+		Operation        func(childComplexity int) int
+		RestoredEntityID func(childComplexity int) int
+		Success          func(childComplexity int) int
+	}
+
+	UndoRedoStatus struct {
+		CanRedo         func(childComplexity int) int
+		CanUndo         func(childComplexity int) int
+		CurrentSequence func(childComplexity int) int
+		ProjectID       func(childComplexity int) int
+		RedoDescription func(childComplexity int) int
+		TotalOperations func(childComplexity int) int
+		UndoDescription func(childComplexity int) int
 	}
 
 	UniverseChannelMap struct {
@@ -1150,6 +1204,17 @@ type MutationResolver interface {
 	ActivateBlackout(ctx context.Context, fadeTime *float64) (bool, error)
 	ReleaseBlackout(ctx context.Context, fadeTime *float64) (bool, error)
 	SetGrandMaster(ctx context.Context, value float64) (bool, error)
+	Undo(ctx context.Context, projectID string) (*UndoRedoResult, error)
+	Redo(ctx context.Context, projectID string) (*UndoRedoResult, error)
+	JumpToOperation(ctx context.Context, projectID string, operationID string) (*UndoRedoResult, error)
+	ClearOperationHistory(ctx context.Context, projectID string, confirmClear bool) (bool, error)
+}
+type OperationResolver interface {
+	OperationType(ctx context.Context, obj *models.Operation) (OperationType, error)
+	EntityType(ctx context.Context, obj *models.Operation) (UndoEntityType, error)
+
+	CreatedAt(ctx context.Context, obj *models.Operation) (string, error)
+	RelatedIds(ctx context.Context, obj *models.Operation) ([]string, error)
 }
 type PreviewSessionResolver interface {
 	Project(ctx context.Context, obj *models.PreviewSession) (*models.Project, error)
@@ -1233,6 +1298,9 @@ type QueryResolver interface {
 	LookBoardsByIds(ctx context.Context, ids []string) ([]*models.LookBoard, error)
 	FixtureDefinitionsByIds(ctx context.Context, ids []string) ([]*models.FixtureDefinition, error)
 	ProjectsByIds(ctx context.Context, ids []string) ([]*models.Project, error)
+	UndoRedoStatus(ctx context.Context, projectID string) (*UndoRedoStatus, error)
+	OperationHistory(ctx context.Context, projectID string, page *int, perPage *int) (*OperationHistoryPage, error)
+	Operation(ctx context.Context, operationID string) (*models.Operation, error)
 }
 type SettingResolver interface {
 	CreatedAt(ctx context.Context, obj *models.Setting) (string, error)
@@ -1249,6 +1317,7 @@ type SubscriptionResolver interface {
 	WifiStatusUpdated(ctx context.Context) (<-chan *WiFiStatus, error)
 	WifiModeChanged(ctx context.Context) (<-chan WiFiMode, error)
 	OflImportProgress(ctx context.Context) (<-chan *OFLImportStatus, error)
+	OperationHistoryChanged(ctx context.Context, projectID string) (<-chan *UndoRedoStatus, error)
 }
 type UserResolver interface {
 	Role(ctx context.Context, obj *models.User) (UserRole, error)
@@ -3545,6 +3614,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.CancelPreviewSession(childComplexity, args["sessionId"].(string)), true
+	case "Mutation.clearOperationHistory":
+		if e.complexity.Mutation.ClearOperationHistory == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_clearOperationHistory_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.ClearOperationHistory(childComplexity, args["projectId"].(string), args["confirmClear"].(bool)), true
 	case "Mutation.cloneLook":
 		if e.complexity.Mutation.CloneLook == nil {
 			break
@@ -3870,6 +3950,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.InitializePreviewWithLook(childComplexity, args["sessionId"].(string), args["lookId"].(string)), true
+	case "Mutation.jumpToOperation":
+		if e.complexity.Mutation.JumpToOperation == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_jumpToOperation_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.JumpToOperation(childComplexity, args["projectId"].(string), args["operationId"].(string)), true
 	case "Mutation.nextCue":
 		if e.complexity.Mutation.NextCue == nil {
 			break
@@ -3903,6 +3994,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.PreviousCue(childComplexity, args["cueListId"].(string), args["fadeInTime"].(*float64)), true
+	case "Mutation.redo":
+		if e.complexity.Mutation.Redo == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_redo_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.Redo(childComplexity, args["projectId"].(string)), true
 	case "Mutation.releaseBlackout":
 		if e.complexity.Mutation.ReleaseBlackout == nil {
 			break
@@ -4157,6 +4259,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.TriggerOFLImport(childComplexity, args["options"].(*OFLImportOptionsInput)), true
+	case "Mutation.undo":
+		if e.complexity.Mutation.Undo == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_undo_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.Undo(childComplexity, args["projectId"].(string)), true
 	case "Mutation.updateAllRepositories":
 		if e.complexity.Mutation.UpdateAllRepositories == nil {
 			break
@@ -4654,6 +4767,123 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.OFLUpdateCheckResult.OflVersion(childComplexity), true
+
+	case "Operation.createdAt":
+		if e.complexity.Operation.CreatedAt == nil {
+			break
+		}
+
+		return e.complexity.Operation.CreatedAt(childComplexity), true
+	case "Operation.description":
+		if e.complexity.Operation.Description == nil {
+			break
+		}
+
+		return e.complexity.Operation.Description(childComplexity), true
+	case "Operation.entityId":
+		if e.complexity.Operation.EntityID == nil {
+			break
+		}
+
+		return e.complexity.Operation.EntityID(childComplexity), true
+	case "Operation.entityType":
+		if e.complexity.Operation.EntityType == nil {
+			break
+		}
+
+		return e.complexity.Operation.EntityType(childComplexity), true
+	case "Operation.id":
+		if e.complexity.Operation.ID == nil {
+			break
+		}
+
+		return e.complexity.Operation.ID(childComplexity), true
+	case "Operation.operationType":
+		if e.complexity.Operation.OperationType == nil {
+			break
+		}
+
+		return e.complexity.Operation.OperationType(childComplexity), true
+	case "Operation.projectId":
+		if e.complexity.Operation.ProjectID == nil {
+			break
+		}
+
+		return e.complexity.Operation.ProjectID(childComplexity), true
+	case "Operation.relatedIds":
+		if e.complexity.Operation.RelatedIds == nil {
+			break
+		}
+
+		return e.complexity.Operation.RelatedIds(childComplexity), true
+	case "Operation.sequence":
+		if e.complexity.Operation.Sequence == nil {
+			break
+		}
+
+		return e.complexity.Operation.Sequence(childComplexity), true
+
+	case "OperationHistoryPage.currentSequence":
+		if e.complexity.OperationHistoryPage.CurrentSequence == nil {
+			break
+		}
+
+		return e.complexity.OperationHistoryPage.CurrentSequence(childComplexity), true
+	case "OperationHistoryPage.operations":
+		if e.complexity.OperationHistoryPage.Operations == nil {
+			break
+		}
+
+		return e.complexity.OperationHistoryPage.Operations(childComplexity), true
+	case "OperationHistoryPage.pagination":
+		if e.complexity.OperationHistoryPage.Pagination == nil {
+			break
+		}
+
+		return e.complexity.OperationHistoryPage.Pagination(childComplexity), true
+
+	case "OperationSummary.createdAt":
+		if e.complexity.OperationSummary.CreatedAt == nil {
+			break
+		}
+
+		return e.complexity.OperationSummary.CreatedAt(childComplexity), true
+	case "OperationSummary.description":
+		if e.complexity.OperationSummary.Description == nil {
+			break
+		}
+
+		return e.complexity.OperationSummary.Description(childComplexity), true
+	case "OperationSummary.entityType":
+		if e.complexity.OperationSummary.EntityType == nil {
+			break
+		}
+
+		return e.complexity.OperationSummary.EntityType(childComplexity), true
+	case "OperationSummary.id":
+		if e.complexity.OperationSummary.ID == nil {
+			break
+		}
+
+		return e.complexity.OperationSummary.ID(childComplexity), true
+	case "OperationSummary.isCurrent":
+		if e.complexity.OperationSummary.IsCurrent == nil {
+			break
+		}
+
+		return e.complexity.OperationSummary.IsCurrent(childComplexity), true
+	case "OperationSummary.operationType":
+		if e.complexity.OperationSummary.OperationType == nil {
+			break
+		}
+
+		return e.complexity.OperationSummary.OperationType(childComplexity), true
+	case "OperationSummary.sequence":
+		if e.complexity.OperationSummary.Sequence == nil {
+			break
+		}
+
+		return e.complexity.OperationSummary.Sequence(childComplexity), true
 
 	case "PaginationInfo.hasMore":
 		if e.complexity.PaginationInfo.HasMore == nil {
@@ -5361,6 +5591,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.OflImportStatus(childComplexity), true
+	case "Query.operation":
+		if e.complexity.Query.Operation == nil {
+			break
+		}
+
+		args, err := ec.field_Query_operation_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.Operation(childComplexity, args["operationId"].(string)), true
+	case "Query.operationHistory":
+		if e.complexity.Query.OperationHistory == nil {
+			break
+		}
+
+		args, err := ec.field_Query_operationHistory_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.OperationHistory(childComplexity, args["projectId"].(string), args["page"].(*int), args["perPage"].(*int)), true
 	case "Query.previewSession":
 		if e.complexity.Query.PreviewSession == nil {
 			break
@@ -5479,6 +5731,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.SystemVersions(childComplexity), true
+	case "Query.undoRedoStatus":
+		if e.complexity.Query.UndoRedoStatus == nil {
+			break
+		}
+
+		args, err := ec.field_Query_undoRedoStatus_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.UndoRedoStatus(childComplexity, args["projectId"].(string)), true
 	case "Query.wifiMode":
 		if e.complexity.Query.WifiMode == nil {
 			break
@@ -5604,6 +5867,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Subscription.OflImportProgress(childComplexity), true
+	case "Subscription.operationHistoryChanged":
+		if e.complexity.Subscription.OperationHistoryChanged == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_operationHistoryChanged_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Subscription.OperationHistoryChanged(childComplexity, args["projectId"].(string)), true
 	case "Subscription.previewSessionUpdated":
 		if e.complexity.Subscription.PreviewSessionUpdated == nil {
 			break
@@ -5682,6 +5956,74 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.SystemVersionInfo.VersionManagementSupported(childComplexity), true
+
+	case "UndoRedoResult.message":
+		if e.complexity.UndoRedoResult.Message == nil {
+			break
+		}
+
+		return e.complexity.UndoRedoResult.Message(childComplexity), true
+	case "UndoRedoResult.operation":
+		if e.complexity.UndoRedoResult.Operation == nil {
+			break
+		}
+
+		return e.complexity.UndoRedoResult.Operation(childComplexity), true
+	case "UndoRedoResult.restoredEntityId":
+		if e.complexity.UndoRedoResult.RestoredEntityID == nil {
+			break
+		}
+
+		return e.complexity.UndoRedoResult.RestoredEntityID(childComplexity), true
+	case "UndoRedoResult.success":
+		if e.complexity.UndoRedoResult.Success == nil {
+			break
+		}
+
+		return e.complexity.UndoRedoResult.Success(childComplexity), true
+
+	case "UndoRedoStatus.canRedo":
+		if e.complexity.UndoRedoStatus.CanRedo == nil {
+			break
+		}
+
+		return e.complexity.UndoRedoStatus.CanRedo(childComplexity), true
+	case "UndoRedoStatus.canUndo":
+		if e.complexity.UndoRedoStatus.CanUndo == nil {
+			break
+		}
+
+		return e.complexity.UndoRedoStatus.CanUndo(childComplexity), true
+	case "UndoRedoStatus.currentSequence":
+		if e.complexity.UndoRedoStatus.CurrentSequence == nil {
+			break
+		}
+
+		return e.complexity.UndoRedoStatus.CurrentSequence(childComplexity), true
+	case "UndoRedoStatus.projectId":
+		if e.complexity.UndoRedoStatus.ProjectID == nil {
+			break
+		}
+
+		return e.complexity.UndoRedoStatus.ProjectID(childComplexity), true
+	case "UndoRedoStatus.redoDescription":
+		if e.complexity.UndoRedoStatus.RedoDescription == nil {
+			break
+		}
+
+		return e.complexity.UndoRedoStatus.RedoDescription(childComplexity), true
+	case "UndoRedoStatus.totalOperations":
+		if e.complexity.UndoRedoStatus.TotalOperations == nil {
+			break
+		}
+
+		return e.complexity.UndoRedoStatus.TotalOperations(childComplexity), true
+	case "UndoRedoStatus.undoDescription":
+		if e.complexity.UndoRedoStatus.UndoDescription == nil {
+			break
+		}
+
+		return e.complexity.UndoRedoStatus.UndoDescription(childComplexity), true
 
 	case "UniverseChannelMap.availableChannels":
 		if e.complexity.UniverseChannelMap.AvailableChannels == nil {
@@ -6245,6 +6587,35 @@ enum OFLFixtureChangeType {
 enum ImportMode {
   CREATE
   MERGE
+}
+
+# =============================================================================
+# UNDO/REDO ENUMS
+# =============================================================================
+
+"""
+Type of operation recorded for undo/redo.
+"""
+enum OperationType {
+  CREATE
+  UPDATE
+  DELETE
+  BULK
+}
+
+"""
+Type of entity being operated on.
+"""
+enum UndoEntityType {
+  Look
+  FixtureInstance
+  Cue
+  CueList
+  LookBoard
+  LookBoardButton
+  Effect
+  Project
+  CuePlayback
 }
 
 enum FixtureConflictStrategy {
@@ -6994,6 +7365,75 @@ type OFLImportResult {
   stats: OFLImportStats!
   errorMessage: String
   oflVersion: String!
+}
+
+# =============================================================================
+# UNDO/REDO TYPES
+# =============================================================================
+
+"""
+Represents a recorded operation in the undo/redo history.
+"""
+type Operation {
+  id: ID!
+  projectId: ID!
+  operationType: OperationType!
+  entityType: UndoEntityType!
+  entityId: ID!
+  description: String!
+  sequence: Int!
+  createdAt: String!
+  "JSON array of related entity IDs for bulk operations"
+  relatedIds: [ID!]
+}
+
+"""
+Summary view of an operation for history display.
+"""
+type OperationSummary {
+  id: ID!
+  description: String!
+  operationType: OperationType!
+  entityType: UndoEntityType!
+  sequence: Int!
+  createdAt: String!
+  "True if this operation is at the current position in history"
+  isCurrent: Boolean!
+}
+
+"""
+Result of an undo or redo operation.
+"""
+type UndoRedoResult {
+  success: Boolean!
+  operation: Operation
+  message: String
+  "ID of the entity that was restored"
+  restoredEntityId: ID
+}
+
+"""
+Current status of undo/redo for a project.
+"""
+type UndoRedoStatus {
+  projectId: ID!
+  canUndo: Boolean!
+  canRedo: Boolean!
+  currentSequence: Int!
+  totalOperations: Int!
+  "Description of what would be undone"
+  undoDescription: String
+  "Description of what would be redone"
+  redoDescription: String
+}
+
+"""
+Paginated operation history for a project.
+"""
+type OperationHistoryPage {
+  operations: [OperationSummary!]!
+  pagination: PaginationInfo!
+  currentSequence: Int!
 }
 
 # =============================================================================
@@ -7844,6 +8284,14 @@ type Query {
   lookBoardsByIds(ids: [ID!]!): [LookBoard!]!
   fixtureDefinitionsByIds(ids: [ID!]!): [FixtureDefinition!]!
   projectsByIds(ids: [ID!]!): [Project!]!
+
+  # Undo/Redo
+  "Get current undo/redo status for a project"
+  undoRedoStatus(projectId: ID!): UndoRedoStatus!
+  "Get paginated operation history for a project"
+  operationHistory(projectId: ID!, page: Int = 1, perPage: Int = 50): OperationHistoryPage!
+  "Get a specific operation by ID"
+  operation(operationId: ID!): Operation
 }
 
 # =============================================================================
@@ -8090,6 +8538,16 @@ type Mutation {
   releaseBlackout(fadeTime: Float): Boolean!
   "Set the grand master level (0.0-1.0)"
   setGrandMaster(value: Float!): Boolean!
+
+  # Undo/Redo Operations
+  "Undo the last operation for a project"
+  undo(projectId: ID!): UndoRedoResult!
+  "Redo the last undone operation for a project"
+  redo(projectId: ID!): UndoRedoResult!
+  "Jump to a specific operation in history"
+  jumpToOperation(projectId: ID!, operationId: ID!): UndoRedoResult!
+  "Clear all operation history for a project"
+  clearOperationHistory(projectId: ID!, confirmClear: Boolean!): Boolean!
 }
 
 # =============================================================================
@@ -8110,6 +8568,8 @@ type Subscription {
   wifiModeChanged: WiFiMode!
   "Real-time updates during OFL import"
   oflImportProgress: OFLImportStatus!
+  "Real-time updates when operation history changes (after undo/redo or new operations)"
+  operationHistoryChanged(projectId: ID!): UndoRedoStatus!
 }
 `, BuiltIn: false},
 }
@@ -8534,6 +8994,22 @@ func (ec *executionContext) field_Mutation_cancelPreviewSession_args(ctx context
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_clearOperationHistory_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "confirmClear", ec.unmarshalNBoolean2bool)
+	if err != nil {
+		return nil, err
+	}
+	args["confirmClear"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_cloneLook_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -8898,6 +9374,22 @@ func (ec *executionContext) field_Mutation_initializePreviewWithLook_args(ctx co
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_jumpToOperation_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_nextCue_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -8943,6 +9435,17 @@ func (ec *executionContext) field_Mutation_previousCue_args(ctx context.Context,
 		return nil, err
 	}
 	args["fadeInTime"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_redo_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
 	return args, nil
 }
 
@@ -9245,6 +9748,17 @@ func (ec *executionContext) field_Mutation_triggerOFLImport_args(ctx context.Con
 		return nil, err
 	}
 	args["options"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_undo_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
 	return args, nil
 }
 
@@ -9952,6 +10466,38 @@ func (ec *executionContext) field_Query_looks_args(ctx context.Context, rawArgs 
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_operationHistory_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "page", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["page"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "perPage", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["perPage"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_operation_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "operationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["operationId"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_previewSession_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -10095,6 +10641,17 @@ func (ec *executionContext) field_Query_suggestChannelAssignment_args(ctx contex
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_undoRedoStatus_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_wifiNetworks_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -10141,6 +10698,17 @@ func (ec *executionContext) field_Subscription_dmxOutputChanged_args(ctx context
 		return nil, err
 	}
 	args["universe"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_operationHistoryChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
 	return args, nil
 }
 
@@ -25896,6 +26464,200 @@ func (ec *executionContext) fieldContext_Mutation_setGrandMaster(ctx context.Con
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_undo(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_undo,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().Undo(ctx, fc.Args["projectId"].(string))
+		},
+		nil,
+		ec.marshalNUndoRedoResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUndoRedoResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_undo(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "success":
+				return ec.fieldContext_UndoRedoResult_success(ctx, field)
+			case "operation":
+				return ec.fieldContext_UndoRedoResult_operation(ctx, field)
+			case "message":
+				return ec.fieldContext_UndoRedoResult_message(ctx, field)
+			case "restoredEntityId":
+				return ec.fieldContext_UndoRedoResult_restoredEntityId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UndoRedoResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_undo_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_redo(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_redo,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().Redo(ctx, fc.Args["projectId"].(string))
+		},
+		nil,
+		ec.marshalNUndoRedoResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUndoRedoResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_redo(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "success":
+				return ec.fieldContext_UndoRedoResult_success(ctx, field)
+			case "operation":
+				return ec.fieldContext_UndoRedoResult_operation(ctx, field)
+			case "message":
+				return ec.fieldContext_UndoRedoResult_message(ctx, field)
+			case "restoredEntityId":
+				return ec.fieldContext_UndoRedoResult_restoredEntityId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UndoRedoResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_redo_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_jumpToOperation(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_jumpToOperation,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().JumpToOperation(ctx, fc.Args["projectId"].(string), fc.Args["operationId"].(string))
+		},
+		nil,
+		ec.marshalNUndoRedoResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUndoRedoResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_jumpToOperation(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "success":
+				return ec.fieldContext_UndoRedoResult_success(ctx, field)
+			case "operation":
+				return ec.fieldContext_UndoRedoResult_operation(ctx, field)
+			case "message":
+				return ec.fieldContext_UndoRedoResult_message(ctx, field)
+			case "restoredEntityId":
+				return ec.fieldContext_UndoRedoResult_restoredEntityId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UndoRedoResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_jumpToOperation_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_clearOperationHistory(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_clearOperationHistory,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().ClearOperationHistory(ctx, fc.Args["projectId"].(string), fc.Args["confirmClear"].(bool))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_clearOperationHistory(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_clearOperationHistory_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _NetworkInterfaceOption_name(ctx context.Context, field graphql.CollectedField, obj *NetworkInterfaceOption) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -27257,6 +28019,585 @@ func (ec *executionContext) fieldContext_OFLUpdateCheckResult_checkedAt(_ contex
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Operation_id(ctx context.Context, field graphql.CollectedField, obj *models.Operation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Operation_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Operation_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Operation",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Operation_projectId(ctx context.Context, field graphql.CollectedField, obj *models.Operation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Operation_projectId,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Operation_projectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Operation",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Operation_operationType(ctx context.Context, field graphql.CollectedField, obj *models.Operation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Operation_operationType,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Operation().OperationType(ctx, obj)
+		},
+		nil,
+		ec.marshalNOperationType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOperationType,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Operation_operationType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Operation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type OperationType does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Operation_entityType(ctx context.Context, field graphql.CollectedField, obj *models.Operation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Operation_entityType,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Operation().EntityType(ctx, obj)
+		},
+		nil,
+		ec.marshalNUndoEntityType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUndoEntityType,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Operation_entityType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Operation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type UndoEntityType does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Operation_entityId(ctx context.Context, field graphql.CollectedField, obj *models.Operation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Operation_entityId,
+		func(ctx context.Context) (any, error) {
+			return obj.EntityID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Operation_entityId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Operation",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Operation_description(ctx context.Context, field graphql.CollectedField, obj *models.Operation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Operation_description,
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Operation_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Operation",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Operation_sequence(ctx context.Context, field graphql.CollectedField, obj *models.Operation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Operation_sequence,
+		func(ctx context.Context) (any, error) {
+			return obj.Sequence, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Operation_sequence(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Operation",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Operation_createdAt(ctx context.Context, field graphql.CollectedField, obj *models.Operation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Operation_createdAt,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Operation().CreatedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Operation_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Operation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Operation_relatedIds(ctx context.Context, field graphql.CollectedField, obj *models.Operation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Operation_relatedIds,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Operation().RelatedIds(ctx, obj)
+		},
+		nil,
+		ec.marshalOID2ᚕstringᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Operation_relatedIds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Operation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationHistoryPage_operations(ctx context.Context, field graphql.CollectedField, obj *OperationHistoryPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationHistoryPage_operations,
+		func(ctx context.Context) (any, error) {
+			return obj.Operations, nil
+		},
+		nil,
+		ec.marshalNOperationSummary2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOperationSummaryᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationHistoryPage_operations(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationHistoryPage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_OperationSummary_id(ctx, field)
+			case "description":
+				return ec.fieldContext_OperationSummary_description(ctx, field)
+			case "operationType":
+				return ec.fieldContext_OperationSummary_operationType(ctx, field)
+			case "entityType":
+				return ec.fieldContext_OperationSummary_entityType(ctx, field)
+			case "sequence":
+				return ec.fieldContext_OperationSummary_sequence(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_OperationSummary_createdAt(ctx, field)
+			case "isCurrent":
+				return ec.fieldContext_OperationSummary_isCurrent(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type OperationSummary", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationHistoryPage_pagination(ctx context.Context, field graphql.CollectedField, obj *OperationHistoryPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationHistoryPage_pagination,
+		func(ctx context.Context) (any, error) {
+			return obj.Pagination, nil
+		},
+		nil,
+		ec.marshalNPaginationInfo2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐPaginationInfo,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationHistoryPage_pagination(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationHistoryPage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "total":
+				return ec.fieldContext_PaginationInfo_total(ctx, field)
+			case "page":
+				return ec.fieldContext_PaginationInfo_page(ctx, field)
+			case "perPage":
+				return ec.fieldContext_PaginationInfo_perPage(ctx, field)
+			case "totalPages":
+				return ec.fieldContext_PaginationInfo_totalPages(ctx, field)
+			case "hasMore":
+				return ec.fieldContext_PaginationInfo_hasMore(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PaginationInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationHistoryPage_currentSequence(ctx context.Context, field graphql.CollectedField, obj *OperationHistoryPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationHistoryPage_currentSequence,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentSequence, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationHistoryPage_currentSequence(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationHistoryPage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationSummary_id(ctx context.Context, field graphql.CollectedField, obj *OperationSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationSummary_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationSummary_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationSummary_description(ctx context.Context, field graphql.CollectedField, obj *OperationSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationSummary_description,
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationSummary_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationSummary_operationType(ctx context.Context, field graphql.CollectedField, obj *OperationSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationSummary_operationType,
+		func(ctx context.Context) (any, error) {
+			return obj.OperationType, nil
+		},
+		nil,
+		ec.marshalNOperationType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOperationType,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationSummary_operationType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type OperationType does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationSummary_entityType(ctx context.Context, field graphql.CollectedField, obj *OperationSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationSummary_entityType,
+		func(ctx context.Context) (any, error) {
+			return obj.EntityType, nil
+		},
+		nil,
+		ec.marshalNUndoEntityType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUndoEntityType,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationSummary_entityType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type UndoEntityType does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationSummary_sequence(ctx context.Context, field graphql.CollectedField, obj *OperationSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationSummary_sequence,
+		func(ctx context.Context) (any, error) {
+			return obj.Sequence, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationSummary_sequence(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationSummary_createdAt(ctx context.Context, field graphql.CollectedField, obj *OperationSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationSummary_createdAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationSummary_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperationSummary_isCurrent(ctx context.Context, field graphql.CollectedField, obj *OperationSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperationSummary_isCurrent,
+		func(ctx context.Context) (any, error) {
+			return obj.IsCurrent, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperationSummary_isCurrent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperationSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -32054,6 +33395,173 @@ func (ec *executionContext) fieldContext_Query_projectsByIds(ctx context.Context
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_undoRedoStatus(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_undoRedoStatus,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().UndoRedoStatus(ctx, fc.Args["projectId"].(string))
+		},
+		nil,
+		ec.marshalNUndoRedoStatus2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUndoRedoStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_undoRedoStatus(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "projectId":
+				return ec.fieldContext_UndoRedoStatus_projectId(ctx, field)
+			case "canUndo":
+				return ec.fieldContext_UndoRedoStatus_canUndo(ctx, field)
+			case "canRedo":
+				return ec.fieldContext_UndoRedoStatus_canRedo(ctx, field)
+			case "currentSequence":
+				return ec.fieldContext_UndoRedoStatus_currentSequence(ctx, field)
+			case "totalOperations":
+				return ec.fieldContext_UndoRedoStatus_totalOperations(ctx, field)
+			case "undoDescription":
+				return ec.fieldContext_UndoRedoStatus_undoDescription(ctx, field)
+			case "redoDescription":
+				return ec.fieldContext_UndoRedoStatus_redoDescription(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UndoRedoStatus", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_undoRedoStatus_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_operationHistory(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_operationHistory,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().OperationHistory(ctx, fc.Args["projectId"].(string), fc.Args["page"].(*int), fc.Args["perPage"].(*int))
+		},
+		nil,
+		ec.marshalNOperationHistoryPage2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOperationHistoryPage,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_operationHistory(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "operations":
+				return ec.fieldContext_OperationHistoryPage_operations(ctx, field)
+			case "pagination":
+				return ec.fieldContext_OperationHistoryPage_pagination(ctx, field)
+			case "currentSequence":
+				return ec.fieldContext_OperationHistoryPage_currentSequence(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type OperationHistoryPage", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_operationHistory_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_operation(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_operation,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().Operation(ctx, fc.Args["operationId"].(string))
+		},
+		nil,
+		ec.marshalOOperation2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐOperation,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_operation(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Operation_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_Operation_projectId(ctx, field)
+			case "operationType":
+				return ec.fieldContext_Operation_operationType(ctx, field)
+			case "entityType":
+				return ec.fieldContext_Operation_entityType(ctx, field)
+			case "entityId":
+				return ec.fieldContext_Operation_entityId(ctx, field)
+			case "description":
+				return ec.fieldContext_Operation_description(ctx, field)
+			case "sequence":
+				return ec.fieldContext_Operation_sequence(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Operation_createdAt(ctx, field)
+			case "relatedIds":
+				return ec.fieldContext_Operation_relatedIds(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Operation", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_operation_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query___type(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -32947,6 +34455,63 @@ func (ec *executionContext) fieldContext_Subscription_oflImportProgress(_ contex
 	return fc, nil
 }
 
+func (ec *executionContext) _Subscription_operationHistoryChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_operationHistoryChanged,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Subscription().OperationHistoryChanged(ctx, fc.Args["projectId"].(string))
+		},
+		nil,
+		ec.marshalNUndoRedoStatus2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUndoRedoStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_operationHistoryChanged(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "projectId":
+				return ec.fieldContext_UndoRedoStatus_projectId(ctx, field)
+			case "canUndo":
+				return ec.fieldContext_UndoRedoStatus_canUndo(ctx, field)
+			case "canRedo":
+				return ec.fieldContext_UndoRedoStatus_canRedo(ctx, field)
+			case "currentSequence":
+				return ec.fieldContext_UndoRedoStatus_currentSequence(ctx, field)
+			case "totalOperations":
+				return ec.fieldContext_UndoRedoStatus_totalOperations(ctx, field)
+			case "undoDescription":
+				return ec.fieldContext_UndoRedoStatus_undoDescription(ctx, field)
+			case "redoDescription":
+				return ec.fieldContext_UndoRedoStatus_redoDescription(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UndoRedoStatus", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_operationHistoryChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SystemInfo_artnetBroadcastAddress(ctx context.Context, field graphql.CollectedField, obj *SystemInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -33126,6 +34691,345 @@ func (ec *executionContext) fieldContext_SystemVersionInfo_versionManagementSupp
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UndoRedoResult_success(ctx context.Context, field graphql.CollectedField, obj *UndoRedoResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UndoRedoResult_success,
+		func(ctx context.Context) (any, error) {
+			return obj.Success, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UndoRedoResult_success(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UndoRedoResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UndoRedoResult_operation(ctx context.Context, field graphql.CollectedField, obj *UndoRedoResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UndoRedoResult_operation,
+		func(ctx context.Context) (any, error) {
+			return obj.Operation, nil
+		},
+		nil,
+		ec.marshalOOperation2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐOperation,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UndoRedoResult_operation(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UndoRedoResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Operation_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_Operation_projectId(ctx, field)
+			case "operationType":
+				return ec.fieldContext_Operation_operationType(ctx, field)
+			case "entityType":
+				return ec.fieldContext_Operation_entityType(ctx, field)
+			case "entityId":
+				return ec.fieldContext_Operation_entityId(ctx, field)
+			case "description":
+				return ec.fieldContext_Operation_description(ctx, field)
+			case "sequence":
+				return ec.fieldContext_Operation_sequence(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Operation_createdAt(ctx, field)
+			case "relatedIds":
+				return ec.fieldContext_Operation_relatedIds(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Operation", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UndoRedoResult_message(ctx context.Context, field graphql.CollectedField, obj *UndoRedoResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UndoRedoResult_message,
+		func(ctx context.Context) (any, error) {
+			return obj.Message, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UndoRedoResult_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UndoRedoResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UndoRedoResult_restoredEntityId(ctx context.Context, field graphql.CollectedField, obj *UndoRedoResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UndoRedoResult_restoredEntityId,
+		func(ctx context.Context) (any, error) {
+			return obj.RestoredEntityID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UndoRedoResult_restoredEntityId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UndoRedoResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UndoRedoStatus_projectId(ctx context.Context, field graphql.CollectedField, obj *UndoRedoStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UndoRedoStatus_projectId,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UndoRedoStatus_projectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UndoRedoStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UndoRedoStatus_canUndo(ctx context.Context, field graphql.CollectedField, obj *UndoRedoStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UndoRedoStatus_canUndo,
+		func(ctx context.Context) (any, error) {
+			return obj.CanUndo, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UndoRedoStatus_canUndo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UndoRedoStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UndoRedoStatus_canRedo(ctx context.Context, field graphql.CollectedField, obj *UndoRedoStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UndoRedoStatus_canRedo,
+		func(ctx context.Context) (any, error) {
+			return obj.CanRedo, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UndoRedoStatus_canRedo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UndoRedoStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UndoRedoStatus_currentSequence(ctx context.Context, field graphql.CollectedField, obj *UndoRedoStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UndoRedoStatus_currentSequence,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentSequence, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UndoRedoStatus_currentSequence(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UndoRedoStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UndoRedoStatus_totalOperations(ctx context.Context, field graphql.CollectedField, obj *UndoRedoStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UndoRedoStatus_totalOperations,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalOperations, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UndoRedoStatus_totalOperations(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UndoRedoStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UndoRedoStatus_undoDescription(ctx context.Context, field graphql.CollectedField, obj *UndoRedoStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UndoRedoStatus_undoDescription,
+		func(ctx context.Context) (any, error) {
+			return obj.UndoDescription, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UndoRedoStatus_undoDescription(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UndoRedoStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UndoRedoStatus_redoDescription(ctx context.Context, field graphql.CollectedField, obj *UndoRedoStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UndoRedoStatus_redoDescription,
+		func(ctx context.Context) (any, error) {
+			return obj.RedoDescription, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_UndoRedoStatus_redoDescription(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UndoRedoStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -44445,6 +46349,34 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "undo":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_undo(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "redo":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_redo(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "jumpToOperation":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_jumpToOperation(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clearOperationHistory":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_clearOperationHistory(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -44849,6 +46781,324 @@ func (ec *executionContext) _OFLUpdateCheckResult(ctx context.Context, sel ast.S
 			}
 		case "checkedAt":
 			out.Values[i] = ec._OFLUpdateCheckResult_checkedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var operationImplementors = []string{"Operation"}
+
+func (ec *executionContext) _Operation(ctx context.Context, sel ast.SelectionSet, obj *models.Operation) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, operationImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Operation")
+		case "id":
+			out.Values[i] = ec._Operation_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "projectId":
+			out.Values[i] = ec._Operation_projectId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "operationType":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Operation_operationType(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "entityType":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Operation_entityType(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "entityId":
+			out.Values[i] = ec._Operation_entityId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "description":
+			out.Values[i] = ec._Operation_description(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "sequence":
+			out.Values[i] = ec._Operation_sequence(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "createdAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Operation_createdAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "relatedIds":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Operation_relatedIds(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var operationHistoryPageImplementors = []string{"OperationHistoryPage"}
+
+func (ec *executionContext) _OperationHistoryPage(ctx context.Context, sel ast.SelectionSet, obj *OperationHistoryPage) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, operationHistoryPageImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OperationHistoryPage")
+		case "operations":
+			out.Values[i] = ec._OperationHistoryPage_operations(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pagination":
+			out.Values[i] = ec._OperationHistoryPage_pagination(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "currentSequence":
+			out.Values[i] = ec._OperationHistoryPage_currentSequence(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var operationSummaryImplementors = []string{"OperationSummary"}
+
+func (ec *executionContext) _OperationSummary(ctx context.Context, sel ast.SelectionSet, obj *OperationSummary) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, operationSummaryImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OperationSummary")
+		case "id":
+			out.Values[i] = ec._OperationSummary_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "description":
+			out.Values[i] = ec._OperationSummary_description(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "operationType":
+			out.Values[i] = ec._OperationSummary_operationType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "entityType":
+			out.Values[i] = ec._OperationSummary_entityType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sequence":
+			out.Values[i] = ec._OperationSummary_sequence(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createdAt":
+			out.Values[i] = ec._OperationSummary_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isCurrent":
+			out.Values[i] = ec._OperationSummary_isCurrent(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -47174,6 +49424,69 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "undoRedoStatus":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_undoRedoStatus(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "operationHistory":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_operationHistory(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "operation":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_operation(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "__type":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___type(ctx, field)
@@ -47413,6 +49726,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_wifiModeChanged(ctx, fields[0])
 	case "oflImportProgress":
 		return ec._Subscription_oflImportProgress(ctx, fields[0])
+	case "operationHistoryChanged":
+		return ec._Subscription_operationHistoryChanged(ctx, fields[0])
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
@@ -47493,6 +49808,114 @@ func (ec *executionContext) _SystemVersionInfo(ctx context.Context, sel ast.Sele
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var undoRedoResultImplementors = []string{"UndoRedoResult"}
+
+func (ec *executionContext) _UndoRedoResult(ctx context.Context, sel ast.SelectionSet, obj *UndoRedoResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, undoRedoResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("UndoRedoResult")
+		case "success":
+			out.Values[i] = ec._UndoRedoResult_success(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "operation":
+			out.Values[i] = ec._UndoRedoResult_operation(ctx, field, obj)
+		case "message":
+			out.Values[i] = ec._UndoRedoResult_message(ctx, field, obj)
+		case "restoredEntityId":
+			out.Values[i] = ec._UndoRedoResult_restoredEntityId(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var undoRedoStatusImplementors = []string{"UndoRedoStatus"}
+
+func (ec *executionContext) _UndoRedoStatus(ctx context.Context, sel ast.SelectionSet, obj *UndoRedoStatus) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, undoRedoStatusImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("UndoRedoStatus")
+		case "projectId":
+			out.Values[i] = ec._UndoRedoStatus_projectId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "canUndo":
+			out.Values[i] = ec._UndoRedoStatus_canUndo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "canRedo":
+			out.Values[i] = ec._UndoRedoStatus_canRedo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "currentSequence":
+			out.Values[i] = ec._UndoRedoStatus_currentSequence(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalOperations":
+			out.Values[i] = ec._UndoRedoStatus_totalOperations(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "undoDescription":
+			out.Values[i] = ec._UndoRedoStatus_undoDescription(ctx, field, obj)
+		case "redoDescription":
+			out.Values[i] = ec._UndoRedoStatus_redoDescription(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -51336,6 +53759,84 @@ func (ec *executionContext) marshalNOFLUpdateCheckResult2ᚖgithubᚗcomᚋbbern
 	return ec._OFLUpdateCheckResult(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNOperationHistoryPage2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOperationHistoryPage(ctx context.Context, sel ast.SelectionSet, v OperationHistoryPage) graphql.Marshaler {
+	return ec._OperationHistoryPage(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNOperationHistoryPage2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOperationHistoryPage(ctx context.Context, sel ast.SelectionSet, v *OperationHistoryPage) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OperationHistoryPage(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNOperationSummary2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOperationSummaryᚄ(ctx context.Context, sel ast.SelectionSet, v []*OperationSummary) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNOperationSummary2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOperationSummary(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNOperationSummary2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOperationSummary(ctx context.Context, sel ast.SelectionSet, v *OperationSummary) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OperationSummary(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNOperationType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOperationType(ctx context.Context, v any) (OperationType, error) {
+	var res OperationType
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNOperationType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐOperationType(ctx context.Context, sel ast.SelectionSet, v OperationType) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) marshalNPaginationInfo2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐPaginationInfo(ctx context.Context, sel ast.SelectionSet, v PaginationInfo) graphql.Marshaler {
 	return ec._PaginationInfo(ctx, sel, &v)
 }
@@ -51850,6 +54351,44 @@ func (ec *executionContext) unmarshalNTransitionBehavior2githubᚗcomᚋbbernste
 
 func (ec *executionContext) marshalNTransitionBehavior2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐTransitionBehavior(ctx context.Context, sel ast.SelectionSet, v TransitionBehavior) graphql.Marshaler {
 	return v
+}
+
+func (ec *executionContext) unmarshalNUndoEntityType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUndoEntityType(ctx context.Context, v any) (UndoEntityType, error) {
+	var res UndoEntityType
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNUndoEntityType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUndoEntityType(ctx context.Context, sel ast.SelectionSet, v UndoEntityType) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNUndoRedoResult2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUndoRedoResult(ctx context.Context, sel ast.SelectionSet, v UndoRedoResult) graphql.Marshaler {
+	return ec._UndoRedoResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNUndoRedoResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUndoRedoResult(ctx context.Context, sel ast.SelectionSet, v *UndoRedoResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._UndoRedoResult(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNUndoRedoStatus2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUndoRedoStatus(ctx context.Context, sel ast.SelectionSet, v UndoRedoStatus) graphql.Marshaler {
+	return ec._UndoRedoStatus(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNUndoRedoStatus2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUndoRedoStatus(ctx context.Context, sel ast.SelectionSet, v *UndoRedoStatus) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._UndoRedoStatus(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNUniverseChannelMap2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUniverseChannelMapᚄ(ctx context.Context, sel ast.SelectionSet, v []*UniverseChannelMap) graphql.Marshaler {
@@ -53015,6 +55554,13 @@ func (ec *executionContext) unmarshalOOFLImportOptionsInput2ᚖgithubᚗcomᚋbb
 	}
 	res, err := ec.unmarshalInputOFLImportOptionsInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOOperation2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐOperation(ctx context.Context, sel ast.SelectionSet, v *models.Operation) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Operation(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalOPreviewSession2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐPreviewSession(ctx context.Context, sel ast.SelectionSet, v *models.PreviewSession) graphql.Marshaler {
