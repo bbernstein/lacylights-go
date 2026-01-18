@@ -938,6 +938,13 @@ func (r *mutationResolver) CreateFixtureInstance(ctx context.Context, input gene
 		return nil, err
 	}
 
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureFixtureState(ctx, fixture.ID); err == nil {
+		_ = r.UndoService.RecordOperation(ctx, fixture.ProjectID, "CREATE", "FixtureInstance", fixture.ID,
+			fmt.Sprintf("Create fixture '%s'", fixture.Name), nil, newState, nil)
+		r.publishOperationHistoryChanged(ctx, fixture.ProjectID)
+	}
+
 	return fixture, nil
 }
 
@@ -951,6 +958,9 @@ func (r *mutationResolver) UpdateFixtureInstance(ctx context.Context, id string,
 	if fixture == nil {
 		return nil, fmt.Errorf("fixture not found: %s", id)
 	}
+
+	// Capture previous state for undo (before any changes)
+	prevState, _ := r.UndoService.CaptureFixtureState(ctx, id)
 
 	// Update fields if provided
 	if input.Name.IsSet() && input.Name.Value() != nil {
@@ -1095,6 +1105,13 @@ func (r *mutationResolver) UpdateFixtureInstance(ctx context.Context, id string,
 		return nil, err
 	}
 
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureFixtureState(ctx, id); err == nil && prevState != nil {
+		_ = r.UndoService.RecordOperation(ctx, fixture.ProjectID, "UPDATE", "FixtureInstance", id,
+			fmt.Sprintf("Update fixture '%s'", fixture.Name), prevState, newState, nil)
+		r.publishOperationHistoryChanged(ctx, fixture.ProjectID)
+	}
+
 	return fixture, nil
 }
 
@@ -1186,6 +1203,11 @@ func (r *mutationResolver) DeleteFixtureInstance(ctx context.Context, id string)
 		return false, fmt.Errorf("fixture not found: %s", id)
 	}
 
+	// Capture previous state for undo (before deletion)
+	prevState, _ := r.UndoService.CaptureFixtureState(ctx, id)
+	projectID := fixture.ProjectID
+	fixtureName := fixture.Name
+
 	// Delete instance channels first
 	if err := r.FixtureRepo.DeleteInstanceChannels(ctx, id); err != nil {
 		return false, err
@@ -1194,6 +1216,13 @@ func (r *mutationResolver) DeleteFixtureInstance(ctx context.Context, id string)
 	// Delete the fixture
 	if err := r.FixtureRepo.Delete(ctx, id); err != nil {
 		return false, err
+	}
+
+	// Record undo operation (non-blocking on error)
+	if prevState != nil {
+		_ = r.UndoService.RecordOperation(ctx, projectID, "DELETE", "FixtureInstance", id,
+			fmt.Sprintf("Delete fixture '%s'", fixtureName), prevState, nil, nil)
+		r.publishOperationHistoryChanged(ctx, projectID)
 	}
 
 	return true, nil
@@ -1383,6 +1412,13 @@ func (r *mutationResolver) CreateLook(ctx context.Context, input generated.Creat
 		return nil, err
 	}
 
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureLookState(ctx, look.ID); err == nil {
+		_ = r.UndoService.RecordOperation(ctx, look.ProjectID, "CREATE", "Look", look.ID,
+			fmt.Sprintf("Create look '%s'", look.Name), nil, newState, nil)
+		r.publishOperationHistoryChanged(ctx, look.ProjectID)
+	}
+
 	return look, nil
 }
 
@@ -1396,6 +1432,9 @@ func (r *mutationResolver) UpdateLook(ctx context.Context, id string, input gene
 	if look == nil {
 		return nil, fmt.Errorf("look not found: %s", id)
 	}
+
+	// Capture previous state for undo (before any changes)
+	prevState, _ := r.UndoService.CaptureLookState(ctx, id)
 
 	// Track if name changed for notification
 	nameChanged := false
@@ -1458,6 +1497,13 @@ func (r *mutationResolver) UpdateLook(ctx context.Context, id string, input gene
 	// Re-apply the look if it's currently active
 	if err := r.reapplyActiveLookIfNeeded(ctx, id); err != nil {
 		log.Printf("Warning: failed to re-apply active look %s: %v", id, err)
+	}
+
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureLookState(ctx, id); err == nil && prevState != nil {
+		_ = r.UndoService.RecordOperation(ctx, look.ProjectID, "UPDATE", "Look", id,
+			fmt.Sprintf("Update look '%s'", look.Name), prevState, newState, nil)
+		r.publishOperationHistoryChanged(ctx, look.ProjectID)
 	}
 
 	return look, nil
@@ -1534,6 +1580,11 @@ func (r *mutationResolver) DeleteLook(ctx context.Context, id string) (bool, err
 		return false, fmt.Errorf("look not found: %s", id)
 	}
 
+	// Capture previous state for undo (before deletion)
+	prevState, _ := r.UndoService.CaptureLookState(ctx, id)
+	projectID := look.ProjectID
+	lookName := look.Name
+
 	// Delete fixture values first
 	if err := r.LookRepo.DeleteFixtureValues(ctx, id); err != nil {
 		return false, fmt.Errorf("failed to delete fixture values: %w", err)
@@ -1542,6 +1593,13 @@ func (r *mutationResolver) DeleteLook(ctx context.Context, id string) (bool, err
 	// Delete the look
 	if err := r.LookRepo.Delete(ctx, id); err != nil {
 		return false, err
+	}
+
+	// Record undo operation (non-blocking on error)
+	if prevState != nil {
+		_ = r.UndoService.RecordOperation(ctx, projectID, "DELETE", "Look", id,
+			fmt.Sprintf("Delete look '%s'", lookName), prevState, nil, nil)
+		r.publishOperationHistoryChanged(ctx, projectID)
 	}
 
 	return true, nil
@@ -2953,6 +3011,18 @@ func (r *mutationResolver) FadeToBlack(ctx context.Context, fadeOutTime float64)
 
 // StartCueList is the resolver for the startCueList field.
 func (r *mutationResolver) StartCueList(ctx context.Context, cueListID string, startFromCue *int, fadeInTime *float64) (bool, error) {
+	// Get cue list for project ID and name
+	cueList, err := r.CueListRepo.FindByID(ctx, cueListID)
+	if err != nil {
+		return false, err
+	}
+	if cueList == nil {
+		return false, fmt.Errorf("cue list not found: %s", cueListID)
+	}
+
+	// Capture previous playback state
+	prevState := r.captureCuePlaybackState(cueListID, cueList.ProjectID, cueList.Name)
+
 	var startFromCueNumber *float64
 	if startFromCue != nil {
 		cueNum := float64(*startFromCue)
@@ -2961,36 +3031,130 @@ func (r *mutationResolver) StartCueList(ctx context.Context, cueListID string, s
 	if err := r.PlaybackService.StartCueList(ctx, cueListID, startFromCueNumber, fadeInTime); err != nil {
 		return false, err
 	}
+
+	// Capture new playback state and record operation
+	newState := r.captureCuePlaybackState(cueListID, cueList.ProjectID, cueList.Name)
+	cueName := ""
+	if newState.CueName != nil {
+		cueName = fmt.Sprintf(" '%s'", *newState.CueName)
+	}
+	_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, "UPDATE", "CuePlayback", cueListID,
+		fmt.Sprintf("Start cue list '%s'%s", cueList.Name, cueName), prevState, newState, nil)
+
 	return true, nil
 }
 
 // NextCue is the resolver for the nextCue field.
 func (r *mutationResolver) NextCue(ctx context.Context, cueListID string, fadeInTime *float64) (bool, error) {
+	// Get cue list for project ID and name
+	cueList, err := r.CueListRepo.FindByID(ctx, cueListID)
+	if err != nil {
+		return false, err
+	}
+	if cueList == nil {
+		return false, fmt.Errorf("cue list not found: %s", cueListID)
+	}
+
+	// Capture previous playback state
+	prevState := r.captureCuePlaybackState(cueListID, cueList.ProjectID, cueList.Name)
+
 	if err := r.PlaybackService.NextCue(ctx, cueListID, fadeInTime); err != nil {
 		return false, err
 	}
+
+	// Capture new playback state and record operation
+	newState := r.captureCuePlaybackState(cueListID, cueList.ProjectID, cueList.Name)
+	cueName := ""
+	if newState.CueName != nil {
+		cueName = fmt.Sprintf(" to '%s'", *newState.CueName)
+	}
+	_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, "UPDATE", "CuePlayback", cueListID,
+		fmt.Sprintf("Next cue%s", cueName), prevState, newState, nil)
+
 	return true, nil
 }
 
 // PreviousCue is the resolver for the previousCue field.
 func (r *mutationResolver) PreviousCue(ctx context.Context, cueListID string, fadeInTime *float64) (bool, error) {
+	// Get cue list for project ID and name
+	cueList, err := r.CueListRepo.FindByID(ctx, cueListID)
+	if err != nil {
+		return false, err
+	}
+	if cueList == nil {
+		return false, fmt.Errorf("cue list not found: %s", cueListID)
+	}
+
+	// Capture previous playback state
+	prevState := r.captureCuePlaybackState(cueListID, cueList.ProjectID, cueList.Name)
+
 	if err := r.PlaybackService.PreviousCue(ctx, cueListID, fadeInTime); err != nil {
 		return false, err
 	}
+
+	// Capture new playback state and record operation
+	newState := r.captureCuePlaybackState(cueListID, cueList.ProjectID, cueList.Name)
+	cueName := ""
+	if newState.CueName != nil {
+		cueName = fmt.Sprintf(" to '%s'", *newState.CueName)
+	}
+	_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, "UPDATE", "CuePlayback", cueListID,
+		fmt.Sprintf("Previous cue%s", cueName), prevState, newState, nil)
+
 	return true, nil
 }
 
 // GoToCue is the resolver for the goToCue field.
 func (r *mutationResolver) GoToCue(ctx context.Context, cueListID string, cueIndex int, fadeInTime *float64) (bool, error) {
+	// Get cue list for project ID and name
+	cueList, err := r.CueListRepo.FindByID(ctx, cueListID)
+	if err != nil {
+		return false, err
+	}
+	if cueList == nil {
+		return false, fmt.Errorf("cue list not found: %s", cueListID)
+	}
+
+	// Capture previous playback state
+	prevState := r.captureCuePlaybackState(cueListID, cueList.ProjectID, cueList.Name)
+
 	if err := r.PlaybackService.JumpToCue(ctx, cueListID, cueIndex, fadeInTime); err != nil {
 		return false, err
 	}
+
+	// Capture new playback state and record operation
+	newState := r.captureCuePlaybackState(cueListID, cueList.ProjectID, cueList.Name)
+	cueName := ""
+	if newState.CueName != nil {
+		cueName = fmt.Sprintf(" '%s'", *newState.CueName)
+	}
+	_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, "UPDATE", "CuePlayback", cueListID,
+		fmt.Sprintf("Go to cue%s", cueName), prevState, newState, nil)
+
 	return true, nil
 }
 
 // StopCueList is the resolver for the stopCueList field.
 func (r *mutationResolver) StopCueList(ctx context.Context, cueListID string) (bool, error) {
+	// Get cue list for project ID and name
+	cueList, err := r.CueListRepo.FindByID(ctx, cueListID)
+	if err != nil {
+		return false, err
+	}
+	if cueList == nil {
+		return false, fmt.Errorf("cue list not found: %s", cueListID)
+	}
+
+	// Capture previous playback state
+	prevState := r.captureCuePlaybackState(cueListID, cueList.ProjectID, cueList.Name)
+
 	r.PlaybackService.StopCueList(cueListID)
+
+	// Capture new playback state (stopped) and record operation
+	newState := r.captureCuePlaybackState(cueListID, cueList.ProjectID, cueList.Name)
+	_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, "UPDATE", "CuePlayback", cueListID,
+		fmt.Sprintf("Stop cue list '%s'", cueList.Name), prevState, newState, nil)
+
 	return true, nil
 }
 
@@ -3481,6 +3645,171 @@ func (r *mutationResolver) ReleaseBlackout(ctx context.Context, fadeTime *float6
 // SetGrandMaster is the resolver for the setGrandMaster field.
 func (r *mutationResolver) SetGrandMaster(ctx context.Context, value float64) (bool, error) {
 	return r.ResolveSetGrandMaster(ctx, value)
+}
+
+// Undo is the resolver for the undo field.
+func (r *mutationResolver) Undo(ctx context.Context, projectID string) (*generated.UndoRedoResult, error) {
+	result, err := r.UndoService.Undo(ctx, projectID)
+	if err != nil {
+		errMsg := err.Error()
+		return &generated.UndoRedoResult{
+			Success: false,
+			Message: &errMsg,
+		}, nil
+	}
+
+	gqlResult := &generated.UndoRedoResult{
+		Success: result.Success,
+		Message: &result.Message,
+	}
+
+	if result.RestoredEntityID != "" {
+		gqlResult.RestoredEntityID = &result.RestoredEntityID
+	}
+
+	if result.Operation != nil {
+		gqlResult.Operation = result.Operation
+	}
+
+	// Publish operation history changed event
+	r.publishOperationHistoryChanged(ctx, projectID)
+
+	return gqlResult, nil
+}
+
+// Redo is the resolver for the redo field.
+func (r *mutationResolver) Redo(ctx context.Context, projectID string) (*generated.UndoRedoResult, error) {
+	result, err := r.UndoService.Redo(ctx, projectID)
+	if err != nil {
+		errMsg := err.Error()
+		return &generated.UndoRedoResult{
+			Success: false,
+			Message: &errMsg,
+		}, nil
+	}
+
+	gqlResult := &generated.UndoRedoResult{
+		Success: result.Success,
+		Message: &result.Message,
+	}
+
+	if result.RestoredEntityID != "" {
+		gqlResult.RestoredEntityID = &result.RestoredEntityID
+	}
+
+	if result.Operation != nil {
+		gqlResult.Operation = result.Operation
+	}
+
+	// Publish operation history changed event
+	r.publishOperationHistoryChanged(ctx, projectID)
+
+	return gqlResult, nil
+}
+
+// JumpToOperation is the resolver for the jumpToOperation field.
+func (r *mutationResolver) JumpToOperation(ctx context.Context, projectID string, operationID string) (*generated.UndoRedoResult, error) {
+	result, err := r.UndoService.JumpToOperation(ctx, projectID, operationID)
+	if err != nil {
+		errMsg := err.Error()
+		return &generated.UndoRedoResult{
+			Success: false,
+			Message: &errMsg,
+		}, nil
+	}
+
+	gqlResult := &generated.UndoRedoResult{
+		Success: result.Success,
+		Message: &result.Message,
+	}
+
+	if result.RestoredEntityID != "" {
+		gqlResult.RestoredEntityID = &result.RestoredEntityID
+	}
+
+	if result.Operation != nil {
+		gqlResult.Operation = result.Operation
+	}
+
+	// Publish operation history changed event
+	r.publishOperationHistoryChanged(ctx, projectID)
+
+	return gqlResult, nil
+}
+
+// ClearOperationHistory is the resolver for the clearOperationHistory field.
+func (r *mutationResolver) ClearOperationHistory(ctx context.Context, projectID string, confirmClear bool) (bool, error) {
+	if !confirmClear {
+		return false, fmt.Errorf("confirmClear must be true to clear operation history")
+	}
+
+	err := r.OperationRepo.ClearHistory(ctx, projectID)
+	if err != nil {
+		return false, fmt.Errorf("failed to clear operation history: %w", err)
+	}
+
+	// Publish operation history changed event
+	r.publishOperationHistoryChanged(ctx, projectID)
+
+	return true, nil
+}
+
+// OperationType is the resolver for the operationType field.
+func (r *operationResolver) OperationType(ctx context.Context, obj *models.Operation) (generated.OperationType, error) {
+	switch obj.OperationType {
+	case "CREATE":
+		return generated.OperationTypeCreate, nil
+	case "UPDATE":
+		return generated.OperationTypeUpdate, nil
+	case "DELETE":
+		return generated.OperationTypeDelete, nil
+	case "BULK":
+		return generated.OperationTypeBulk, nil
+	default:
+		return generated.OperationTypeUpdate, nil
+	}
+}
+
+// EntityType is the resolver for the entityType field.
+func (r *operationResolver) EntityType(ctx context.Context, obj *models.Operation) (generated.UndoEntityType, error) {
+	switch obj.EntityType {
+	case "Project":
+		return generated.UndoEntityTypeProject, nil
+	case "FixtureInstance":
+		return generated.UndoEntityTypeFixtureInstance, nil
+	case "Look":
+		return generated.UndoEntityTypeLook, nil
+	case "CueList":
+		return generated.UndoEntityTypeCueList, nil
+	case "Cue":
+		return generated.UndoEntityTypeCue, nil
+	case "LookBoard":
+		return generated.UndoEntityTypeLookBoard, nil
+	case "LookBoardButton":
+		return generated.UndoEntityTypeLookBoardButton, nil
+	case "Effect":
+		return generated.UndoEntityTypeEffect, nil
+	default:
+		return generated.UndoEntityTypeLook, nil
+	}
+}
+
+// CreatedAt is the resolver for the createdAt field.
+func (r *operationResolver) CreatedAt(ctx context.Context, obj *models.Operation) (string, error) {
+	return obj.CreatedAt.Format("2006-01-02T15:04:05.000Z"), nil
+}
+
+// RelatedIds is the resolver for the relatedIds field.
+func (r *operationResolver) RelatedIds(ctx context.Context, obj *models.Operation) ([]string, error) {
+	if obj.RelatedIDs == nil || *obj.RelatedIDs == "" {
+		return []string{}, nil
+	}
+
+	var ids []string
+	if err := json.Unmarshal([]byte(*obj.RelatedIDs), &ids); err != nil {
+		return []string{}, nil
+	}
+	return ids, nil
 }
 
 // Project is the resolver for the project field.
@@ -5090,6 +5419,130 @@ func (r *queryResolver) ProjectsByIds(ctx context.Context, ids []string) ([]*mod
 	return projects, nil
 }
 
+// UndoRedoStatus is the resolver for the undoRedoStatus field.
+func (r *queryResolver) UndoRedoStatus(ctx context.Context, projectID string) (*generated.UndoRedoStatus, error) {
+	status, err := r.OperationRepo.GetUndoRedoStatus(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get undo/redo status: %w", err)
+	}
+
+	gqlStatus := &generated.UndoRedoStatus{
+		ProjectID:       status.ProjectID,
+		CanUndo:         status.CanUndo,
+		CanRedo:         status.CanRedo,
+		CurrentSequence: status.CurrentSequence,
+		TotalOperations: int(status.TotalOperations),
+	}
+
+	if status.UndoDescription != "" {
+		gqlStatus.UndoDescription = &status.UndoDescription
+	}
+	if status.RedoDescription != "" {
+		gqlStatus.RedoDescription = &status.RedoDescription
+	}
+
+	return gqlStatus, nil
+}
+
+// OperationHistory is the resolver for the operationHistory field.
+func (r *queryResolver) OperationHistory(ctx context.Context, projectID string, page *int, perPage *int) (*generated.OperationHistoryPage, error) {
+	pageNum := 1
+	if page != nil {
+		pageNum = *page
+	}
+	perPageNum := 50
+	if perPage != nil {
+		perPageNum = *perPage
+	}
+
+	operations, total, err := r.OperationRepo.GetOperationsByProject(ctx, projectID, pageNum, perPageNum)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get operation history: %w", err)
+	}
+
+	// Get current sequence for highlighting current position
+	pointer, err := r.OperationRepo.GetPointer(ctx, projectID)
+	currentSeq := 0
+	if err == nil && pointer != nil {
+		currentSeq = pointer.CurrentSequence
+	}
+
+	// Convert to operation summaries
+	summaries := make([]*generated.OperationSummary, len(operations))
+	for i, op := range operations {
+		isCurrent := op.Sequence == currentSeq
+		summaries[i] = &generated.OperationSummary{
+			ID:          op.ID,
+			Description: op.Description,
+			Sequence:    op.Sequence,
+			CreatedAt:   op.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+			IsCurrent:   isCurrent,
+		}
+
+		// Convert operation type
+		switch op.OperationType {
+		case "CREATE":
+			summaries[i].OperationType = generated.OperationTypeCreate
+		case "UPDATE":
+			summaries[i].OperationType = generated.OperationTypeUpdate
+		case "DELETE":
+			summaries[i].OperationType = generated.OperationTypeDelete
+		case "BULK":
+			summaries[i].OperationType = generated.OperationTypeBulk
+		default:
+			summaries[i].OperationType = generated.OperationTypeUpdate
+		}
+
+		// Convert entity type
+		switch op.EntityType {
+		case "Project":
+			summaries[i].EntityType = generated.UndoEntityTypeProject
+		case "FixtureInstance":
+			summaries[i].EntityType = generated.UndoEntityTypeFixtureInstance
+		case "Look":
+			summaries[i].EntityType = generated.UndoEntityTypeLook
+		case "CueList":
+			summaries[i].EntityType = generated.UndoEntityTypeCueList
+		case "Cue":
+			summaries[i].EntityType = generated.UndoEntityTypeCue
+		case "LookBoard":
+			summaries[i].EntityType = generated.UndoEntityTypeLookBoard
+		case "LookBoardButton":
+			summaries[i].EntityType = generated.UndoEntityTypeLookBoardButton
+		case "Effect":
+			summaries[i].EntityType = generated.UndoEntityTypeEffect
+		default:
+			summaries[i].EntityType = generated.UndoEntityTypeLook
+		}
+	}
+
+	hasMore := int64(pageNum*perPageNum) < total
+	totalPages := int(total) / perPageNum
+	if int(total)%perPageNum > 0 {
+		totalPages++
+	}
+	return &generated.OperationHistoryPage{
+		Operations: summaries,
+		Pagination: generated.PaginationInfo{
+			Total:      int(total),
+			Page:       pageNum,
+			PerPage:    perPageNum,
+			TotalPages: totalPages,
+			HasMore:    hasMore,
+		},
+		CurrentSequence: currentSeq,
+	}, nil
+}
+
+// Operation is the resolver for the operation field.
+func (r *queryResolver) Operation(ctx context.Context, operationID string) (*models.Operation, error) {
+	op, err := r.OperationRepo.GetOperationByID(ctx, operationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get operation: %w", err)
+	}
+	return op, nil
+}
+
 // CreatedAt is the resolver for the createdAt field.
 func (r *settingResolver) CreatedAt(ctx context.Context, obj *models.Setting) (string, error) {
 	return obj.CreatedAt.Format("2006-01-02T15:04:05.000Z"), nil
@@ -5502,6 +5955,41 @@ func (r *subscriptionResolver) OflImportProgress(ctx context.Context) (<-chan *g
 	return outputChan, nil
 }
 
+// OperationHistoryChanged is the resolver for the operationHistoryChanged field.
+func (r *subscriptionResolver) OperationHistoryChanged(ctx context.Context, projectID string) (<-chan *generated.UndoRedoStatus, error) {
+	// Subscribe to operation history changes filtered by projectID
+	sub := r.PubSub.Subscribe(pubsub.TopicOperationHistoryChanged, projectID, 10)
+
+	// Create the output channel
+	outputChan := make(chan *generated.UndoRedoStatus, 10)
+
+	// Start a goroutine to forward messages
+	go func() {
+		defer close(outputChan)
+		for {
+			select {
+			case <-ctx.Done():
+				r.PubSub.Unsubscribe(sub)
+				return
+			case msg, ok := <-sub.Channel:
+				if !ok {
+					return
+				}
+				if status, valid := msg.(*generated.UndoRedoStatus); valid {
+					select {
+					case outputChan <- status:
+					case <-ctx.Done():
+						r.PubSub.Unsubscribe(sub)
+						return
+					}
+				}
+			}
+		}
+	}()
+
+	return outputChan, nil
+}
+
 // Role is the resolver for the role field.
 func (r *userResolver) Role(ctx context.Context, obj *models.User) (generated.UserRole, error) {
 	if obj.Role != "" {
@@ -5570,6 +6058,9 @@ func (r *Resolver) ModeChannel() generated.ModeChannelResolver { return &modeCha
 // Mutation returns generated.MutationResolver implementation.
 func (r *Resolver) Mutation() generated.MutationResolver { return &mutationResolver{r} }
 
+// Operation returns generated.OperationResolver implementation.
+func (r *Resolver) Operation() generated.OperationResolver { return &operationResolver{r} }
+
 // PreviewSession returns generated.PreviewSessionResolver implementation.
 func (r *Resolver) PreviewSession() generated.PreviewSessionResolver {
 	return &previewSessionResolver{r}
@@ -5608,6 +6099,7 @@ type lookBoardResolver struct{ *Resolver }
 type lookBoardButtonResolver struct{ *Resolver }
 type modeChannelResolver struct{ *Resolver }
 type mutationResolver struct{ *Resolver }
+type operationResolver struct{ *Resolver }
 type previewSessionResolver struct{ *Resolver }
 type projectResolver struct{ *Resolver }
 type projectUserResolver struct{ *Resolver }

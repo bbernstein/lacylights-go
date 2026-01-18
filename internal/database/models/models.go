@@ -424,3 +424,36 @@ type OFLImportMeta struct {
 }
 
 func (OFLImportMeta) TableName() string { return "ofl_import_meta" }
+
+// Operation represents a recorded operation for undo/redo functionality.
+// Each operation captures the state before and after a mutation, enabling reversal.
+// Table: operations
+type Operation struct {
+	ID            string    `gorm:"column:id;primaryKey"`
+	ProjectID     string    `gorm:"column:project_id;index"`
+	OperationType string    `gorm:"column:operation_type"` // CREATE, UPDATE, DELETE, BULK
+	EntityType    string    `gorm:"column:entity_type"`    // Look, FixtureInstance, Cue, etc.
+	EntityID      string    `gorm:"column:entity_id"`
+	Description   string    `gorm:"column:description"`
+	PreviousState string    `gorm:"column:previous_state"` // JSON snapshot before
+	NewState      string    `gorm:"column:new_state"`      // JSON snapshot after
+	RelatedIDs    *string   `gorm:"column:related_ids"`    // JSON array for bulk ops
+	Sequence      int       `gorm:"column:sequence;index"`
+	CreatedAt     time.Time `gorm:"column:created_at;autoCreateTime"`
+}
+
+func (Operation) TableName() string { return "operations" }
+
+// OperationPointer tracks the current position in each project's undo/redo stack.
+// The CurrentSequence indicates the most recently applied operation.
+// Operations with sequence > CurrentSequence are "redo" candidates.
+// Table: operation_pointers
+type OperationPointer struct {
+	ID              string    `gorm:"column:id;primaryKey"`
+	ProjectID       string    `gorm:"column:project_id;uniqueIndex"`
+	CurrentSequence int       `gorm:"column:current_sequence;default:0"`
+	MaxSequence     int       `gorm:"column:max_sequence;default:0"`
+	UpdatedAt       time.Time `gorm:"column:updated_at;autoUpdateTime"`
+}
+
+func (OperationPointer) TableName() string { return "operation_pointers" }

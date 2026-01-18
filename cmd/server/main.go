@@ -84,6 +84,8 @@ func main() {
 		&models.PreviewSession{},
 		&models.Setting{},
 		&models.OFLImportMeta{},
+		&models.Operation{},
+		&models.OperationPointer{},
 	); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
