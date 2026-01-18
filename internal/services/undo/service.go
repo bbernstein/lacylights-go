@@ -788,15 +788,17 @@ func (s *Service) DeleteEntityForUndo(ctx context.Context, entityType EntityType
 	}
 }
 
-// applyCuePlaybackSnapshot restores cue playback state from a snapshot.
-// This is used to undo/redo cue navigation operations.
+// applyCuePlaybackSnapshot restores cue playback to a previous state.
+// Returns (cueListID, nil) on success when playback state was restored.
+// Returns ("", nil) when snapshotJSON is empty, indicating no cue list was affected
+// (e.g., playback was already stopped before the operation was recorded).
 func (s *Service) applyCuePlaybackSnapshot(ctx context.Context, snapshotJSON string) (string, error) {
 	if s.playbackController == nil {
 		return "", fmt.Errorf("playback controller not set, cannot restore cue playback")
 	}
 
 	if snapshotJSON == "" {
-		// Empty snapshot means playback was stopped
+		// Empty snapshot means playback was already stopped - no action needed
 		return "", nil
 	}
 

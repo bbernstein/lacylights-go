@@ -20,6 +20,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/services/network"
 	"github.com/bbernstein/lacylights-go/internal/services/ofl"
 	"github.com/bbernstein/lacylights-go/internal/services/pubsub"
+	"github.com/bbernstein/lacylights-go/internal/services/undo"
 	"github.com/bbernstein/lacylights-go/internal/services/version"
 	"github.com/lucsky/cuid"
 	"gorm.io/gorm"
@@ -940,7 +941,7 @@ func (r *mutationResolver) CreateFixtureInstance(ctx context.Context, input gene
 
 	// Record undo operation (non-blocking on error)
 	if newState, err := r.UndoService.CaptureFixtureState(ctx, fixture.ID); err == nil {
-		_ = r.UndoService.RecordOperation(ctx, fixture.ProjectID, "CREATE", "FixtureInstance", fixture.ID,
+		_ = r.UndoService.RecordOperation(ctx, fixture.ProjectID, undo.OperationTypeCreate, undo.EntityTypeFixtureInstance, fixture.ID,
 			fmt.Sprintf("Create fixture '%s'", fixture.Name), nil, newState, nil)
 		r.publishOperationHistoryChanged(ctx, fixture.ProjectID)
 	}
@@ -1107,7 +1108,7 @@ func (r *mutationResolver) UpdateFixtureInstance(ctx context.Context, id string,
 
 	// Record undo operation (non-blocking on error)
 	if newState, err := r.UndoService.CaptureFixtureState(ctx, id); err == nil && prevState != nil {
-		_ = r.UndoService.RecordOperation(ctx, fixture.ProjectID, "UPDATE", "FixtureInstance", id,
+		_ = r.UndoService.RecordOperation(ctx, fixture.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeFixtureInstance, id,
 			fmt.Sprintf("Update fixture '%s'", fixture.Name), prevState, newState, nil)
 		r.publishOperationHistoryChanged(ctx, fixture.ProjectID)
 	}
@@ -1220,7 +1221,7 @@ func (r *mutationResolver) DeleteFixtureInstance(ctx context.Context, id string)
 
 	// Record undo operation (non-blocking on error)
 	if prevState != nil {
-		_ = r.UndoService.RecordOperation(ctx, projectID, "DELETE", "FixtureInstance", id,
+		_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeDelete, undo.EntityTypeFixtureInstance, id,
 			fmt.Sprintf("Delete fixture '%s'", fixtureName), prevState, nil, nil)
 		r.publishOperationHistoryChanged(ctx, projectID)
 	}
@@ -1414,7 +1415,7 @@ func (r *mutationResolver) CreateLook(ctx context.Context, input generated.Creat
 
 	// Record undo operation (non-blocking on error)
 	if newState, err := r.UndoService.CaptureLookState(ctx, look.ID); err == nil {
-		_ = r.UndoService.RecordOperation(ctx, look.ProjectID, "CREATE", "Look", look.ID,
+		_ = r.UndoService.RecordOperation(ctx, look.ProjectID, undo.OperationTypeCreate, undo.EntityTypeLook, look.ID,
 			fmt.Sprintf("Create look '%s'", look.Name), nil, newState, nil)
 		r.publishOperationHistoryChanged(ctx, look.ProjectID)
 	}
@@ -1501,7 +1502,7 @@ func (r *mutationResolver) UpdateLook(ctx context.Context, id string, input gene
 
 	// Record undo operation (non-blocking on error)
 	if newState, err := r.UndoService.CaptureLookState(ctx, id); err == nil && prevState != nil {
-		_ = r.UndoService.RecordOperation(ctx, look.ProjectID, "UPDATE", "Look", id,
+		_ = r.UndoService.RecordOperation(ctx, look.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeLook, id,
 			fmt.Sprintf("Update look '%s'", look.Name), prevState, newState, nil)
 		r.publishOperationHistoryChanged(ctx, look.ProjectID)
 	}
@@ -1597,7 +1598,7 @@ func (r *mutationResolver) DeleteLook(ctx context.Context, id string) (bool, err
 
 	// Record undo operation (non-blocking on error)
 	if prevState != nil {
-		_ = r.UndoService.RecordOperation(ctx, projectID, "DELETE", "Look", id,
+		_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeDelete, undo.EntityTypeLook, id,
 			fmt.Sprintf("Delete look '%s'", lookName), prevState, nil, nil)
 		r.publishOperationHistoryChanged(ctx, projectID)
 	}
@@ -3038,7 +3039,7 @@ func (r *mutationResolver) StartCueList(ctx context.Context, cueListID string, s
 	if newState.CueName != nil {
 		cueName = fmt.Sprintf(" '%s'", *newState.CueName)
 	}
-	_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, "UPDATE", "CuePlayback", cueListID,
+	_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeCuePlayback, cueListID,
 		fmt.Sprintf("Start cue list '%s'%s", cueList.Name, cueName), prevState, newState, nil)
 
 	return true, nil
@@ -3068,7 +3069,7 @@ func (r *mutationResolver) NextCue(ctx context.Context, cueListID string, fadeIn
 	if newState.CueName != nil {
 		cueName = fmt.Sprintf(" to '%s'", *newState.CueName)
 	}
-	_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, "UPDATE", "CuePlayback", cueListID,
+	_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeCuePlayback, cueListID,
 		fmt.Sprintf("Next cue%s", cueName), prevState, newState, nil)
 
 	return true, nil
@@ -3098,7 +3099,7 @@ func (r *mutationResolver) PreviousCue(ctx context.Context, cueListID string, fa
 	if newState.CueName != nil {
 		cueName = fmt.Sprintf(" to '%s'", *newState.CueName)
 	}
-	_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, "UPDATE", "CuePlayback", cueListID,
+	_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeCuePlayback, cueListID,
 		fmt.Sprintf("Previous cue%s", cueName), prevState, newState, nil)
 
 	return true, nil
@@ -3128,7 +3129,7 @@ func (r *mutationResolver) GoToCue(ctx context.Context, cueListID string, cueInd
 	if newState.CueName != nil {
 		cueName = fmt.Sprintf(" '%s'", *newState.CueName)
 	}
-	_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, "UPDATE", "CuePlayback", cueListID,
+	_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeCuePlayback, cueListID,
 		fmt.Sprintf("Go to cue%s", cueName), prevState, newState, nil)
 
 	return true, nil
@@ -3152,7 +3153,7 @@ func (r *mutationResolver) StopCueList(ctx context.Context, cueListID string) (b
 
 	// Capture new playback state (stopped) and record operation
 	newState := r.captureCuePlaybackState(cueListID, cueList.ProjectID, cueList.Name)
-	_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, "UPDATE", "CuePlayback", cueListID,
+	_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeCuePlayback, cueListID,
 		fmt.Sprintf("Stop cue list '%s'", cueList.Name), prevState, newState, nil)
 
 	return true, nil
