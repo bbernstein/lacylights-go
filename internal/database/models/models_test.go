@@ -30,6 +30,8 @@ func TestTableNames(t *testing.T) {
 		{"EffectChannel", EffectChannel{}, "effect_channels"},
 		{"CueEffect", CueEffect{}, "cue_effects"},
 		{"OFLImportMeta", OFLImportMeta{}, "ofl_import_meta"},
+		{"Operation", Operation{}, "operations"},
+		{"OperationPointer", OperationPointer{}, "operation_pointers"},
 	}
 
 	for _, tt := range tests {

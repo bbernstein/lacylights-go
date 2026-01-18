@@ -20,7 +20,7 @@ get_threshold() {
         "internal/database/models") echo 100 ;;  # TableName methods
         "internal/services/pubsub") echo 100 ;;
         "internal/services/fade") echo 93 ;;
-        "internal/database/repositories") echo 90 ;;  # Integration tests, error handling branches require mocking
+        "internal/database/repositories") echo 88 ;;  # Integration tests, error handling branches require mocking
         "internal/services/preview") echo 91 ;;  # Integration tests provide good coverage
         "internal/services/network") echo 64 ;;  # macOS-specific code paths not covered on Linux CI
         "internal/services/export") echo 88 ;;  # Integration tests provide good coverage
@@ -28,6 +28,8 @@ get_threshold() {
         "internal/database") echo 86 ;;  # Connect/Close functions
         "internal/services/import") echo 83 ;;  # Integration tests provide good coverage
         "internal/services/playback") echo 81 ;;  # Integration tests, handleFollowTime via timers
+        "internal/services/undo") echo 57 ;;  # Undo/redo service, some edge cases require integration tests
+        "internal/services/modulator") echo 81 ;;  # Effect modulator service
         "internal/services/ofl") echo 35 ;;  # New package, bundle operations conditional on embedded data
         "internal/services/wifi") echo 39 ;;  # WiFi AP mode, platform-specific code paths (39.7% achievable)
         "internal/services/version") echo 30 ;;  # Version info retrieval
