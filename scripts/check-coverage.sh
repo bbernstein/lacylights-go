@@ -19,22 +19,22 @@ get_threshold() {
         "internal/config") echo 100 ;;
         "internal/database/models") echo 100 ;;  # TableName methods
         "internal/services/pubsub") echo 100 ;;
-        "internal/services/fade") echo 93 ;;
-        "internal/database/repositories") echo 88 ;;  # Integration tests, error handling branches require mocking
+        "internal/services/fade") echo 97 ;;  # Fade engine with comprehensive timing tests
         "internal/services/preview") echo 91 ;;  # Integration tests provide good coverage
-        "internal/services/network") echo 64 ;;  # macOS-specific code paths not covered on Linux CI
-        "internal/services/export") echo 88 ;;  # Integration tests provide good coverage
         "internal/services/dmx") echo 88 ;;  # Network retry loop tested with configurable intervals
+        "internal/services/export") echo 88 ;;  # Integration tests provide good coverage
+        "internal/services/network") echo 88 ;;  # Network interface detection
+        "internal/database/repositories") echo 88 ;;  # Integration tests, error handling branches require mocking
         "internal/database") echo 86 ;;  # Connect/Close functions
         "internal/services/import") echo 83 ;;  # Integration tests provide good coverage
-        "internal/services/playback") echo 81 ;;  # Integration tests, handleFollowTime via timers
-        "internal/services/undo") echo 70 ;;  # Undo/redo service, comprehensive tests added
+        "internal/services/playback") echo 82 ;;  # Integration tests, handleFollowTime via timers
         "internal/services/modulator") echo 81 ;;  # Effect modulator service
-        "internal/services/ofl") echo 35 ;;  # New package, bundle operations conditional on embedded data
-        "internal/services/wifi") echo 39 ;;  # WiFi AP mode, platform-specific code paths (39.7% achievable)
-        "internal/services/version") echo 30 ;;  # Version info retrieval
+        "internal/services/undo") echo 70 ;;  # Undo/redo service, comprehensive tests added
+        "internal/services/wifi") echo 39 ;;  # WiFi AP mode, platform-specific code paths
+        "cmd/server") echo 39 ;;  # Server startup, helper functions covered
+        "internal/services/ofl") echo 36 ;;  # OFL fixture library, bundle operations conditional
+        "internal/services/version") echo 32 ;;  # Version info retrieval
         "internal/graphql/resolvers") echo 23 ;;  # Auto-generated code, coverage via service tests
-        "cmd/server") echo 16 ;;  # main() is untestable, helper functions covered
         *) echo "" ;;
     esac
 }
@@ -45,6 +45,7 @@ should_skip() {
     case "$pkg" in
         "github.com/bbernstein/lacylights-go/internal/graphql/generated") return 0 ;;  # Auto-generated code
         "github.com/bbernstein/lacylights-go/internal/services/testutil") return 0 ;;  # Test utilities only
+        "github.com/bbernstein/lacylights-go/cmd/migrate-layout") return 0 ;;  # One-time migration script
         *) return 1 ;;
     esac
 }
