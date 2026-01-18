@@ -14,7 +14,7 @@ coverage:
     patch:
       default:
         # New code should have at least 50% coverage
-        target: 50%
+        target: 80%
 
 # Exclude auto-generated code and packages requiring integration tests
 ignore:

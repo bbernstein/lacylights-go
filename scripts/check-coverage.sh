@@ -28,7 +28,7 @@ get_threshold() {
         "internal/database") echo 86 ;;  # Connect/Close functions
         "internal/services/import") echo 83 ;;  # Integration tests provide good coverage
         "internal/services/playback") echo 81 ;;  # Integration tests, handleFollowTime via timers
-        "internal/services/undo") echo 57 ;;  # Undo/redo service, some edge cases require integration tests
+        "internal/services/undo") echo 70 ;;  # Undo/redo service, comprehensive tests added
         "internal/services/modulator") echo 81 ;;  # Effect modulator service
         "internal/services/ofl") echo 35 ;;  # New package, bundle operations conditional on embedded data
         "internal/services/wifi") echo 39 ;;  # WiFi AP mode, platform-specific code paths (39.7% achievable)
