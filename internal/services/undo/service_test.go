@@ -3,6 +3,7 @@ package undo
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
@@ -2646,7 +2647,7 @@ func TestService_MultipleUndoRedo_Cues(t *testing.T) {
 			OperationTypeCreate,
 			EntityTypeCue,
 			cue.ID,
-			"Create cue '"+cue.Name+"' (#"+string(rune(int(cue.CueNumber)+'0'))+")",
+			fmt.Sprintf("Create cue '%s' (#%.1f)", cue.Name, cue.CueNumber),
 			nil,
 			newSnapshot,
 			nil,
