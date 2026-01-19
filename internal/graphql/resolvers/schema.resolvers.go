@@ -2401,6 +2401,13 @@ func (r *mutationResolver) CreateCueList(ctx context.Context, input generated.Cr
 		return nil, err
 	}
 
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureCueListState(ctx, cueList.ID); err == nil {
+		_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, undo.OperationTypeCreate, undo.EntityTypeCueList, cueList.ID,
+			fmt.Sprintf("Create cue list '%s'", cueList.Name), nil, newState, nil)
+		r.publishOperationHistoryChanged(ctx, cueList.ProjectID)
+	}
+
 	return cueList, nil
 }
 
@@ -2413,6 +2420,9 @@ func (r *mutationResolver) UpdateCueList(ctx context.Context, id string, input g
 	if cueList == nil {
 		return nil, fmt.Errorf("cue list not found: %s", id)
 	}
+
+	// Capture previous state for undo
+	prevState, _ := r.UndoService.CaptureCueListState(ctx, id)
 
 	// Update fields
 	cueList.Name = input.Name
@@ -2427,6 +2437,13 @@ func (r *mutationResolver) UpdateCueList(ctx context.Context, id string, input g
 
 	if err := r.CueListRepo.Update(ctx, cueList); err != nil {
 		return nil, err
+	}
+
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureCueListState(ctx, id); err == nil && prevState != nil {
+		_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeCueList, id,
+			fmt.Sprintf("Update cue list '%s'", cueList.Name), prevState, newState, nil)
+		r.publishOperationHistoryChanged(ctx, cueList.ProjectID)
 	}
 
 	// Publish cue list data change event
@@ -2445,6 +2462,11 @@ func (r *mutationResolver) DeleteCueList(ctx context.Context, id string) (bool, 
 		return false, fmt.Errorf("cue list not found: %s", id)
 	}
 
+	// Capture previous state for undo (includes all cues)
+	prevState, _ := r.UndoService.CaptureCueListState(ctx, id)
+	projectID := cueList.ProjectID
+	cueListName := cueList.Name
+
 	// Delete all cues first
 	if err := r.CueRepo.DeleteByCueListID(ctx, id); err != nil {
 		return false, err
@@ -2453,6 +2475,13 @@ func (r *mutationResolver) DeleteCueList(ctx context.Context, id string) (bool, 
 	// Delete the cue list
 	if err := r.CueListRepo.Delete(ctx, id); err != nil {
 		return false, err
+	}
+
+	// Record undo operation (non-blocking on error)
+	if prevState != nil {
+		_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeDelete, undo.EntityTypeCueList, id,
+			fmt.Sprintf("Delete cue list '%s'", cueListName), prevState, nil, nil)
+		r.publishOperationHistoryChanged(ctx, projectID)
 	}
 
 	return true, nil
@@ -2579,6 +2608,13 @@ func (r *mutationResolver) CreateCue(ctx context.Context, input generated.Create
 		return nil, err
 	}
 
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureCueState(ctx, cue.ID); err == nil {
+		_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, undo.OperationTypeCreate, undo.EntityTypeCue, cue.ID,
+			fmt.Sprintf("Create cue '%s' (#%.1f)", cue.Name, cue.CueNumber), nil, newState, nil)
+		r.publishOperationHistoryChanged(ctx, cueList.ProjectID)
+	}
+
 	// Publish cue list data change event
 	r.publishCueListDataChanged(input.CueListID, generated.CueListDataChangeTypeCueAdded, []string{cue.ID}, nil, nil)
 
@@ -2594,6 +2630,15 @@ func (r *mutationResolver) UpdateCue(ctx context.Context, id string, input gener
 	if cue == nil {
 		return nil, fmt.Errorf("cue not found: %s", id)
 	}
+
+	// Get cue list for project ID
+	cueList, err := r.CueListRepo.FindByID(ctx, cue.CueListID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Capture previous state for undo
+	prevState, _ := r.UndoService.CaptureCueState(ctx, id)
 
 	// Verify look exists if being changed
 	if input.LookID != cue.LookID {
@@ -2634,6 +2679,13 @@ func (r *mutationResolver) UpdateCue(ctx context.Context, id string, input gener
 		return nil, err
 	}
 
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureCueState(ctx, id); err == nil && prevState != nil && cueList != nil {
+		_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeCue, id,
+			fmt.Sprintf("Update cue '%s'", cue.Name), prevState, newState, nil)
+		r.publishOperationHistoryChanged(ctx, cueList.ProjectID)
+	}
+
 	// Publish cue list data change event
 	r.publishCueListDataChanged(cue.CueListID, generated.CueListDataChangeTypeCueUpdated, []string{cue.ID}, nil, nil)
 
@@ -2650,11 +2702,29 @@ func (r *mutationResolver) DeleteCue(ctx context.Context, id string) (bool, erro
 		return false, fmt.Errorf("cue not found: %s", id)
 	}
 
-	// Capture cue list ID before deletion
+	// Capture cue list ID and cue name before deletion
 	cueListID := cue.CueListID
+	cueName := cue.Name
+
+	// Get cue list for project ID
+	cueList, _ := r.CueListRepo.FindByID(ctx, cueListID)
+	var projectID string
+	if cueList != nil {
+		projectID = cueList.ProjectID
+	}
+
+	// Capture previous state for undo
+	prevState, _ := r.UndoService.CaptureCueState(ctx, id)
 
 	if err := r.CueRepo.Delete(ctx, id); err != nil {
 		return false, err
+	}
+
+	// Record undo operation (non-blocking on error)
+	if prevState != nil && projectID != "" {
+		_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeDelete, undo.EntityTypeCue, id,
+			fmt.Sprintf("Delete cue '%s'", cueName), prevState, nil, nil)
+		r.publishOperationHistoryChanged(ctx, projectID)
 	}
 
 	// Publish cue list data change event
@@ -2674,6 +2744,9 @@ func (r *mutationResolver) ReorderCues(ctx context.Context, cueListID string, cu
 		return false, fmt.Errorf("cue list not found: %s", cueListID)
 	}
 
+	// Capture previous state for undo (cue list with all cues and their numbers)
+	prevState, _ := r.UndoService.CaptureCueListState(ctx, cueListID)
+
 	// Collect cue IDs for the event
 	var reorderedCueIDs []string
 
@@ -2692,6 +2765,13 @@ func (r *mutationResolver) ReorderCues(ctx context.Context, cueListID string, cu
 			return false, err
 		}
 		reorderedCueIDs = append(reorderedCueIDs, order.CueID)
+	}
+
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureCueListState(ctx, cueListID); err == nil && prevState != nil {
+		_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeCueList, cueListID,
+			fmt.Sprintf("Reorder %d cues in '%s'", len(cueOrders), cueList.Name), prevState, newState, reorderedCueIDs)
+		r.publishOperationHistoryChanged(ctx, cueList.ProjectID)
 	}
 
 	// Publish cue list data change event
@@ -2800,11 +2880,28 @@ func (r *mutationResolver) ToggleCueSkip(ctx context.Context, cueID string) (*mo
 		return nil, fmt.Errorf("cue not found: %s", cueID)
 	}
 
+	// Get cue list for project ID
+	cueList, _ := r.CueListRepo.FindByID(ctx, cue.CueListID)
+
+	// Capture previous state for undo
+	prevState, _ := r.UndoService.CaptureCueState(ctx, cueID)
+
 	// Toggle the skip status
 	cue.Skip = !cue.Skip
 
 	if err := r.CueRepo.Update(ctx, cue); err != nil {
 		return nil, err
+	}
+
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureCueState(ctx, cueID); err == nil && prevState != nil && cueList != nil {
+		skipAction := "Skip"
+		if !cue.Skip {
+			skipAction = "Unskip"
+		}
+		_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeCue, cueID,
+			fmt.Sprintf("%s cue '%s'", skipAction, cue.Name), prevState, newState, nil)
+		r.publishOperationHistoryChanged(ctx, cueList.ProjectID)
 	}
 
 	// Publish cue list data change event
@@ -3161,10 +3258,32 @@ func (r *mutationResolver) StopCueList(ctx context.Context, cueListID string) (b
 
 // ResumeCueList is the resolver for the resumeCueList field.
 func (r *mutationResolver) ResumeCueList(ctx context.Context, cueListID string) (bool, error) {
-	err := r.PlaybackService.ResumeCueList(ctx, cueListID)
+	// Get cue list for project ID and name
+	cueList, err := r.CueListRepo.FindByID(ctx, cueListID)
 	if err != nil {
 		return false, err
 	}
+	if cueList == nil {
+		return false, fmt.Errorf("cue list not found: %s", cueListID)
+	}
+
+	// Capture previous playback state
+	prevState := r.captureCuePlaybackState(cueListID, cueList.ProjectID, cueList.Name)
+
+	err = r.PlaybackService.ResumeCueList(ctx, cueListID)
+	if err != nil {
+		return false, err
+	}
+
+	// Capture new playback state and record operation
+	newState := r.captureCuePlaybackState(cueListID, cueList.ProjectID, cueList.Name)
+	cueName := ""
+	if newState.CueName != nil {
+		cueName = fmt.Sprintf(" at '%s'", *newState.CueName)
+	}
+	_ = r.UndoService.RecordOperation(ctx, cueList.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeCuePlayback, cueListID,
+		fmt.Sprintf("Resume cue list '%s'%s", cueList.Name, cueName), prevState, newState, nil)
+
 	return true, nil
 }
 

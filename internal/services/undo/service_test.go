@@ -2607,3 +2607,479 @@ func TestService_UndoRedo_LookBoardCreate(t *testing.T) {
 		t.Errorf("LookBoard should exist after redo: %v", result.Error)
 	}
 }
+
+// TestService_MultipleUndoRedo_Cues tests undo/redo through multiple cue operations.
+func TestService_MultipleUndoRedo_Cues(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+	look := createTestLook(t, db, project.ID)
+
+	// Create a cue list
+	cueList := createTestCueList(t, db, project.ID)
+
+	// Create 3 cues with different numbers
+	cue1 := createTestCue(t, db, cueList.ID, look.ID)
+	cue1.CueNumber = 1.0
+	cue1.Name = "Opening"
+	db.Save(cue1)
+
+	cue2 := createTestCue(t, db, cueList.ID, look.ID)
+	cue2.CueNumber = 2.0
+	cue2.Name = "Scene 1"
+	db.Save(cue2)
+
+	cue3 := createTestCue(t, db, cueList.ID, look.ID)
+	cue3.CueNumber = 3.0
+	cue3.Name = "Scene 2"
+	db.Save(cue3)
+
+	// Record 3 create operations
+	for _, cue := range []*models.Cue{cue1, cue2, cue3} {
+		newSnapshot := CueSnapshot{Cue: cue}
+		err := service.RecordOperation(
+			ctx,
+			project.ID,
+			OperationTypeCreate,
+			EntityTypeCue,
+			cue.ID,
+			"Create cue '"+cue.Name+"' (#"+string(rune(int(cue.CueNumber)+'0'))+")",
+			nil,
+			newSnapshot,
+			nil,
+		)
+		if err != nil {
+			t.Fatalf("RecordOperation failed for %s: %v", cue.Name, err)
+		}
+	}
+
+	// Verify status shows 3 operations
+	status, err := service.GetStatus(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("GetStatus failed: %v", err)
+	}
+	if status.TotalOperations != 3 {
+		t.Errorf("Expected 3 operations, got %d", status.TotalOperations)
+	}
+	if !status.CanUndo {
+		t.Error("Should be able to undo")
+	}
+	if status.CanRedo {
+		t.Error("Should not be able to redo before undoing")
+	}
+
+	// Undo all 3 operations
+	for i := 3; i > 0; i-- {
+		result, err := service.Undo(ctx, project.ID)
+		if err != nil {
+			t.Fatalf("Undo %d failed: %v", i, err)
+		}
+		if !result.Success {
+			t.Errorf("Undo %d should succeed", i)
+		}
+	}
+
+	// Verify all cues are deleted
+	var count int64
+	db.Model(&models.Cue{}).Where("cue_list_id = ?", cueList.ID).Count(&count)
+	if count != 0 {
+		t.Errorf("Expected 0 cues after undo all, got %d", count)
+	}
+
+	// Verify can redo but not undo
+	status, _ = service.GetStatus(ctx, project.ID)
+	if status.CanUndo {
+		t.Error("Should not be able to undo after undoing all")
+	}
+	if !status.CanRedo {
+		t.Error("Should be able to redo after undoing all")
+	}
+
+	// Redo all 3 operations
+	for i := 1; i <= 3; i++ {
+		result, err := service.Redo(ctx, project.ID)
+		if err != nil {
+			t.Fatalf("Redo %d failed: %v", i, err)
+		}
+		if !result.Success {
+			t.Errorf("Redo %d should succeed", i)
+		}
+	}
+
+	// Verify all cues are back
+	db.Model(&models.Cue{}).Where("cue_list_id = ?", cueList.ID).Count(&count)
+	if count != 3 {
+		t.Errorf("Expected 3 cues after redo all, got %d", count)
+	}
+}
+
+// TestService_OperationHistory_Descriptions tests that operation history shows descriptive information.
+func TestService_OperationHistory_Descriptions(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+	look := createTestLook(t, db, project.ID)
+
+	// Create a cue list
+	cueList := createTestCueList(t, db, project.ID)
+
+	// Create a cue
+	cue := createTestCue(t, db, cueList.ID, look.ID)
+	cue.Name = "Blackout"
+	cue.CueNumber = 5.5
+	db.Save(cue)
+
+	// Record the creation with a descriptive message
+	newSnapshot := CueSnapshot{Cue: cue}
+	err := service.RecordOperation(
+		ctx,
+		project.ID,
+		OperationTypeCreate,
+		EntityTypeCue,
+		cue.ID,
+		"Create cue 'Blackout' (#5.5)",
+		nil,
+		newSnapshot,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("RecordOperation failed: %v", err)
+	}
+
+	// Capture prev state
+	prevSnapshot := CueSnapshot{Cue: cue}
+
+	// Update the cue
+	cue.Name = "Final Blackout"
+	cue.FadeInTime = 3.0
+	db.Save(cue)
+
+	newSnapshot = CueSnapshot{Cue: cue}
+	err = service.RecordOperation(
+		ctx,
+		project.ID,
+		OperationTypeUpdate,
+		EntityTypeCue,
+		cue.ID,
+		"Update cue 'Final Blackout'",
+		prevSnapshot,
+		newSnapshot,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("RecordOperation update failed: %v", err)
+	}
+
+	// Get operation history
+	ops, total, err := service.GetOperationHistory(ctx, project.ID, 1, 10)
+	if err != nil {
+		t.Fatalf("GetOperationHistory failed: %v", err)
+	}
+
+	if total != 2 {
+		t.Errorf("Expected 2 operations, got %d", total)
+	}
+
+	// Operations are returned in descending sequence order (newest first)
+	if len(ops) < 2 {
+		t.Fatalf("Expected at least 2 operations, got %d", len(ops))
+	}
+
+	// First operation should be update (most recent)
+	if ops[0].Description != "Update cue 'Final Blackout'" {
+		t.Errorf("Expected update description, got: %s", ops[0].Description)
+	}
+	if ops[0].OperationType != string(OperationTypeUpdate) {
+		t.Errorf("Expected UPDATE operation type, got: %s", ops[0].OperationType)
+	}
+	if ops[0].EntityType != string(EntityTypeCue) {
+		t.Errorf("Expected Cue entity type, got: %s", ops[0].EntityType)
+	}
+
+	// Second operation should be create (older)
+	if ops[1].Description != "Create cue 'Blackout' (#5.5)" {
+		t.Errorf("Expected create description, got: %s", ops[1].Description)
+	}
+	if ops[1].OperationType != string(OperationTypeCreate) {
+		t.Errorf("Expected CREATE operation type, got: %s", ops[1].OperationType)
+	}
+}
+
+// TestService_UndoRedo_CueListWithReorder tests undo/redo of cue list reordering.
+func TestService_UndoRedo_CueListWithReorder(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+	look := createTestLook(t, db, project.ID)
+
+	// Create a cue list with 3 cues
+	cueList := createTestCueList(t, db, project.ID)
+
+	cue1 := createTestCue(t, db, cueList.ID, look.ID)
+	cue1.CueNumber = 1.0
+	db.Save(cue1)
+
+	cue2 := createTestCue(t, db, cueList.ID, look.ID)
+	cue2.CueNumber = 2.0
+	db.Save(cue2)
+
+	cue3 := createTestCue(t, db, cueList.ID, look.ID)
+	cue3.CueNumber = 3.0
+	db.Save(cue3)
+
+	// Capture previous state (with original order)
+	prevSnapshot, err := service.CaptureCueListState(ctx, cueList.ID)
+	if err != nil {
+		t.Fatalf("CaptureCueListState failed: %v", err)
+	}
+
+	// Reorder cues: 3, 1, 2 -> new numbers: 1, 2, 3
+	cue3.CueNumber = 1.0
+	cue1.CueNumber = 2.0
+	cue2.CueNumber = 3.0
+	db.Save(cue3)
+	db.Save(cue1)
+	db.Save(cue2)
+
+	// Capture new state (with new order)
+	newSnapshot, err := service.CaptureCueListState(ctx, cueList.ID)
+	if err != nil {
+		t.Fatalf("CaptureCueListState failed: %v", err)
+	}
+
+	// Record the reorder operation
+	err = service.RecordOperation(
+		ctx,
+		project.ID,
+		OperationTypeUpdate,
+		EntityTypeCueList,
+		cueList.ID,
+		"Reorder 3 cues in 'Test CueList'",
+		prevSnapshot,
+		newSnapshot,
+		[]string{cue1.ID, cue2.ID, cue3.ID},
+	)
+	if err != nil {
+		t.Fatalf("RecordOperation failed: %v", err)
+	}
+
+	// Verify current order: cue3=1, cue1=2, cue2=3
+	var foundCue3 models.Cue
+	db.First(&foundCue3, "id = ?", cue3.ID)
+	if foundCue3.CueNumber != 1.0 {
+		t.Errorf("Expected cue3 to be #1, got #%.1f", foundCue3.CueNumber)
+	}
+
+	// Undo the reorder
+	result, err := service.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Undo failed: %v", err)
+	}
+	if !result.Success {
+		t.Errorf("Undo should succeed: %s", result.Message)
+	}
+
+	// Verify original order is restored
+	db.First(&foundCue3, "id = ?", cue3.ID)
+	if foundCue3.CueNumber != 3.0 {
+		t.Errorf("Expected cue3 to be #3 after undo, got #%.1f", foundCue3.CueNumber)
+	}
+
+	var foundCue1 models.Cue
+	db.First(&foundCue1, "id = ?", cue1.ID)
+	if foundCue1.CueNumber != 1.0 {
+		t.Errorf("Expected cue1 to be #1 after undo, got #%.1f", foundCue1.CueNumber)
+	}
+
+	// Redo the reorder
+	result, err = service.Redo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Redo failed: %v", err)
+	}
+	if !result.Success {
+		t.Errorf("Redo should succeed: %s", result.Message)
+	}
+
+	// Verify reorder is re-applied
+	db.First(&foundCue3, "id = ?", cue3.ID)
+	if foundCue3.CueNumber != 1.0 {
+		t.Errorf("Expected cue3 to be #1 after redo, got #%.1f", foundCue3.CueNumber)
+	}
+}
+
+// TestService_UndoRedo_ToggleCueSkip tests undo/redo of cue skip toggle.
+func TestService_UndoRedo_ToggleCueSkip(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+	look := createTestLook(t, db, project.ID)
+
+	// Create a cue list and cue
+	cueList := createTestCueList(t, db, project.ID)
+	cue := createTestCue(t, db, cueList.ID, look.ID)
+	cue.Name = "Transition"
+	cue.Skip = false
+	db.Save(cue)
+
+	// Capture previous state
+	prevSnapshot, _ := service.CaptureCueState(ctx, cue.ID)
+
+	// Toggle skip to true
+	cue.Skip = true
+	db.Save(cue)
+
+	// Capture new state
+	newSnapshot, _ := service.CaptureCueState(ctx, cue.ID)
+
+	// Record the skip toggle
+	err := service.RecordOperation(
+		ctx,
+		project.ID,
+		OperationTypeUpdate,
+		EntityTypeCue,
+		cue.ID,
+		"Skip cue 'Transition'",
+		prevSnapshot,
+		newSnapshot,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("RecordOperation failed: %v", err)
+	}
+
+	// Verify skip is true
+	var foundCue models.Cue
+	db.First(&foundCue, "id = ?", cue.ID)
+	if !foundCue.Skip {
+		t.Error("Expected cue to be skipped")
+	}
+
+	// Undo the skip
+	result, err := service.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Undo failed: %v", err)
+	}
+	if !result.Success {
+		t.Errorf("Undo should succeed: %s", result.Message)
+	}
+
+	// Verify skip is false
+	db.First(&foundCue, "id = ?", cue.ID)
+	if foundCue.Skip {
+		t.Error("Expected cue to not be skipped after undo")
+	}
+
+	// Redo the skip
+	_, err = service.Redo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Redo failed: %v", err)
+	}
+
+	// Verify skip is true again
+	db.First(&foundCue, "id = ?", cue.ID)
+	if !foundCue.Skip {
+		t.Error("Expected cue to be skipped after redo")
+	}
+}
+
+// TestService_UndoRedo_CueDelete tests undo/redo of cue deletion.
+func TestService_UndoRedo_CueDelete(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+	look := createTestLook(t, db, project.ID)
+
+	// Create a cue list and cue
+	cueList := createTestCueList(t, db, project.ID)
+	cue := createTestCue(t, db, cueList.ID, look.ID)
+	cue.Name = "Important Cue"
+	cue.CueNumber = 7.5
+	cue.FadeInTime = 5.0
+	cue.FadeOutTime = 2.0
+	db.Save(cue)
+
+	cueID := cue.ID
+
+	// Capture state before deletion
+	prevSnapshot, _ := service.CaptureCueState(ctx, cue.ID)
+
+	// Delete the cue
+	db.Delete(cue)
+
+	// Record the deletion
+	err := service.RecordOperation(
+		ctx,
+		project.ID,
+		OperationTypeDelete,
+		EntityTypeCue,
+		cueID,
+		"Delete cue 'Important Cue'",
+		prevSnapshot,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("RecordOperation failed: %v", err)
+	}
+
+	// Verify cue is deleted
+	var foundCue models.Cue
+	result := db.First(&foundCue, "id = ?", cueID)
+	if result.Error == nil {
+		t.Error("Cue should be deleted")
+	}
+
+	// Undo the deletion
+	undoResult, err := service.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Undo failed: %v", err)
+	}
+	if !undoResult.Success {
+		t.Errorf("Undo should succeed: %s", undoResult.Message)
+	}
+
+	// Verify cue is restored with all properties
+	result = db.First(&foundCue, "id = ?", cueID)
+	if result.Error != nil {
+		t.Fatalf("Cue should exist after undo: %v", result.Error)
+	}
+	if foundCue.Name != "Important Cue" {
+		t.Errorf("Expected name 'Important Cue', got '%s'", foundCue.Name)
+	}
+	if foundCue.CueNumber != 7.5 {
+		t.Errorf("Expected cue number 7.5, got %.1f", foundCue.CueNumber)
+	}
+	if foundCue.FadeInTime != 5.0 {
+		t.Errorf("Expected fade in time 5.0, got %.1f", foundCue.FadeInTime)
+	}
+
+	// Redo the deletion
+	redoResult, err := service.Redo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Redo failed: %v", err)
+	}
+	if !redoResult.Success {
+		t.Errorf("Redo should succeed: %s", redoResult.Message)
+	}
+
+	// Verify cue is deleted again
+	result = db.First(&foundCue, "id = ?", cueID)
+	if result.Error == nil {
+		t.Error("Cue should be deleted after redo")
+	}
+}

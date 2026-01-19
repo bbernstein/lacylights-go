@@ -597,6 +597,22 @@ func (s *Service) applyCueListSnapshot(ctx context.Context, snapshotJSON string,
 		if err := s.cueListRepo.Update(ctx, snapshot.CueList); err != nil {
 			return "", fmt.Errorf("failed to update cue list: %w", err)
 		}
+		// Also update all cues (for reorder operations)
+		for i := range snapshot.Cues {
+			cue := &snapshot.Cues[i]
+			existingCue, _ := s.cueRepo.FindByID(ctx, cue.ID)
+			if existingCue != nil {
+				// Cue exists - update it
+				if err := s.cueRepo.Update(ctx, cue); err != nil {
+					return "", fmt.Errorf("failed to update cue: %w", err)
+				}
+			} else {
+				// Cue doesn't exist - recreate it
+				if err := s.cueRepo.Create(ctx, cue); err != nil {
+					return "", fmt.Errorf("failed to recreate cue: %w", err)
+				}
+			}
+		}
 	}
 
 	return snapshot.CueList.ID, nil
