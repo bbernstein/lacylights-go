@@ -48,13 +48,14 @@ type Config struct {
 
 // Load loads configuration from environment variables with sensible defaults.
 func Load() *Config {
+	env := getEnv("ENV", "development")
 	return &Config{
 		// Server
 		Port: getEnv("PORT", "4000"),
-		Env:  getEnv("ENV", "development"),
+		Env:  env,
 
-		// Database
-		DatabaseURL: getEnv("DATABASE_URL", "file:./dev.db"),
+		// Database - default filename depends on environment
+		DatabaseURL: getEnv("DATABASE_URL", defaultDatabaseURL(env)),
 
 		// DMX
 		DMXUniverseCount:    getEnvInt("DMX_UNIVERSE_COUNT", 4),
@@ -123,4 +124,25 @@ func getEnvBool(key string, defaultValue bool) bool {
 		}
 	}
 	return defaultValue
+}
+
+// defaultDatabaseURL returns the default database URL based on the environment.
+// This allows different database files for different purposes:
+//   - development: dev.db (default for local development)
+//   - production: lacylights.db (production data)
+//   - integration: integration.db (integration tests, auto-cleaned)
+//   - e2e: e2e.db (end-to-end tests, auto-cleaned)
+//   - test: dev.db (unit tests typically use in-memory via DATABASE_URL override)
+func defaultDatabaseURL(env string) string {
+	switch env {
+	case "production":
+		return "file:./lacylights.db"
+	case "integration":
+		return "file:./integration.db"
+	case "e2e":
+		return "file:./e2e.db"
+	default:
+		// development and test use dev.db by default
+		return "file:./dev.db"
+	}
 }

@@ -722,3 +722,729 @@ func TestJumpToOperation_Integration(t *testing.T) {
 		t.Errorf("Expected cues C and D to be deleted after jump")
 	}
 }
+
+// TestUndoRedoFixtureInstanceWorkflow_Integration tests fixture instance create/update/delete/undo/redo
+func TestUndoRedoFixtureInstanceWorkflow_Integration(t *testing.T) {
+	db, cleanup := setupUndoTestDB(t)
+	defer cleanup()
+
+	undoService, projectRepo, _, _, _, fixtureRepo := createUndoTestService(db)
+
+	ctx := context.Background()
+
+	// Setup: Create project and fixture definition
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	if err := projectRepo.Create(ctx, project); err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+
+	// Create a fixture definition (required for fixture instances)
+	fixtureDef := &models.FixtureDefinition{
+		ID:           cuid.New(),
+		Manufacturer: "Test Manufacturer",
+		Model:        "Test Model",
+		Type:         "LED_PAR",
+	}
+	if err := db.Create(fixtureDef).Error; err != nil {
+		t.Fatalf("Failed to create fixture definition: %v", err)
+	}
+
+	// Step 1: Create a fixture instance
+	fixture := &models.FixtureInstance{
+		ID:           cuid.New(),
+		ProjectID:    project.ID,
+		DefinitionID: fixtureDef.ID,
+		Name:         "Front Wash 1",
+		Universe:     1,
+		StartChannel: 1,
+	}
+	if err := fixtureRepo.Create(ctx, fixture); err != nil {
+		t.Fatalf("Failed to create fixture: %v", err)
+	}
+
+	// Record create operation
+	newState, err := undoService.CaptureFixtureState(ctx, fixture.ID)
+	if err != nil {
+		t.Fatalf("Failed to capture fixture state: %v", err)
+	}
+	if err := undoService.RecordOperation(ctx, project.ID, undo.OperationTypeCreate, undo.EntityTypeFixtureInstance, fixture.ID,
+		"Create fixture 'Front Wash 1'", nil, newState, nil); err != nil {
+		t.Fatalf("Failed to record create operation: %v", err)
+	}
+
+	// Step 2: Update the fixture
+	prevState, err := undoService.CaptureFixtureState(ctx, fixture.ID)
+	if err != nil {
+		t.Fatalf("Failed to capture previous state: %v", err)
+	}
+
+	fixture.Name = "Front Wash Left"
+	fixture.StartChannel = 10
+	if err := fixtureRepo.Update(ctx, fixture); err != nil {
+		t.Fatalf("Failed to update fixture: %v", err)
+	}
+
+	newState, err = undoService.CaptureFixtureState(ctx, fixture.ID)
+	if err != nil {
+		t.Fatalf("Failed to capture new state: %v", err)
+	}
+	if err := undoService.RecordOperation(ctx, project.ID, undo.OperationTypeUpdate, undo.EntityTypeFixtureInstance, fixture.ID,
+		"Update fixture 'Front Wash Left'", prevState, newState, nil); err != nil {
+		t.Fatalf("Failed to record update operation: %v", err)
+	}
+
+	// Verify current state
+	currentFixture, err := fixtureRepo.FindByID(ctx, fixture.ID)
+	if err != nil {
+		t.Fatalf("Failed to find fixture: %v", err)
+	}
+	if currentFixture.Name != "Front Wash Left" {
+		t.Errorf("Expected fixture name 'Front Wash Left', got '%s'", currentFixture.Name)
+	}
+	if currentFixture.StartChannel != 10 {
+		t.Errorf("Expected start channel 10, got %d", currentFixture.StartChannel)
+	}
+
+	// Step 3: Undo the update
+	result, err := undoService.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Undo failed: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("Undo was not successful: %s", result.Message)
+	}
+
+	// Verify undo result
+	currentFixture, err = fixtureRepo.FindByID(ctx, fixture.ID)
+	if err != nil {
+		t.Fatalf("Failed to find fixture after undo: %v", err)
+	}
+	if currentFixture.Name != "Front Wash 1" {
+		t.Errorf("Expected fixture name 'Front Wash 1' after undo, got '%s'", currentFixture.Name)
+	}
+	if currentFixture.StartChannel != 1 {
+		t.Errorf("Expected start channel 1 after undo, got %d", currentFixture.StartChannel)
+	}
+
+	// Step 4: Redo the update
+	result, err = undoService.Redo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Redo failed: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("Redo was not successful: %s", result.Message)
+	}
+
+	// Verify redo result
+	currentFixture, err = fixtureRepo.FindByID(ctx, fixture.ID)
+	if err != nil {
+		t.Fatalf("Failed to find fixture after redo: %v", err)
+	}
+	if currentFixture.Name != "Front Wash Left" {
+		t.Errorf("Expected fixture name 'Front Wash Left' after redo, got '%s'", currentFixture.Name)
+	}
+
+	// Step 5: Undo both operations (delete the fixture)
+	_, err = undoService.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Second undo failed: %v", err)
+	}
+
+	result, err = undoService.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Undo create failed: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("Undo create was not successful: %s", result.Message)
+	}
+
+	// Verify fixture was deleted
+	currentFixture, err = fixtureRepo.FindByID(ctx, fixture.ID)
+	if err == nil && currentFixture != nil {
+		t.Errorf("Expected fixture to be deleted after undo create, but it still exists")
+	}
+
+	// Step 6: Redo should recreate the fixture
+	result, err = undoService.Redo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Redo create failed: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("Redo create was not successful: %s", result.Message)
+	}
+
+	// Verify fixture was recreated
+	currentFixture, err = fixtureRepo.FindByID(ctx, fixture.ID)
+	if err != nil {
+		t.Fatalf("Failed to find fixture after redo create: %v", err)
+	}
+	if currentFixture.Name != "Front Wash 1" {
+		t.Errorf("Expected fixture name 'Front Wash 1' after redo create, got '%s'", currentFixture.Name)
+	}
+}
+
+// TestUndoRedoLookWorkflow_Integration tests look create/update/delete/undo/redo with fixture values
+func TestUndoRedoLookWorkflow_Integration(t *testing.T) {
+	db, cleanup := setupUndoTestDB(t)
+	defer cleanup()
+
+	undoService, projectRepo, _, _, lookRepo, fixtureRepo := createUndoTestService(db)
+
+	ctx := context.Background()
+
+	// Setup: Create project and fixture
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	if err := projectRepo.Create(ctx, project); err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+
+	fixtureDef := &models.FixtureDefinition{
+		ID:           cuid.New(),
+		Manufacturer: "Test Manufacturer",
+		Model:        "Test Model",
+		Type:         "LED_PAR",
+	}
+	if err := db.Create(fixtureDef).Error; err != nil {
+		t.Fatalf("Failed to create fixture definition: %v", err)
+	}
+
+	fixture := &models.FixtureInstance{
+		ID:           cuid.New(),
+		ProjectID:    project.ID,
+		DefinitionID: fixtureDef.ID,
+		Name:         "Test Fixture",
+		Universe:     1,
+		StartChannel: 1,
+	}
+	if err := fixtureRepo.Create(ctx, fixture); err != nil {
+		t.Fatalf("Failed to create fixture: %v", err)
+	}
+
+	// Step 1: Create a look with fixture values
+	look := &models.Look{
+		ID:        cuid.New(),
+		ProjectID: project.ID,
+		Name:      "Warm Wash",
+	}
+	fixtureValues := []models.FixtureValue{
+		{
+			ID:        cuid.New(),
+			LookID:    look.ID,
+			FixtureID: fixture.ID,
+			Channels:  `[{"offset":0,"value":255},{"offset":1,"value":128}]`,
+		},
+	}
+	if err := lookRepo.CreateWithFixtureValues(ctx, look, fixtureValues); err != nil {
+		t.Fatalf("Failed to create look: %v", err)
+	}
+
+	// Record create operation
+	newState, err := undoService.CaptureLookState(ctx, look.ID)
+	if err != nil {
+		t.Fatalf("Failed to capture look state: %v", err)
+	}
+	if err := undoService.RecordOperation(ctx, project.ID, undo.OperationTypeCreate, undo.EntityTypeLook, look.ID,
+		"Create look 'Warm Wash'", nil, newState, nil); err != nil {
+		t.Fatalf("Failed to record create operation: %v", err)
+	}
+
+	// Step 2: Update the look
+	prevState, err := undoService.CaptureLookState(ctx, look.ID)
+	if err != nil {
+		t.Fatalf("Failed to capture previous state: %v", err)
+	}
+
+	look.Name = "Cool Wash"
+	if err := lookRepo.Update(ctx, look); err != nil {
+		t.Fatalf("Failed to update look: %v", err)
+	}
+	// Update fixture values
+	if err := lookRepo.DeleteFixtureValues(ctx, look.ID); err != nil {
+		t.Fatalf("Failed to delete fixture values: %v", err)
+	}
+	newFixtureValues := []models.FixtureValue{
+		{
+			ID:        cuid.New(),
+			LookID:    look.ID,
+			FixtureID: fixture.ID,
+			Channels:  `[{"offset":0,"value":100},{"offset":1,"value":200}]`,
+		},
+	}
+	if err := lookRepo.CreateFixtureValues(ctx, newFixtureValues); err != nil {
+		t.Fatalf("Failed to create new fixture values: %v", err)
+	}
+
+	newState, err = undoService.CaptureLookState(ctx, look.ID)
+	if err != nil {
+		t.Fatalf("Failed to capture new state: %v", err)
+	}
+	if err := undoService.RecordOperation(ctx, project.ID, undo.OperationTypeUpdate, undo.EntityTypeLook, look.ID,
+		"Update look 'Cool Wash'", prevState, newState, nil); err != nil {
+		t.Fatalf("Failed to record update operation: %v", err)
+	}
+
+	// Verify current state
+	currentLook, err := lookRepo.FindByID(ctx, look.ID)
+	if err != nil {
+		t.Fatalf("Failed to find look: %v", err)
+	}
+	if currentLook.Name != "Cool Wash" {
+		t.Errorf("Expected look name 'Cool Wash', got '%s'", currentLook.Name)
+	}
+
+	// Step 3: Undo the update
+	result, err := undoService.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Undo failed: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("Undo was not successful: %s", result.Message)
+	}
+
+	// Verify look was restored
+	currentLook, err = lookRepo.FindByID(ctx, look.ID)
+	if err != nil {
+		t.Fatalf("Failed to find look after undo: %v", err)
+	}
+	if currentLook.Name != "Warm Wash" {
+		t.Errorf("Expected look name 'Warm Wash' after undo, got '%s'", currentLook.Name)
+	}
+
+	// Verify fixture values were restored
+	restoredValues, err := lookRepo.GetFixtureValues(ctx, look.ID)
+	if err != nil {
+		t.Fatalf("Failed to get fixture values: %v", err)
+	}
+	if len(restoredValues) != 1 {
+		t.Errorf("Expected 1 fixture value after undo, got %d", len(restoredValues))
+	}
+	if restoredValues[0].Channels != `[{"offset":0,"value":255},{"offset":1,"value":128}]` {
+		t.Errorf("Expected original fixture values after undo")
+	}
+
+	// Step 4: Undo the create (delete the look)
+	result, err = undoService.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Undo create failed: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("Undo create was not successful: %s", result.Message)
+	}
+
+	// Verify look was deleted
+	currentLook, err = lookRepo.FindByID(ctx, look.ID)
+	if err == nil && currentLook != nil {
+		t.Errorf("Expected look to be deleted after undo create")
+	}
+
+	// Step 5: Redo should recreate the look with fixture values
+	result, err = undoService.Redo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Redo create failed: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("Redo create was not successful: %s", result.Message)
+	}
+
+	// Verify look and fixture values were restored
+	currentLook, err = lookRepo.FindByID(ctx, look.ID)
+	if err != nil {
+		t.Fatalf("Failed to find look after redo: %v", err)
+	}
+	if currentLook.Name != "Warm Wash" {
+		t.Errorf("Expected look name 'Warm Wash' after redo, got '%s'", currentLook.Name)
+	}
+
+	restoredValues, err = lookRepo.GetFixtureValues(ctx, look.ID)
+	if err != nil {
+		t.Fatalf("Failed to get fixture values after redo: %v", err)
+	}
+	if len(restoredValues) != 1 {
+		t.Errorf("Expected 1 fixture value after redo, got %d", len(restoredValues))
+	}
+}
+
+// TestUndoRedoCueListUpdate_Integration tests cue list update undo/redo
+func TestUndoRedoCueListUpdate_Integration(t *testing.T) {
+	db, cleanup := setupUndoTestDB(t)
+	defer cleanup()
+
+	undoService, projectRepo, _, cueListRepo, _, _ := createUndoTestService(db)
+
+	ctx := context.Background()
+
+	// Setup
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	_ = projectRepo.Create(ctx, project)
+
+	desc := "First act"
+	cueList := &models.CueList{
+		ID:          cuid.New(),
+		ProjectID:   project.ID,
+		Name:        "Act 1",
+		Description: &desc,
+		Loop:        false,
+	}
+	if err := cueListRepo.Create(ctx, cueList); err != nil {
+		t.Fatalf("Failed to create cue list: %v", err)
+	}
+
+	// Capture state before update
+	prevState, _ := undoService.CaptureCueListState(ctx, cueList.ID)
+
+	// Update cue list
+	newDesc := "First act with changes"
+	cueList.Name = "Act 1 - Revised"
+	cueList.Description = &newDesc
+	cueList.Loop = true
+	if err := cueListRepo.Update(ctx, cueList); err != nil {
+		t.Fatalf("Failed to update cue list: %v", err)
+	}
+
+	newState, _ := undoService.CaptureCueListState(ctx, cueList.ID)
+	_ = undoService.RecordOperation(ctx, project.ID, undo.OperationTypeUpdate, undo.EntityTypeCueList, cueList.ID,
+		"Update cue list 'Act 1 - Revised'", prevState, newState, nil)
+
+	// Verify update
+	updated, _ := cueListRepo.FindByID(ctx, cueList.ID)
+	if updated.Name != "Act 1 - Revised" {
+		t.Errorf("Expected 'Act 1 - Revised', got '%s'", updated.Name)
+	}
+	if !updated.Loop {
+		t.Error("Expected Loop to be true")
+	}
+
+	// Undo
+	result, err := undoService.Undo(ctx, project.ID)
+	if err != nil || !result.Success {
+		t.Fatalf("Undo failed: %v, %s", err, result.Message)
+	}
+
+	// Verify undo
+	restored, _ := cueListRepo.FindByID(ctx, cueList.ID)
+	if restored.Name != "Act 1" {
+		t.Errorf("Expected 'Act 1' after undo, got '%s'", restored.Name)
+	}
+	if restored.Loop {
+		t.Error("Expected Loop to be false after undo")
+	}
+
+	// Redo
+	result, err = undoService.Redo(ctx, project.ID)
+	if err != nil || !result.Success {
+		t.Fatalf("Redo failed: %v, %s", err, result.Message)
+	}
+
+	// Verify redo
+	redone, _ := cueListRepo.FindByID(ctx, cueList.ID)
+	if redone.Name != "Act 1 - Revised" {
+		t.Errorf("Expected 'Act 1 - Revised' after redo, got '%s'", redone.Name)
+	}
+}
+
+// TestUndoRedoCueDelete_Integration tests direct cue deletion undo/redo
+func TestUndoRedoCueDelete_Integration(t *testing.T) {
+	db, cleanup := setupUndoTestDB(t)
+	defer cleanup()
+
+	undoService, projectRepo, cueRepo, cueListRepo, lookRepo, _ := createUndoTestService(db)
+
+	ctx := context.Background()
+
+	// Setup
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	_ = projectRepo.Create(ctx, project)
+
+	look := &models.Look{ID: cuid.New(), ProjectID: project.ID, Name: "Test Look"}
+	_ = lookRepo.Create(ctx, look)
+
+	cueList := &models.CueList{ID: cuid.New(), ProjectID: project.ID, Name: "Main"}
+	_ = cueListRepo.Create(ctx, cueList)
+
+	notes := "End of scene"
+	cue := &models.Cue{
+		ID:         cuid.New(),
+		CueListID:  cueList.ID,
+		LookID:     look.ID,
+		Name:       "Blackout",
+		CueNumber:  10.0,
+		FadeInTime: 2.0,
+		Notes:      &notes,
+	}
+	if err := cueRepo.Create(ctx, cue); err != nil {
+		t.Fatalf("Failed to create cue: %v", err)
+	}
+
+	// Capture state before delete
+	prevState, _ := undoService.CaptureCueState(ctx, cue.ID)
+
+	// Delete cue
+	if err := cueRepo.Delete(ctx, cue.ID); err != nil {
+		t.Fatalf("Failed to delete cue: %v", err)
+	}
+
+	// Record delete operation
+	_ = undoService.RecordOperation(ctx, project.ID, undo.OperationTypeDelete, undo.EntityTypeCue, cue.ID,
+		"Delete cue 'Blackout'", prevState, nil, nil)
+
+	// Verify cue is deleted
+	deleted, _ := cueRepo.FindByID(ctx, cue.ID)
+	if deleted != nil {
+		t.Error("Expected cue to be deleted")
+	}
+
+	// Undo should restore the cue
+	result, err := undoService.Undo(ctx, project.ID)
+	if err != nil || !result.Success {
+		t.Fatalf("Undo failed: %v, %s", err, result.Message)
+	}
+
+	// Verify cue is restored with all properties
+	restored, err := cueRepo.FindByID(ctx, cue.ID)
+	if err != nil {
+		t.Fatalf("Failed to find restored cue: %v", err)
+	}
+	if restored.Name != "Blackout" {
+		t.Errorf("Expected name 'Blackout', got '%s'", restored.Name)
+	}
+	if restored.CueNumber != 10.0 {
+		t.Errorf("Expected cue number 10.0, got %f", restored.CueNumber)
+	}
+	if restored.FadeInTime != 2.0 {
+		t.Errorf("Expected fade time 2.0, got %f", restored.FadeInTime)
+	}
+	if restored.Notes == nil || *restored.Notes != "End of scene" {
+		t.Errorf("Expected notes 'End of scene', got '%v'", restored.Notes)
+	}
+
+	// Redo should delete the cue again
+	result, err = undoService.Redo(ctx, project.ID)
+	if err != nil || !result.Success {
+		t.Fatalf("Redo failed: %v, %s", err, result.Message)
+	}
+
+	// Verify cue is deleted again
+	deleted, _ = cueRepo.FindByID(ctx, cue.ID)
+	if deleted != nil {
+		t.Error("Expected cue to be deleted after redo")
+	}
+}
+
+// TestClearHistory_Integration tests clearing operation history
+func TestClearHistory_Integration(t *testing.T) {
+	db, cleanup := setupUndoTestDB(t)
+	defer cleanup()
+
+	undoService, projectRepo, cueRepo, cueListRepo, lookRepo, _ := createUndoTestService(db)
+
+	ctx := context.Background()
+
+	// Setup
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	_ = projectRepo.Create(ctx, project)
+
+	look := &models.Look{ID: cuid.New(), ProjectID: project.ID, Name: "Test Look"}
+	_ = lookRepo.Create(ctx, look)
+
+	cueList := &models.CueList{ID: cuid.New(), ProjectID: project.ID, Name: "Main"}
+	_ = cueListRepo.Create(ctx, cueList)
+
+	// Create multiple cues and record operations
+	for i := 0; i < 5; i++ {
+		cue := &models.Cue{
+			ID:        cuid.New(),
+			CueListID: cueList.ID,
+			LookID:    look.ID,
+			Name:      string(rune('A' + i)),
+			CueNumber: float64(i + 1),
+		}
+		_ = cueRepo.Create(ctx, cue)
+
+		newState, _ := undoService.CaptureCueState(ctx, cue.ID)
+		_ = undoService.RecordOperation(ctx, project.ID, undo.OperationTypeCreate, undo.EntityTypeCue, cue.ID,
+			"Create cue "+cue.Name, nil, newState, nil)
+	}
+
+	// Verify we have operations
+	ops, total, _ := undoService.GetOperationHistory(ctx, project.ID, 1, 10)
+	if total != 5 {
+		t.Errorf("Expected 5 operations before clear, got %d", total)
+	}
+	if len(ops) != 5 {
+		t.Errorf("Expected 5 operations in list, got %d", len(ops))
+	}
+
+	// Verify undo is available
+	status, _ := undoService.GetStatus(ctx, project.ID)
+	if !status.CanUndo {
+		t.Error("Expected CanUndo to be true before clear")
+	}
+
+	// Clear history
+	if err := undoService.ClearHistory(ctx, project.ID); err != nil {
+		t.Fatalf("ClearHistory failed: %v", err)
+	}
+
+	// Verify history is cleared
+	ops, total, _ = undoService.GetOperationHistory(ctx, project.ID, 1, 10)
+	if total != 0 {
+		t.Errorf("Expected 0 operations after clear, got %d", total)
+	}
+	if len(ops) != 0 {
+		t.Errorf("Expected empty operations list, got %d", len(ops))
+	}
+
+	// Verify undo is not available
+	status, _ = undoService.GetStatus(ctx, project.ID)
+	if status.CanUndo {
+		t.Error("Expected CanUndo to be false after clear")
+	}
+	if status.CanRedo {
+		t.Error("Expected CanRedo to be false after clear")
+	}
+}
+
+// mockPlaybackController implements undo.PlaybackController for testing
+type mockPlaybackController struct {
+	goToCalls []struct {
+		cueListID string
+		cueNumber float64
+		fadeTime  *float64
+	}
+	stopCalls []string
+}
+
+func (m *mockPlaybackController) GoToCueNumber(ctx context.Context, cueListID string, cueNumber float64, fadeInTimeOverride *float64) error {
+	m.goToCalls = append(m.goToCalls, struct {
+		cueListID string
+		cueNumber float64
+		fadeTime  *float64
+	}{cueListID, cueNumber, fadeInTimeOverride})
+	return nil
+}
+
+func (m *mockPlaybackController) StopCueList(cueListID string) {
+	m.stopCalls = append(m.stopCalls, cueListID)
+}
+
+// TestUndoRedoCuePlayback_Integration tests cue playback undo/redo
+func TestUndoRedoCuePlayback_Integration(t *testing.T) {
+	db, cleanup := setupUndoTestDB(t)
+	defer cleanup()
+
+	undoService, projectRepo, cueRepo, cueListRepo, lookRepo, _ := createUndoTestService(db)
+
+	// Set up mock playback controller
+	mockPlayback := &mockPlaybackController{}
+	undoService.SetPlaybackController(mockPlayback)
+
+	ctx := context.Background()
+
+	// Setup
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	_ = projectRepo.Create(ctx, project)
+
+	look := &models.Look{ID: cuid.New(), ProjectID: project.ID, Name: "Test Look"}
+	_ = lookRepo.Create(ctx, look)
+
+	cueList := &models.CueList{ID: cuid.New(), ProjectID: project.ID, Name: "Main Show"}
+	_ = cueListRepo.Create(ctx, cueList)
+
+	cue1 := &models.Cue{ID: cuid.New(), CueListID: cueList.ID, LookID: look.ID, Name: "Opening", CueNumber: 1.0, FadeInTime: 3.0}
+	cue2 := &models.Cue{ID: cuid.New(), CueListID: cueList.ID, LookID: look.ID, Name: "Scene 1", CueNumber: 2.0, FadeInTime: 2.0}
+	_ = cueRepo.Create(ctx, cue1)
+	_ = cueRepo.Create(ctx, cue2)
+
+	// Simulate: Playback was stopped, then started on cue 1
+	fadeTime := 3.0
+	prevSnapshot := &undo.CuePlaybackSnapshot{
+		CueListID: cueList.ID,
+		ProjectID: project.ID,
+		IsPlaying: false,
+	}
+	newSnapshot := &undo.CuePlaybackSnapshot{
+		CueListID:   cueList.ID,
+		ProjectID:   project.ID,
+		CueID:       &cue1.ID,
+		CueNumber:   &cue1.CueNumber,
+		CueName:     &cue1.Name,
+		FadeInTime:  &fadeTime,
+		IsPlaying:   true,
+		CueListName: cueList.Name,
+	}
+
+	_ = undoService.RecordOperation(ctx, project.ID, undo.OperationTypeUpdate, undo.EntityTypeCuePlayback, cueList.ID,
+		"Start cue list 'Main Show'", prevSnapshot, newSnapshot, nil)
+
+	// Simulate: Advance to cue 2
+	cue2FadeTime := 2.0
+	prevSnapshot2 := newSnapshot
+	newSnapshot2 := &undo.CuePlaybackSnapshot{
+		CueListID:   cueList.ID,
+		ProjectID:   project.ID,
+		CueID:       &cue2.ID,
+		CueNumber:   &cue2.CueNumber,
+		CueName:     &cue2.Name,
+		FadeInTime:  &cue2FadeTime,
+		IsPlaying:   true,
+		CueListName: cueList.Name,
+	}
+
+	_ = undoService.RecordOperation(ctx, project.ID, undo.OperationTypeUpdate, undo.EntityTypeCuePlayback, cueList.ID,
+		"Next cue to 'Scene 1'", prevSnapshot2, newSnapshot2, nil)
+
+	// Undo: Should go back to cue 1
+	result, err := undoService.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Undo failed: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("Undo was not successful: %s", result.Message)
+	}
+
+	// Verify mock was called to go to cue 1
+	if len(mockPlayback.goToCalls) != 1 {
+		t.Errorf("Expected 1 GoToCueNumber call, got %d", len(mockPlayback.goToCalls))
+	} else {
+		call := mockPlayback.goToCalls[0]
+		if call.cueListID != cueList.ID {
+			t.Errorf("Expected cue list ID %s, got %s", cueList.ID, call.cueListID)
+		}
+		if call.cueNumber != 1.0 {
+			t.Errorf("Expected cue number 1.0, got %f", call.cueNumber)
+		}
+	}
+
+	// Undo again: Should stop playback
+	mockPlayback.goToCalls = nil // Reset
+	result, err = undoService.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Second undo failed: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("Second undo was not successful: %s", result.Message)
+	}
+
+	// Verify mock was called to stop
+	if len(mockPlayback.stopCalls) != 1 {
+		t.Errorf("Expected 1 StopCueList call, got %d", len(mockPlayback.stopCalls))
+	} else if mockPlayback.stopCalls[0] != cueList.ID {
+		t.Errorf("Expected stop for cue list ID %s, got %s", cueList.ID, mockPlayback.stopCalls[0])
+	}
+
+	// Redo: Should restart playback at cue 1
+	mockPlayback.stopCalls = nil
+	mockPlayback.goToCalls = nil
+	result, err = undoService.Redo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Redo failed: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("Redo was not successful: %s", result.Message)
+	}
+
+	// Verify mock was called to go to cue 1
+	if len(mockPlayback.goToCalls) != 1 {
+		t.Errorf("Expected 1 GoToCueNumber call on redo, got %d", len(mockPlayback.goToCalls))
+	}
+}

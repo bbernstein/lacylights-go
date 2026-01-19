@@ -124,8 +124,8 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `4000` | HTTP server port |
-| `ENV` | `development` | Environment (development/production) |
-| `DATABASE_URL` | `file:./dev.db` | SQLite database path |
+| `ENV` | `development` | Environment (development/production/integration/e2e) |
+| `DATABASE_URL` | (see below) | SQLite database path (defaults based on ENV) |
 | `ARTNET_ENABLED` | `true` | Enable Art-Net DMX output |
 | `ARTNET_PORT` | `6454` | Art-Net UDP port |
 | `ARTNET_BROADCAST` | `""` | Broadcast address for Art-Net |
@@ -137,6 +137,27 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 | `OFL_IMPORT_ENABLED` | `true` | Auto-import OFL fixtures on startup |
 | `OFL_CACHE_PATH` | `./.ofl-cache` | Path to the OFL fixture cache directory |
 | `NON_INTERACTIVE` | `false` | Disable interactive prompts (CI/Docker) |
+
+### Database Environments
+
+The database filename defaults based on the `ENV` environment variable. This allows different database files for different purposes, keeping production, development, and test data separate:
+
+| ENV Value | Default Database | Purpose |
+|-----------|-----------------|---------|
+| `development` | `dev.db` | Local development (default) |
+| `production` | `lacylights.db` | Production data |
+| `integration` | `integration.db` | Integration tests (can be auto-cleaned) |
+| `e2e` | `e2e.db` | End-to-end tests (can be auto-cleaned) |
+| `test` | `dev.db` | Unit tests (typically use in-memory override) |
+
+You can always override the default by setting `DATABASE_URL` explicitly:
+```bash
+# Run with integration database
+ENV=integration ./lacylights-go
+
+# Run with explicit database path (overrides ENV-based default)
+DATABASE_URL=file:./custom.db ./lacylights-go
+```
 
 ### Services and Ports
 
