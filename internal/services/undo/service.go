@@ -550,6 +550,14 @@ func (s *Service) applyCueSnapshot(ctx context.Context, snapshotJSON string, opT
 
 // applyCueListSnapshot restores a cue list from a snapshot.
 // If snapshotJSON is empty, we delete the entity (undoing a CREATE).
+//
+// When the cue list exists, this function:
+//   - Updates the cue list with values from the snapshot
+//   - Creates or updates all cues from the snapshot
+//   - Deletes any cues that exist in the database but are NOT in the snapshot
+//
+// This ensures proper undo behavior for operations that add/remove cues,
+// such as reorder operations or cue list restores.
 func (s *Service) applyCueListSnapshot(ctx context.Context, snapshotJSON string, opType OperationType, entityID string) (string, error) {
 	if snapshotJSON == "" {
 		// Empty snapshot means we need to delete the entity (undoing a CREATE)
