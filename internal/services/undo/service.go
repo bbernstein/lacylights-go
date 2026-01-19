@@ -632,13 +632,14 @@ func (s *Service) applyCueListSnapshot(ctx context.Context, snapshotJSON string,
 		// Delete any cues that exist in the DB but are not in the snapshot
 		// This handles the case where undo needs to remove cues added after the snapshot
 		currentCues, err := s.cueRepo.FindByCueListID(ctx, snapshot.CueList.ID)
-		if err == nil {
-			for _, currentCue := range currentCues {
-				if !snapshotCueIDs[currentCue.ID] {
-					// This cue exists but wasn't in the snapshot - delete it
-					if err := s.cueRepo.Delete(ctx, currentCue.ID); err != nil {
-						return "", fmt.Errorf("failed to delete orphaned cue: %w", err)
-					}
+		if err != nil {
+			return "", fmt.Errorf("failed to fetch current cues for cue list %s: %w", snapshot.CueList.ID, err)
+		}
+		for _, currentCue := range currentCues {
+			if !snapshotCueIDs[currentCue.ID] {
+				// This cue exists but wasn't in the snapshot - delete it
+				if err := s.cueRepo.Delete(ctx, currentCue.ID); err != nil {
+					return "", fmt.Errorf("failed to delete orphaned cue: %w", err)
 				}
 			}
 		}
