@@ -592,6 +592,7 @@ type ComplexityRoot struct {
 		InitializePreviewWithLook              func(childComplexity int, sessionID string, lookID string) int
 		JumpToOperation                        func(childComplexity int, projectID string, operationID string) int
 		NextCue                                func(childComplexity int, cueListID string, fadeInTime *float64) int
+		PermanentlyDeleteProject               func(childComplexity int, id string) int
 		PlayCue                                func(childComplexity int, cueID string, fadeInTime *float64) int
 		PreviousCue                            func(childComplexity int, cueListID string, fadeInTime *float64) int
 		Redo                                   func(childComplexity int, projectID string) int
@@ -605,6 +606,7 @@ type ComplexityRoot struct {
 		ReorderLookFixtures                    func(childComplexity int, lookID string, fixtureOrders []*FixtureOrderInput) int
 		ReorderProjectFixtures                 func(childComplexity int, projectID string, fixtureOrders []*FixtureOrderInput) int
 		ResetAPTimeout                         func(childComplexity int) int
+		RestoreProject                         func(childComplexity int, id string) int
 		ResumeCueList                          func(childComplexity int, cueListID string) int
 		SetArtNetEnabled                       func(childComplexity int, enabled bool, fadeTime *float64) int
 		SetChannelValue                        func(childComplexity int, universe int, channel int, value int) int
@@ -755,6 +757,7 @@ type ComplexityRoot struct {
 		CreatedAt          func(childComplexity int) int
 		CueListCount       func(childComplexity int) int
 		CueLists           func(childComplexity int) int
+		DeletedAt          func(childComplexity int) int
 		Description        func(childComplexity int) int
 		FixtureCount       func(childComplexity int) int
 		Fixtures           func(childComplexity int) int
@@ -830,6 +833,7 @@ type ComplexityRoot struct {
 		CueListsByIds                   func(childComplexity int, ids []string) int
 		CuesByIds                       func(childComplexity int, ids []string) int
 		CurrentActiveLook               func(childComplexity int) int
+		DeletedProjects                 func(childComplexity int) int
 		DmxOutput                       func(childComplexity int, universe int) int
 		Effect                          func(childComplexity int, id string) int
 		Effects                         func(childComplexity int, projectID string) int
@@ -1094,6 +1098,8 @@ type MutationResolver interface {
 	CreateProject(ctx context.Context, input CreateProjectInput) (*models.Project, error)
 	UpdateProject(ctx context.Context, id string, input CreateProjectInput) (*models.Project, error)
 	DeleteProject(ctx context.Context, id string) (bool, error)
+	RestoreProject(ctx context.Context, id string) (*models.Project, error)
+	PermanentlyDeleteProject(ctx context.Context, id string) (bool, error)
 	BulkCreateProjects(ctx context.Context, input BulkProjectCreateInput) ([]*models.Project, error)
 	BulkUpdateProjects(ctx context.Context, input BulkProjectUpdateInput) ([]*models.Project, error)
 	BulkDeleteProjects(ctx context.Context, projectIds []string) (*BulkDeleteResult, error)
@@ -1229,6 +1235,7 @@ type ProjectResolver interface {
 	CueListCount(ctx context.Context, obj *models.Project) (int, error)
 	CreatedAt(ctx context.Context, obj *models.Project) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.Project) (string, error)
+	DeletedAt(ctx context.Context, obj *models.Project) (*string, error)
 	Fixtures(ctx context.Context, obj *models.Project) ([]*models.FixtureInstance, error)
 	Looks(ctx context.Context, obj *models.Project) ([]*models.Look, error)
 	CueLists(ctx context.Context, obj *models.Project) ([]*models.CueList, error)
@@ -1244,6 +1251,7 @@ type ProjectUserResolver interface {
 type QueryResolver interface {
 	Projects(ctx context.Context) ([]*models.Project, error)
 	Project(ctx context.Context, id string) (*models.Project, error)
+	DeletedProjects(ctx context.Context) ([]*models.Project, error)
 	FixtureDefinitions(ctx context.Context, filter *FixtureDefinitionFilter) ([]*models.FixtureDefinition, error)
 	FixtureDefinition(ctx context.Context, id string) (*models.FixtureDefinition, error)
 	FixtureInstances(ctx context.Context, projectID string, page *int, perPage *int, filter *FixtureFilterInput) (*FixtureInstancePage, error)
@@ -3972,6 +3980,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.NextCue(childComplexity, args["cueListId"].(string), args["fadeInTime"].(*float64)), true
+	case "Mutation.permanentlyDeleteProject":
+		if e.complexity.Mutation.PermanentlyDeleteProject == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_permanentlyDeleteProject_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.PermanentlyDeleteProject(childComplexity, args["id"].(string)), true
 	case "Mutation.playCue":
 		if e.complexity.Mutation.PlayCue == nil {
 			break
@@ -4110,6 +4129,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.ResetAPTimeout(childComplexity), true
+	case "Mutation.restoreProject":
+		if e.complexity.Mutation.RestoreProject == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_restoreProject_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.RestoreProject(childComplexity, args["id"].(string)), true
 	case "Mutation.resumeCueList":
 		if e.complexity.Mutation.ResumeCueList == nil {
 			break
@@ -4971,6 +5001,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Project.CueLists(childComplexity), true
+	case "Project.deletedAt":
+		if e.complexity.Project.DeletedAt == nil {
+			break
+		}
+
+		return e.complexity.Project.DeletedAt(childComplexity), true
 	case "Project.description":
 		if e.complexity.Project.Description == nil {
 			break
@@ -5347,6 +5383,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.CurrentActiveLook(childComplexity), true
+	case "Query.deletedProjects":
+		if e.complexity.Query.DeletedProjects == nil {
+			break
+		}
+
+		return e.complexity.Query.DeletedProjects(childComplexity), true
 	case "Query.dmxOutput":
 		if e.complexity.Query.DmxOutput == nil {
 			break
@@ -6727,6 +6769,7 @@ type Project {
   cueListCount: Int!
   createdAt: String!
   updatedAt: String!
+  deletedAt: String  # Soft delete timestamp - null means not deleted
   fixtures: [FixtureInstance!]!
   looks: [Look!]!
   cueLists: [CueList!]!
@@ -8150,6 +8193,7 @@ type Query {
   # Projects
   projects: [Project!]!
   project(id: ID!): Project
+  deletedProjects: [Project!]!  # Returns soft-deleted projects that can be restored
 
   # Fixtures
   fixtureDefinitions(filter: FixtureDefinitionFilter): [FixtureDefinition!]!
@@ -8302,7 +8346,9 @@ type Mutation {
   # Project Management
   createProject(input: CreateProjectInput!): Project!
   updateProject(id: ID!, input: CreateProjectInput!): Project!
-  deleteProject(id: ID!): Boolean!
+  deleteProject(id: ID!): Boolean!  # Soft delete - project can be restored
+  restoreProject(id: ID!): Project!  # Restore a soft-deleted project
+  permanentlyDeleteProject(id: ID!): Boolean!  # Permanently delete (cannot be restored)
   bulkCreateProjects(input: BulkProjectCreateInput!): [Project!]!
   bulkUpdateProjects(input: BulkProjectUpdateInput!): [Project!]!
   bulkDeleteProjects(projectIds: [ID!]!): BulkDeleteResult!
@@ -9406,6 +9452,17 @@ func (ec *executionContext) field_Mutation_nextCue_args(ctx context.Context, raw
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_permanentlyDeleteProject_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_playCue_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -9575,6 +9632,17 @@ func (ec *executionContext) field_Mutation_reorderProjectFixtures_args(ctx conte
 		return nil, err
 	}
 	args["fixtureOrders"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_restoreProject_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -13067,6 +13135,8 @@ func (ec *executionContext) fieldContext_CueList_project(_ context.Context, fiel
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
 			case "fixtures":
 				return ec.fieldContext_Project_fixtures(ctx, field)
 			case "looks":
@@ -16486,6 +16556,8 @@ func (ec *executionContext) fieldContext_FixtureInstance_project(_ context.Conte
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
 			case "fixtures":
 				return ec.fieldContext_Project_fixtures(ctx, field)
 			case "looks":
@@ -18507,6 +18579,8 @@ func (ec *executionContext) fieldContext_Look_project(_ context.Context, field g
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
 			case "fixtures":
 				return ec.fieldContext_Project_fixtures(ctx, field)
 			case "looks":
@@ -18752,6 +18826,8 @@ func (ec *executionContext) fieldContext_LookBoard_project(_ context.Context, fi
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
 			case "fixtures":
 				return ec.fieldContext_Project_fixtures(ctx, field)
 			case "looks":
@@ -20558,6 +20634,8 @@ func (ec *executionContext) fieldContext_Mutation_createProject(ctx context.Cont
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
 			case "fixtures":
 				return ec.fieldContext_Project_fixtures(ctx, field)
 			case "looks":
@@ -20631,6 +20709,8 @@ func (ec *executionContext) fieldContext_Mutation_updateProject(ctx context.Cont
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
 			case "fixtures":
 				return ec.fieldContext_Project_fixtures(ctx, field)
 			case "looks":
@@ -20704,6 +20784,122 @@ func (ec *executionContext) fieldContext_Mutation_deleteProject(ctx context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_restoreProject(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_restoreProject,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().RestoreProject(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		ec.marshalNProject2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐProject,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_restoreProject(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Project_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Project_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Project_description(ctx, field)
+			case "fixtureCount":
+				return ec.fieldContext_Project_fixtureCount(ctx, field)
+			case "lookCount":
+				return ec.fieldContext_Project_lookCount(ctx, field)
+			case "cueListCount":
+				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Project_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
+			case "fixtures":
+				return ec.fieldContext_Project_fixtures(ctx, field)
+			case "looks":
+				return ec.fieldContext_Project_looks(ctx, field)
+			case "cueLists":
+				return ec.fieldContext_Project_cueLists(ctx, field)
+			case "lookBoards":
+				return ec.fieldContext_Project_lookBoards(ctx, field)
+			case "users":
+				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_restoreProject_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_permanentlyDeleteProject(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_permanentlyDeleteProject,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().PermanentlyDeleteProject(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_permanentlyDeleteProject(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_permanentlyDeleteProject_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_bulkCreateProjects(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -20745,6 +20941,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkCreateProjects(ctx context
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
 			case "fixtures":
 				return ec.fieldContext_Project_fixtures(ctx, field)
 			case "looks":
@@ -20818,6 +21016,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkUpdateProjects(ctx context
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
 			case "fixtures":
 				return ec.fieldContext_Project_fixtures(ctx, field)
 			case "looks":
@@ -28817,6 +29017,8 @@ func (ec *executionContext) fieldContext_PreviewSession_project(_ context.Contex
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
 			case "fixtures":
 				return ec.fieldContext_Project_fixtures(ctx, field)
 			case "looks":
@@ -29192,6 +29394,35 @@ func (ec *executionContext) _Project_updatedAt(ctx context.Context, field graphq
 }
 
 func (ec *executionContext) fieldContext_Project_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Project",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Project_deletedAt(ctx context.Context, field graphql.CollectedField, obj *models.Project) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Project_deletedAt,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Project().DeletedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Project_deletedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Project",
 		Field:      field,
@@ -29631,6 +29862,8 @@ func (ec *executionContext) fieldContext_ProjectUser_project(_ context.Context, 
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
 			case "fixtures":
 				return ec.fieldContext_Project_fixtures(ctx, field)
 			case "looks":
@@ -30213,6 +30446,8 @@ func (ec *executionContext) fieldContext_QLCImportResult_project(_ context.Conte
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
 			case "fixtures":
 				return ec.fieldContext_Project_fixtures(ctx, field)
 			case "looks":
@@ -30419,6 +30654,8 @@ func (ec *executionContext) fieldContext_Query_projects(_ context.Context, field
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
 			case "fixtures":
 				return ec.fieldContext_Project_fixtures(ctx, field)
 			case "looks":
@@ -30481,6 +30718,8 @@ func (ec *executionContext) fieldContext_Query_project(ctx context.Context, fiel
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
 			case "fixtures":
 				return ec.fieldContext_Project_fixtures(ctx, field)
 			case "looks":
@@ -30509,6 +30748,69 @@ func (ec *executionContext) fieldContext_Query_project(ctx context.Context, fiel
 	if fc.Args, err = ec.field_Query_project_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_deletedProjects(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_deletedProjects,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().DeletedProjects(ctx)
+		},
+		nil,
+		ec.marshalNProject2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐProjectᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_deletedProjects(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Project_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Project_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Project_description(ctx, field)
+			case "fixtureCount":
+				return ec.fieldContext_Project_fixtureCount(ctx, field)
+			case "lookCount":
+				return ec.fieldContext_Project_lookCount(ctx, field)
+			case "cueListCount":
+				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Project_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
+			case "fixtures":
+				return ec.fieldContext_Project_fixtures(ctx, field)
+			case "looks":
+				return ec.fieldContext_Project_looks(ctx, field)
+			case "cueLists":
+				return ec.fieldContext_Project_cueLists(ctx, field)
+			case "lookBoards":
+				return ec.fieldContext_Project_lookBoards(ctx, field)
+			case "users":
+				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
+		},
 	}
 	return fc, nil
 }
@@ -33363,6 +33665,8 @@ func (ec *executionContext) fieldContext_Query_projectsByIds(ctx context.Context
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
 			case "fixtures":
 				return ec.fieldContext_Project_fixtures(ctx, field)
 			case "looks":
@@ -34019,6 +34323,8 @@ func (ec *executionContext) fieldContext_Subscription_projectUpdated(ctx context
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
 			case "fixtures":
 				return ec.fieldContext_Project_fixtures(ctx, field)
 			case "looks":
@@ -45579,6 +45885,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "restoreProject":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_restoreProject(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "permanentlyDeleteProject":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_permanentlyDeleteProject(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "bulkCreateProjects":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_bulkCreateProjects(ctx, field)
@@ -47575,6 +47895,39 @@ func (ec *executionContext) _Project(ctx context.Context, sel ast.SelectionSet, 
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "deletedAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Project_deletedAt(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "fixtures":
 			field := field
 
@@ -48266,6 +48619,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_project(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "deletedProjects":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_deletedProjects(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
 				return res
 			}
 

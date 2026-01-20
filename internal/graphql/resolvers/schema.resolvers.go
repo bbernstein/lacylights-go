@@ -472,6 +472,135 @@ func (r *mutationResolver) DeleteProject(ctx context.Context, id string) (bool, 
 	return true, nil
 }
 
+// RestoreProject is the resolver for the restoreProject field.
+func (r *mutationResolver) RestoreProject(ctx context.Context, id string) (*models.Project, error) {
+	// Check if project exists (including deleted)
+	project, err := r.ProjectRepo.FindByIDIncludingDeleted(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if project == nil {
+		return nil, fmt.Errorf("project not found: %s", id)
+	}
+
+	// Verify project is actually deleted
+	if project.DeletedAt == nil {
+		return nil, fmt.Errorf("project is not deleted: %s", id)
+	}
+
+	// Restore the project
+	if err := r.ProjectRepo.Restore(ctx, id); err != nil {
+		return nil, fmt.Errorf("failed to restore project: %w", err)
+	}
+
+	// Fetch and return the restored project
+	return r.ProjectRepo.FindByID(ctx, id)
+}
+
+// PermanentlyDeleteProject is the resolver for the permanentlyDeleteProject field.
+func (r *mutationResolver) PermanentlyDeleteProject(ctx context.Context, id string) (bool, error) {
+	// Check if project exists (including deleted)
+	project, err := r.ProjectRepo.FindByIDIncludingDeleted(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	if project == nil {
+		return false, fmt.Errorf("project not found: %s", id)
+	}
+
+	// Only allow permanent deletion of soft-deleted projects
+	if project.DeletedAt == nil {
+		return false, fmt.Errorf("project must be soft-deleted first before permanent deletion: %s", id)
+	}
+
+	// Delete all associated data first
+	// Delete operation history
+	if err := r.OperationRepo.DeleteByProjectID(ctx, id); err != nil {
+		return false, fmt.Errorf("failed to delete operation history: %w", err)
+	}
+
+	// Delete effects (including effect fixtures and channels)
+	effects, err := r.EffectRepo.FindByProjectID(ctx, id)
+	if err != nil {
+		return false, fmt.Errorf("failed to find effects: %w", err)
+	}
+	for _, effect := range effects {
+		if err := r.EffectRepo.Delete(ctx, effect.ID); err != nil {
+			return false, fmt.Errorf("failed to delete effect: %w", err)
+		}
+	}
+
+	// Delete look board buttons and look boards
+	lookBoards, err := r.LookBoardRepo.FindByProjectID(ctx, id)
+	if err != nil {
+		return false, fmt.Errorf("failed to find look boards: %w", err)
+	}
+	for _, board := range lookBoards {
+		if err := r.LookBoardRepo.DeleteButtons(ctx, board.ID); err != nil {
+			return false, fmt.Errorf("failed to delete look board buttons: %w", err)
+		}
+		if err := r.LookBoardRepo.Delete(ctx, board.ID); err != nil {
+			return false, fmt.Errorf("failed to delete look board: %w", err)
+		}
+	}
+
+	// Delete cues and cue lists
+	cueLists, err := r.CueListRepo.FindByProjectID(ctx, id)
+	if err != nil {
+		return false, fmt.Errorf("failed to find cue lists: %w", err)
+	}
+	for _, cueList := range cueLists {
+		// Delete cues in this list
+		cues, err := r.CueRepo.FindByCueListID(ctx, cueList.ID)
+		if err != nil {
+			return false, fmt.Errorf("failed to find cues: %w", err)
+		}
+		for _, cue := range cues {
+			if err := r.CueRepo.Delete(ctx, cue.ID); err != nil {
+				return false, fmt.Errorf("failed to delete cue: %w", err)
+			}
+		}
+		if err := r.CueListRepo.Delete(ctx, cueList.ID); err != nil {
+			return false, fmt.Errorf("failed to delete cue list: %w", err)
+		}
+	}
+
+	// Delete look fixture values and looks
+	looks, err := r.LookRepo.FindByProjectID(ctx, id)
+	if err != nil {
+		return false, fmt.Errorf("failed to find looks: %w", err)
+	}
+	for _, look := range looks {
+		if err := r.LookRepo.DeleteFixtureValues(ctx, look.ID); err != nil {
+			return false, fmt.Errorf("failed to delete look fixture values: %w", err)
+		}
+		if err := r.LookRepo.Delete(ctx, look.ID); err != nil {
+			return false, fmt.Errorf("failed to delete look: %w", err)
+		}
+	}
+
+	// Delete fixture instance channels and instances
+	fixtures, err := r.FixtureRepo.FindByProjectID(ctx, id)
+	if err != nil {
+		return false, fmt.Errorf("failed to find fixtures: %w", err)
+	}
+	for _, fixture := range fixtures {
+		if err := r.FixtureRepo.DeleteInstanceChannels(ctx, fixture.ID); err != nil {
+			return false, fmt.Errorf("failed to delete instance channels: %w", err)
+		}
+		if err := r.FixtureRepo.Delete(ctx, fixture.ID); err != nil {
+			return false, fmt.Errorf("failed to delete fixture: %w", err)
+		}
+	}
+
+	// Finally, permanently delete the project
+	if err := r.ProjectRepo.PermanentDelete(ctx, id); err != nil {
+		return false, fmt.Errorf("failed to permanently delete project: %w", err)
+	}
+
+	return true, nil
+}
+
 // BulkCreateProjects is the resolver for the bulkCreateProjects field.
 func (r *mutationResolver) BulkCreateProjects(ctx context.Context, input generated.BulkProjectCreateInput) ([]*models.Project, error) {
 	var createdProjects []*models.Project
@@ -1129,6 +1258,11 @@ func (r *mutationResolver) BulkUpdateFixtures(ctx context.Context, input generat
 			return nil, fmt.Errorf("fixture not found: %s", item.FixtureID)
 		}
 
+		// Capture previous state for undo (before update)
+		prevState, _ := r.UndoService.CaptureFixtureState(ctx, item.FixtureID)
+		projectID := fixture.ProjectID
+		fixtureName := fixture.Name
+
 		// Update fields if provided
 		if item.Name.IsSet() && item.Name.Value() != nil {
 			fixture.Name = *item.Name.Value()
@@ -1169,6 +1303,13 @@ func (r *mutationResolver) BulkUpdateFixtures(ctx context.Context, input generat
 
 		if err := r.FixtureRepo.Update(ctx, fixture); err != nil {
 			return nil, err
+		}
+
+		// Record undo operation (non-blocking on error)
+		if newState, err := r.UndoService.CaptureFixtureState(ctx, item.FixtureID); err == nil {
+			_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeUpdate, undo.EntityTypeFixtureInstance, item.FixtureID,
+				fmt.Sprintf("Update fixture '%s'", fixtureName), prevState, newState, nil)
+			r.publishOperationHistoryChanged(ctx, projectID)
 		}
 
 		updatedFixtures = append(updatedFixtures, fixture)
@@ -1256,10 +1397,29 @@ func (r *mutationResolver) UpdateInstanceChannelFadeBehavior(ctx context.Context
 		return nil, fmt.Errorf("instance channel not found: %s", channelID)
 	}
 
+	// Get the fixture for undo recording
+	fixture, err := r.FixtureRepo.FindByID(ctx, channel.FixtureID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find fixture: %w", err)
+	}
+	if fixture == nil {
+		return nil, fmt.Errorf("fixture not found: %s", channel.FixtureID)
+	}
+
+	// Capture previous state for undo
+	prevState, _ := r.UndoService.CaptureFixtureState(ctx, channel.FixtureID)
+
 	// Update the fade behavior
 	channel.FadeBehavior = string(fadeBehavior)
 	if err := r.db.WithContext(ctx).Save(&channel).Error; err != nil {
 		return nil, fmt.Errorf("failed to update channel fade behavior: %w", err)
+	}
+
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureFixtureState(ctx, channel.FixtureID); err == nil {
+		_ = r.UndoService.RecordOperation(ctx, fixture.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeFixtureInstance, channel.FixtureID,
+			fmt.Sprintf("Update fade behavior for channel '%s'", channel.Name), prevState, newState, nil)
+		r.publishOperationHistoryChanged(ctx, fixture.ProjectID)
 	}
 
 	return &channel, nil
@@ -1269,6 +1429,37 @@ func (r *mutationResolver) UpdateInstanceChannelFadeBehavior(ctx context.Context
 // Updates fade behavior for multiple instance channels in a single operation.
 func (r *mutationResolver) BulkUpdateInstanceChannelsFadeBehavior(ctx context.Context, updates []*generated.ChannelFadeBehaviorInput) ([]*models.InstanceChannel, error) {
 	var results []*models.InstanceChannel
+
+	// Collect fixture info for undo recording (before updates)
+	type fixtureInfo struct {
+		projectID string
+		name      string
+		prevState any
+	}
+	fixtureInfos := make(map[string]*fixtureInfo)
+
+	// First pass: gather fixture information and capture previous states
+	for _, update := range updates {
+		var channel models.InstanceChannel
+		if err := r.db.WithContext(ctx).First(&channel, "id = ?", update.ChannelID).Error; err != nil {
+			return nil, fmt.Errorf("instance channel not found: %s", update.ChannelID)
+		}
+
+		if _, exists := fixtureInfos[channel.FixtureID]; !exists {
+			fixture, err := r.FixtureRepo.FindByID(ctx, channel.FixtureID)
+			if err != nil || fixture == nil {
+				continue
+			}
+			info := &fixtureInfo{
+				projectID: fixture.ProjectID,
+				name:      fixture.Name,
+			}
+			if prevState, err := r.UndoService.CaptureFixtureState(ctx, channel.FixtureID); err == nil {
+				info.prevState = prevState
+			}
+			fixtureInfos[channel.FixtureID] = info
+		}
+	}
 
 	// Process all updates in a transaction
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -1290,6 +1481,17 @@ func (r *mutationResolver) BulkUpdateInstanceChannelsFadeBehavior(ctx context.Co
 
 	if err != nil {
 		return nil, err
+	}
+
+	// Record undo operations for each affected fixture (non-blocking on error)
+	for fixtureID, info := range fixtureInfos {
+		if info.prevState != nil {
+			if newState, err := r.UndoService.CaptureFixtureState(ctx, fixtureID); err == nil {
+				_ = r.UndoService.RecordOperation(ctx, info.projectID, undo.OperationTypeUpdate, undo.EntityTypeFixtureInstance, fixtureID,
+					fmt.Sprintf("Update channel fade behaviors for fixture '%s'", info.name), info.prevState, newState, nil)
+				r.publishOperationHistoryChanged(ctx, info.projectID)
+			}
+		}
 	}
 
 	return results, nil
@@ -1316,9 +1518,20 @@ func (r *mutationResolver) ReorderProjectFixtures(ctx context.Context, projectID
 			return false, fmt.Errorf("fixture not found: %s", order.FixtureID)
 		}
 
+		// Capture previous state for undo
+		prevState, _ := r.UndoService.CaptureFixtureState(ctx, order.FixtureID)
+		fixtureName := fixture.Name
+
 		fixture.ProjectOrder = &order.Order
 		if err := r.FixtureRepo.Update(ctx, fixture); err != nil {
 			return false, err
+		}
+
+		// Record undo operation (non-blocking on error)
+		if newState, err := r.UndoService.CaptureFixtureState(ctx, order.FixtureID); err == nil {
+			_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeUpdate, undo.EntityTypeFixtureInstance, order.FixtureID,
+				fmt.Sprintf("Reorder fixture '%s'", fixtureName), prevState, newState, nil)
+			r.publishOperationHistoryChanged(ctx, projectID)
 		}
 	}
 
@@ -1327,6 +1540,20 @@ func (r *mutationResolver) ReorderProjectFixtures(ctx context.Context, projectID
 
 // ReorderLookFixtures is the resolver for the reorderLookFixtures field.
 func (r *mutationResolver) ReorderLookFixtures(ctx context.Context, lookID string, fixtureOrders []*generated.FixtureOrderInput) (bool, error) {
+	// Get the look for undo recording
+	look, err := r.LookRepo.FindByID(ctx, lookID)
+	if err != nil {
+		return false, err
+	}
+	if look == nil {
+		return false, fmt.Errorf("look not found: %s", lookID)
+	}
+
+	// Capture previous state for undo
+	prevState, _ := r.UndoService.CaptureLookState(ctx, lookID)
+	projectID := look.ProjectID
+	lookName := look.Name
+
 	// Get existing fixture values
 	fixtureValues, err := r.LookRepo.GetFixtureValues(ctx, lookID)
 	if err != nil {
@@ -1349,6 +1576,13 @@ func (r *mutationResolver) ReorderLookFixtures(ctx context.Context, lookID strin
 		}
 	}
 
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureLookState(ctx, lookID); err == nil {
+		_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeUpdate, undo.EntityTypeLook, lookID,
+			fmt.Sprintf("Reorder fixtures in look '%s'", lookName), prevState, newState, nil)
+		r.publishOperationHistoryChanged(ctx, projectID)
+	}
+
 	return true, nil
 }
 
@@ -1363,6 +1597,11 @@ func (r *mutationResolver) UpdateFixturePositions(ctx context.Context, positions
 			return false, fmt.Errorf("fixture not found: %s", position.FixtureID)
 		}
 
+		// Capture previous state for undo
+		prevState, _ := r.UndoService.CaptureFixtureState(ctx, position.FixtureID)
+		projectID := fixture.ProjectID
+		fixtureName := fixture.Name
+
 		fixture.LayoutX = &position.LayoutX
 		fixture.LayoutY = &position.LayoutY
 		if position.LayoutRotation.IsSet() {
@@ -1371,6 +1610,13 @@ func (r *mutationResolver) UpdateFixturePositions(ctx context.Context, positions
 
 		if err := r.FixtureRepo.Update(ctx, fixture); err != nil {
 			return false, err
+		}
+
+		// Record undo operation (non-blocking on error)
+		if newState, err := r.UndoService.CaptureFixtureState(ctx, position.FixtureID); err == nil {
+			_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeUpdate, undo.EntityTypeFixtureInstance, position.FixtureID,
+				fmt.Sprintf("Update position for fixture '%s'", fixtureName), prevState, newState, nil)
+			r.publishOperationHistoryChanged(ctx, projectID)
 		}
 	}
 
@@ -1567,6 +1813,13 @@ func (r *mutationResolver) CloneLook(ctx context.Context, lookID string, newName
 		return nil, err
 	}
 
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureLookState(ctx, newLook.ID); err == nil {
+		_ = r.UndoService.RecordOperation(ctx, newLook.ProjectID, undo.OperationTypeCreate, undo.EntityTypeLook, newLook.ID,
+			fmt.Sprintf("Clone look to '%s'", newName), nil, newState, nil)
+		r.publishOperationHistoryChanged(ctx, newLook.ProjectID)
+	}
+
 	return newLook, nil
 }
 
@@ -1635,6 +1888,11 @@ func (r *mutationResolver) BulkUpdateLooks(ctx context.Context, input generated.
 			return nil, fmt.Errorf("look not found: %s", lookUpdate.LookID)
 		}
 
+		// Capture previous state for undo (before update)
+		prevState, _ := r.UndoService.CaptureLookState(ctx, lookUpdate.LookID)
+		projectID := look.ProjectID
+		lookName := look.Name
+
 		// Update fields if provided
 		if lookUpdate.Name.IsSet() && lookUpdate.Name.Value() != nil {
 			look.Name = *lookUpdate.Name.Value()
@@ -1648,6 +1906,13 @@ func (r *mutationResolver) BulkUpdateLooks(ctx context.Context, input generated.
 			return nil, fmt.Errorf("failed to update look %s: %w", lookUpdate.LookID, err)
 		}
 
+		// Record undo operation (non-blocking on error)
+		if newState, err := r.UndoService.CaptureLookState(ctx, lookUpdate.LookID); err == nil {
+			_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeUpdate, undo.EntityTypeLook, lookUpdate.LookID,
+				fmt.Sprintf("Update look '%s'", lookName), prevState, newState, nil)
+			r.publishOperationHistoryChanged(ctx, projectID)
+		}
+
 		updatedLooks = append(updatedLooks, look)
 	}
 
@@ -1656,8 +1921,31 @@ func (r *mutationResolver) BulkUpdateLooks(ctx context.Context, input generated.
 
 // BulkDeleteLooks is the resolver for the bulkDeleteLooks field.
 func (r *mutationResolver) BulkDeleteLooks(ctx context.Context, lookIds []string) (*generated.BulkDeleteResult, error) {
-	var deletedIds []string
+	// Capture previous states and project IDs for undo recording
+	type lookInfo struct {
+		projectID string
+		name      string
+		prevState interface{}
+	}
+	lookInfos := make(map[string]*lookInfo)
 
+	for _, id := range lookIds {
+		look, err := r.LookRepo.FindByID(ctx, id)
+		if err != nil || look == nil {
+			continue
+		}
+		info := &lookInfo{
+			projectID: look.ProjectID,
+			name:      look.Name,
+		}
+		if prevState, err := r.UndoService.CaptureLookState(ctx, id); err == nil {
+			info.prevState = prevState
+		}
+		lookInfos[id] = info
+	}
+
+	// Delete the looks
+	var deletedIds []string
 	for _, id := range lookIds {
 		// Delete fixture values first
 		if err := r.LookRepo.DeleteFixtureValues(ctx, id); err != nil {
@@ -1670,6 +1958,16 @@ func (r *mutationResolver) BulkDeleteLooks(ctx context.Context, lookIds []string
 		}
 
 		deletedIds = append(deletedIds, id)
+	}
+
+	// Record undo operations for each deleted look (non-blocking on error)
+	for _, id := range deletedIds {
+		if info, ok := lookInfos[id]; ok && info.prevState != nil {
+			description := fmt.Sprintf("Delete look '%s'", info.name)
+			_ = r.UndoService.RecordOperation(ctx, info.projectID, undo.OperationTypeDelete, undo.EntityTypeLook, id,
+				description, info.prevState, nil, nil)
+			r.publishOperationHistoryChanged(ctx, info.projectID)
+		}
 	}
 
 	return &generated.BulkDeleteResult{
@@ -1688,6 +1986,11 @@ func (r *mutationResolver) AddFixturesToLook(ctx context.Context, lookID string,
 	if look == nil {
 		return nil, fmt.Errorf("look not found: %s", lookID)
 	}
+
+	// Capture previous state for undo (before adding fixtures)
+	prevState, _ := r.UndoService.CaptureLookState(ctx, lookID)
+	projectID := look.ProjectID
+	lookName := look.Name
 
 	// Default to not overwriting
 	overwrite := false
@@ -1752,6 +2055,13 @@ func (r *mutationResolver) AddFixturesToLook(ctx context.Context, lookID string,
 		log.Printf("Warning: failed to re-apply active look %s: %v", lookID, err)
 	}
 
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureLookState(ctx, lookID); err == nil {
+		_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeUpdate, undo.EntityTypeLook, lookID,
+			fmt.Sprintf("Add fixtures to look '%s'", lookName), prevState, newState, nil)
+		r.publishOperationHistoryChanged(ctx, projectID)
+	}
+
 	return look, nil
 }
 
@@ -1766,6 +2076,11 @@ func (r *mutationResolver) RemoveFixturesFromLook(ctx context.Context, lookID st
 		return nil, fmt.Errorf("look not found: %s", lookID)
 	}
 
+	// Capture previous state for undo (before removing fixtures)
+	prevState, _ := r.UndoService.CaptureLookState(ctx, lookID)
+	projectID := look.ProjectID
+	lookName := look.Name
+
 	// Delete each fixture value
 	for _, fixtureID := range fixtureIds {
 		if err := r.LookRepo.DeleteFixtureValue(ctx, lookID, fixtureID); err != nil {
@@ -1776,6 +2091,13 @@ func (r *mutationResolver) RemoveFixturesFromLook(ctx context.Context, lookID st
 	// Re-apply the look if it's currently active
 	if err := r.reapplyActiveLookIfNeeded(ctx, lookID); err != nil {
 		log.Printf("Warning: failed to re-apply active look %s: %v", lookID, err)
+	}
+
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureLookState(ctx, lookID); err == nil {
+		_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeUpdate, undo.EntityTypeLook, lookID,
+			fmt.Sprintf("Remove fixtures from look '%s'", lookName), prevState, newState, nil)
+		r.publishOperationHistoryChanged(ctx, projectID)
 	}
 
 	return look, nil
@@ -1791,6 +2113,11 @@ func (r *mutationResolver) UpdateLookPartial(ctx context.Context, lookID string,
 	if look == nil {
 		return nil, fmt.Errorf("look not found: %s", lookID)
 	}
+
+	// Capture previous state for undo (before any updates)
+	prevState, _ := r.UndoService.CaptureLookState(ctx, lookID)
+	projectID := look.ProjectID
+	originalName := look.Name
 
 	// Update metadata fields if provided
 	updated := false
@@ -1885,6 +2212,13 @@ func (r *mutationResolver) UpdateLookPartial(ctx context.Context, lookID string,
 		log.Printf("Warning: failed to re-apply active look %s: %v", lookID, err)
 	}
 
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureLookState(ctx, lookID); err == nil {
+		_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeUpdate, undo.EntityTypeLook, lookID,
+			fmt.Sprintf("Update look '%s'", originalName), prevState, newState, nil)
+		r.publishOperationHistoryChanged(ctx, projectID)
+	}
+
 	return look, nil
 }
 
@@ -1958,6 +2292,13 @@ func (r *mutationResolver) CreateLookBoard(ctx context.Context, input generated.
 		return nil, err
 	}
 
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureLookBoardState(ctx, board.ID); err == nil {
+		_ = r.UndoService.RecordOperation(ctx, board.ProjectID, undo.OperationTypeCreate, undo.EntityTypeLookBoard, board.ID,
+			fmt.Sprintf("Create look board '%s'", board.Name), nil, newState, nil)
+		r.publishOperationHistoryChanged(ctx, board.ProjectID)
+	}
+
 	return board, nil
 }
 
@@ -1970,6 +2311,9 @@ func (r *mutationResolver) UpdateLookBoard(ctx context.Context, id string, input
 	if board == nil {
 		return nil, fmt.Errorf("look board not found: %s", id)
 	}
+
+	// Capture previous state for undo
+	prevState, _ := r.UndoService.CaptureLookBoardState(ctx, id)
 
 	if input.Name.IsSet() && input.Name.Value() != nil {
 		board.Name = *input.Name.Value()
@@ -2000,6 +2344,13 @@ func (r *mutationResolver) UpdateLookBoard(ctx context.Context, id string, input
 		return nil, err
 	}
 
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureLookBoardState(ctx, id); err == nil {
+		_ = r.UndoService.RecordOperation(ctx, board.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeLookBoard, id,
+			fmt.Sprintf("Update look board '%s'", board.Name), prevState, newState, nil)
+		r.publishOperationHistoryChanged(ctx, board.ProjectID)
+	}
+
 	return board, nil
 }
 
@@ -2014,10 +2365,20 @@ func (r *mutationResolver) DeleteLookBoard(ctx context.Context, id string) (bool
 		return false, fmt.Errorf("look board not found: %s", id)
 	}
 
+	// Capture state before delete for undo
+	prevState, _ := r.UndoService.CaptureLookBoardState(ctx, id)
+	projectID := board.ProjectID
+	boardName := board.Name
+
 	// Delete look board (repository handles button deletion)
 	if err := r.LookBoardRepo.Delete(ctx, id); err != nil {
 		return false, err
 	}
+
+	// Record undo operation (non-blocking on error)
+	_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeDelete, undo.EntityTypeLookBoard, id,
+		fmt.Sprintf("Delete look board '%s'", boardName), prevState, nil, nil)
+	r.publishOperationHistoryChanged(ctx, projectID)
 
 	return true, nil
 }
@@ -2075,13 +2436,46 @@ func (r *mutationResolver) BulkUpdateLookBoards(ctx context.Context, input gener
 
 // BulkDeleteLookBoards is the resolver for the bulkDeleteLookBoards field.
 func (r *mutationResolver) BulkDeleteLookBoards(ctx context.Context, lookBoardIds []string) (*generated.BulkDeleteResult, error) {
-	var deletedIds []string
+	// Capture previous states and project IDs for undo recording
+	type boardInfo struct {
+		projectID string
+		name      string
+		prevState interface{}
+	}
+	boardInfos := make(map[string]*boardInfo)
 
+	for _, id := range lookBoardIds {
+		board, err := r.LookBoardRepo.FindByID(ctx, id)
+		if err != nil || board == nil {
+			continue
+		}
+		info := &boardInfo{
+			projectID: board.ProjectID,
+			name:      board.Name,
+		}
+		if prevState, err := r.UndoService.CaptureLookBoardState(ctx, id); err == nil {
+			info.prevState = prevState
+		}
+		boardInfos[id] = info
+	}
+
+	// Delete the boards
+	var deletedIds []string
 	for _, id := range lookBoardIds {
 		if err := r.LookBoardRepo.Delete(ctx, id); err != nil {
 			continue
 		}
 		deletedIds = append(deletedIds, id)
+	}
+
+	// Record undo operations for each deleted board (non-blocking on error)
+	for _, id := range deletedIds {
+		if info, ok := boardInfos[id]; ok && info.prevState != nil {
+			description := fmt.Sprintf("Delete look board '%s'", info.name)
+			_ = r.UndoService.RecordOperation(ctx, info.projectID, undo.OperationTypeDelete, undo.EntityTypeLookBoard, id,
+				description, info.prevState, nil, nil)
+			r.publishOperationHistoryChanged(ctx, info.projectID)
+		}
 	}
 
 	return &generated.BulkDeleteResult{
@@ -2110,6 +2504,9 @@ func (r *mutationResolver) AddLookToBoard(ctx context.Context, input generated.C
 		return nil, fmt.Errorf("look not found: %s", input.LookID)
 	}
 
+	// Capture board state before adding button for undo
+	prevState, _ := r.UndoService.CaptureLookBoardState(ctx, input.LookBoardID)
+
 	button := &models.LookBoardButton{
 		LookBoardID: input.LookBoardID,
 		LookID:      input.LookID,
@@ -2134,6 +2531,13 @@ func (r *mutationResolver) AddLookToBoard(ctx context.Context, input generated.C
 		return nil, err
 	}
 
+	// Record undo operation (non-blocking on error)
+	if newState, err := r.UndoService.CaptureLookBoardState(ctx, input.LookBoardID); err == nil {
+		_ = r.UndoService.RecordOperation(ctx, board.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeLookBoard, input.LookBoardID,
+			fmt.Sprintf("Add '%s' to board '%s'", look.Name, board.Name), prevState, newState, nil)
+		r.publishOperationHistoryChanged(ctx, board.ProjectID)
+	}
+
 	return button, nil
 }
 
@@ -2146,6 +2550,15 @@ func (r *mutationResolver) UpdateLookBoardButton(ctx context.Context, id string,
 	if button == nil {
 		return nil, fmt.Errorf("look board button not found: %s", id)
 	}
+
+	// Get board for undo recording
+	board, err := r.LookBoardRepo.FindByID(ctx, button.LookBoardID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Capture board state before updating button for undo
+	prevState, _ := r.UndoService.CaptureLookBoardState(ctx, button.LookBoardID)
 
 	if input.LayoutX.IsSet() && input.LayoutX.Value() != nil {
 		button.LayoutX = *input.LayoutX.Value()
@@ -2170,6 +2583,15 @@ func (r *mutationResolver) UpdateLookBoardButton(ctx context.Context, id string,
 		return nil, err
 	}
 
+	// Record undo operation (non-blocking on error)
+	if board != nil {
+		if newState, err := r.UndoService.CaptureLookBoardState(ctx, button.LookBoardID); err == nil {
+			_ = r.UndoService.RecordOperation(ctx, board.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeLookBoard, button.LookBoardID,
+				fmt.Sprintf("Update button on board '%s'", board.Name), prevState, newState, nil)
+			r.publishOperationHistoryChanged(ctx, board.ProjectID)
+		}
+	}
+
 	return button, nil
 }
 
@@ -2184,8 +2606,37 @@ func (r *mutationResolver) RemoveLookFromBoard(ctx context.Context, buttonID str
 		return false, fmt.Errorf("look board button not found: %s", buttonID)
 	}
 
+	// Get board for undo recording
+	board, err := r.LookBoardRepo.FindByID(ctx, button.LookBoardID)
+	if err != nil {
+		return false, err
+	}
+
+	// Get look name for description
+	var lookName string
+	if look, _ := r.LookRepo.FindByID(ctx, button.LookID); look != nil {
+		lookName = look.Name
+	}
+
+	// Capture board state before removing button for undo
+	prevState, _ := r.UndoService.CaptureLookBoardState(ctx, button.LookBoardID)
+	boardID := button.LookBoardID
+
 	if err := r.LookBoardRepo.DeleteButton(ctx, buttonID); err != nil {
 		return false, err
+	}
+
+	// Record undo operation (non-blocking on error)
+	if board != nil {
+		if newState, err := r.UndoService.CaptureLookBoardState(ctx, boardID); err == nil {
+			description := fmt.Sprintf("Remove button from board '%s'", board.Name)
+			if lookName != "" {
+				description = fmt.Sprintf("Remove '%s' from board '%s'", lookName, board.Name)
+			}
+			_ = r.UndoService.RecordOperation(ctx, board.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeLookBoard, boardID,
+				description, prevState, newState, nil)
+			r.publishOperationHistoryChanged(ctx, board.ProjectID)
+		}
 	}
 
 	return true, nil
@@ -2193,6 +2644,37 @@ func (r *mutationResolver) RemoveLookFromBoard(ctx context.Context, buttonID str
 
 // UpdateLookBoardButtonPositions is the resolver for the updateLookBoardButtonPositions field.
 func (r *mutationResolver) UpdateLookBoardButtonPositions(ctx context.Context, positions []*generated.LookBoardButtonPositionInput) (bool, error) {
+	// Collect all affected boards and their previous states for undo recording
+	affectedBoards := make(map[string]string)  // boardID -> projectID
+	prevStates := make(map[string]interface{}) // boardID -> previous state
+
+	// First pass: identify affected boards and capture previous states
+	for _, pos := range positions {
+		button, err := r.LookBoardRepo.FindButtonByID(ctx, pos.ButtonID)
+		if err != nil {
+			return false, err
+		}
+		if button == nil {
+			return false, fmt.Errorf("look board button not found: %s", pos.ButtonID)
+		}
+
+		// If we haven't captured this board's state yet, do so now
+		if _, seen := affectedBoards[button.LookBoardID]; !seen {
+			board, err := r.LookBoardRepo.FindByID(ctx, button.LookBoardID)
+			if err != nil {
+				return false, err
+			}
+			if board != nil {
+				affectedBoards[button.LookBoardID] = board.ProjectID
+				// Capture previous state for undo
+				if prevState, err := r.UndoService.CaptureLookBoardState(ctx, button.LookBoardID); err == nil {
+					prevStates[button.LookBoardID] = prevState
+				}
+			}
+		}
+	}
+
+	// Second pass: apply the updates
 	for _, pos := range positions {
 		button, err := r.LookBoardRepo.FindButtonByID(ctx, pos.ButtonID)
 		if err != nil {
@@ -2207,6 +2689,17 @@ func (r *mutationResolver) UpdateLookBoardButtonPositions(ctx context.Context, p
 
 		if err := r.LookBoardRepo.UpdateButton(ctx, button); err != nil {
 			return false, err
+		}
+	}
+
+	// Record undo operations for each affected board (non-blocking on error)
+	for boardID, projectID := range affectedBoards {
+		if newState, err := r.UndoService.CaptureLookBoardState(ctx, boardID); err == nil {
+			prevState := prevStates[boardID]
+			description := "Update button positions on look board"
+			_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeUpdate, undo.EntityTypeLookBoard, boardID,
+				description, prevState, newState, nil)
+			r.publishOperationHistoryChanged(ctx, projectID)
 		}
 	}
 
@@ -2266,13 +2759,48 @@ func (r *mutationResolver) BulkUpdateLookBoardButtons(ctx context.Context, input
 
 // BulkDeleteLookBoardButtons is the resolver for the bulkDeleteLookBoardButtons field.
 func (r *mutationResolver) BulkDeleteLookBoardButtons(ctx context.Context, buttonIds []string) (*generated.BulkDeleteResult, error) {
-	var deletedIds []string
+	// Collect affected boards and capture their previous states for undo recording
+	affectedBoards := make(map[string]string)  // boardID -> projectID
+	prevStates := make(map[string]interface{}) // boardID -> previous state
 
+	// First pass: identify affected boards and capture previous states
+	for _, id := range buttonIds {
+		button, err := r.LookBoardRepo.FindButtonByID(ctx, id)
+		if err != nil || button == nil {
+			continue
+		}
+
+		// If we haven't captured this board's state yet, do so now
+		if _, seen := affectedBoards[button.LookBoardID]; !seen {
+			board, err := r.LookBoardRepo.FindByID(ctx, button.LookBoardID)
+			if err == nil && board != nil {
+				affectedBoards[button.LookBoardID] = board.ProjectID
+				// Capture previous state for undo
+				if prevState, err := r.UndoService.CaptureLookBoardState(ctx, button.LookBoardID); err == nil {
+					prevStates[button.LookBoardID] = prevState
+				}
+			}
+		}
+	}
+
+	// Second pass: delete the buttons
+	var deletedIds []string
 	for _, id := range buttonIds {
 		if err := r.LookBoardRepo.DeleteButton(ctx, id); err != nil {
 			continue
 		}
 		deletedIds = append(deletedIds, id)
+	}
+
+	// Record undo operations for each affected board (non-blocking on error)
+	for boardID, projectID := range affectedBoards {
+		if newState, err := r.UndoService.CaptureLookBoardState(ctx, boardID); err == nil {
+			prevState := prevStates[boardID]
+			description := fmt.Sprintf("Delete %d buttons from look board", len(deletedIds))
+			_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeUpdate, undo.EntityTypeLookBoard, boardID,
+				description, prevState, newState, nil)
+			r.publishOperationHistoryChanged(ctx, projectID)
+		}
 	}
 
 	return &generated.BulkDeleteResult{
@@ -2520,6 +3048,11 @@ func (r *mutationResolver) BulkUpdateCueLists(ctx context.Context, input generat
 			return nil, fmt.Errorf("cue list not found: %s", item.CueListID)
 		}
 
+		// Capture previous state for undo (before update)
+		prevState, _ := r.UndoService.CaptureCueListState(ctx, item.CueListID)
+		projectID := cueList.ProjectID
+		cueListName := cueList.Name
+
 		if item.Name.IsSet() && item.Name.Value() != nil {
 			cueList.Name = *item.Name.Value()
 		}
@@ -2534,6 +3067,13 @@ func (r *mutationResolver) BulkUpdateCueLists(ctx context.Context, input generat
 
 		if err := r.CueListRepo.Update(ctx, cueList); err != nil {
 			return nil, err
+		}
+
+		// Record undo operation (non-blocking on error)
+		if newState, err := r.UndoService.CaptureCueListState(ctx, item.CueListID); err == nil {
+			_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeUpdate, undo.EntityTypeCueList, item.CueListID,
+				fmt.Sprintf("Update cue list '%s'", cueListName), prevState, newState, nil)
+			r.publishOperationHistoryChanged(ctx, projectID)
 		}
 
 		updatedCueLists = append(updatedCueLists, cueList)
@@ -2808,6 +3348,8 @@ func (r *mutationResolver) BulkUpdateCues(ctx context.Context, input generated.B
 	var updatedCues []*models.Cue
 	// Track affected cue lists and their cue IDs
 	affectedCueLists := make(map[string][]string)
+	// Cache for cue list project IDs
+	cueListProjectIDs := make(map[string]string)
 
 	for _, cueID := range input.CueIds {
 		cue, err := r.CueRepo.FindByID(ctx, cueID)
@@ -2816,6 +3358,20 @@ func (r *mutationResolver) BulkUpdateCues(ctx context.Context, input generated.B
 		}
 		if cue == nil {
 			return nil, fmt.Errorf("cue not found: %s", cueID)
+		}
+
+		// Capture previous state for undo (before update)
+		prevState, _ := r.UndoService.CaptureCueState(ctx, cueID)
+		cueName := cue.Name
+
+		// Get project ID from cue list (cached)
+		projectID, ok := cueListProjectIDs[cue.CueListID]
+		if !ok {
+			cueList, err := r.CueListRepo.FindByID(ctx, cue.CueListID)
+			if err == nil && cueList != nil {
+				projectID = cueList.ProjectID
+				cueListProjectIDs[cue.CueListID] = projectID
+			}
 		}
 
 		// Update fade in time if provided
@@ -2846,6 +3402,15 @@ func (r *mutationResolver) BulkUpdateCues(ctx context.Context, input generated.B
 
 		if err := r.CueRepo.Update(ctx, cue); err != nil {
 			return nil, err
+		}
+
+		// Record undo operation (non-blocking on error)
+		if projectID != "" {
+			if newState, err := r.UndoService.CaptureCueState(ctx, cueID); err == nil {
+				_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeUpdate, undo.EntityTypeCue, cueID,
+					fmt.Sprintf("Update cue '%s'", cueName), prevState, newState, nil)
+				r.publishOperationHistoryChanged(ctx, projectID)
+			}
 		}
 
 		updatedCues = append(updatedCues, cue)
@@ -4014,6 +4579,15 @@ func (r *projectResolver) UpdatedAt(ctx context.Context, obj *models.Project) (s
 	return obj.UpdatedAt.Format("2006-01-02T15:04:05.000Z"), nil
 }
 
+// DeletedAt is the resolver for the deletedAt field.
+func (r *projectResolver) DeletedAt(ctx context.Context, obj *models.Project) (*string, error) {
+	if obj.DeletedAt == nil {
+		return nil, nil
+	}
+	formatted := obj.DeletedAt.Format(time.RFC3339)
+	return &formatted, nil
+}
+
 // Fixtures is the resolver for the fixtures field.
 func (r *projectResolver) Fixtures(ctx context.Context, obj *models.Project) ([]*models.FixtureInstance, error) {
 	fixtures, err := r.FixtureRepo.FindByProjectID(ctx, obj.ID)
@@ -4112,6 +4686,20 @@ func (r *queryResolver) Projects(ctx context.Context) ([]*models.Project, error)
 // Project is the resolver for the project field.
 func (r *queryResolver) Project(ctx context.Context, id string) (*models.Project, error) {
 	return r.ProjectRepo.FindByID(ctx, id)
+}
+
+// DeletedProjects is the resolver for the deletedProjects field.
+func (r *queryResolver) DeletedProjects(ctx context.Context) ([]*models.Project, error) {
+	projects, err := r.ProjectRepo.FindAllDeleted(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// Convert to pointer slice
+	result := make([]*models.Project, len(projects))
+	for i := range projects {
+		result[i] = &projects[i]
+	}
+	return result, nil
 }
 
 // FixtureDefinitions is the resolver for the fixtureDefinitions field.

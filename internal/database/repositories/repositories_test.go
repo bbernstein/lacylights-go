@@ -261,6 +261,268 @@ func TestProjectRepository_CountMethods(t *testing.T) {
 	}
 }
 
+// TestProjectRepository_SoftDelete tests soft delete behavior.
+func TestProjectRepository_SoftDelete(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewProjectRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create a project
+	project := &models.Project{Name: "Soft Delete Test"}
+	err := repo.Create(ctx, project)
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	// Verify it appears in FindAll
+	projects, err := repo.FindAll(ctx)
+	if err != nil {
+		t.Fatalf("FindAll failed: %v", err)
+	}
+	found := false
+	for _, p := range projects {
+		if p.ID == project.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected project in FindAll before delete")
+	}
+
+	// Soft delete
+	err = repo.Delete(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	// Verify it no longer appears in FindAll
+	projects, err = repo.FindAll(ctx)
+	if err != nil {
+		t.Fatalf("FindAll after delete failed: %v", err)
+	}
+	for _, p := range projects {
+		if p.ID == project.ID {
+			t.Error("Soft deleted project should not appear in FindAll")
+		}
+	}
+
+	// Verify it no longer appears in FindByID
+	foundProject, err := repo.FindByID(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("FindByID failed: %v", err)
+	}
+	if foundProject != nil {
+		t.Error("Soft deleted project should not appear in FindByID")
+	}
+}
+
+// TestProjectRepository_FindAllDeleted tests retrieving soft-deleted projects.
+func TestProjectRepository_FindAllDeleted(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewProjectRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create two projects
+	project1 := &models.Project{Name: "Active Project"}
+	project2 := &models.Project{Name: "Deleted Project"}
+	err := repo.Create(ctx, project1)
+	if err != nil {
+		t.Fatalf("Create project1 failed: %v", err)
+	}
+	err = repo.Create(ctx, project2)
+	if err != nil {
+		t.Fatalf("Create project2 failed: %v", err)
+	}
+
+	// Initially no deleted projects
+	deleted, err := repo.FindAllDeleted(ctx)
+	if err != nil {
+		t.Fatalf("FindAllDeleted failed: %v", err)
+	}
+	for _, p := range deleted {
+		if p.ID == project1.ID || p.ID == project2.ID {
+			t.Error("No projects should be deleted yet")
+		}
+	}
+
+	// Soft delete project2
+	err = repo.Delete(ctx, project2.ID)
+	if err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	// Verify only project2 appears in FindAllDeleted
+	deleted, err = repo.FindAllDeleted(ctx)
+	if err != nil {
+		t.Fatalf("FindAllDeleted failed: %v", err)
+	}
+	foundDeleted := false
+	for _, p := range deleted {
+		if p.ID == project2.ID {
+			foundDeleted = true
+			if p.DeletedAt == nil {
+				t.Error("DeletedAt should be set for soft-deleted project")
+			}
+		}
+		if p.ID == project1.ID {
+			t.Error("Active project should not appear in FindAllDeleted")
+		}
+	}
+	if !foundDeleted {
+		t.Error("Expected deleted project in FindAllDeleted")
+	}
+}
+
+// TestProjectRepository_FindByIDIncludingDeleted tests retrieving projects regardless of deleted status.
+func TestProjectRepository_FindByIDIncludingDeleted(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewProjectRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create a project
+	project := &models.Project{Name: "Test Project"}
+	err := repo.Create(ctx, project)
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	// Should find active project
+	found, err := repo.FindByIDIncludingDeleted(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("FindByIDIncludingDeleted failed: %v", err)
+	}
+	if found == nil {
+		t.Fatal("Expected to find active project")
+	}
+	if found.Name != "Test Project" {
+		t.Errorf("Name mismatch: got %s", found.Name)
+	}
+
+	// Soft delete
+	err = repo.Delete(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	// Should still find deleted project with FindByIDIncludingDeleted
+	found, err = repo.FindByIDIncludingDeleted(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("FindByIDIncludingDeleted after delete failed: %v", err)
+	}
+	if found == nil {
+		t.Fatal("Expected to find deleted project with FindByIDIncludingDeleted")
+	}
+	if found.DeletedAt == nil {
+		t.Error("DeletedAt should be set for deleted project")
+	}
+
+	// Test non-existent ID
+	notFound, err := repo.FindByIDIncludingDeleted(ctx, "nonexistent-id")
+	if err != nil {
+		t.Fatalf("FindByIDIncludingDeleted for nonexistent failed: %v", err)
+	}
+	if notFound != nil {
+		t.Error("Expected nil for non-existent project")
+	}
+}
+
+// TestProjectRepository_Restore tests restoring soft-deleted projects.
+func TestProjectRepository_Restore(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewProjectRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create and soft delete a project
+	project := &models.Project{Name: "Restore Test"}
+	err := repo.Create(ctx, project)
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	err = repo.Delete(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	// Verify it's deleted
+	found, err := repo.FindByID(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("FindByID failed: %v", err)
+	}
+	if found != nil {
+		t.Error("Project should not appear in FindByID after soft delete")
+	}
+
+	// Restore the project
+	err = repo.Restore(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Restore failed: %v", err)
+	}
+
+	// Verify it's now visible again
+	found, err = repo.FindByID(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("FindByID after restore failed: %v", err)
+	}
+	if found == nil {
+		t.Fatal("Expected project to be visible after restore")
+	}
+	if found.DeletedAt != nil {
+		t.Error("DeletedAt should be nil after restore")
+	}
+
+	// Verify it's no longer in deleted list
+	deleted, err := repo.FindAllDeleted(ctx)
+	if err != nil {
+		t.Fatalf("FindAllDeleted failed: %v", err)
+	}
+	for _, p := range deleted {
+		if p.ID == project.ID {
+			t.Error("Restored project should not appear in FindAllDeleted")
+		}
+	}
+}
+
+// TestProjectRepository_PermanentDelete tests permanent deletion.
+func TestProjectRepository_PermanentDelete(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewProjectRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create a project
+	project := &models.Project{Name: "Permanent Delete Test"}
+	err := repo.Create(ctx, project)
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	projectID := project.ID
+
+	// Permanently delete
+	err = repo.PermanentDelete(ctx, projectID)
+	if err != nil {
+		t.Fatalf("PermanentDelete failed: %v", err)
+	}
+
+	// Verify it's completely gone (not even with IncludingDeleted)
+	found, err := repo.FindByIDIncludingDeleted(ctx, projectID)
+	if err != nil {
+		t.Fatalf("FindByIDIncludingDeleted failed: %v", err)
+	}
+	if found != nil {
+		t.Error("Permanently deleted project should not be found anywhere")
+	}
+}
+
 // TestSettingRepository_CRUD tests basic CRUD operations on the SettingRepository.
 func TestSettingRepository_CRUD(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)

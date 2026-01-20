@@ -239,8 +239,79 @@ func (r *OperationRepository) pruneOldOperationsTx(tx *gorm.DB, projectID string
 		Delete(&models.Operation{}).Error
 }
 
+// GetOperationForUndo returns the operation that would be undone, without modifying the pointer.
+// Returns nil if there's nothing to undo.
+// Use this with ConfirmUndo for atomic undo operations.
+func (r *OperationRepository) GetOperationForUndo(ctx context.Context, projectID string) (*models.Operation, error) {
+	pointer, err := r.GetPointer(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if pointer == nil || pointer.CurrentSequence == 0 {
+		return nil, nil // Nothing to undo
+	}
+
+	return r.GetOperationAtSequence(ctx, projectID, pointer.CurrentSequence)
+}
+
+// GetOperationForRedo returns the operation that would be redone, without modifying the pointer.
+// Returns nil if there's nothing to redo.
+// Use this with ConfirmRedo for atomic redo operations.
+func (r *OperationRepository) GetOperationForRedo(ctx context.Context, projectID string) (*models.Operation, error) {
+	pointer, err := r.GetPointer(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if pointer == nil || pointer.CurrentSequence >= pointer.MaxSequence {
+		return nil, nil // Nothing to redo
+	}
+
+	return r.GetOperationAtSequence(ctx, projectID, pointer.CurrentSequence+1)
+}
+
+// ConfirmUndo decrements the pointer after a successful undo apply.
+// This should only be called after the snapshot has been successfully applied.
+func (r *OperationRepository) ConfirmUndo(ctx context.Context, projectID string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var pointer models.OperationPointer
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("project_id = ?", projectID).
+			First(&pointer).Error; err != nil {
+			return err
+		}
+
+		if pointer.CurrentSequence == 0 {
+			return nil // Already at beginning
+		}
+
+		pointer.CurrentSequence--
+		return tx.Save(&pointer).Error
+	})
+}
+
+// ConfirmRedo increments the pointer after a successful redo apply.
+// This should only be called after the snapshot has been successfully applied.
+func (r *OperationRepository) ConfirmRedo(ctx context.Context, projectID string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var pointer models.OperationPointer
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("project_id = ?", projectID).
+			First(&pointer).Error; err != nil {
+			return err
+		}
+
+		if pointer.CurrentSequence >= pointer.MaxSequence {
+			return nil // Already at end
+		}
+
+		pointer.CurrentSequence++
+		return tx.Save(&pointer).Error
+	})
+}
+
 // Undo decrements the current sequence and returns the operation to undo.
 // Returns nil if there's nothing to undo.
+// DEPRECATED: Use GetOperationForUndo + ConfirmUndo for atomic operations.
 func (r *OperationRepository) Undo(ctx context.Context, projectID string) (*models.Operation, error) {
 	var result *models.Operation
 
@@ -285,6 +356,7 @@ func (r *OperationRepository) Undo(ctx context.Context, projectID string) (*mode
 
 // Redo increments the current sequence and returns the operation to redo.
 // Returns nil if there's nothing to redo.
+// DEPRECATED: Use GetOperationForRedo + ConfirmRedo for atomic operations.
 func (r *OperationRepository) Redo(ctx context.Context, projectID string) (*models.Operation, error) {
 	var result *models.Operation
 

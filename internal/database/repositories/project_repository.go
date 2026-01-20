@@ -3,6 +3,7 @@ package repositories
 
 import (
 	"context"
+	"time"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/lucsky/cuid"
@@ -19,17 +20,43 @@ func NewProjectRepository(db *gorm.DB) *ProjectRepository {
 	return &ProjectRepository{db: db}
 }
 
-// FindAll returns all projects.
+// FindAll returns all non-deleted projects.
 func (r *ProjectRepository) FindAll(ctx context.Context) ([]models.Project, error) {
 	var projects []models.Project
 	result := r.db.WithContext(ctx).
+		Where("deleted_at IS NULL").
 		Order("created_at DESC").
 		Find(&projects)
 	return projects, result.Error
 }
 
-// FindByID returns a project by ID.
+// FindAllDeleted returns all soft-deleted projects.
+func (r *ProjectRepository) FindAllDeleted(ctx context.Context) ([]models.Project, error) {
+	var projects []models.Project
+	result := r.db.WithContext(ctx).
+		Where("deleted_at IS NOT NULL").
+		Order("deleted_at DESC").
+		Find(&projects)
+	return projects, result.Error
+}
+
+// FindByID returns a non-deleted project by ID.
 func (r *ProjectRepository) FindByID(ctx context.Context, id string) (*models.Project, error) {
+	var project models.Project
+	result := r.db.WithContext(ctx).
+		Where("deleted_at IS NULL").
+		First(&project, "id = ?", id)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &project, nil
+}
+
+// FindByIDIncludingDeleted returns a project by ID regardless of deleted status.
+func (r *ProjectRepository) FindByIDIncludingDeleted(ctx context.Context, id string) (*models.Project, error) {
 	var project models.Project
 	result := r.db.WithContext(ctx).First(&project, "id = ?", id)
 	if result.Error != nil {
@@ -54,9 +81,27 @@ func (r *ProjectRepository) Update(ctx context.Context, project *models.Project)
 	return r.db.WithContext(ctx).Save(project).Error
 }
 
-// Delete deletes a project by ID.
+// Delete soft-deletes a project by setting deleted_at timestamp.
 func (r *ProjectRepository) Delete(ctx context.Context, id string) error {
-	return r.db.WithContext(ctx).Delete(&models.Project{}, "id = ?", id).Error
+	now := time.Now()
+	return r.db.WithContext(ctx).
+		Model(&models.Project{}).
+		Where("id = ?", id).
+		Update("deleted_at", now).Error
+}
+
+// Restore restores a soft-deleted project by clearing deleted_at.
+func (r *ProjectRepository) Restore(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).
+		Model(&models.Project{}).
+		Where("id = ?", id).
+		Update("deleted_at", nil).Error
+}
+
+// PermanentDelete permanently removes a project and all its data.
+// This should only be called for projects that are already soft-deleted.
+func (r *ProjectRepository) PermanentDelete(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Unscoped().Delete(&models.Project{}, "id = ?", id).Error
 }
 
 // CountFixtures returns the number of fixtures in a project.

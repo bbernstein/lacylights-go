@@ -261,6 +261,7 @@ type Project {
   cueListCount: Int!
   createdAt: String!
   updatedAt: String!
+  deletedAt: String  # Soft delete timestamp - null means not deleted
   fixtures: [FixtureInstance!]!
   looks: [Look!]!
   cueLists: [CueList!]!
@@ -1684,6 +1685,7 @@ type Query {
   # Projects
   projects: [Project!]!
   project(id: ID!): Project
+  deletedProjects: [Project!]!  # Returns soft-deleted projects that can be restored
 
   # Fixtures
   fixtureDefinitions(filter: FixtureDefinitionFilter): [FixtureDefinition!]!
@@ -1836,7 +1838,9 @@ type Mutation {
   # Project Management
   createProject(input: CreateProjectInput!): Project!
   updateProject(id: ID!, input: CreateProjectInput!): Project!
-  deleteProject(id: ID!): Boolean!
+  deleteProject(id: ID!): Boolean!  # Soft delete - project can be restored
+  restoreProject(id: ID!): Project!  # Restore a soft-deleted project
+  permanentlyDeleteProject(id: ID!): Boolean!  # Permanently delete (cannot be restored)
   bulkCreateProjects(input: BulkProjectCreateInput!): [Project!]!
   bulkUpdateProjects(input: BulkProjectUpdateInput!): [Project!]!
   bulkDeleteProjects(projectIds: [ID!]!): BulkDeleteResult!
