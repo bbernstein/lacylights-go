@@ -23,6 +23,7 @@ const (
 	EntityTypeLookBoard       EntityType = "LookBoard"
 	EntityTypeLookBoardButton EntityType = "LookBoardButton"
 	EntityTypeEffect          EntityType = "Effect"
+	EntityTypeCueEffect       EntityType = "CueEffect"
 	EntityTypeProject         EntityType = "Project"
 	EntityTypeCuePlayback     EntityType = "CuePlayback"
 )
@@ -126,6 +127,14 @@ type EffectSnapshot struct {
 	EffectChannels []models.EffectChannel `json:"effectChannels"`
 }
 
+// CueEffectSnapshot captures the state of a cue-effect relationship.
+type CueEffectSnapshot struct {
+	CueEffect *models.CueEffect `json:"cueEffect"`
+	CueID     string            `json:"cueId"`
+	EffectID  string            `json:"effectId"`
+	ProjectID string            `json:"projectId"`
+}
+
 // CuePlaybackSnapshot captures the playback state for undo/redo.
 // This tracks which cue was playing (or if playback was stopped).
 type CuePlaybackSnapshot struct {
@@ -210,8 +219,11 @@ func (s *Service) RecordOperation(
 }
 
 // Undo reverts the last operation for a project.
+// This uses an atomic pattern: get operation, apply snapshot, then confirm pointer update.
+// If the snapshot fails to apply, the pointer is not modified.
 func (s *Service) Undo(ctx context.Context, projectID string) (*UndoRedoResult, error) {
-	op, err := s.opRepo.Undo(ctx, projectID)
+	// Step 1: Get the operation without modifying the pointer
+	op, err := s.opRepo.GetOperationForUndo(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get operation for undo: %w", err)
 	}
@@ -223,16 +235,27 @@ func (s *Service) Undo(ctx context.Context, projectID string) (*UndoRedoResult, 
 		}, nil
 	}
 
-	// Apply the previous state
+	// Step 2: Apply the previous state
 	entityID, err := s.applySnapshot(ctx, EntityType(op.EntityType), op.PreviousState, OperationType(op.OperationType), op.EntityID)
 	if err != nil {
-		// Rollback the pointer change
-		// Note: In a more robust implementation, we'd want to handle this atomically
-		log.Printf("Warning: failed to apply undo, attempting rollback: %v", err)
+		// Pointer was NOT modified, so no rollback needed
+		log.Printf("Warning: failed to apply undo: %v", err)
 		return &UndoRedoResult{
 			Success: false,
 			Message: fmt.Sprintf("Failed to apply undo: %v", err),
 		}, err
+	}
+
+	// Step 3: Only update the pointer after successful apply
+	if err := s.opRepo.ConfirmUndo(ctx, projectID); err != nil {
+		// This is a rare edge case - snapshot applied but pointer update failed
+		log.Printf("Warning: undo applied but pointer update failed: %v", err)
+		return &UndoRedoResult{
+			Success:          true,
+			Operation:        op,
+			Message:          fmt.Sprintf("Undid: %s (warning: pointer sync issue)", op.Description),
+			RestoredEntityID: entityID,
+		}, nil
 	}
 
 	s.publishStatusUpdate(ctx, projectID)
@@ -246,8 +269,11 @@ func (s *Service) Undo(ctx context.Context, projectID string) (*UndoRedoResult, 
 }
 
 // Redo re-applies the last undone operation for a project.
+// This uses an atomic pattern: get operation, apply snapshot, then confirm pointer update.
+// If the snapshot fails to apply, the pointer is not modified.
 func (s *Service) Redo(ctx context.Context, projectID string) (*UndoRedoResult, error) {
-	op, err := s.opRepo.Redo(ctx, projectID)
+	// Step 1: Get the operation without modifying the pointer
+	op, err := s.opRepo.GetOperationForRedo(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get operation for redo: %w", err)
 	}
@@ -259,14 +285,27 @@ func (s *Service) Redo(ctx context.Context, projectID string) (*UndoRedoResult, 
 		}, nil
 	}
 
-	// Apply the new state
+	// Step 2: Apply the new state
 	entityID, err := s.applySnapshot(ctx, EntityType(op.EntityType), op.NewState, OperationType(op.OperationType), op.EntityID)
 	if err != nil {
+		// Pointer was NOT modified, so no rollback needed
 		log.Printf("Warning: failed to apply redo: %v", err)
 		return &UndoRedoResult{
 			Success: false,
 			Message: fmt.Sprintf("Failed to apply redo: %v", err),
 		}, err
+	}
+
+	// Step 3: Only update the pointer after successful apply
+	if err := s.opRepo.ConfirmRedo(ctx, projectID); err != nil {
+		// This is a rare edge case - snapshot applied but pointer update failed
+		log.Printf("Warning: redo applied but pointer update failed: %v", err)
+		return &UndoRedoResult{
+			Success:          true,
+			Operation:        op,
+			Message:          fmt.Sprintf("Redid: %s (warning: pointer sync issue)", op.Description),
+			RestoredEntityID: entityID,
+		}, nil
 	}
 
 	s.publishStatusUpdate(ctx, projectID)
@@ -374,6 +413,10 @@ func (s *Service) applySnapshot(ctx context.Context, entityType EntityType, snap
 		return s.applyCueListSnapshot(ctx, snapshotJSON, opType, entityID)
 	case EntityTypeLookBoard:
 		return s.applyLookBoardSnapshot(ctx, snapshotJSON, opType, entityID)
+	case EntityTypeEffect:
+		return s.applyEffectSnapshot(ctx, snapshotJSON, opType, entityID)
+	case EntityTypeCueEffect:
+		return s.applyCueEffectSnapshot(ctx, snapshotJSON, opType, entityID)
 	case EntityTypeCuePlayback:
 		return s.applyCuePlaybackSnapshot(ctx, snapshotJSON)
 	default:
@@ -491,9 +534,19 @@ func (s *Service) applyFixtureSnapshot(ctx context.Context, snapshotJSON string,
 			return "", fmt.Errorf("failed to recreate fixture: %w", err)
 		}
 	} else {
-		// Fixture exists - update it
+		// Fixture exists - update it and its channels
 		if err := s.fixtureRepo.Update(ctx, snapshot.Fixture); err != nil {
 			return "", fmt.Errorf("failed to update fixture: %w", err)
+		}
+
+		// Also update channels - delete existing and recreate from snapshot
+		if err := s.fixtureRepo.DeleteInstanceChannels(ctx, snapshot.Fixture.ID); err != nil {
+			return "", fmt.Errorf("failed to delete existing channels for undo: %w", err)
+		}
+		if len(snapshot.Channels) > 0 {
+			if err := s.fixtureRepo.CreateInstanceChannels(ctx, snapshot.Channels); err != nil {
+				return "", fmt.Errorf("failed to recreate channels for undo: %w", err)
+			}
 		}
 	}
 
@@ -615,7 +668,10 @@ func (s *Service) applyCueListSnapshot(ctx context.Context, snapshotJSON string,
 		// Update or create cues from snapshot
 		for i := range snapshot.Cues {
 			cue := &snapshot.Cues[i]
-			existingCue, _ := s.cueRepo.FindByID(ctx, cue.ID)
+			existingCue, err := s.cueRepo.FindByID(ctx, cue.ID)
+			if err != nil {
+				return "", fmt.Errorf("failed to check existing cue %s: %w", cue.ID, err)
+			}
 			if existingCue != nil {
 				// Cue exists - update it
 				if err := s.cueRepo.Update(ctx, cue); err != nil {
@@ -686,12 +742,6 @@ func (s *Service) applyLookBoardSnapshot(ctx context.Context, snapshotJSON strin
 		if err := s.lookBoardRepo.Create(ctx, snapshot.LookBoard); err != nil {
 			return "", fmt.Errorf("failed to recreate look board: %w", err)
 		}
-		// Recreate buttons
-		for i := range snapshot.Buttons {
-			if err := s.lookBoardRepo.CreateButton(ctx, &snapshot.Buttons[i]); err != nil {
-				return "", fmt.Errorf("failed to recreate look board button: %w", err)
-			}
-		}
 	} else {
 		// Look board exists - update it
 		if err := s.lookBoardRepo.Update(ctx, snapshot.LookBoard); err != nil {
@@ -699,7 +749,204 @@ func (s *Service) applyLookBoardSnapshot(ctx context.Context, snapshotJSON strin
 		}
 	}
 
+	// Delete existing buttons and recreate from snapshot
+	if err := s.lookBoardRepo.DeleteButtons(ctx, snapshot.LookBoard.ID); err != nil {
+		return "", fmt.Errorf("failed to delete existing buttons: %w", err)
+	}
+	for i := range snapshot.Buttons {
+		if err := s.lookBoardRepo.CreateButton(ctx, &snapshot.Buttons[i]); err != nil {
+			return "", fmt.Errorf("failed to recreate look board button: %w", err)
+		}
+	}
+
 	return snapshot.LookBoard.ID, nil
+}
+
+// applyEffectSnapshot restores an effect from a snapshot.
+// If snapshotJSON is empty, we delete the entity (undoing a CREATE).
+func (s *Service) applyEffectSnapshot(ctx context.Context, snapshotJSON string, opType OperationType, entityID string) (string, error) {
+	if snapshotJSON == "" {
+		// Empty snapshot means we need to delete the entity (undoing a CREATE)
+		if entityID != "" {
+			if err := s.effectRepo.Delete(ctx, entityID); err != nil {
+				return "", fmt.Errorf("failed to delete effect for undo: %w", err)
+			}
+		}
+		return entityID, nil
+	}
+
+	var snapshot EffectSnapshot
+	if err := json.Unmarshal([]byte(snapshotJSON), &snapshot); err != nil {
+		return "", fmt.Errorf("failed to unmarshal effect snapshot: %w", err)
+	}
+
+	if snapshot.Effect == nil {
+		// Snapshot unmarshaled but has nil Effect - delete the entity
+		if entityID != "" {
+			if err := s.effectRepo.Delete(ctx, entityID); err != nil {
+				return "", fmt.Errorf("failed to delete effect for undo: %w", err)
+			}
+		}
+		return entityID, nil
+	}
+
+	existingEffect, err := s.effectRepo.FindByID(ctx, snapshot.Effect.ID)
+	if err != nil {
+		return "", fmt.Errorf("failed to check existing effect: %w", err)
+	}
+
+	if existingEffect == nil {
+		// Effect was deleted - recreate it
+		if err := s.effectRepo.Create(ctx, snapshot.Effect); err != nil {
+			return "", fmt.Errorf("failed to recreate effect: %w", err)
+		}
+	} else {
+		// Effect exists - update it
+		if err := s.effectRepo.Update(ctx, snapshot.Effect); err != nil {
+			return "", fmt.Errorf("failed to update effect: %w", err)
+		}
+	}
+
+	// Delete existing fixtures/channels and recreate from snapshot
+	if err := s.effectRepo.DeleteEffectFixtures(ctx, snapshot.Effect.ID); err != nil {
+		return "", fmt.Errorf("failed to delete existing effect fixtures: %w", err)
+	}
+
+	// Create a map to track effect fixture IDs for channel recreation
+	oldToNewFixtureID := make(map[string]string)
+
+	// Recreate effect fixtures
+	for i := range snapshot.EffectFixtures {
+		ef := &snapshot.EffectFixtures[i]
+		oldID := ef.ID
+		ef.ID = "" // Let the repo generate a new ID
+		ef.EffectID = snapshot.Effect.ID
+		if err := s.effectRepo.AddFixtureToEffect(ctx, ef.EffectID, ef.FixtureID, ef.PhaseOffset, ef.AmplitudeScale); err != nil {
+			return "", fmt.Errorf("failed to recreate effect fixture: %w", err)
+		}
+		// Get the newly created effect fixture to get its ID
+		newEF, err := s.effectRepo.GetEffectFixture(ctx, ef.EffectID, ef.FixtureID)
+		if err != nil || newEF == nil {
+			return "", fmt.Errorf("failed to get recreated effect fixture: %w", err)
+		}
+		// Update with additional properties if they exist
+		if ef.EffectOrder != nil {
+			newEF.EffectOrder = ef.EffectOrder
+			if err := s.effectRepo.UpdateEffectFixture(ctx, newEF); err != nil {
+				return "", fmt.Errorf("failed to update effect fixture order: %w", err)
+			}
+		}
+		oldToNewFixtureID[oldID] = newEF.ID
+	}
+
+	// Recreate effect channels using the new fixture IDs
+	for i := range snapshot.EffectChannels {
+		ec := &snapshot.EffectChannels[i]
+		newFixtureID, ok := oldToNewFixtureID[ec.EffectFixtureID]
+		if !ok {
+			// Channel references a fixture not in the snapshot - skip it
+			continue
+		}
+		if err := s.effectRepo.AddChannelToEffectFixtureWithScales(ctx, newFixtureID, ec.ChannelOffset, ec.ChannelType, ec.AmplitudeScale, ec.FrequencyScale); err != nil {
+			return "", fmt.Errorf("failed to recreate effect channel: %w", err)
+		}
+	}
+
+	return snapshot.Effect.ID, nil
+}
+
+// splitEntityID splits an entity ID in "id1:id2" format into its components.
+func splitEntityID(entityID string) []string {
+	for i := 0; i < len(entityID); i++ {
+		if entityID[i] == ':' {
+			return []string{entityID[:i], entityID[i+1:]}
+		}
+	}
+	return []string{entityID}
+}
+
+// applyCueEffectSnapshot restores a cue-effect relationship from a snapshot.
+// For CREATE: empty prevState means we need to remove the cue effect (undo add)
+// For DELETE: we need to recreate the cue effect (undo remove)
+// entityID format: "cueID:effectID"
+func (s *Service) applyCueEffectSnapshot(ctx context.Context, snapshotJSON string, opType OperationType, entityID string) (string, error) {
+	// Parse entityID to get cueID and effectID (format: "cueID:effectID")
+	var cueIDFromEntity, effectIDFromEntity string
+	if entityID != "" {
+		parts := splitEntityID(entityID)
+		if len(parts) == 2 {
+			cueIDFromEntity = parts[0]
+			effectIDFromEntity = parts[1]
+		}
+	}
+
+	if snapshotJSON == "" {
+		// Empty snapshot - delete the cue effect (undoing a CREATE)
+		if cueIDFromEntity != "" && effectIDFromEntity != "" {
+			if err := s.effectRepo.RemoveEffectFromCue(ctx, cueIDFromEntity, effectIDFromEntity); err != nil {
+				// Ignore error if it doesn't exist
+				log.Printf("Warning: failed to remove cue effect for undo: %v", err)
+			}
+		}
+		return entityID, nil
+	}
+
+	var snapshot CueEffectSnapshot
+	if err := json.Unmarshal([]byte(snapshotJSON), &snapshot); err != nil {
+		return "", fmt.Errorf("failed to unmarshal cue effect snapshot: %w", err)
+	}
+
+	if snapshot.CueEffect == nil {
+		// Snapshot has no cue effect - remove the relationship if it exists
+		cueID := snapshot.CueID
+		effectID := snapshot.EffectID
+		if cueID == "" {
+			cueID = cueIDFromEntity
+		}
+		if effectID == "" {
+			effectID = effectIDFromEntity
+		}
+		if cueID != "" && effectID != "" {
+			if err := s.effectRepo.RemoveEffectFromCue(ctx, cueID, effectID); err != nil {
+				// Ignore error if it doesn't exist
+				log.Printf("Warning: failed to remove cue effect for undo: %v", err)
+			}
+		}
+		return fmt.Sprintf("%s:%s", cueID, effectID), nil
+	}
+
+	// Check if cue effect already exists
+	existing, err := s.effectRepo.GetCueEffect(ctx, snapshot.CueID, snapshot.EffectID)
+	if err != nil {
+		return "", fmt.Errorf("failed to check existing cue effect: %w", err)
+	}
+
+	if existing != nil {
+		// CueEffect exists - update it
+		existing.Intensity = snapshot.CueEffect.Intensity
+		existing.Speed = snapshot.CueEffect.Speed
+		existing.OnCueChange = snapshot.CueEffect.OnCueChange
+		if err := s.effectRepo.UpdateCueEffect(ctx, existing); err != nil {
+			return "", fmt.Errorf("failed to update cue effect: %w", err)
+		}
+	} else {
+		// CueEffect doesn't exist - recreate it
+		intensity := snapshot.CueEffect.Intensity
+		speed := snapshot.CueEffect.Speed
+		if err := s.effectRepo.AddEffectToCue(ctx, snapshot.CueID, snapshot.EffectID, intensity, speed); err != nil {
+			return "", fmt.Errorf("failed to recreate cue effect: %w", err)
+		}
+		// Update with any additional properties
+		if snapshot.CueEffect.OnCueChange != nil {
+			recreated, err := s.effectRepo.GetCueEffect(ctx, snapshot.CueID, snapshot.EffectID)
+			if err == nil && recreated != nil {
+				recreated.OnCueChange = snapshot.CueEffect.OnCueChange
+				_ = s.effectRepo.UpdateCueEffect(ctx, recreated)
+			}
+		}
+	}
+
+	return fmt.Sprintf("%s:%s", snapshot.CueID, snapshot.EffectID), nil
 }
 
 // publishStatusUpdate publishes an update to subscribers.
@@ -816,6 +1063,75 @@ func (s *Service) CaptureLookBoardState(ctx context.Context, lookBoardID string)
 	}, nil
 }
 
+// CaptureEffectState captures the complete state of an effect for undo.
+// This includes all EffectFixtures and their EffectChannels.
+func (s *Service) CaptureEffectState(ctx context.Context, effectID string) (*EffectSnapshot, error) {
+	effect, err := s.effectRepo.FindByID(ctx, effectID)
+	if err != nil {
+		return nil, err
+	}
+	if effect == nil {
+		return nil, nil
+	}
+
+	// Get all effect fixtures with their channels
+	effectFixtures, err := s.effectRepo.GetEffectFixtures(ctx, effectID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Collect all effect channels from all fixtures
+	var effectChannels []models.EffectChannel
+	for _, ef := range effectFixtures {
+		channels, err := s.effectRepo.GetEffectChannels(ctx, ef.ID)
+		if err != nil {
+			return nil, err
+		}
+		effectChannels = append(effectChannels, channels...)
+	}
+
+	return &EffectSnapshot{
+		Effect:         effect,
+		EffectFixtures: effectFixtures,
+		EffectChannels: effectChannels,
+	}, nil
+}
+
+// CaptureCueEffectState captures the state of a cue-effect relationship for undo.
+func (s *Service) CaptureCueEffectState(ctx context.Context, cueID, effectID string) (*CueEffectSnapshot, error) {
+	cueEffect, err := s.effectRepo.GetCueEffect(ctx, cueID, effectID)
+	if err != nil {
+		return nil, err
+	}
+	if cueEffect == nil {
+		return nil, nil
+	}
+
+	// Get the cue to find the project ID
+	cue, err := s.cueRepo.FindByID(ctx, cueID)
+	if err != nil {
+		return nil, err
+	}
+	projectID := ""
+	if cue != nil {
+		// Get the cue list to find the project ID
+		cueList, err := s.cueListRepo.FindByID(ctx, cue.CueListID)
+		if err != nil {
+			return nil, err
+		}
+		if cueList != nil {
+			projectID = cueList.ProjectID
+		}
+	}
+
+	return &CueEffectSnapshot{
+		CueEffect: cueEffect,
+		CueID:     cueID,
+		EffectID:  effectID,
+		ProjectID: projectID,
+	}, nil
+}
+
 // DeleteEntityForUndo handles deletion during undo of a CREATE operation.
 func (s *Service) DeleteEntityForUndo(ctx context.Context, entityType EntityType, entityID string) error {
 	switch entityType {
@@ -829,6 +1145,13 @@ func (s *Service) DeleteEntityForUndo(ctx context.Context, entityType EntityType
 		return s.cueListRepo.Delete(ctx, entityID)
 	case EntityTypeLookBoard:
 		return s.lookBoardRepo.Delete(ctx, entityID)
+	case EntityTypeEffect:
+		return s.effectRepo.Delete(ctx, entityID)
+	case EntityTypeCueEffect:
+		// CueEffect uses composite key (cueID-effectID), entityID should be "cueID:effectID"
+		// For delete, we don't need to handle this case specially - the snapshot contains
+		// the cue and effect IDs for recreation
+		return fmt.Errorf("CueEffect deletion should use RemoveEffectFromCue with snapshot data")
 	default:
 		return fmt.Errorf("unsupported entity type for delete: %s", entityType)
 	}

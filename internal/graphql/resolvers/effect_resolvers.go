@@ -12,6 +12,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 	"github.com/bbernstein/lacylights-go/internal/services/modulator"
+	"github.com/bbernstein/lacylights-go/internal/services/undo"
 )
 
 // ============================================================================
@@ -158,6 +159,12 @@ func (r *Resolver) ResolveCreateEffect(ctx context.Context, input generated.Crea
 		return nil, fmt.Errorf("failed to create effect: %w", err)
 	}
 
+	// Record undo operation
+	if newState, err := r.UndoService.CaptureEffectState(ctx, effect.ID); err == nil {
+		_ = r.UndoService.RecordOperation(ctx, effect.ProjectID, undo.OperationTypeCreate, undo.EntityTypeEffect, effect.ID,
+			fmt.Sprintf("Create effect '%s'", effect.Name), nil, newState, nil)
+	}
+
 	return effect, nil
 }
 
@@ -170,6 +177,9 @@ func (r *Resolver) ResolveUpdateEffect(ctx context.Context, id string, input gen
 	if effect == nil {
 		return nil, fmt.Errorf("effect not found: %s", id)
 	}
+
+	// Capture state before update
+	prevState, _ := r.UndoService.CaptureEffectState(ctx, id)
 
 	if input.Name.IsSet() && input.Name.Value() != nil {
 		effect.Name = *input.Name.Value()
@@ -219,14 +229,36 @@ func (r *Resolver) ResolveUpdateEffect(ctx context.Context, id string, input gen
 		return nil, fmt.Errorf("failed to update effect: %w", err)
 	}
 
+	// Record undo operation
+	if newState, err := r.UndoService.CaptureEffectState(ctx, id); err == nil && prevState != nil {
+		_ = r.UndoService.RecordOperation(ctx, effect.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeEffect, id,
+			fmt.Sprintf("Update effect '%s'", effect.Name), prevState, newState, nil)
+	}
+
 	return effect, nil
 }
 
 // ResolveDeleteEffect deletes an effect.
 func (r *Resolver) ResolveDeleteEffect(ctx context.Context, id string) (bool, error) {
+	// Capture state before delete
+	prevState, _ := r.UndoService.CaptureEffectState(ctx, id)
+	var projectID string
+	var effectName string
+	if prevState != nil && prevState.Effect != nil {
+		projectID = prevState.Effect.ProjectID
+		effectName = prevState.Effect.Name
+	}
+
 	if err := r.EffectRepo.Delete(ctx, id); err != nil {
 		return false, fmt.Errorf("failed to delete effect: %w", err)
 	}
+
+	// Record undo operation
+	if prevState != nil && projectID != "" {
+		_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeDelete, undo.EntityTypeEffect, id,
+			fmt.Sprintf("Delete effect '%s'", effectName), prevState, nil, nil)
+	}
+
 	return true, nil
 }
 
@@ -250,6 +282,9 @@ func (r *Resolver) ResolveAddFixtureToEffect(ctx context.Context, input generate
 		return nil, fmt.Errorf("fixture not found: %s", input.FixtureID)
 	}
 
+	// Capture state before modification
+	prevState, _ := r.UndoService.CaptureEffectState(ctx, input.EffectID)
+
 	var phaseOffset *float64
 	var amplitudeScale *float64
 
@@ -270,14 +305,39 @@ func (r *Resolver) ResolveAddFixtureToEffect(ctx context.Context, input generate
 		return nil, fmt.Errorf("failed to get effect fixture: %w", err)
 	}
 
+	// Record undo operation
+	if newState, err := r.UndoService.CaptureEffectState(ctx, input.EffectID); err == nil && prevState != nil {
+		_ = r.UndoService.RecordOperation(ctx, effect.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeEffect, input.EffectID,
+			fmt.Sprintf("Add fixture to effect '%s'", effect.Name), prevState, newState, nil)
+	}
+
 	return effectFixture, nil
 }
 
 // ResolveRemoveFixtureFromEffect removes a fixture from an effect.
 func (r *Resolver) ResolveRemoveFixtureFromEffect(ctx context.Context, effectID, fixtureID string) (bool, error) {
+	// Get effect for project ID
+	effect, err := r.EffectRepo.FindByID(ctx, effectID)
+	if err != nil {
+		return false, fmt.Errorf("failed to find effect: %w", err)
+	}
+	if effect == nil {
+		return false, fmt.Errorf("effect not found: %s", effectID)
+	}
+
+	// Capture state before modification
+	prevState, _ := r.UndoService.CaptureEffectState(ctx, effectID)
+
 	if err := r.EffectRepo.RemoveFixtureFromEffect(ctx, effectID, fixtureID); err != nil {
 		return false, fmt.Errorf("failed to remove fixture from effect: %w", err)
 	}
+
+	// Record undo operation
+	if newState, err := r.UndoService.CaptureEffectState(ctx, effectID); err == nil && prevState != nil {
+		_ = r.UndoService.RecordOperation(ctx, effect.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeEffect, effectID,
+			fmt.Sprintf("Remove fixture from effect '%s'", effect.Name), prevState, newState, nil)
+	}
+
 	return true, nil
 }
 
@@ -290,6 +350,16 @@ func (r *Resolver) ResolveAddEffectToCue(ctx context.Context, input generated.Ad
 	}
 	if cue == nil {
 		return nil, fmt.Errorf("cue not found: %s", input.CueID)
+	}
+
+	// Get the cue list to find the project ID
+	cueList, err := r.CueListRepo.FindByID(ctx, cue.CueListID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find cue list: %w", err)
+	}
+	projectID := ""
+	if cueList != nil {
+		projectID = cueList.ProjectID
 	}
 
 	// Verify effect exists
@@ -330,14 +400,46 @@ func (r *Resolver) ResolveAddEffectToCue(ctx context.Context, input generated.Ad
 		}
 	}
 
+	// Record undo operation (capture state after creation)
+	if projectID != "" && cueEffect != nil {
+		if newState, err := r.UndoService.CaptureCueEffectState(ctx, input.CueID, input.EffectID); err == nil {
+			entityID := fmt.Sprintf("%s:%s", input.CueID, input.EffectID)
+			_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeCreate, undo.EntityTypeCueEffect, entityID,
+				fmt.Sprintf("Add effect '%s' to cue", effect.Name), nil, newState, nil)
+		}
+	}
+
 	return cueEffect, nil
 }
 
 // ResolveRemoveEffectFromCue removes an effect from a cue.
 func (r *Resolver) ResolveRemoveEffectFromCue(ctx context.Context, cueID, effectID string) (bool, error) {
+	// Capture state before deletion for undo
+	var prevState *undo.CueEffectSnapshot
+	var projectID string
+	var effectName string
+
+	if cueEffect, err := r.UndoService.CaptureCueEffectState(ctx, cueID, effectID); err == nil && cueEffect != nil {
+		prevState = cueEffect
+		projectID = cueEffect.ProjectID
+	}
+
+	// Get effect name for description
+	if effect, err := r.EffectRepo.FindByID(ctx, effectID); err == nil && effect != nil {
+		effectName = effect.Name
+	}
+
 	if err := r.EffectRepo.RemoveEffectFromCue(ctx, cueID, effectID); err != nil {
 		return false, fmt.Errorf("failed to remove effect from cue: %w", err)
 	}
+
+	// Record undo operation
+	if projectID != "" && prevState != nil {
+		entityID := fmt.Sprintf("%s:%s", cueID, effectID)
+		_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeDelete, undo.EntityTypeCueEffect, entityID,
+			fmt.Sprintf("Remove effect '%s' from cue", effectName), prevState, nil, nil)
+	}
+
 	return true, nil
 }
 
@@ -447,6 +549,12 @@ func (r *Resolver) ResolveUpdateEffectFixture(ctx context.Context, id string, in
 		return nil, fmt.Errorf("effect fixture not found: %s", id)
 	}
 
+	// Get parent effect for undo recording
+	effect, _ := r.EffectRepo.FindByID(ctx, effectFixture.EffectID)
+
+	// Capture state before modification
+	prevState, _ := r.UndoService.CaptureEffectState(ctx, effectFixture.EffectID)
+
 	if input.PhaseOffset.IsSet() {
 		effectFixture.PhaseOffset = input.PhaseOffset.Value()
 	}
@@ -459,6 +567,14 @@ func (r *Resolver) ResolveUpdateEffectFixture(ctx context.Context, id string, in
 
 	if err := r.EffectRepo.UpdateEffectFixture(ctx, effectFixture); err != nil {
 		return nil, fmt.Errorf("failed to update effect fixture: %w", err)
+	}
+
+	// Record undo operation
+	if effect != nil && prevState != nil {
+		if newState, err := r.UndoService.CaptureEffectState(ctx, effectFixture.EffectID); err == nil {
+			_ = r.UndoService.RecordOperation(ctx, effect.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeEffect, effectFixture.EffectID,
+				fmt.Sprintf("Update fixture settings in effect '%s'", effect.Name), prevState, newState, nil)
+		}
 	}
 
 	// Re-fetch to get updated data with preloaded relationships
@@ -475,6 +591,12 @@ func (r *Resolver) ResolveAddChannelToEffectFixture(ctx context.Context, effectF
 	if effectFixture == nil {
 		return nil, fmt.Errorf("effect fixture not found: %s", effectFixtureID)
 	}
+
+	// Get parent effect for undo recording
+	effect, _ := r.EffectRepo.FindByID(ctx, effectFixture.EffectID)
+
+	// Capture state before modification
+	prevState, _ := r.UndoService.CaptureEffectState(ctx, effectFixture.EffectID)
 
 	var channelOffset *int
 	var channelType *string
@@ -505,6 +627,14 @@ func (r *Resolver) ResolveAddChannelToEffectFixture(ctx context.Context, effectF
 		return nil, fmt.Errorf("failed to get effect channels: %w", err)
 	}
 
+	// Record undo operation
+	if effect != nil && prevState != nil {
+		if newState, err := r.UndoService.CaptureEffectState(ctx, effectFixture.EffectID); err == nil {
+			_ = r.UndoService.RecordOperation(ctx, effect.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeEffect, effectFixture.EffectID,
+				fmt.Sprintf("Add channel to effect '%s'", effect.Name), prevState, newState, nil)
+		}
+	}
+
 	// Return the last channel (the one we just created)
 	if len(channels) > 0 {
 		return &channels[len(channels)-1], nil
@@ -521,6 +651,15 @@ func (r *Resolver) ResolveUpdateEffectChannel(ctx context.Context, id string, in
 	}
 	if channel == nil {
 		return nil, fmt.Errorf("effect channel not found: %s", id)
+	}
+
+	// Get parent effect fixture and effect for undo recording
+	effectFixture, _ := r.EffectRepo.FindEffectFixtureByID(ctx, channel.EffectFixtureID)
+	var effect *models.Effect
+	var prevState *undo.EffectSnapshot
+	if effectFixture != nil {
+		effect, _ = r.EffectRepo.FindByID(ctx, effectFixture.EffectID)
+		prevState, _ = r.UndoService.CaptureEffectState(ctx, effectFixture.EffectID)
 	}
 
 	if input.ChannelOffset.IsSet() {
@@ -547,6 +686,14 @@ func (r *Resolver) ResolveUpdateEffectChannel(ctx context.Context, id string, in
 		return nil, fmt.Errorf("failed to update effect channel: %w", err)
 	}
 
+	// Record undo operation
+	if effect != nil && prevState != nil && effectFixture != nil {
+		if newState, err := r.UndoService.CaptureEffectState(ctx, effectFixture.EffectID); err == nil {
+			_ = r.UndoService.RecordOperation(ctx, effect.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeEffect, effectFixture.EffectID,
+				fmt.Sprintf("Update channel in effect '%s'", effect.Name), prevState, newState, nil)
+		}
+	}
+
 	return channel, nil
 }
 
@@ -561,9 +708,27 @@ func (r *Resolver) ResolveRemoveChannelFromEffectFixture(ctx context.Context, id
 		return false, fmt.Errorf("effect channel not found: %s", id)
 	}
 
+	// Get parent effect fixture and effect for undo recording
+	effectFixture, _ := r.EffectRepo.FindEffectFixtureByID(ctx, channel.EffectFixtureID)
+	var effect *models.Effect
+	var prevState *undo.EffectSnapshot
+	if effectFixture != nil {
+		effect, _ = r.EffectRepo.FindByID(ctx, effectFixture.EffectID)
+		prevState, _ = r.UndoService.CaptureEffectState(ctx, effectFixture.EffectID)
+	}
+
 	if err := r.EffectRepo.DeleteEffectChannel(ctx, id); err != nil {
 		return false, fmt.Errorf("failed to delete effect channel: %w", err)
 	}
+
+	// Record undo operation
+	if effect != nil && prevState != nil && effectFixture != nil {
+		if newState, err := r.UndoService.CaptureEffectState(ctx, effectFixture.EffectID); err == nil {
+			_ = r.UndoService.RecordOperation(ctx, effect.ProjectID, undo.OperationTypeUpdate, undo.EntityTypeEffect, effectFixture.EffectID,
+				fmt.Sprintf("Remove channel from effect '%s'", effect.Name), prevState, newState, nil)
+		}
+	}
+
 	return true, nil
 }
 

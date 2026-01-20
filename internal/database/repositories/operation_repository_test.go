@@ -931,3 +931,341 @@ func TestUnmarshalState(t *testing.T) {
 		t.Errorf("Expected Value=42, got %d", data.Value)
 	}
 }
+
+func TestOperationRepository_GetOperationForUndo(t *testing.T) {
+	db, cleanup := setupOperationTestDB(t)
+	defer cleanup()
+
+	repo := NewOperationRepository(db)
+	ctx := context.Background()
+	project := createOperationTestProject(t, db)
+
+	// No operation to undo
+	op, err := repo.GetOperationForUndo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("GetOperationForUndo with no history failed: %v", err)
+	}
+	if op != nil {
+		t.Error("Expected nil operation when nothing to undo")
+	}
+
+	// Record operations
+	op1 := &models.Operation{
+		ProjectID:     project.ID,
+		OperationType: "CREATE",
+		EntityType:    "Look",
+		EntityID:      cuid.New(),
+		Description:   "Created look 1",
+	}
+	if err := repo.RecordOperation(ctx, op1); err != nil {
+		t.Fatalf("RecordOperation 1 failed: %v", err)
+	}
+
+	op2 := &models.Operation{
+		ProjectID:     project.ID,
+		OperationType: "UPDATE",
+		EntityType:    "Look",
+		EntityID:      op1.EntityID,
+		Description:   "Updated look",
+	}
+	if err := repo.RecordOperation(ctx, op2); err != nil {
+		t.Fatalf("RecordOperation 2 failed: %v", err)
+	}
+
+	// Get operation for undo - should return op2 WITHOUT modifying pointer
+	op, err = repo.GetOperationForUndo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("GetOperationForUndo failed: %v", err)
+	}
+	if op == nil {
+		t.Fatal("Expected non-nil operation for undo")
+	}
+	if op.ID != op2.ID {
+		t.Errorf("Expected op2 (ID=%s), got ID=%s", op2.ID, op.ID)
+	}
+
+	// Verify pointer was NOT modified
+	pointer, _ := repo.GetPointer(ctx, project.ID)
+	if pointer.CurrentSequence != 2 {
+		t.Errorf("Pointer should still be at sequence 2, got %d", pointer.CurrentSequence)
+	}
+
+	// Call again - should still return op2 (pointer unchanged)
+	op, err = repo.GetOperationForUndo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Second GetOperationForUndo failed: %v", err)
+	}
+	if op.ID != op2.ID {
+		t.Errorf("Second call should also return op2 (ID=%s), got ID=%s", op2.ID, op.ID)
+	}
+}
+
+func TestOperationRepository_GetOperationForRedo(t *testing.T) {
+	db, cleanup := setupOperationTestDB(t)
+	defer cleanup()
+
+	repo := NewOperationRepository(db)
+	ctx := context.Background()
+	project := createOperationTestProject(t, db)
+
+	// No operation to redo
+	op, err := repo.GetOperationForRedo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("GetOperationForRedo with no history failed: %v", err)
+	}
+	if op != nil {
+		t.Error("Expected nil operation when nothing to redo")
+	}
+
+	// Record operations
+	op1 := &models.Operation{
+		ProjectID:     project.ID,
+		OperationType: "CREATE",
+		EntityType:    "Look",
+		EntityID:      cuid.New(),
+		Description:   "Created look 1",
+	}
+	if err := repo.RecordOperation(ctx, op1); err != nil {
+		t.Fatalf("RecordOperation 1 failed: %v", err)
+	}
+
+	op2 := &models.Operation{
+		ProjectID:     project.ID,
+		OperationType: "UPDATE",
+		EntityType:    "Look",
+		EntityID:      op1.EntityID,
+		Description:   "Updated look",
+	}
+	if err := repo.RecordOperation(ctx, op2); err != nil {
+		t.Fatalf("RecordOperation 2 failed: %v", err)
+	}
+
+	// Nothing to redo when at max sequence
+	op, err = repo.GetOperationForRedo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("GetOperationForRedo at max failed: %v", err)
+	}
+	if op != nil {
+		t.Error("Expected nil operation when at max sequence")
+	}
+
+	// Undo to create redo possibility (using deprecated Undo to set up state)
+	_, _ = repo.Undo(ctx, project.ID)
+	_, _ = repo.Undo(ctx, project.ID)
+
+	// Get operation for redo - should return op1 WITHOUT modifying pointer
+	op, err = repo.GetOperationForRedo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("GetOperationForRedo failed: %v", err)
+	}
+	if op == nil {
+		t.Fatal("Expected non-nil operation for redo")
+	}
+	if op.ID != op1.ID {
+		t.Errorf("Expected op1 (ID=%s), got ID=%s", op1.ID, op.ID)
+	}
+
+	// Verify pointer was NOT modified
+	pointer, _ := repo.GetPointer(ctx, project.ID)
+	if pointer.CurrentSequence != 0 {
+		t.Errorf("Pointer should still be at sequence 0, got %d", pointer.CurrentSequence)
+	}
+}
+
+func TestOperationRepository_ConfirmUndo(t *testing.T) {
+	db, cleanup := setupOperationTestDB(t)
+	defer cleanup()
+
+	repo := NewOperationRepository(db)
+	ctx := context.Background()
+	project := createOperationTestProject(t, db)
+
+	// Record operations
+	for i := 1; i <= 3; i++ {
+		op := &models.Operation{
+			ProjectID:     project.ID,
+			OperationType: "CREATE",
+			EntityType:    "Look",
+			EntityID:      cuid.New(),
+			Description:   "Test operation",
+		}
+		if err := repo.RecordOperation(ctx, op); err != nil {
+			t.Fatalf("RecordOperation %d failed: %v", i, err)
+		}
+	}
+
+	// Pointer at sequence 3
+	pointer, _ := repo.GetPointer(ctx, project.ID)
+	if pointer.CurrentSequence != 3 {
+		t.Fatalf("Expected CurrentSequence=3, got %d", pointer.CurrentSequence)
+	}
+
+	// ConfirmUndo decrements pointer
+	if err := repo.ConfirmUndo(ctx, project.ID); err != nil {
+		t.Fatalf("ConfirmUndo failed: %v", err)
+	}
+
+	pointer, _ = repo.GetPointer(ctx, project.ID)
+	if pointer.CurrentSequence != 2 {
+		t.Errorf("Expected CurrentSequence=2 after ConfirmUndo, got %d", pointer.CurrentSequence)
+	}
+
+	// ConfirmUndo again
+	if err := repo.ConfirmUndo(ctx, project.ID); err != nil {
+		t.Fatalf("Second ConfirmUndo failed: %v", err)
+	}
+
+	pointer, _ = repo.GetPointer(ctx, project.ID)
+	if pointer.CurrentSequence != 1 {
+		t.Errorf("Expected CurrentSequence=1 after second ConfirmUndo, got %d", pointer.CurrentSequence)
+	}
+
+	// ConfirmUndo at sequence 1 - should go to 0
+	if err := repo.ConfirmUndo(ctx, project.ID); err != nil {
+		t.Fatalf("Third ConfirmUndo failed: %v", err)
+	}
+
+	pointer, _ = repo.GetPointer(ctx, project.ID)
+	if pointer.CurrentSequence != 0 {
+		t.Errorf("Expected CurrentSequence=0 after third ConfirmUndo, got %d", pointer.CurrentSequence)
+	}
+
+	// ConfirmUndo at sequence 0 - should stay at 0
+	if err := repo.ConfirmUndo(ctx, project.ID); err != nil {
+		t.Fatalf("Fourth ConfirmUndo failed: %v", err)
+	}
+
+	pointer, _ = repo.GetPointer(ctx, project.ID)
+	if pointer.CurrentSequence != 0 {
+		t.Errorf("Expected CurrentSequence=0 (unchanged), got %d", pointer.CurrentSequence)
+	}
+}
+
+func TestOperationRepository_ConfirmRedo(t *testing.T) {
+	db, cleanup := setupOperationTestDB(t)
+	defer cleanup()
+
+	repo := NewOperationRepository(db)
+	ctx := context.Background()
+	project := createOperationTestProject(t, db)
+
+	// Record operations
+	for i := 1; i <= 3; i++ {
+		op := &models.Operation{
+			ProjectID:     project.ID,
+			OperationType: "CREATE",
+			EntityType:    "Look",
+			EntityID:      cuid.New(),
+			Description:   "Test operation",
+		}
+		if err := repo.RecordOperation(ctx, op); err != nil {
+			t.Fatalf("RecordOperation %d failed: %v", i, err)
+		}
+	}
+
+	// Undo all operations (using deprecated Undo to set up state)
+	_, _ = repo.Undo(ctx, project.ID)
+	_, _ = repo.Undo(ctx, project.ID)
+	_, _ = repo.Undo(ctx, project.ID)
+
+	// Pointer at sequence 0
+	pointer, _ := repo.GetPointer(ctx, project.ID)
+	if pointer.CurrentSequence != 0 {
+		t.Fatalf("Expected CurrentSequence=0, got %d", pointer.CurrentSequence)
+	}
+
+	// ConfirmRedo increments pointer
+	if err := repo.ConfirmRedo(ctx, project.ID); err != nil {
+		t.Fatalf("ConfirmRedo failed: %v", err)
+	}
+
+	pointer, _ = repo.GetPointer(ctx, project.ID)
+	if pointer.CurrentSequence != 1 {
+		t.Errorf("Expected CurrentSequence=1 after ConfirmRedo, got %d", pointer.CurrentSequence)
+	}
+
+	// ConfirmRedo again
+	if err := repo.ConfirmRedo(ctx, project.ID); err != nil {
+		t.Fatalf("Second ConfirmRedo failed: %v", err)
+	}
+
+	pointer, _ = repo.GetPointer(ctx, project.ID)
+	if pointer.CurrentSequence != 2 {
+		t.Errorf("Expected CurrentSequence=2 after second ConfirmRedo, got %d", pointer.CurrentSequence)
+	}
+
+	// ConfirmRedo to max
+	if err := repo.ConfirmRedo(ctx, project.ID); err != nil {
+		t.Fatalf("Third ConfirmRedo failed: %v", err)
+	}
+
+	pointer, _ = repo.GetPointer(ctx, project.ID)
+	if pointer.CurrentSequence != 3 {
+		t.Errorf("Expected CurrentSequence=3 after third ConfirmRedo, got %d", pointer.CurrentSequence)
+	}
+
+	// ConfirmRedo at max sequence - should stay at 3
+	if err := repo.ConfirmRedo(ctx, project.ID); err != nil {
+		t.Fatalf("Fourth ConfirmRedo failed: %v", err)
+	}
+
+	pointer, _ = repo.GetPointer(ctx, project.ID)
+	if pointer.CurrentSequence != 3 {
+		t.Errorf("Expected CurrentSequence=3 (unchanged), got %d", pointer.CurrentSequence)
+	}
+}
+
+func TestOperationRepository_AtomicUndoRedo_PointerNotModifiedOnReadOnly(t *testing.T) {
+	// This test verifies that the new atomic methods don't modify the pointer
+	// until explicitly confirmed - the key fix for transaction atomicity
+	db, cleanup := setupOperationTestDB(t)
+	defer cleanup()
+
+	repo := NewOperationRepository(db)
+	ctx := context.Background()
+	project := createOperationTestProject(t, db)
+
+	// Record operations
+	for i := 1; i <= 3; i++ {
+		op := &models.Operation{
+			ProjectID:     project.ID,
+			OperationType: "CREATE",
+			EntityType:    "Look",
+			EntityID:      cuid.New(),
+			Description:   "Test operation",
+		}
+		if err := repo.RecordOperation(ctx, op); err != nil {
+			t.Fatalf("RecordOperation %d failed: %v", i, err)
+		}
+	}
+
+	initialPointer, _ := repo.GetPointer(ctx, project.ID)
+	initialSeq := initialPointer.CurrentSequence
+
+	// Call GetOperationForUndo multiple times - pointer should NOT change
+	for i := 0; i < 5; i++ {
+		_, _ = repo.GetOperationForUndo(ctx, project.ID)
+		pointer, _ := repo.GetPointer(ctx, project.ID)
+		if pointer.CurrentSequence != initialSeq {
+			t.Errorf("GetOperationForUndo modified pointer (iteration %d): expected %d, got %d",
+				i, initialSeq, pointer.CurrentSequence)
+		}
+	}
+
+	// Undo to create redo possibility (using deprecated Undo)
+	_, _ = repo.Undo(ctx, project.ID)
+	_, _ = repo.Undo(ctx, project.ID)
+
+	newPointer, _ := repo.GetPointer(ctx, project.ID)
+	newSeq := newPointer.CurrentSequence
+
+	// Call GetOperationForRedo multiple times - pointer should NOT change
+	for i := 0; i < 5; i++ {
+		_, _ = repo.GetOperationForRedo(ctx, project.ID)
+		pointer, _ := repo.GetPointer(ctx, project.ID)
+		if pointer.CurrentSequence != newSeq {
+			t.Errorf("GetOperationForRedo modified pointer (iteration %d): expected %d, got %d",
+				i, newSeq, pointer.CurrentSequence)
+		}
+	}
+}
