@@ -550,6 +550,14 @@ func (s *Service) applyCueSnapshot(ctx context.Context, snapshotJSON string, opT
 
 // applyCueListSnapshot restores a cue list from a snapshot.
 // If snapshotJSON is empty, we delete the entity (undoing a CREATE).
+//
+// When the cue list exists, this function:
+//   - Updates the cue list with values from the snapshot
+//   - Creates or updates all cues from the snapshot
+//   - Deletes any cues that exist in the database but are NOT in the snapshot
+//
+// This ensures proper undo behavior for operations that add/remove cues,
+// such as reorder operations or cue list restores.
 func (s *Service) applyCueListSnapshot(ctx context.Context, snapshotJSON string, opType OperationType, entityID string) (string, error) {
 	if snapshotJSON == "" {
 		// Empty snapshot means we need to delete the entity (undoing a CREATE)
@@ -596,6 +604,44 @@ func (s *Service) applyCueListSnapshot(ctx context.Context, snapshotJSON string,
 		// Cue list exists - update it
 		if err := s.cueListRepo.Update(ctx, snapshot.CueList); err != nil {
 			return "", fmt.Errorf("failed to update cue list: %w", err)
+		}
+
+		// Build a set of cue IDs in the snapshot
+		snapshotCueIDs := make(map[string]bool)
+		for _, cue := range snapshot.Cues {
+			snapshotCueIDs[cue.ID] = true
+		}
+
+		// Update or create cues from snapshot
+		for i := range snapshot.Cues {
+			cue := &snapshot.Cues[i]
+			existingCue, _ := s.cueRepo.FindByID(ctx, cue.ID)
+			if existingCue != nil {
+				// Cue exists - update it
+				if err := s.cueRepo.Update(ctx, cue); err != nil {
+					return "", fmt.Errorf("failed to update cue: %w", err)
+				}
+			} else {
+				// Cue doesn't exist - recreate it
+				if err := s.cueRepo.Create(ctx, cue); err != nil {
+					return "", fmt.Errorf("failed to recreate cue: %w", err)
+				}
+			}
+		}
+
+		// Delete any cues that exist in the DB but are not in the snapshot
+		// This handles the case where undo needs to remove cues added after the snapshot
+		currentCues, err := s.cueRepo.FindByCueListID(ctx, snapshot.CueList.ID)
+		if err != nil {
+			return "", fmt.Errorf("failed to fetch current cues for cue list %s: %w", snapshot.CueList.ID, err)
+		}
+		for _, currentCue := range currentCues {
+			if !snapshotCueIDs[currentCue.ID] {
+				// This cue exists but wasn't in the snapshot - delete it
+				if err := s.cueRepo.Delete(ctx, currentCue.ID); err != nil {
+					return "", fmt.Errorf("failed to delete orphaned cue: %w", err)
+				}
+			}
 		}
 	}
 

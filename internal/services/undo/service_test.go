@@ -3,6 +3,7 @@ package undo
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
@@ -2606,4 +2607,1089 @@ func TestService_UndoRedo_LookBoardCreate(t *testing.T) {
 	if result.Error != nil {
 		t.Errorf("LookBoard should exist after redo: %v", result.Error)
 	}
+}
+
+// TestService_MultipleUndoRedo_Cues tests undo/redo through multiple cue operations.
+func TestService_MultipleUndoRedo_Cues(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+	look := createTestLook(t, db, project.ID)
+
+	// Create a cue list
+	cueList := createTestCueList(t, db, project.ID)
+
+	// Create 3 cues with different numbers
+	cue1 := createTestCue(t, db, cueList.ID, look.ID)
+	cue1.CueNumber = 1.0
+	cue1.Name = "Opening"
+	db.Save(cue1)
+
+	cue2 := createTestCue(t, db, cueList.ID, look.ID)
+	cue2.CueNumber = 2.0
+	cue2.Name = "Scene 1"
+	db.Save(cue2)
+
+	cue3 := createTestCue(t, db, cueList.ID, look.ID)
+	cue3.CueNumber = 3.0
+	cue3.Name = "Scene 2"
+	db.Save(cue3)
+
+	// Record 3 create operations
+	for _, cue := range []*models.Cue{cue1, cue2, cue3} {
+		newSnapshot := CueSnapshot{Cue: cue}
+		err := service.RecordOperation(
+			ctx,
+			project.ID,
+			OperationTypeCreate,
+			EntityTypeCue,
+			cue.ID,
+			fmt.Sprintf("Create cue '%s' (#%.1f)", cue.Name, cue.CueNumber),
+			nil,
+			newSnapshot,
+			nil,
+		)
+		if err != nil {
+			t.Fatalf("RecordOperation failed for %s: %v", cue.Name, err)
+		}
+	}
+
+	// Verify status shows 3 operations
+	status, err := service.GetStatus(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("GetStatus failed: %v", err)
+	}
+	if status.TotalOperations != 3 {
+		t.Errorf("Expected 3 operations, got %d", status.TotalOperations)
+	}
+	if !status.CanUndo {
+		t.Error("Should be able to undo")
+	}
+	if status.CanRedo {
+		t.Error("Should not be able to redo before undoing")
+	}
+
+	// Undo all 3 operations
+	for i := 3; i > 0; i-- {
+		result, err := service.Undo(ctx, project.ID)
+		if err != nil {
+			t.Fatalf("Undo %d failed: %v", i, err)
+		}
+		if !result.Success {
+			t.Errorf("Undo %d should succeed", i)
+		}
+	}
+
+	// Verify all cues are deleted
+	var count int64
+	db.Model(&models.Cue{}).Where("cue_list_id = ?", cueList.ID).Count(&count)
+	if count != 0 {
+		t.Errorf("Expected 0 cues after undo all, got %d", count)
+	}
+
+	// Verify can redo but not undo
+	status, _ = service.GetStatus(ctx, project.ID)
+	if status.CanUndo {
+		t.Error("Should not be able to undo after undoing all")
+	}
+	if !status.CanRedo {
+		t.Error("Should be able to redo after undoing all")
+	}
+
+	// Redo all 3 operations
+	for i := 1; i <= 3; i++ {
+		result, err := service.Redo(ctx, project.ID)
+		if err != nil {
+			t.Fatalf("Redo %d failed: %v", i, err)
+		}
+		if !result.Success {
+			t.Errorf("Redo %d should succeed", i)
+		}
+	}
+
+	// Verify all cues are back
+	db.Model(&models.Cue{}).Where("cue_list_id = ?", cueList.ID).Count(&count)
+	if count != 3 {
+		t.Errorf("Expected 3 cues after redo all, got %d", count)
+	}
+}
+
+// TestService_OperationHistory_Descriptions tests that operation history shows descriptive information.
+func TestService_OperationHistory_Descriptions(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+	look := createTestLook(t, db, project.ID)
+
+	// Create a cue list
+	cueList := createTestCueList(t, db, project.ID)
+
+	// Create a cue
+	cue := createTestCue(t, db, cueList.ID, look.ID)
+	cue.Name = "Blackout"
+	cue.CueNumber = 5.5
+	db.Save(cue)
+
+	// Record the creation with a descriptive message
+	newSnapshot := CueSnapshot{Cue: cue}
+	err := service.RecordOperation(
+		ctx,
+		project.ID,
+		OperationTypeCreate,
+		EntityTypeCue,
+		cue.ID,
+		"Create cue 'Blackout' (#5.5)",
+		nil,
+		newSnapshot,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("RecordOperation failed: %v", err)
+	}
+
+	// Capture prev state
+	prevSnapshot := CueSnapshot{Cue: cue}
+
+	// Update the cue
+	cue.Name = "Final Blackout"
+	cue.FadeInTime = 3.0
+	db.Save(cue)
+
+	newSnapshot = CueSnapshot{Cue: cue}
+	err = service.RecordOperation(
+		ctx,
+		project.ID,
+		OperationTypeUpdate,
+		EntityTypeCue,
+		cue.ID,
+		"Update cue 'Final Blackout'",
+		prevSnapshot,
+		newSnapshot,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("RecordOperation update failed: %v", err)
+	}
+
+	// Get operation history
+	ops, total, err := service.GetOperationHistory(ctx, project.ID, 1, 10)
+	if err != nil {
+		t.Fatalf("GetOperationHistory failed: %v", err)
+	}
+
+	if total != 2 {
+		t.Errorf("Expected 2 operations, got %d", total)
+	}
+
+	// Operations are returned in descending sequence order (newest first)
+	if len(ops) < 2 {
+		t.Fatalf("Expected at least 2 operations, got %d", len(ops))
+	}
+
+	// First operation should be update (most recent)
+	if ops[0].Description != "Update cue 'Final Blackout'" {
+		t.Errorf("Expected update description, got: %s", ops[0].Description)
+	}
+	if ops[0].OperationType != string(OperationTypeUpdate) {
+		t.Errorf("Expected UPDATE operation type, got: %s", ops[0].OperationType)
+	}
+	if ops[0].EntityType != string(EntityTypeCue) {
+		t.Errorf("Expected Cue entity type, got: %s", ops[0].EntityType)
+	}
+
+	// Second operation should be create (older)
+	if ops[1].Description != "Create cue 'Blackout' (#5.5)" {
+		t.Errorf("Expected create description, got: %s", ops[1].Description)
+	}
+	if ops[1].OperationType != string(OperationTypeCreate) {
+		t.Errorf("Expected CREATE operation type, got: %s", ops[1].OperationType)
+	}
+}
+
+// TestService_UndoRedo_CueListWithReorder tests undo/redo of cue list reordering.
+func TestService_UndoRedo_CueListWithReorder(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+	look := createTestLook(t, db, project.ID)
+
+	// Create a cue list with 3 cues
+	cueList := createTestCueList(t, db, project.ID)
+
+	cue1 := createTestCue(t, db, cueList.ID, look.ID)
+	cue1.CueNumber = 1.0
+	db.Save(cue1)
+
+	cue2 := createTestCue(t, db, cueList.ID, look.ID)
+	cue2.CueNumber = 2.0
+	db.Save(cue2)
+
+	cue3 := createTestCue(t, db, cueList.ID, look.ID)
+	cue3.CueNumber = 3.0
+	db.Save(cue3)
+
+	// Capture previous state (with original order)
+	prevSnapshot, err := service.CaptureCueListState(ctx, cueList.ID)
+	if err != nil {
+		t.Fatalf("CaptureCueListState failed: %v", err)
+	}
+
+	// Reorder cues: 3, 1, 2 -> new numbers: 1, 2, 3
+	cue3.CueNumber = 1.0
+	cue1.CueNumber = 2.0
+	cue2.CueNumber = 3.0
+	db.Save(cue3)
+	db.Save(cue1)
+	db.Save(cue2)
+
+	// Capture new state (with new order)
+	newSnapshot, err := service.CaptureCueListState(ctx, cueList.ID)
+	if err != nil {
+		t.Fatalf("CaptureCueListState failed: %v", err)
+	}
+
+	// Record the reorder operation
+	err = service.RecordOperation(
+		ctx,
+		project.ID,
+		OperationTypeUpdate,
+		EntityTypeCueList,
+		cueList.ID,
+		"Reorder 3 cues in 'Test CueList'",
+		prevSnapshot,
+		newSnapshot,
+		[]string{cue1.ID, cue2.ID, cue3.ID},
+	)
+	if err != nil {
+		t.Fatalf("RecordOperation failed: %v", err)
+	}
+
+	// Verify current order: cue3=1, cue1=2, cue2=3
+	var foundCue3 models.Cue
+	db.First(&foundCue3, "id = ?", cue3.ID)
+	if foundCue3.CueNumber != 1.0 {
+		t.Errorf("Expected cue3 to be #1, got #%.1f", foundCue3.CueNumber)
+	}
+
+	// Undo the reorder
+	result, err := service.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Undo failed: %v", err)
+	}
+	if !result.Success {
+		t.Errorf("Undo should succeed: %s", result.Message)
+	}
+
+	// Verify original order is restored
+	db.First(&foundCue3, "id = ?", cue3.ID)
+	if foundCue3.CueNumber != 3.0 {
+		t.Errorf("Expected cue3 to be #3 after undo, got #%.1f", foundCue3.CueNumber)
+	}
+
+	var foundCue1 models.Cue
+	db.First(&foundCue1, "id = ?", cue1.ID)
+	if foundCue1.CueNumber != 1.0 {
+		t.Errorf("Expected cue1 to be #1 after undo, got #%.1f", foundCue1.CueNumber)
+	}
+
+	// Redo the reorder
+	result, err = service.Redo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Redo failed: %v", err)
+	}
+	if !result.Success {
+		t.Errorf("Redo should succeed: %s", result.Message)
+	}
+
+	// Verify reorder is re-applied
+	db.First(&foundCue3, "id = ?", cue3.ID)
+	if foundCue3.CueNumber != 1.0 {
+		t.Errorf("Expected cue3 to be #1 after redo, got #%.1f", foundCue3.CueNumber)
+	}
+}
+
+// TestService_UndoRedo_ToggleCueSkip tests undo/redo of cue skip toggle.
+func TestService_UndoRedo_ToggleCueSkip(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+	look := createTestLook(t, db, project.ID)
+
+	// Create a cue list and cue
+	cueList := createTestCueList(t, db, project.ID)
+	cue := createTestCue(t, db, cueList.ID, look.ID)
+	cue.Name = "Transition"
+	cue.Skip = false
+	db.Save(cue)
+
+	// Capture previous state
+	prevSnapshot, _ := service.CaptureCueState(ctx, cue.ID)
+
+	// Toggle skip to true
+	cue.Skip = true
+	db.Save(cue)
+
+	// Capture new state
+	newSnapshot, _ := service.CaptureCueState(ctx, cue.ID)
+
+	// Record the skip toggle
+	err := service.RecordOperation(
+		ctx,
+		project.ID,
+		OperationTypeUpdate,
+		EntityTypeCue,
+		cue.ID,
+		"Skip cue 'Transition'",
+		prevSnapshot,
+		newSnapshot,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("RecordOperation failed: %v", err)
+	}
+
+	// Verify skip is true
+	var foundCue models.Cue
+	db.First(&foundCue, "id = ?", cue.ID)
+	if !foundCue.Skip {
+		t.Error("Expected cue to be skipped")
+	}
+
+	// Undo the skip
+	result, err := service.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Undo failed: %v", err)
+	}
+	if !result.Success {
+		t.Errorf("Undo should succeed: %s", result.Message)
+	}
+
+	// Verify skip is false
+	db.First(&foundCue, "id = ?", cue.ID)
+	if foundCue.Skip {
+		t.Error("Expected cue to not be skipped after undo")
+	}
+
+	// Redo the skip
+	_, err = service.Redo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Redo failed: %v", err)
+	}
+
+	// Verify skip is true again
+	db.First(&foundCue, "id = ?", cue.ID)
+	if !foundCue.Skip {
+		t.Error("Expected cue to be skipped after redo")
+	}
+}
+
+// TestService_UndoRedo_CueDelete tests undo/redo of cue deletion.
+func TestService_UndoRedo_CueDelete(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+	look := createTestLook(t, db, project.ID)
+
+	// Create a cue list and cue
+	cueList := createTestCueList(t, db, project.ID)
+	cue := createTestCue(t, db, cueList.ID, look.ID)
+	cue.Name = "Important Cue"
+	cue.CueNumber = 7.5
+	cue.FadeInTime = 5.0
+	cue.FadeOutTime = 2.0
+	db.Save(cue)
+
+	cueID := cue.ID
+
+	// Capture state before deletion
+	prevSnapshot, _ := service.CaptureCueState(ctx, cue.ID)
+
+	// Delete the cue
+	db.Delete(cue)
+
+	// Record the deletion
+	err := service.RecordOperation(
+		ctx,
+		project.ID,
+		OperationTypeDelete,
+		EntityTypeCue,
+		cueID,
+		"Delete cue 'Important Cue'",
+		prevSnapshot,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("RecordOperation failed: %v", err)
+	}
+
+	// Verify cue is deleted
+	var foundCue models.Cue
+	result := db.First(&foundCue, "id = ?", cueID)
+	if result.Error == nil {
+		t.Error("Cue should be deleted")
+	}
+
+	// Undo the deletion
+	undoResult, err := service.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Undo failed: %v", err)
+	}
+	if !undoResult.Success {
+		t.Errorf("Undo should succeed: %s", undoResult.Message)
+	}
+
+	// Verify cue is restored with all properties
+	result = db.First(&foundCue, "id = ?", cueID)
+	if result.Error != nil {
+		t.Fatalf("Cue should exist after undo: %v", result.Error)
+	}
+	if foundCue.Name != "Important Cue" {
+		t.Errorf("Expected name 'Important Cue', got '%s'", foundCue.Name)
+	}
+	if foundCue.CueNumber != 7.5 {
+		t.Errorf("Expected cue number 7.5, got %.1f", foundCue.CueNumber)
+	}
+	if foundCue.FadeInTime != 5.0 {
+		t.Errorf("Expected fade in time 5.0, got %.1f", foundCue.FadeInTime)
+	}
+
+	// Redo the deletion
+	redoResult, err := service.Redo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Redo failed: %v", err)
+	}
+	if !redoResult.Success {
+		t.Errorf("Redo should succeed: %s", redoResult.Message)
+	}
+
+	// Verify cue is deleted again
+	result = db.First(&foundCue, "id = ?", cueID)
+	if result.Error == nil {
+		t.Error("Cue should be deleted after redo")
+	}
+}
+
+// =============================================================================
+// Edge Case and Error Path Tests
+// =============================================================================
+
+// TestService_ApplyLookSnapshot_InvalidJSON tests error handling for invalid JSON.
+func TestService_ApplyLookSnapshot_InvalidJSON(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+
+	// Call applyLookSnapshot with invalid JSON
+	_, err := service.applyLookSnapshot(ctx, "not valid json", OperationTypeUpdate, "some-id")
+	if err == nil {
+		t.Error("Expected error for invalid JSON, got nil")
+	}
+	if err != nil && !contains(err.Error(), "failed to unmarshal look snapshot") {
+		t.Errorf("Expected unmarshal error, got: %v", err)
+	}
+}
+
+// TestService_ApplyFixtureSnapshot_InvalidJSON tests error handling for invalid JSON.
+func TestService_ApplyFixtureSnapshot_InvalidJSON(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+
+	// Call applyFixtureSnapshot with invalid JSON
+	_, err := service.applyFixtureSnapshot(ctx, "not valid json", OperationTypeUpdate, "some-id")
+	if err == nil {
+		t.Error("Expected error for invalid JSON, got nil")
+	}
+	if err != nil && !contains(err.Error(), "failed to unmarshal fixture snapshot") {
+		t.Errorf("Expected unmarshal error, got: %v", err)
+	}
+}
+
+// TestService_ApplyCueSnapshot_InvalidJSON tests error handling for invalid JSON.
+func TestService_ApplyCueSnapshot_InvalidJSON(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+
+	// Call applyCueSnapshot with invalid JSON
+	_, err := service.applyCueSnapshot(ctx, "not valid json", OperationTypeUpdate, "some-id")
+	if err == nil {
+		t.Error("Expected error for invalid JSON, got nil")
+	}
+	if err != nil && !contains(err.Error(), "failed to unmarshal cue snapshot") {
+		t.Errorf("Expected unmarshal error, got: %v", err)
+	}
+}
+
+// TestService_ApplyCueListSnapshot_InvalidJSON tests error handling for invalid JSON.
+func TestService_ApplyCueListSnapshot_InvalidJSON(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+
+	// Call applyCueListSnapshot with invalid JSON
+	_, err := service.applyCueListSnapshot(ctx, "not valid json", OperationTypeUpdate, "some-id")
+	if err == nil {
+		t.Error("Expected error for invalid JSON, got nil")
+	}
+	if err != nil && !contains(err.Error(), "failed to unmarshal cue list snapshot") {
+		t.Errorf("Expected unmarshal error, got: %v", err)
+	}
+}
+
+// TestService_ApplyLookBoardSnapshot_InvalidJSON tests error handling for invalid JSON.
+func TestService_ApplyLookBoardSnapshot_InvalidJSON(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+
+	// Call applyLookBoardSnapshot with invalid JSON
+	_, err := service.applyLookBoardSnapshot(ctx, "not valid json", OperationTypeUpdate, "some-id")
+	if err == nil {
+		t.Error("Expected error for invalid JSON, got nil")
+	}
+	if err != nil && !contains(err.Error(), "failed to unmarshal look board snapshot") {
+		t.Errorf("Expected unmarshal error, got: %v", err)
+	}
+}
+
+// TestService_ApplyCuePlaybackSnapshot_NoController tests error handling when playback controller is nil.
+func TestService_ApplyCuePlaybackSnapshot_NoController(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+
+	// Call applyCuePlaybackSnapshot without a playback controller set
+	_, err := service.applyCuePlaybackSnapshot(ctx, `{"cueListId":"test","isPlaying":true}`)
+	if err == nil {
+		t.Error("Expected error when playback controller not set, got nil")
+	}
+	if err != nil && !contains(err.Error(), "playback controller not set") {
+		t.Errorf("Expected 'playback controller not set' error, got: %v", err)
+	}
+}
+
+// TestService_ApplyLookSnapshot_EmptySnapshotWithEntityID tests deleting when undoing CREATE.
+func TestService_ApplyLookSnapshot_EmptySnapshotWithEntityID(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+	look := createTestLook(t, db, project.ID)
+
+	// Apply empty snapshot (should delete the look)
+	resultID, err := service.applyLookSnapshot(ctx, "", OperationTypeCreate, look.ID)
+	if err != nil {
+		t.Fatalf("applyLookSnapshot with empty snapshot failed: %v", err)
+	}
+	if resultID != look.ID {
+		t.Errorf("Expected result ID %s, got %s", look.ID, resultID)
+	}
+
+	// Verify look is deleted
+	var count int64
+	db.Model(&models.Look{}).Where("id = ?", look.ID).Count(&count)
+	if count != 0 {
+		t.Error("Look should be deleted after applying empty snapshot")
+	}
+}
+
+// TestService_ApplyFixtureSnapshot_EmptySnapshotWithEntityID tests deleting when undoing CREATE.
+func TestService_ApplyFixtureSnapshot_EmptySnapshotWithEntityID(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+	fixture := createTestFixtureInstance(t, db, project.ID)
+
+	// Apply empty snapshot (should delete the fixture)
+	resultID, err := service.applyFixtureSnapshot(ctx, "", OperationTypeCreate, fixture.ID)
+	if err != nil {
+		t.Fatalf("applyFixtureSnapshot with empty snapshot failed: %v", err)
+	}
+	if resultID != fixture.ID {
+		t.Errorf("Expected result ID %s, got %s", fixture.ID, resultID)
+	}
+
+	// Verify fixture is deleted
+	var count int64
+	db.Model(&models.FixtureInstance{}).Where("id = ?", fixture.ID).Count(&count)
+	if count != 0 {
+		t.Error("Fixture should be deleted after applying empty snapshot")
+	}
+}
+
+// TestService_ApplyCueSnapshot_EmptySnapshotWithEntityID tests deleting when undoing CREATE.
+func TestService_ApplyCueSnapshot_EmptySnapshotWithEntityID(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+	look := createTestLook(t, db, project.ID)
+	cueList := createTestCueList(t, db, project.ID)
+	cue := createTestCue(t, db, cueList.ID, look.ID)
+
+	// Apply empty snapshot (should delete the cue)
+	resultID, err := service.applyCueSnapshot(ctx, "", OperationTypeCreate, cue.ID)
+	if err != nil {
+		t.Fatalf("applyCueSnapshot with empty snapshot failed: %v", err)
+	}
+	if resultID != cue.ID {
+		t.Errorf("Expected result ID %s, got %s", cue.ID, resultID)
+	}
+
+	// Verify cue is deleted
+	var count int64
+	db.Model(&models.Cue{}).Where("id = ?", cue.ID).Count(&count)
+	if count != 0 {
+		t.Error("Cue should be deleted after applying empty snapshot")
+	}
+}
+
+// TestService_ApplyCueListSnapshot_EmptySnapshotWithEntityID tests deleting when undoing CREATE.
+func TestService_ApplyCueListSnapshot_EmptySnapshotWithEntityID(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+	cueList := createTestCueList(t, db, project.ID)
+
+	// Apply empty snapshot (should delete the cue list)
+	resultID, err := service.applyCueListSnapshot(ctx, "", OperationTypeCreate, cueList.ID)
+	if err != nil {
+		t.Fatalf("applyCueListSnapshot with empty snapshot failed: %v", err)
+	}
+	if resultID != cueList.ID {
+		t.Errorf("Expected result ID %s, got %s", cueList.ID, resultID)
+	}
+
+	// Verify cue list is deleted
+	var count int64
+	db.Model(&models.CueList{}).Where("id = ?", cueList.ID).Count(&count)
+	if count != 0 {
+		t.Error("CueList should be deleted after applying empty snapshot")
+	}
+}
+
+// TestService_ApplyLookBoardSnapshot_EmptySnapshotWithEntityID tests deleting when undoing CREATE.
+func TestService_ApplyLookBoardSnapshot_EmptySnapshotWithEntityID(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+
+	// Create a look board
+	lookBoard := &models.LookBoard{
+		ID:        cuid.New(),
+		ProjectID: project.ID,
+		Name:      "Test Board",
+	}
+	if err := db.Create(lookBoard).Error; err != nil {
+		t.Fatalf("Failed to create look board: %v", err)
+	}
+
+	// Apply empty snapshot (should delete the look board)
+	resultID, err := service.applyLookBoardSnapshot(ctx, "", OperationTypeCreate, lookBoard.ID)
+	if err != nil {
+		t.Fatalf("applyLookBoardSnapshot with empty snapshot failed: %v", err)
+	}
+	if resultID != lookBoard.ID {
+		t.Errorf("Expected result ID %s, got %s", lookBoard.ID, resultID)
+	}
+
+	// Verify look board is deleted
+	var count int64
+	db.Model(&models.LookBoard{}).Where("id = ?", lookBoard.ID).Count(&count)
+	if count != 0 {
+		t.Error("LookBoard should be deleted after applying empty snapshot")
+	}
+}
+
+// TestService_PublishStatusUpdate_NilPubSub tests that nil pubsub doesn't panic.
+func TestService_PublishStatusUpdate_NilPubSub(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Create service with nil pubsub
+	opRepo := repositories.NewOperationRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	lookBoardRepo := repositories.NewLookBoardRepository(db)
+	effectRepo := repositories.NewEffectRepository(db)
+	projectRepo := repositories.NewProjectRepository(db)
+
+	service := NewService(
+		opRepo, lookRepo, fixtureRepo, cueRepo, cueListRepo, lookBoardRepo, effectRepo, projectRepo, nil,
+	)
+
+	ctx := context.Background()
+	project := createTestProject(t, db)
+
+	// Should not panic with nil pubsub
+	service.publishStatusUpdate(ctx, project.ID)
+}
+
+// TestService_CaptureLookState_WithFixtureValues tests capturing look state with fixture values.
+func TestService_CaptureLookState_WithFixtureValues(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+	fixture := createTestFixtureInstance(t, db, project.ID)
+	look := createTestLook(t, db, project.ID)
+
+	// Add fixture values to the look
+	fixtureValue := &models.FixtureValue{
+		ID:        cuid.New(),
+		LookID:    look.ID,
+		FixtureID: fixture.ID,
+	}
+	if err := db.Create(fixtureValue).Error; err != nil {
+		t.Fatalf("Failed to create fixture value: %v", err)
+	}
+
+	// Capture state
+	snapshot, err := service.CaptureLookState(ctx, look.ID)
+	if err != nil {
+		t.Fatalf("CaptureLookState failed: %v", err)
+	}
+	if snapshot == nil {
+		t.Fatal("Expected non-nil snapshot")
+	}
+	if snapshot.Look == nil {
+		t.Error("Expected non-nil Look in snapshot")
+	}
+	if len(snapshot.FixtureValues) != 1 {
+		t.Errorf("Expected 1 fixture value, got %d", len(snapshot.FixtureValues))
+	}
+}
+
+// TestService_CaptureLookState_NotFound tests capturing non-existent look.
+func TestService_CaptureLookState_NotFound(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+
+	// Capture state for non-existent look
+	snapshot, err := service.CaptureLookState(ctx, "non-existent-id")
+	if err != nil {
+		t.Fatalf("CaptureLookState should not error for missing look: %v", err)
+	}
+	if snapshot != nil {
+		t.Error("Expected nil snapshot for non-existent look")
+	}
+}
+
+// TestService_CaptureFixtureState_NotFound tests capturing non-existent fixture.
+func TestService_CaptureFixtureState_NotFound(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+
+	// Capture state for non-existent fixture
+	snapshot, err := service.CaptureFixtureState(ctx, "non-existent-id")
+	if err != nil {
+		t.Fatalf("CaptureFixtureState should not error for missing fixture: %v", err)
+	}
+	if snapshot != nil {
+		t.Error("Expected nil snapshot for non-existent fixture")
+	}
+}
+
+// TestService_CaptureCueState_NotFound tests capturing non-existent cue.
+func TestService_CaptureCueState_NotFound(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+
+	// Capture state for non-existent cue
+	snapshot, err := service.CaptureCueState(ctx, "non-existent-id")
+	if err != nil {
+		t.Fatalf("CaptureCueState should not error for missing cue: %v", err)
+	}
+	if snapshot != nil {
+		t.Error("Expected nil snapshot for non-existent cue")
+	}
+}
+
+// TestService_CaptureCueListState_NotFound tests capturing non-existent cue list.
+func TestService_CaptureCueListState_NotFound(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+
+	// Capture state for non-existent cue list
+	snapshot, err := service.CaptureCueListState(ctx, "non-existent-id")
+	if err != nil {
+		t.Fatalf("CaptureCueListState should not error for missing cue list: %v", err)
+	}
+	if snapshot != nil {
+		t.Error("Expected nil snapshot for non-existent cue list")
+	}
+}
+
+// TestService_CaptureLookBoardState_NotFound tests capturing non-existent look board.
+func TestService_CaptureLookBoardState_NotFound(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+
+	// Capture state for non-existent look board
+	snapshot, err := service.CaptureLookBoardState(ctx, "non-existent-id")
+	if err != nil {
+		t.Fatalf("CaptureLookBoardState should not error for missing look board: %v", err)
+	}
+	if snapshot != nil {
+		t.Error("Expected nil snapshot for non-existent look board")
+	}
+}
+
+// TestService_ApplyLookSnapshot_RecreateDeleted tests recreating a deleted look.
+func TestService_ApplyLookSnapshot_RecreateDeleted(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+
+	// Create a look and capture its state
+	look := createTestLook(t, db, project.ID)
+	lookID := look.ID
+	snapshot, err := service.CaptureLookState(ctx, lookID)
+	if err != nil {
+		t.Fatalf("CaptureLookState failed: %v", err)
+	}
+
+	// Delete the look
+	if err := db.Delete(look).Error; err != nil {
+		t.Fatalf("Failed to delete look: %v", err)
+	}
+
+	// Verify look is deleted
+	var count int64
+	db.Model(&models.Look{}).Where("id = ?", lookID).Count(&count)
+	if count != 0 {
+		t.Fatal("Look should be deleted")
+	}
+
+	// Apply snapshot to recreate
+	snapshotJSON, _ := json.Marshal(snapshot)
+	resultID, err := service.applyLookSnapshot(ctx, string(snapshotJSON), OperationTypeDelete, lookID)
+	if err != nil {
+		t.Fatalf("applyLookSnapshot to recreate failed: %v", err)
+	}
+	if resultID != lookID {
+		t.Errorf("Expected result ID %s, got %s", lookID, resultID)
+	}
+
+	// Verify look is recreated
+	db.Model(&models.Look{}).Where("id = ?", lookID).Count(&count)
+	if count != 1 {
+		t.Error("Look should be recreated")
+	}
+}
+
+// TestService_ApplyFixtureSnapshot_RecreateDeleted tests recreating a deleted fixture.
+func TestService_ApplyFixtureSnapshot_RecreateDeleted(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+
+	// Create a fixture and capture its state
+	fixture := createTestFixtureInstance(t, db, project.ID)
+	fixtureID := fixture.ID
+	snapshot, err := service.CaptureFixtureState(ctx, fixtureID)
+	if err != nil {
+		t.Fatalf("CaptureFixtureState failed: %v", err)
+	}
+
+	// Delete the fixture
+	if err := db.Delete(fixture).Error; err != nil {
+		t.Fatalf("Failed to delete fixture: %v", err)
+	}
+
+	// Verify fixture is deleted
+	var count int64
+	db.Model(&models.FixtureInstance{}).Where("id = ?", fixtureID).Count(&count)
+	if count != 0 {
+		t.Fatal("Fixture should be deleted")
+	}
+
+	// Apply snapshot to recreate
+	snapshotJSON, _ := json.Marshal(snapshot)
+	resultID, err := service.applyFixtureSnapshot(ctx, string(snapshotJSON), OperationTypeDelete, fixtureID)
+	if err != nil {
+		t.Fatalf("applyFixtureSnapshot to recreate failed: %v", err)
+	}
+	if resultID != fixtureID {
+		t.Errorf("Expected result ID %s, got %s", fixtureID, resultID)
+	}
+
+	// Verify fixture is recreated
+	db.Model(&models.FixtureInstance{}).Where("id = ?", fixtureID).Count(&count)
+	if count != 1 {
+		t.Error("Fixture should be recreated")
+	}
+}
+
+// TestService_ClearHistory_NoOperations tests clearing history when none exist.
+func TestService_ClearHistory_NoOperations(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+
+	// Clear history when none exist
+	err := service.ClearHistory(ctx, project.ID)
+	if err != nil {
+		t.Errorf("ClearHistory should not error with no operations: %v", err)
+	}
+}
+
+// TestService_RecordOperation_NilSnapshots tests recording with nil snapshots.
+func TestService_RecordOperation_NilSnapshots(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+
+	// Record operation with nil previous snapshot (CREATE)
+	err := service.RecordOperation(
+		ctx,
+		project.ID,
+		OperationTypeCreate,
+		EntityTypeLook,
+		"test-id",
+		"Test operation",
+		nil,
+		LookSnapshot{Look: &models.Look{ID: "test-id", ProjectID: project.ID, Name: "Test"}},
+		nil,
+	)
+	if err != nil {
+		t.Errorf("RecordOperation with nil prev snapshot failed: %v", err)
+	}
+
+	// Verify operation was recorded
+	status, _ := service.GetStatus(ctx, project.ID)
+	if status.TotalOperations != 1 {
+		t.Errorf("Expected 1 operation, got %d", status.TotalOperations)
+	}
+}
+
+// TestService_Undo_NoOperations tests undo when no operations exist.
+func TestService_Undo_NoOperations(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+
+	// Try to undo with no operations
+	result, err := service.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Undo should not error with no operations: %v", err)
+	}
+	if result.Success {
+		t.Error("Undo should not succeed with no operations")
+	}
+	if !contains(result.Message, "Nothing to undo") {
+		t.Errorf("Expected 'Nothing to undo' message, got: %s", result.Message)
+	}
+}
+
+// TestService_Redo_NoOperations tests redo when no operations exist to redo.
+func TestService_Redo_NoOperations(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+	project := createTestProject(t, db)
+
+	// Try to redo with no operations
+	result, err := service.Redo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Redo should not error with no operations: %v", err)
+	}
+	if result.Success {
+		t.Error("Redo should not succeed with no operations to redo")
+	}
+	if !contains(result.Message, "Nothing to redo") {
+		t.Errorf("Expected 'Nothing to redo' message, got: %s", result.Message)
+	}
+}
+
+// Helper function to check if a string contains a substring.
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

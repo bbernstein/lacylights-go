@@ -334,3 +334,71 @@ func TestLoad_CORSAllowAll(t *testing.T) {
 		})
 	}
 }
+
+func TestDefaultDatabaseURL(t *testing.T) {
+	tests := []struct {
+		env      string
+		expected string
+	}{
+		{"development", "file:./dev.db"},
+		{"production", "file:./lacylights.db"},
+		{"integration", "file:./integration.db"},
+		{"e2e", "file:./e2e.db"},
+		{"test", "file:./dev.db"},
+		{"", "file:./dev.db"},
+		{"unknown", "file:./dev.db"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.env, func(t *testing.T) {
+			result := defaultDatabaseURL(tt.env)
+			if result != tt.expected {
+				t.Errorf("defaultDatabaseURL(%q) = %q, want %q", tt.env, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestLoad_DatabaseURL_DefaultsByEnvironment(t *testing.T) {
+	tests := []struct {
+		env         string
+		expectedURL string
+	}{
+		{"development", "file:./dev.db"},
+		{"production", "file:./lacylights.db"},
+		{"integration", "file:./integration.db"},
+		{"e2e", "file:./e2e.db"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.env, func(t *testing.T) {
+			t.Setenv("ENV", tt.env)
+			// Ensure DATABASE_URL is not set so we get the default
+			// t.Setenv with empty string still sets the var, so we need to
+			// test without setting it - but other tests may have set it.
+			// The safest approach is to check that the defaultDatabaseURL
+			// function itself works correctly (tested above).
+
+			cfg := Load()
+			if cfg.Env != tt.env {
+				t.Errorf("Expected Env to be %q, got %q", tt.env, cfg.Env)
+			}
+			// If DATABASE_URL is not set by environment, it should use the default
+			if cfg.DatabaseURL != tt.expectedURL {
+				t.Errorf("Expected DatabaseURL to be %q for env %q, got %q", tt.expectedURL, tt.env, cfg.DatabaseURL)
+			}
+		})
+	}
+}
+
+func TestLoad_DatabaseURL_OverridesTakePrecedence(t *testing.T) {
+	// Test that explicit DATABASE_URL overrides the environment-based default
+	t.Setenv("ENV", "production")
+	t.Setenv("DATABASE_URL", "file:./custom.db")
+
+	cfg := Load()
+
+	if cfg.DatabaseURL != "file:./custom.db" {
+		t.Errorf("Expected DATABASE_URL override to take precedence, got %q", cfg.DatabaseURL)
+	}
+}

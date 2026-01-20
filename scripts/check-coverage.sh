@@ -29,7 +29,7 @@ get_threshold() {
         "internal/services/import") echo 83 ;;  # Integration tests provide good coverage
         "internal/services/playback") echo 82 ;;  # Integration tests, handleFollowTime via timers
         "internal/services/modulator") echo 81 ;;  # Effect modulator service
-        "internal/services/undo") echo 70 ;;  # Undo/redo service, comprehensive tests added
+        "internal/services/undo") echo 72 ;;  # Undo/redo service, comprehensive unit tests for edge cases
         "internal/services/wifi") echo 39 ;;  # WiFi AP mode, platform-specific code paths
         "cmd/server") echo 39 ;;  # Server startup, helper functions covered
         "internal/services/ofl") echo 36 ;;  # OFL fixture library, bundle operations conditional
