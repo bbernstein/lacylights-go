@@ -2916,3 +2916,103 @@ func TestLookBoardRepository_DeleteButton(t *testing.T) {
 		t.Error("Button should be deleted")
 	}
 }
+
+// TestLookRepository_DeleteFixtureValuesByFixtureID tests cascade delete of fixture values.
+func TestLookRepository_DeleteFixtureValuesByFixtureID(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewLookRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create project
+	project := &models.Project{ID: cuid.New(), Name: "Cascade Delete Test Project"}
+	testDB.DB.Create(project)
+
+	// Create fixture definition and fixture
+	fixtureDef := &models.FixtureDefinition{
+		ID:           cuid.New(),
+		Manufacturer: "Test",
+		Model:        "CascadeTest",
+		Type:         "test",
+	}
+	testDB.DB.Create(fixtureDef)
+
+	fixtureToDelete := &models.FixtureInstance{
+		ID:           cuid.New(),
+		Name:         "Fixture To Delete",
+		ProjectID:    project.ID,
+		DefinitionID: fixtureDef.ID,
+		Universe:     1,
+		StartChannel: 1,
+	}
+	testDB.DB.Create(fixtureToDelete)
+
+	// Create another fixture that should NOT be affected
+	otherFixture := &models.FixtureInstance{
+		ID:           cuid.New(),
+		Name:         "Other Fixture",
+		ProjectID:    project.ID,
+		DefinitionID: fixtureDef.ID,
+		Universe:     1,
+		StartChannel: 10,
+	}
+	testDB.DB.Create(otherFixture)
+
+	// Create two looks, each with fixture values for both fixtures
+	look1 := &models.Look{ID: cuid.New(), Name: "Look 1", ProjectID: project.ID}
+	testDB.DB.Create(look1)
+	look2 := &models.Look{ID: cuid.New(), Name: "Look 2", ProjectID: project.ID}
+	testDB.DB.Create(look2)
+
+	// Add fixture values for fixtureToDelete to both looks
+	fv1 := &models.FixtureValue{ID: cuid.New(), LookID: look1.ID, FixtureID: fixtureToDelete.ID, Channels: `[{"offset":0,"value":100}]`}
+	fv2 := &models.FixtureValue{ID: cuid.New(), LookID: look2.ID, FixtureID: fixtureToDelete.ID, Channels: `[{"offset":0,"value":200}]`}
+	testDB.DB.Create(fv1)
+	testDB.DB.Create(fv2)
+
+	// Add fixture values for otherFixture to both looks
+	fv3 := &models.FixtureValue{ID: cuid.New(), LookID: look1.ID, FixtureID: otherFixture.ID, Channels: `[{"offset":0,"value":50}]`}
+	fv4 := &models.FixtureValue{ID: cuid.New(), LookID: look2.ID, FixtureID: otherFixture.ID, Channels: `[{"offset":0,"value":75}]`}
+	testDB.DB.Create(fv3)
+	testDB.DB.Create(fv4)
+
+	// Verify initial state: 4 fixture values total
+	var count int64
+	testDB.DB.Model(&models.FixtureValue{}).Count(&count)
+	if count != 4 {
+		t.Fatalf("Expected 4 fixture values initially, got %d", count)
+	}
+
+	// Delete fixture values by fixture ID
+	err := repo.DeleteFixtureValuesByFixtureID(ctx, fixtureToDelete.ID)
+	if err != nil {
+		t.Fatalf("DeleteFixtureValuesByFixtureID failed: %v", err)
+	}
+
+	// Verify fixtureToDelete values are gone from both looks
+	found1, _ := repo.GetFixtureValue(ctx, look1.ID, fixtureToDelete.ID)
+	if found1 != nil {
+		t.Error("Expected fixture value in look1 to be deleted")
+	}
+	found2, _ := repo.GetFixtureValue(ctx, look2.ID, fixtureToDelete.ID)
+	if found2 != nil {
+		t.Error("Expected fixture value in look2 to be deleted")
+	}
+
+	// Verify otherFixture values are still present
+	other1, _ := repo.GetFixtureValue(ctx, look1.ID, otherFixture.ID)
+	if other1 == nil {
+		t.Error("Expected other fixture value in look1 to still exist")
+	}
+	other2, _ := repo.GetFixtureValue(ctx, look2.ID, otherFixture.ID)
+	if other2 == nil {
+		t.Error("Expected other fixture value in look2 to still exist")
+	}
+
+	// Final count: should be 2 (only otherFixture values remain)
+	testDB.DB.Model(&models.FixtureValue{}).Count(&count)
+	if count != 2 {
+		t.Errorf("Expected 2 fixture values remaining, got %d", count)
+	}
+}

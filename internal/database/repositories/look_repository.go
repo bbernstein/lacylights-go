@@ -135,6 +135,12 @@ func (r *LookRepository) DeleteFixtureValue(ctx context.Context, lookID, fixture
 	return r.db.WithContext(ctx).Delete(&models.FixtureValue{}, "look_id = ? AND fixture_id = ?", lookID, fixtureID).Error
 }
 
+// DeleteFixtureValuesByFixtureID deletes all fixture values referencing a specific fixture (across all looks).
+// This should be called when a fixture is deleted to clean up orphaned references.
+func (r *LookRepository) DeleteFixtureValuesByFixtureID(ctx context.Context, fixtureID string) error {
+	return r.db.WithContext(ctx).Delete(&models.FixtureValue{}, "fixture_id = ?", fixtureID).Error
+}
+
 // GetFixtureValue returns a specific fixture value by look and fixture ID.
 func (r *LookRepository) GetFixtureValue(ctx context.Context, lookID, fixtureID string) (*models.FixtureValue, error) {
 	var value models.FixtureValue

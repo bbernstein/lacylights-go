@@ -966,6 +966,149 @@ func TestFixtureInstance_Delete(t *testing.T) {
 	}
 }
 
+func TestFixtureInstance_DeleteCascadesFixtureValues(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Create project
+	var projectResp struct {
+		CreateProject struct {
+			ID string `json:"id"`
+		} `json:"createProject"`
+	}
+	err := c.Post(`mutation { createProject(input: { name: "Cascade Test Project" }) { id } }`, &projectResp)
+	if err != nil {
+		t.Fatalf("CreateProject mutation failed: %v", err)
+	}
+	projectID := projectResp.CreateProject.ID
+
+	// Create fixture definition
+	var defResp struct {
+		CreateFixtureDefinition struct {
+			ID string `json:"id"`
+		} `json:"createFixtureDefinition"`
+	}
+	err = c.Post(`mutation {
+		createFixtureDefinition(input: {
+			manufacturer: "Test"
+			model: "CascadeTest"
+			type: LED_PAR
+			channels: [
+				{ name: "Dimmer", type: INTENSITY, offset: 0, minValue: 0, maxValue: 255, defaultValue: 0 }
+			]
+		}) {
+			id
+		}
+	}`, &defResp)
+	if err != nil {
+		t.Fatalf("CreateFixtureDefinition mutation failed: %v", err)
+	}
+	defID := defResp.CreateFixtureDefinition.ID
+
+	// Create fixture instance
+	var instanceResp struct {
+		CreateFixtureInstance struct {
+			ID string `json:"id"`
+		} `json:"createFixtureInstance"`
+	}
+	err = c.Post(`mutation($projectId: ID!, $defId: ID!) {
+		createFixtureInstance(input: {
+			name: "Fixture With Values"
+			projectId: $projectId
+			definitionId: $defId
+			universe: 1
+			startChannel: 1
+		}) {
+			id
+		}
+	}`, &instanceResp,
+		client.Var("projectId", projectID),
+		client.Var("defId", defID))
+	if err != nil {
+		t.Fatalf("CreateFixtureInstance mutation failed: %v", err)
+	}
+	fixtureID := instanceResp.CreateFixtureInstance.ID
+
+	// Create a look with fixture values for this fixture
+	var lookResp struct {
+		CreateLook struct {
+			ID            string `json:"id"`
+			FixtureValues []struct {
+				Fixture struct {
+					ID string `json:"id"`
+				} `json:"fixture"`
+			} `json:"fixtureValues"`
+		} `json:"createLook"`
+	}
+	err = c.Post(`mutation($projectId: ID!, $fixtureId: ID!) {
+		createLook(input: {
+			name: "Look With Fixture Values"
+			projectId: $projectId
+			fixtureValues: [
+				{ fixtureId: $fixtureId, channels: [{ offset: 0, value: 255 }] }
+			]
+		}) {
+			id
+			fixtureValues {
+				fixture { id }
+			}
+		}
+	}`, &lookResp,
+		client.Var("projectId", projectID),
+		client.Var("fixtureId", fixtureID))
+	if err != nil {
+		t.Fatalf("CreateLook mutation failed: %v", err)
+	}
+	lookID := lookResp.CreateLook.ID
+
+	// Verify the look has fixture values
+	if len(lookResp.CreateLook.FixtureValues) != 1 {
+		t.Fatalf("Expected 1 fixture value in look, got %d", len(lookResp.CreateLook.FixtureValues))
+	}
+
+	// Delete the fixture instance
+	var deleteResp struct {
+		DeleteFixtureInstance bool `json:"deleteFixtureInstance"`
+	}
+	err = c.Post(`mutation($id: ID!) {
+		deleteFixtureInstance(id: $id)
+	}`, &deleteResp, client.Var("id", fixtureID))
+	if err != nil {
+		t.Fatalf("DeleteFixtureInstance mutation failed: %v", err)
+	}
+	if !deleteResp.DeleteFixtureInstance {
+		t.Error("Expected deleteFixtureInstance to return true")
+	}
+
+	// Fetch the look again and verify fixture values are gone
+	var lookQueryResp struct {
+		Look struct {
+			ID            string `json:"id"`
+			FixtureValues []struct {
+				Fixture struct {
+					ID string `json:"id"`
+				} `json:"fixture"`
+			} `json:"fixtureValues"`
+		} `json:"look"`
+	}
+	err = c.Post(`query($id: ID!) {
+		look(id: $id) {
+			id
+			fixtureValues {
+				fixture { id }
+			}
+		}
+	}`, &lookQueryResp, client.Var("id", lookID))
+	if err != nil {
+		t.Fatalf("Look query failed: %v", err)
+	}
+
+	// The look should now have 0 fixture values (the fixture was deleted and cascaded)
+	if len(lookQueryResp.Look.FixtureValues) != 0 {
+		t.Errorf("Expected 0 fixture values after fixture deletion, got %d", len(lookQueryResp.Look.FixtureValues))
+	}
+}
+
 // =============================================================================
 // Look CRUD Tests
 // =============================================================================
