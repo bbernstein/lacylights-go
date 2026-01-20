@@ -1350,7 +1350,12 @@ func (r *mutationResolver) DeleteFixtureInstance(ctx context.Context, id string)
 	projectID := fixture.ProjectID
 	fixtureName := fixture.Name
 
-	// Delete instance channels first
+	// Delete fixture values from all looks that reference this fixture
+	if err := r.LookRepo.DeleteFixtureValuesByFixtureID(ctx, id); err != nil {
+		return false, fmt.Errorf("failed to delete fixture values: %w", err)
+	}
+
+	// Delete instance channels
 	if err := r.FixtureRepo.DeleteInstanceChannels(ctx, id); err != nil {
 		return false, err
 	}
