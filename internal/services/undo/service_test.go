@@ -4295,3 +4295,356 @@ func TestService_DeleteEntityForUndo_CueEffect(t *testing.T) {
 		t.Error("Expected error for CueEffect DeleteEntityForUndo")
 	}
 }
+
+// TestService_UndoRedo_CueEffectUpdate tests updating an existing cue effect.
+func TestService_UndoRedo_CueEffectUpdate(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+
+	// Create project and cue list
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	db.Create(project)
+
+	cueList := &models.CueList{ID: cuid.New(), Name: "Test Cue List", ProjectID: project.ID}
+	db.Create(cueList)
+
+	// Create a look and a cue
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	db.Create(look)
+
+	cue := &models.Cue{ID: cuid.New(), Name: "Test Cue", CueNumber: 1, CueListID: cueList.ID, LookID: look.ID}
+	db.Create(cue)
+
+	// Create an effect
+	effect := &models.Effect{
+		ID:          cuid.New(),
+		Name:        "Test Effect",
+		EffectType:  "WAVEFORM",
+		ProjectID:   project.ID,
+		Frequency:   1.0,
+		OnCueChange: "maintain",
+	}
+	db.Create(effect)
+
+	// Add effect to cue with initial values
+	effectRepo := repositories.NewEffectRepository(db)
+	err := effectRepo.AddEffectToCue(ctx, cue.ID, effect.ID, 0.5, 0.5)
+	if err != nil {
+		t.Fatalf("AddEffectToCue failed: %v", err)
+	}
+
+	// Capture before state
+	beforeState, err := service.CaptureCueEffectState(ctx, cue.ID, effect.ID)
+	if err != nil {
+		t.Fatalf("CaptureCueEffectState failed: %v", err)
+	}
+
+	// Update the cue effect
+	cueEffect, err := effectRepo.GetCueEffect(ctx, cue.ID, effect.ID)
+	if err != nil {
+		t.Fatalf("GetCueEffect failed: %v", err)
+	}
+	cueEffect.Intensity = 0.8
+	cueEffect.Speed = 0.8
+	err = effectRepo.UpdateCueEffect(ctx, cueEffect)
+	if err != nil {
+		t.Fatalf("UpdateCueEffect failed: %v", err)
+	}
+
+	// Capture after state
+	afterState, err := service.CaptureCueEffectState(ctx, cue.ID, effect.ID)
+	if err != nil {
+		t.Fatalf("CaptureCueEffectState failed: %v", err)
+	}
+
+	// Record the update operation
+	entityID := cue.ID + ":" + effect.ID
+	err = service.RecordOperation(ctx, project.ID, OperationTypeUpdate, EntityTypeCueEffect, entityID,
+		"Update cue effect", beforeState, afterState, nil)
+	if err != nil {
+		t.Fatalf("RecordOperation failed: %v", err)
+	}
+
+	// Undo - should restore original intensity and speed
+	_, err = service.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Undo failed: %v", err)
+	}
+
+	// Verify cue effect was restored to original values
+	restoredCueEffect, err := effectRepo.GetCueEffect(ctx, cue.ID, effect.ID)
+	if err != nil {
+		t.Fatalf("GetCueEffect after undo failed: %v", err)
+	}
+	if restoredCueEffect.Intensity != 0.5 {
+		t.Errorf("Expected intensity 0.5, got %f", restoredCueEffect.Intensity)
+	}
+	if restoredCueEffect.Speed != 0.5 {
+		t.Errorf("Expected speed 0.5, got %f", restoredCueEffect.Speed)
+	}
+
+	// Redo - should restore updated values
+	_, err = service.Redo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Redo failed: %v", err)
+	}
+
+	// Verify cue effect was restored to updated values
+	redoCueEffect, err := effectRepo.GetCueEffect(ctx, cue.ID, effect.ID)
+	if err != nil {
+		t.Fatalf("GetCueEffect after redo failed: %v", err)
+	}
+	if redoCueEffect.Intensity != 0.8 {
+		t.Errorf("Expected intensity 0.8, got %f", redoCueEffect.Intensity)
+	}
+	if redoCueEffect.Speed != 0.8 {
+		t.Errorf("Expected speed 0.8, got %f", redoCueEffect.Speed)
+	}
+}
+
+// TestService_UndoRedo_CueEffectWithOnCueChange tests recreating a cue effect with OnCueChange.
+func TestService_UndoRedo_CueEffectWithOnCueChange(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+
+	// Create project and cue list
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	db.Create(project)
+
+	cueList := &models.CueList{ID: cuid.New(), Name: "Test Cue List", ProjectID: project.ID}
+	db.Create(cueList)
+
+	// Create a look and a cue
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	db.Create(look)
+
+	cue := &models.Cue{ID: cuid.New(), Name: "Test Cue", CueNumber: 1, CueListID: cueList.ID, LookID: look.ID}
+	db.Create(cue)
+
+	// Create an effect
+	effect := &models.Effect{
+		ID:          cuid.New(),
+		Name:        "Test Effect",
+		EffectType:  "WAVEFORM",
+		ProjectID:   project.ID,
+		Frequency:   1.0,
+		OnCueChange: "maintain",
+	}
+	db.Create(effect)
+
+	// Add effect to cue with OnCueChange
+	effectRepo := repositories.NewEffectRepository(db)
+	err := effectRepo.AddEffectToCue(ctx, cue.ID, effect.ID, 0.5, 0.5)
+	if err != nil {
+		t.Fatalf("AddEffectToCue failed: %v", err)
+	}
+
+	// Set OnCueChange
+	cueEffect, err := effectRepo.GetCueEffect(ctx, cue.ID, effect.ID)
+	if err != nil {
+		t.Fatalf("GetCueEffect failed: %v", err)
+	}
+	onCueChange := "start"
+	cueEffect.OnCueChange = &onCueChange
+	err = effectRepo.UpdateCueEffect(ctx, cueEffect)
+	if err != nil {
+		t.Fatalf("UpdateCueEffect failed: %v", err)
+	}
+
+	// Capture before state (with OnCueChange set)
+	beforeState, err := service.CaptureCueEffectState(ctx, cue.ID, effect.ID)
+	if err != nil {
+		t.Fatalf("CaptureCueEffectState failed: %v", err)
+	}
+
+	// Delete the cue effect
+	err = effectRepo.RemoveEffectFromCue(ctx, cue.ID, effect.ID)
+	if err != nil {
+		t.Fatalf("RemoveEffectFromCue failed: %v", err)
+	}
+
+	// Record the delete operation
+	entityID := cue.ID + ":" + effect.ID
+	err = service.RecordOperation(ctx, project.ID, OperationTypeDelete, EntityTypeCueEffect, entityID,
+		"Delete cue effect", beforeState, nil, nil)
+	if err != nil {
+		t.Fatalf("RecordOperation failed: %v", err)
+	}
+
+	// Verify cue effect is deleted
+	deletedCueEffect, err := effectRepo.GetCueEffect(ctx, cue.ID, effect.ID)
+	if err != nil {
+		t.Fatalf("GetCueEffect failed: %v", err)
+	}
+	if deletedCueEffect != nil {
+		t.Error("Expected cue effect to be deleted")
+	}
+
+	// Undo - should recreate the cue effect with OnCueChange
+	_, err = service.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Undo failed: %v", err)
+	}
+
+	// Verify cue effect was recreated with OnCueChange
+	restoredCueEffect, err := effectRepo.GetCueEffect(ctx, cue.ID, effect.ID)
+	if err != nil {
+		t.Fatalf("GetCueEffect after undo failed: %v", err)
+	}
+	if restoredCueEffect == nil {
+		t.Fatal("Expected cue effect to be recreated")
+	}
+	if restoredCueEffect.OnCueChange == nil || *restoredCueEffect.OnCueChange != "start" {
+		t.Error("Expected OnCueChange to be 'start' after undo")
+	}
+}
+
+// TestService_ApplyCueEffectSnapshot_NilSnapshotWithEntityID tests applyCueEffectSnapshot with nil snapshot and entityID.
+func TestService_ApplyCueEffectSnapshot_NilSnapshotWithEntityID(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+
+	// Create project and cue list
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	db.Create(project)
+
+	cueList := &models.CueList{ID: cuid.New(), Name: "Test Cue List", ProjectID: project.ID}
+	db.Create(cueList)
+
+	// Create a look and a cue
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	db.Create(look)
+
+	cue := &models.Cue{ID: cuid.New(), Name: "Test Cue", CueNumber: 1, CueListID: cueList.ID, LookID: look.ID}
+	db.Create(cue)
+
+	// Create an effect
+	effect := &models.Effect{
+		ID:          cuid.New(),
+		Name:        "Test Effect",
+		EffectType:  "WAVEFORM",
+		ProjectID:   project.ID,
+		Frequency:   1.0,
+		OnCueChange: "maintain",
+	}
+	db.Create(effect)
+
+	// Add effect to cue
+	effectRepo := repositories.NewEffectRepository(db)
+	err := effectRepo.AddEffectToCue(ctx, cue.ID, effect.ID, 0.5, 0.5)
+	if err != nil {
+		t.Fatalf("AddEffectToCue failed: %v", err)
+	}
+
+	// Capture state before deletion
+	beforeState, err := service.CaptureCueEffectState(ctx, cue.ID, effect.ID)
+	if err != nil {
+		t.Fatalf("CaptureCueEffectState failed: %v", err)
+	}
+
+	// Record a CREATE operation with the captured state as afterState
+	entityID := cue.ID + ":" + effect.ID
+	err = service.RecordOperation(ctx, project.ID, OperationTypeCreate, EntityTypeCueEffect, entityID,
+		"Create cue effect", nil, beforeState, nil)
+	if err != nil {
+		t.Fatalf("RecordOperation failed: %v", err)
+	}
+
+	// Undo the CREATE - this should delete the cue effect
+	// This exercises the empty snapshot path with a valid entityID
+	_, err = service.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Undo failed: %v", err)
+	}
+
+	// Verify cue effect was removed
+	removedCueEffect, err := effectRepo.GetCueEffect(ctx, cue.ID, effect.ID)
+	if err != nil {
+		t.Fatalf("GetCueEffect failed: %v", err)
+	}
+	if removedCueEffect != nil {
+		t.Error("Expected cue effect to be removed after undoing create")
+	}
+}
+
+// TestService_ApplyCueEffectSnapshot_SnapshotWithNilCueEffect tests the nil CueEffect in snapshot path.
+func TestService_ApplyCueEffectSnapshot_SnapshotWithNilCueEffect(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	service := createTestService(t, db)
+	ctx := context.Background()
+
+	// Create project and cue list
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	db.Create(project)
+
+	cueList := &models.CueList{ID: cuid.New(), Name: "Test Cue List", ProjectID: project.ID}
+	db.Create(cueList)
+
+	// Create a look and a cue
+	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	db.Create(look)
+
+	cue := &models.Cue{ID: cuid.New(), Name: "Test Cue", CueNumber: 1, CueListID: cueList.ID, LookID: look.ID}
+	db.Create(cue)
+
+	// Create an effect
+	effect := &models.Effect{
+		ID:          cuid.New(),
+		Name:        "Test Effect",
+		EffectType:  "WAVEFORM",
+		ProjectID:   project.ID,
+		Frequency:   1.0,
+		OnCueChange: "maintain",
+	}
+	db.Create(effect)
+
+	// Add effect to cue
+	effectRepo := repositories.NewEffectRepository(db)
+	err := effectRepo.AddEffectToCue(ctx, cue.ID, effect.ID, 0.5, 0.5)
+	if err != nil {
+		t.Fatalf("AddEffectToCue failed: %v", err)
+	}
+
+	// Create a snapshot with CueID and EffectID but nil CueEffect
+	// This simulates the "snapshot has no cue effect" path
+	snapshot := &CueEffectSnapshot{
+		CueID:     cue.ID,
+		EffectID:  effect.ID,
+		CueEffect: nil, // nil CueEffect means remove the relationship
+	}
+
+	// Record operation with this special snapshot as beforeState
+	entityID := cue.ID + ":" + effect.ID
+	afterState, _ := service.CaptureCueEffectState(ctx, cue.ID, effect.ID)
+	err = service.RecordOperation(ctx, project.ID, OperationTypeUpdate, EntityTypeCueEffect, entityID,
+		"Update cue effect", snapshot, afterState, nil)
+	if err != nil {
+		t.Fatalf("RecordOperation failed: %v", err)
+	}
+
+	// Undo - this will apply the snapshot with nil CueEffect, removing the relationship
+	_, err = service.Undo(ctx, project.ID)
+	if err != nil {
+		t.Fatalf("Undo failed: %v", err)
+	}
+
+	// Verify cue effect was removed due to nil CueEffect in snapshot
+	removedCueEffect, err := effectRepo.GetCueEffect(ctx, cue.ID, effect.ID)
+	if err != nil {
+		t.Fatalf("GetCueEffect failed: %v", err)
+	}
+	if removedCueEffect != nil {
+		t.Error("Expected cue effect to be removed when restoring snapshot with nil CueEffect")
+	}
+}
