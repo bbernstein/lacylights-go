@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
@@ -1326,14 +1327,7 @@ func (s *Service) applyBulkLookUpdateSnapshot(ctx context.Context, snapshotJSON 
 	}
 
 	// Return comma-separated list of restored IDs
-	result := ""
-	for i, id := range restoredIDs {
-		if i > 0 {
-			result += ","
-		}
-		result += id
-	}
-	return result, nil
+	return strings.Join(restoredIDs, ","), nil
 }
 
 // CaptureBulkLookState captures the complete state of multiple looks for atomic undo.

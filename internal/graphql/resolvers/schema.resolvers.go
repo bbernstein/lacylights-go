@@ -2351,13 +2351,20 @@ func (r *mutationResolver) CopyFixturesToLooks(ctx context.Context, input genera
 		}
 	}
 
-	// Capture bulk state of all target looks BEFORE making changes (for undo)
+	// Capture bulk state of all target looks BEFORE making changes (for undo).
+	// Note: input.TargetLookIds may legally include the source look ID; in that case
+	// copying fixtures to that look is effectively a no-op but is still processed in
+	// order to keep this mutation atomic across all requested looks.
 	prevState, err := r.UndoService.CaptureBulkLookState(ctx, input.TargetLookIds)
 	if err != nil {
 		log.Printf("Warning: failed to capture bulk look state for undo: %v", err)
 	}
 
-	// Apply fixture values to each target look
+	// Apply fixture values to each target look.
+	// Note: These updates are not wrapped in a single transaction because the repository
+	// layer doesn't currently support passing transaction handles. However, if an error
+	// occurs mid-operation, the undo system (prevState captured above) allows recovery
+	// to the pre-operation state. TODO: Consider adding transaction support to repositories.
 	var updatedLooks []*models.Look
 	for _, targetLookID := range input.TargetLookIds {
 		// Get existing fixture values for merge logic
