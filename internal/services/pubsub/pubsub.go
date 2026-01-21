@@ -20,6 +20,9 @@ const (
 	TopicWiFiModeChanged         Topic = "WIFI_MODE_CHANGED"
 	TopicOFLImportProgress       Topic = "OFL_IMPORT_PROGRESS"
 	TopicOperationHistoryChanged Topic = "OPERATION_HISTORY_CHANGED"
+	TopicLookDataChanged         Topic = "LOOK_DATA_CHANGED"
+	TopicLookBoardDataChanged    Topic = "LOOK_BOARD_DATA_CHANGED"
+	TopicFixtureDataChanged      Topic = "FIXTURE_DATA_CHANGED"
 )
 
 // Subscriber represents a subscription channel.

@@ -307,6 +307,13 @@ type ComplexityRoot struct {
 		StartChannel func(childComplexity int) int
 	}
 
+	FixtureDataChangedPayload struct {
+		ChangeType func(childComplexity int) int
+		FixtureIds func(childComplexity int) int
+		ProjectID  func(childComplexity int) int
+		Timestamp  func(childComplexity int) int
+	}
+
 	FixtureDefinition struct {
 		Channels     func(childComplexity int) int
 		CreatedAt    func(childComplexity int) int
@@ -462,12 +469,27 @@ type ComplexityRoot struct {
 		Width     func(childComplexity int) int
 	}
 
+	LookBoardDataChangedPayload struct {
+		AffectedButtonIds func(childComplexity int) int
+		ChangeType        func(childComplexity int) int
+		LookBoardID       func(childComplexity int) int
+		ProjectID         func(childComplexity int) int
+		Timestamp         func(childComplexity int) int
+	}
+
 	LookComparison struct {
 		Differences           func(childComplexity int) int
 		DifferentFixtureCount func(childComplexity int) int
 		IdenticalFixtureCount func(childComplexity int) int
 		Look1                 func(childComplexity int) int
 		Look2                 func(childComplexity int) int
+	}
+
+	LookDataChangedPayload struct {
+		ChangeType func(childComplexity int) int
+		LookID     func(childComplexity int) int
+		ProjectID  func(childComplexity int) int
+		Timestamp  func(childComplexity int) int
 	}
 
 	LookDifference struct {
@@ -898,7 +920,10 @@ type ComplexityRoot struct {
 		CueListDataChanged          func(childComplexity int, cueListID string) int
 		CueListPlaybackUpdated      func(childComplexity int, cueListID string) int
 		DmxOutputChanged            func(childComplexity int, universe *int) int
+		FixtureDataChanged          func(childComplexity int, projectID string) int
 		GlobalPlaybackStatusUpdated func(childComplexity int) int
+		LookBoardDataChanged        func(childComplexity int, projectID string) int
+		LookDataChanged             func(childComplexity int, projectID string) int
 		OflImportProgress           func(childComplexity int) int
 		OperationHistoryChanged     func(childComplexity int, projectID string) int
 		PreviewSessionUpdated       func(childComplexity int, projectID string) int
@@ -1326,6 +1351,9 @@ type SubscriptionResolver interface {
 	WifiModeChanged(ctx context.Context) (<-chan WiFiMode, error)
 	OflImportProgress(ctx context.Context) (<-chan *OFLImportStatus, error)
 	OperationHistoryChanged(ctx context.Context, projectID string) (<-chan *UndoRedoStatus, error)
+	LookDataChanged(ctx context.Context, projectID string) (<-chan *LookDataChangedPayload, error)
+	LookBoardDataChanged(ctx context.Context, projectID string) (<-chan *LookBoardDataChangedPayload, error)
+	FixtureDataChanged(ctx context.Context, projectID string) (<-chan *FixtureDataChangedPayload, error)
 }
 type UserResolver interface {
 	Role(ctx context.Context, obj *models.User) (UserRole, error)
@@ -2349,6 +2377,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.FixtureChannelAssignment.StartChannel(childComplexity), true
 
+	case "FixtureDataChangedPayload.changeType":
+		if e.complexity.FixtureDataChangedPayload.ChangeType == nil {
+			break
+		}
+
+		return e.complexity.FixtureDataChangedPayload.ChangeType(childComplexity), true
+	case "FixtureDataChangedPayload.fixtureIds":
+		if e.complexity.FixtureDataChangedPayload.FixtureIds == nil {
+			break
+		}
+
+		return e.complexity.FixtureDataChangedPayload.FixtureIds(childComplexity), true
+	case "FixtureDataChangedPayload.projectId":
+		if e.complexity.FixtureDataChangedPayload.ProjectID == nil {
+			break
+		}
+
+		return e.complexity.FixtureDataChangedPayload.ProjectID(childComplexity), true
+	case "FixtureDataChangedPayload.timestamp":
+		if e.complexity.FixtureDataChangedPayload.Timestamp == nil {
+			break
+		}
+
+		return e.complexity.FixtureDataChangedPayload.Timestamp(childComplexity), true
+
 	case "FixtureDefinition.channels":
 		if e.complexity.FixtureDefinition.Channels == nil {
 			break
@@ -3007,6 +3060,37 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.LookBoardButton.Width(childComplexity), true
 
+	case "LookBoardDataChangedPayload.affectedButtonIds":
+		if e.complexity.LookBoardDataChangedPayload.AffectedButtonIds == nil {
+			break
+		}
+
+		return e.complexity.LookBoardDataChangedPayload.AffectedButtonIds(childComplexity), true
+	case "LookBoardDataChangedPayload.changeType":
+		if e.complexity.LookBoardDataChangedPayload.ChangeType == nil {
+			break
+		}
+
+		return e.complexity.LookBoardDataChangedPayload.ChangeType(childComplexity), true
+	case "LookBoardDataChangedPayload.lookBoardId":
+		if e.complexity.LookBoardDataChangedPayload.LookBoardID == nil {
+			break
+		}
+
+		return e.complexity.LookBoardDataChangedPayload.LookBoardID(childComplexity), true
+	case "LookBoardDataChangedPayload.projectId":
+		if e.complexity.LookBoardDataChangedPayload.ProjectID == nil {
+			break
+		}
+
+		return e.complexity.LookBoardDataChangedPayload.ProjectID(childComplexity), true
+	case "LookBoardDataChangedPayload.timestamp":
+		if e.complexity.LookBoardDataChangedPayload.Timestamp == nil {
+			break
+		}
+
+		return e.complexity.LookBoardDataChangedPayload.Timestamp(childComplexity), true
+
 	case "LookComparison.differences":
 		if e.complexity.LookComparison.Differences == nil {
 			break
@@ -3037,6 +3121,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.LookComparison.Look2(childComplexity), true
+
+	case "LookDataChangedPayload.changeType":
+		if e.complexity.LookDataChangedPayload.ChangeType == nil {
+			break
+		}
+
+		return e.complexity.LookDataChangedPayload.ChangeType(childComplexity), true
+	case "LookDataChangedPayload.lookId":
+		if e.complexity.LookDataChangedPayload.LookID == nil {
+			break
+		}
+
+		return e.complexity.LookDataChangedPayload.LookID(childComplexity), true
+	case "LookDataChangedPayload.projectId":
+		if e.complexity.LookDataChangedPayload.ProjectID == nil {
+			break
+		}
+
+		return e.complexity.LookDataChangedPayload.ProjectID(childComplexity), true
+	case "LookDataChangedPayload.timestamp":
+		if e.complexity.LookDataChangedPayload.Timestamp == nil {
+			break
+		}
+
+		return e.complexity.LookDataChangedPayload.Timestamp(childComplexity), true
 
 	case "LookDifference.differenceType":
 		if e.complexity.LookDifference.DifferenceType == nil {
@@ -5897,12 +6006,45 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Subscription.DmxOutputChanged(childComplexity, args["universe"].(*int)), true
+	case "Subscription.fixtureDataChanged":
+		if e.complexity.Subscription.FixtureDataChanged == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_fixtureDataChanged_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Subscription.FixtureDataChanged(childComplexity, args["projectId"].(string)), true
 	case "Subscription.globalPlaybackStatusUpdated":
 		if e.complexity.Subscription.GlobalPlaybackStatusUpdated == nil {
 			break
 		}
 
 		return e.complexity.Subscription.GlobalPlaybackStatusUpdated(childComplexity), true
+	case "Subscription.lookBoardDataChanged":
+		if e.complexity.Subscription.LookBoardDataChanged == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_lookBoardDataChanged_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Subscription.LookBoardDataChanged(childComplexity, args["projectId"].(string)), true
+	case "Subscription.lookDataChanged":
+		if e.complexity.Subscription.LookDataChanged == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_lookDataChanged_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Subscription.LookDataChanged(childComplexity, args["projectId"].(string)), true
 	case "Subscription.oflImportProgress":
 		if e.complexity.Subscription.OflImportProgress == nil {
 			break
@@ -6675,6 +6817,18 @@ enum CueListDataChangeType {
   LOOK_NAME_CHANGED
 }
 
+"""
+Type of entity change for real-time updates.
+CREATED - Entity was created
+UPDATED - Entity was modified
+DELETED - Entity was deleted
+"""
+enum EntityDataChangeType {
+  CREATED
+  UPDATED
+  DELETED
+}
+
 # =============================================================================
 # EFFECT ENUMS
 # =============================================================================
@@ -6752,6 +6906,38 @@ type CueListDataChangedPayload {
   affectedLookId: ID
   "New look name if this is a LOOK_NAME_CHANGED event"
   newLookName: String
+  "Timestamp of the change"
+  timestamp: String!
+}
+
+"Payload for look data change notifications (used for undo/redo real-time updates)"
+type LookDataChangedPayload {
+  lookId: ID!
+  projectId: ID!
+  changeType: EntityDataChangeType!
+  "Timestamp of the change"
+  timestamp: String!
+}
+
+"Payload for fixture data change notifications (used for undo/redo real-time updates)"
+type FixtureDataChangedPayload {
+  "The affected fixture IDs"
+  fixtureIds: [ID!]!
+  "The project containing the fixtures"
+  projectId: ID!
+  "Type of change that occurred"
+  changeType: EntityDataChangeType!
+  "Timestamp of the change"
+  timestamp: String!
+}
+
+"Payload for look board data change notifications (used for undo/redo real-time updates)"
+type LookBoardDataChangedPayload {
+  lookBoardId: ID!
+  projectId: ID!
+  changeType: EntityDataChangeType!
+  "Affected button IDs (for button-specific changes)"
+  affectedButtonIds: [ID!]
   "Timestamp of the change"
   timestamp: String!
 }
@@ -8616,6 +8802,12 @@ type Subscription {
   oflImportProgress: OFLImportStatus!
   "Real-time updates when operation history changes (after undo/redo or new operations)"
   operationHistoryChanged(projectId: ID!): UndoRedoStatus!
+  "Real-time updates when look data changes (created, updated, deleted via undo/redo)"
+  lookDataChanged(projectId: ID!): LookDataChangedPayload!
+  "Real-time updates when look board data changes (created, updated, deleted via undo/redo)"
+  lookBoardDataChanged(projectId: ID!): LookBoardDataChangedPayload!
+  "Real-time updates when fixture data changes (positions updated via undo/redo)"
+  fixtureDataChanged(projectId: ID!): FixtureDataChangedPayload!
 }
 `, BuiltIn: false},
 }
@@ -10766,6 +10958,39 @@ func (ec *executionContext) field_Subscription_dmxOutputChanged_args(ctx context
 		return nil, err
 	}
 	args["universe"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_fixtureDataChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_lookBoardDataChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_lookDataChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
 	return args, nil
 }
 
@@ -15942,6 +16167,122 @@ func (ec *executionContext) fieldContext_FixtureChannelAssignment_channelRange(_
 	return fc, nil
 }
 
+func (ec *executionContext) _FixtureDataChangedPayload_fixtureIds(ctx context.Context, field graphql.CollectedField, obj *FixtureDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureDataChangedPayload_fixtureIds,
+		func(ctx context.Context) (any, error) {
+			return obj.FixtureIds, nil
+		},
+		nil,
+		ec.marshalNID2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureDataChangedPayload_fixtureIds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FixtureDataChangedPayload_projectId(ctx context.Context, field graphql.CollectedField, obj *FixtureDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureDataChangedPayload_projectId,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureDataChangedPayload_projectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FixtureDataChangedPayload_changeType(ctx context.Context, field graphql.CollectedField, obj *FixtureDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureDataChangedPayload_changeType,
+		func(ctx context.Context) (any, error) {
+			return obj.ChangeType, nil
+		},
+		nil,
+		ec.marshalNEntityDataChangeType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEntityDataChangeType,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureDataChangedPayload_changeType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type EntityDataChangeType does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FixtureDataChangedPayload_timestamp(ctx context.Context, field graphql.CollectedField, obj *FixtureDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureDataChangedPayload_timestamp,
+		func(ctx context.Context) (any, error) {
+			return obj.Timestamp, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureDataChangedPayload_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _FixtureDefinition_id(ctx context.Context, field graphql.CollectedField, obj *models.FixtureDefinition) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -19435,6 +19776,151 @@ func (ec *executionContext) fieldContext_LookBoardButton_updatedAt(_ context.Con
 	return fc, nil
 }
 
+func (ec *executionContext) _LookBoardDataChangedPayload_lookBoardId(ctx context.Context, field graphql.CollectedField, obj *LookBoardDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_LookBoardDataChangedPayload_lookBoardId,
+		func(ctx context.Context) (any, error) {
+			return obj.LookBoardID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_LookBoardDataChangedPayload_lookBoardId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "LookBoardDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _LookBoardDataChangedPayload_projectId(ctx context.Context, field graphql.CollectedField, obj *LookBoardDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_LookBoardDataChangedPayload_projectId,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_LookBoardDataChangedPayload_projectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "LookBoardDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _LookBoardDataChangedPayload_changeType(ctx context.Context, field graphql.CollectedField, obj *LookBoardDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_LookBoardDataChangedPayload_changeType,
+		func(ctx context.Context) (any, error) {
+			return obj.ChangeType, nil
+		},
+		nil,
+		ec.marshalNEntityDataChangeType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEntityDataChangeType,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_LookBoardDataChangedPayload_changeType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "LookBoardDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type EntityDataChangeType does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _LookBoardDataChangedPayload_affectedButtonIds(ctx context.Context, field graphql.CollectedField, obj *LookBoardDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_LookBoardDataChangedPayload_affectedButtonIds,
+		func(ctx context.Context) (any, error) {
+			return obj.AffectedButtonIds, nil
+		},
+		nil,
+		ec.marshalOID2ᚕstringᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_LookBoardDataChangedPayload_affectedButtonIds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "LookBoardDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _LookBoardDataChangedPayload_timestamp(ctx context.Context, field graphql.CollectedField, obj *LookBoardDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_LookBoardDataChangedPayload_timestamp,
+		func(ctx context.Context) (any, error) {
+			return obj.Timestamp, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_LookBoardDataChangedPayload_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "LookBoardDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _LookComparison_look1(ctx context.Context, field graphql.CollectedField, obj *LookComparison) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -19615,6 +20101,122 @@ func (ec *executionContext) fieldContext_LookComparison_differentFixtureCount(_ 
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _LookDataChangedPayload_lookId(ctx context.Context, field graphql.CollectedField, obj *LookDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_LookDataChangedPayload_lookId,
+		func(ctx context.Context) (any, error) {
+			return obj.LookID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_LookDataChangedPayload_lookId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "LookDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _LookDataChangedPayload_projectId(ctx context.Context, field graphql.CollectedField, obj *LookDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_LookDataChangedPayload_projectId,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_LookDataChangedPayload_projectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "LookDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _LookDataChangedPayload_changeType(ctx context.Context, field graphql.CollectedField, obj *LookDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_LookDataChangedPayload_changeType,
+		func(ctx context.Context) (any, error) {
+			return obj.ChangeType, nil
+		},
+		nil,
+		ec.marshalNEntityDataChangeType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEntityDataChangeType,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_LookDataChangedPayload_changeType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "LookDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type EntityDataChangeType does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _LookDataChangedPayload_timestamp(ctx context.Context, field graphql.CollectedField, obj *LookDataChangedPayload) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_LookDataChangedPayload_timestamp,
+		func(ctx context.Context) (any, error) {
+			return obj.Timestamp, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_LookDataChangedPayload_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "LookDataChangedPayload",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -34818,6 +35420,161 @@ func (ec *executionContext) fieldContext_Subscription_operationHistoryChanged(ct
 	return fc, nil
 }
 
+func (ec *executionContext) _Subscription_lookDataChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_lookDataChanged,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Subscription().LookDataChanged(ctx, fc.Args["projectId"].(string))
+		},
+		nil,
+		ec.marshalNLookDataChangedPayload2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐLookDataChangedPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_lookDataChanged(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "lookId":
+				return ec.fieldContext_LookDataChangedPayload_lookId(ctx, field)
+			case "projectId":
+				return ec.fieldContext_LookDataChangedPayload_projectId(ctx, field)
+			case "changeType":
+				return ec.fieldContext_LookDataChangedPayload_changeType(ctx, field)
+			case "timestamp":
+				return ec.fieldContext_LookDataChangedPayload_timestamp(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type LookDataChangedPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_lookDataChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_lookBoardDataChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_lookBoardDataChanged,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Subscription().LookBoardDataChanged(ctx, fc.Args["projectId"].(string))
+		},
+		nil,
+		ec.marshalNLookBoardDataChangedPayload2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐLookBoardDataChangedPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_lookBoardDataChanged(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "lookBoardId":
+				return ec.fieldContext_LookBoardDataChangedPayload_lookBoardId(ctx, field)
+			case "projectId":
+				return ec.fieldContext_LookBoardDataChangedPayload_projectId(ctx, field)
+			case "changeType":
+				return ec.fieldContext_LookBoardDataChangedPayload_changeType(ctx, field)
+			case "affectedButtonIds":
+				return ec.fieldContext_LookBoardDataChangedPayload_affectedButtonIds(ctx, field)
+			case "timestamp":
+				return ec.fieldContext_LookBoardDataChangedPayload_timestamp(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type LookBoardDataChangedPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_lookBoardDataChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_fixtureDataChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_fixtureDataChanged,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Subscription().FixtureDataChanged(ctx, fc.Args["projectId"].(string))
+		},
+		nil,
+		ec.marshalNFixtureDataChangedPayload2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureDataChangedPayload,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_fixtureDataChanged(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "fixtureIds":
+				return ec.fieldContext_FixtureDataChangedPayload_fixtureIds(ctx, field)
+			case "projectId":
+				return ec.fieldContext_FixtureDataChangedPayload_projectId(ctx, field)
+			case "changeType":
+				return ec.fieldContext_FixtureDataChangedPayload_changeType(ctx, field)
+			case "timestamp":
+				return ec.fieldContext_FixtureDataChangedPayload_timestamp(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FixtureDataChangedPayload", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_fixtureDataChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SystemInfo_artnetBroadcastAddress(ctx context.Context, field graphql.CollectedField, obj *SystemInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -43422,6 +44179,60 @@ func (ec *executionContext) _FixtureChannelAssignment(ctx context.Context, sel a
 	return out
 }
 
+var fixtureDataChangedPayloadImplementors = []string{"FixtureDataChangedPayload"}
+
+func (ec *executionContext) _FixtureDataChangedPayload(ctx context.Context, sel ast.SelectionSet, obj *FixtureDataChangedPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, fixtureDataChangedPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("FixtureDataChangedPayload")
+		case "fixtureIds":
+			out.Values[i] = ec._FixtureDataChangedPayload_fixtureIds(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "projectId":
+			out.Values[i] = ec._FixtureDataChangedPayload_projectId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "changeType":
+			out.Values[i] = ec._FixtureDataChangedPayload_changeType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "timestamp":
+			out.Values[i] = ec._FixtureDataChangedPayload_timestamp(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var fixtureDefinitionImplementors = []string{"FixtureDefinition"}
 
 func (ec *executionContext) _FixtureDefinition(ctx context.Context, sel ast.SelectionSet, obj *models.FixtureDefinition) graphql.Marshaler {
@@ -45371,6 +46182,62 @@ func (ec *executionContext) _LookBoardButton(ctx context.Context, sel ast.Select
 	return out
 }
 
+var lookBoardDataChangedPayloadImplementors = []string{"LookBoardDataChangedPayload"}
+
+func (ec *executionContext) _LookBoardDataChangedPayload(ctx context.Context, sel ast.SelectionSet, obj *LookBoardDataChangedPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, lookBoardDataChangedPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("LookBoardDataChangedPayload")
+		case "lookBoardId":
+			out.Values[i] = ec._LookBoardDataChangedPayload_lookBoardId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "projectId":
+			out.Values[i] = ec._LookBoardDataChangedPayload_projectId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "changeType":
+			out.Values[i] = ec._LookBoardDataChangedPayload_changeType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "affectedButtonIds":
+			out.Values[i] = ec._LookBoardDataChangedPayload_affectedButtonIds(ctx, field, obj)
+		case "timestamp":
+			out.Values[i] = ec._LookBoardDataChangedPayload_timestamp(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var lookComparisonImplementors = []string{"LookComparison"}
 
 func (ec *executionContext) _LookComparison(ctx context.Context, sel ast.SelectionSet, obj *LookComparison) graphql.Marshaler {
@@ -45404,6 +46271,60 @@ func (ec *executionContext) _LookComparison(ctx context.Context, sel ast.Selecti
 			}
 		case "differentFixtureCount":
 			out.Values[i] = ec._LookComparison_differentFixtureCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var lookDataChangedPayloadImplementors = []string{"LookDataChangedPayload"}
+
+func (ec *executionContext) _LookDataChangedPayload(ctx context.Context, sel ast.SelectionSet, obj *LookDataChangedPayload) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, lookDataChangedPayloadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("LookDataChangedPayload")
+		case "lookId":
+			out.Values[i] = ec._LookDataChangedPayload_lookId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "projectId":
+			out.Values[i] = ec._LookDataChangedPayload_projectId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "changeType":
+			out.Values[i] = ec._LookDataChangedPayload_changeType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "timestamp":
+			out.Values[i] = ec._LookDataChangedPayload_timestamp(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -50103,6 +51024,12 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_oflImportProgress(ctx, fields[0])
 	case "operationHistoryChanged":
 		return ec._Subscription_operationHistoryChanged(ctx, fields[0])
+	case "lookDataChanged":
+		return ec._Subscription_lookDataChanged(ctx, fields[0])
+	case "lookBoardDataChanged":
+		return ec._Subscription_lookBoardDataChanged(ctx, fields[0])
+	case "fixtureDataChanged":
+		return ec._Subscription_fixtureDataChanged(ctx, fields[0])
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
@@ -52513,6 +53440,16 @@ func (ec *executionContext) marshalNEffectType2githubᚗcomᚋbbernsteinᚋlacyl
 	return v
 }
 
+func (ec *executionContext) unmarshalNEntityDataChangeType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEntityDataChangeType(ctx context.Context, v any) (EntityDataChangeType, error) {
+	var res EntityDataChangeType
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNEntityDataChangeType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEntityDataChangeType(ctx context.Context, sel ast.SelectionSet, v EntityDataChangeType) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) marshalNExportResult2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐExportResult(ctx context.Context, sel ast.SelectionSet, v ExportResult) graphql.Marshaler {
 	return ec._ExportResult(ctx, sel, &v)
 }
@@ -52593,6 +53530,20 @@ func (ec *executionContext) marshalNFixtureChannelAssignment2ᚖgithubᚗcomᚋb
 		return graphql.Null
 	}
 	return ec._FixtureChannelAssignment(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNFixtureDataChangedPayload2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureDataChangedPayload(ctx context.Context, sel ast.SelectionSet, v FixtureDataChangedPayload) graphql.Marshaler {
+	return ec._FixtureDataChangedPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNFixtureDataChangedPayload2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureDataChangedPayload(ctx context.Context, sel ast.SelectionSet, v *FixtureDataChangedPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._FixtureDataChangedPayload(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNFixtureDefinition2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureDefinition(ctx context.Context, sel ast.SelectionSet, v models.FixtureDefinition) graphql.Marshaler {
@@ -53624,6 +54575,20 @@ func (ec *executionContext) unmarshalNLookBoardButtonUpdateItem2ᚖgithubᚗcom�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalNLookBoardDataChangedPayload2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐLookBoardDataChangedPayload(ctx context.Context, sel ast.SelectionSet, v LookBoardDataChangedPayload) graphql.Marshaler {
+	return ec._LookBoardDataChangedPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNLookBoardDataChangedPayload2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐLookBoardDataChangedPayload(ctx context.Context, sel ast.SelectionSet, v *LookBoardDataChangedPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._LookBoardDataChangedPayload(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNLookBoardUpdateItem2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐLookBoardUpdateItemᚄ(ctx context.Context, v any) ([]*LookBoardUpdateItem, error) {
 	var vSlice []any
 	vSlice = graphql.CoerceList(v)
@@ -53656,6 +54621,20 @@ func (ec *executionContext) marshalNLookComparison2ᚖgithubᚗcomᚋbbernstein�
 		return graphql.Null
 	}
 	return ec._LookComparison(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNLookDataChangedPayload2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐLookDataChangedPayload(ctx context.Context, sel ast.SelectionSet, v LookDataChangedPayload) graphql.Marshaler {
+	return ec._LookDataChangedPayload(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNLookDataChangedPayload2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐLookDataChangedPayload(ctx context.Context, sel ast.SelectionSet, v *LookDataChangedPayload) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._LookDataChangedPayload(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNLookDifference2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐLookDifferenceᚄ(ctx context.Context, sel ast.SelectionSet, v []*LookDifference) graphql.Marshaler {

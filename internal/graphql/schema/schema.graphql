@@ -167,6 +167,18 @@ enum CueListDataChangeType {
   LOOK_NAME_CHANGED
 }
 
+"""
+Type of entity change for real-time updates.
+CREATED - Entity was created
+UPDATED - Entity was modified
+DELETED - Entity was deleted
+"""
+enum EntityDataChangeType {
+  CREATED
+  UPDATED
+  DELETED
+}
+
 # =============================================================================
 # EFFECT ENUMS
 # =============================================================================
@@ -244,6 +256,38 @@ type CueListDataChangedPayload {
   affectedLookId: ID
   "New look name if this is a LOOK_NAME_CHANGED event"
   newLookName: String
+  "Timestamp of the change"
+  timestamp: String!
+}
+
+"Payload for look data change notifications (used for undo/redo real-time updates)"
+type LookDataChangedPayload {
+  lookId: ID!
+  projectId: ID!
+  changeType: EntityDataChangeType!
+  "Timestamp of the change"
+  timestamp: String!
+}
+
+"Payload for fixture data change notifications (used for undo/redo real-time updates)"
+type FixtureDataChangedPayload {
+  "The affected fixture IDs"
+  fixtureIds: [ID!]!
+  "The project containing the fixtures"
+  projectId: ID!
+  "Type of change that occurred"
+  changeType: EntityDataChangeType!
+  "Timestamp of the change"
+  timestamp: String!
+}
+
+"Payload for look board data change notifications (used for undo/redo real-time updates)"
+type LookBoardDataChangedPayload {
+  lookBoardId: ID!
+  projectId: ID!
+  changeType: EntityDataChangeType!
+  "Affected button IDs (for button-specific changes)"
+  affectedButtonIds: [ID!]
   "Timestamp of the change"
   timestamp: String!
 }
@@ -2108,4 +2152,10 @@ type Subscription {
   oflImportProgress: OFLImportStatus!
   "Real-time updates when operation history changes (after undo/redo or new operations)"
   operationHistoryChanged(projectId: ID!): UndoRedoStatus!
+  "Real-time updates when look data changes (created, updated, deleted via undo/redo)"
+  lookDataChanged(projectId: ID!): LookDataChangedPayload!
+  "Real-time updates when look board data changes (created, updated, deleted via undo/redo)"
+  lookBoardDataChanged(projectId: ID!): LookBoardDataChangedPayload!
+  "Real-time updates when fixture data changes (positions updated via undo/redo)"
+  fixtureDataChanged(projectId: ID!): FixtureDataChangedPayload!
 }

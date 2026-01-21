@@ -425,6 +425,18 @@ type FixtureChannelAssignment struct {
 	ChannelRange string  `json:"channelRange"`
 }
 
+// Payload for fixture data change notifications (used for undo/redo real-time updates)
+type FixtureDataChangedPayload struct {
+	// The affected fixture IDs
+	FixtureIds []string `json:"fixtureIds"`
+	// The project containing the fixtures
+	ProjectID string `json:"projectId"`
+	// Type of change that occurred
+	ChangeType EntityDataChangeType `json:"changeType"`
+	// Timestamp of the change
+	Timestamp string `json:"timestamp"`
+}
+
 type FixtureDefinitionFilter struct {
 	Manufacturer graphql.Omittable[*string]       `json:"manufacturer,omitempty"`
 	Model        graphql.Omittable[*string]       `json:"model,omitempty"`
@@ -590,6 +602,17 @@ type LookBoardButtonUpdateItem struct {
 	Label    graphql.Omittable[*string] `json:"label,omitempty"`
 }
 
+// Payload for look board data change notifications (used for undo/redo real-time updates)
+type LookBoardDataChangedPayload struct {
+	LookBoardID string               `json:"lookBoardId"`
+	ProjectID   string               `json:"projectId"`
+	ChangeType  EntityDataChangeType `json:"changeType"`
+	// Affected button IDs (for button-specific changes)
+	AffectedButtonIds []string `json:"affectedButtonIds,omitempty"`
+	// Timestamp of the change
+	Timestamp string `json:"timestamp"`
+}
+
 type LookBoardUpdateItem struct {
 	LookBoardID     string                      `json:"lookBoardId"`
 	Name            graphql.Omittable[*string]  `json:"name,omitempty"`
@@ -606,6 +629,15 @@ type LookComparison struct {
 	Differences           []*LookDifference `json:"differences"`
 	IdenticalFixtureCount int               `json:"identicalFixtureCount"`
 	DifferentFixtureCount int               `json:"differentFixtureCount"`
+}
+
+// Payload for look data change notifications (used for undo/redo real-time updates)
+type LookDataChangedPayload struct {
+	LookID     string               `json:"lookId"`
+	ProjectID  string               `json:"projectId"`
+	ChangeType EntityDataChangeType `json:"changeType"`
+	// Timestamp of the change
+	Timestamp string `json:"timestamp"`
 }
 
 type LookDifference struct {
@@ -1444,6 +1476,67 @@ func (e *EffectType) UnmarshalJSON(b []byte) error {
 }
 
 func (e EffectType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Type of entity change for real-time updates.
+// CREATED - Entity was created
+// UPDATED - Entity was modified
+// DELETED - Entity was deleted
+type EntityDataChangeType string
+
+const (
+	EntityDataChangeTypeCreated EntityDataChangeType = "CREATED"
+	EntityDataChangeTypeUpdated EntityDataChangeType = "UPDATED"
+	EntityDataChangeTypeDeleted EntityDataChangeType = "DELETED"
+)
+
+var AllEntityDataChangeType = []EntityDataChangeType{
+	EntityDataChangeTypeCreated,
+	EntityDataChangeTypeUpdated,
+	EntityDataChangeTypeDeleted,
+}
+
+func (e EntityDataChangeType) IsValid() bool {
+	switch e {
+	case EntityDataChangeTypeCreated, EntityDataChangeTypeUpdated, EntityDataChangeTypeDeleted:
+		return true
+	}
+	return false
+}
+
+func (e EntityDataChangeType) String() string {
+	return string(e)
+}
+
+func (e *EntityDataChangeType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = EntityDataChangeType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid EntityDataChangeType", str)
+	}
+	return nil
+}
+
+func (e EntityDataChangeType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *EntityDataChangeType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e EntityDataChangeType) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

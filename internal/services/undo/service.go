@@ -16,16 +16,17 @@ import (
 type EntityType string
 
 const (
-	EntityTypeLook            EntityType = "Look"
-	EntityTypeFixtureInstance EntityType = "FixtureInstance"
-	EntityTypeCue             EntityType = "Cue"
-	EntityTypeCueList         EntityType = "CueList"
-	EntityTypeLookBoard       EntityType = "LookBoard"
-	EntityTypeLookBoardButton EntityType = "LookBoardButton"
-	EntityTypeEffect          EntityType = "Effect"
-	EntityTypeCueEffect       EntityType = "CueEffect"
-	EntityTypeProject         EntityType = "Project"
-	EntityTypeCuePlayback     EntityType = "CuePlayback"
+	EntityTypeLook                EntityType = "Look"
+	EntityTypeFixtureInstance     EntityType = "FixtureInstance"
+	EntityTypeCue                 EntityType = "Cue"
+	EntityTypeCueList             EntityType = "CueList"
+	EntityTypeLookBoard           EntityType = "LookBoard"
+	EntityTypeLookBoardButton     EntityType = "LookBoardButton"
+	EntityTypeEffect              EntityType = "Effect"
+	EntityTypeCueEffect           EntityType = "CueEffect"
+	EntityTypeProject             EntityType = "Project"
+	EntityTypeCuePlayback         EntityType = "CuePlayback"
+	EntityTypeBulkFixturePosition EntityType = "BulkFixturePosition"
 )
 
 // OperationType represents the type of operation performed.
@@ -146,6 +147,20 @@ type CuePlaybackSnapshot struct {
 	FadeInTime  *float64 `json:"fadeInTime,omitempty"`  // the fade time to use when restoring
 	IsPlaying   bool     `json:"isPlaying"`
 	CueListName string   `json:"cueListName,omitempty"` // for description purposes
+}
+
+// FixturePositionEntry captures a single fixture's position for bulk operations.
+type FixturePositionEntry struct {
+	FixtureID      string   `json:"fixtureId"`
+	FixtureName    string   `json:"fixtureName"`
+	LayoutX        *float64 `json:"layoutX,omitempty"`
+	LayoutY        *float64 `json:"layoutY,omitempty"`
+	LayoutRotation *float64 `json:"layoutRotation,omitempty"`
+}
+
+// BulkFixturePositionSnapshot captures multiple fixture positions for undo/redo.
+type BulkFixturePositionSnapshot struct {
+	Positions []FixturePositionEntry `json:"positions"`
 }
 
 // PlaybackController defines the interface for playback operations needed by undo.
@@ -419,6 +434,8 @@ func (s *Service) applySnapshot(ctx context.Context, entityType EntityType, snap
 		return s.applyCueEffectSnapshot(ctx, snapshotJSON, opType, entityID)
 	case EntityTypeCuePlayback:
 		return s.applyCuePlaybackSnapshot(ctx, snapshotJSON)
+	case EntityTypeBulkFixturePosition:
+		return s.applyBulkFixturePositionSnapshot(ctx, snapshotJSON)
 	default:
 		return "", fmt.Errorf("unsupported entity type for undo: %s", entityType)
 	}
@@ -1006,6 +1023,33 @@ func (s *Service) CaptureFixtureState(ctx context.Context, fixtureID string) (*F
 	}, nil
 }
 
+// CaptureFixturePositions captures positions of multiple fixtures for bulk undo.
+func (s *Service) CaptureFixturePositions(ctx context.Context, fixtureIDs []string) (*BulkFixturePositionSnapshot, error) {
+	var positions []FixturePositionEntry
+
+	for _, fixtureID := range fixtureIDs {
+		fixture, err := s.fixtureRepo.FindByID(ctx, fixtureID)
+		if err != nil {
+			return nil, err
+		}
+		if fixture == nil {
+			continue
+		}
+
+		positions = append(positions, FixturePositionEntry{
+			FixtureID:      fixture.ID,
+			FixtureName:    fixture.Name,
+			LayoutX:        fixture.LayoutX,
+			LayoutY:        fixture.LayoutY,
+			LayoutRotation: fixture.LayoutRotation,
+		})
+	}
+
+	return &BulkFixturePositionSnapshot{
+		Positions: positions,
+	}, nil
+}
+
 // CaptureCueState captures the complete state of a cue for undo.
 func (s *Service) CaptureCueState(ctx context.Context, cueID string) (*CueSnapshot, error) {
 	cue, err := s.cueRepo.FindByID(ctx, cueID)
@@ -1188,4 +1232,40 @@ func (s *Service) applyCuePlaybackSnapshot(ctx context.Context, snapshotJSON str
 	}
 
 	return snapshot.CueListID, nil
+}
+
+// applyBulkFixturePositionSnapshot restores multiple fixture positions from a snapshot.
+// Returns empty string as there's no single entity ID (it's a bulk operation).
+func (s *Service) applyBulkFixturePositionSnapshot(ctx context.Context, snapshotJSON string) (string, error) {
+	if snapshotJSON == "" {
+		return "", nil
+	}
+
+	var snapshot BulkFixturePositionSnapshot
+	if err := json.Unmarshal([]byte(snapshotJSON), &snapshot); err != nil {
+		return "", fmt.Errorf("failed to unmarshal bulk fixture position snapshot: %w", err)
+	}
+
+	// Restore each fixture's position
+	for _, pos := range snapshot.Positions {
+		fixture, err := s.fixtureRepo.FindByID(ctx, pos.FixtureID)
+		if err != nil {
+			log.Printf("Warning: failed to find fixture %s during position restore: %v", pos.FixtureID, err)
+			continue
+		}
+		if fixture == nil {
+			log.Printf("Warning: fixture %s not found during position restore", pos.FixtureID)
+			continue
+		}
+
+		fixture.LayoutX = pos.LayoutX
+		fixture.LayoutY = pos.LayoutY
+		fixture.LayoutRotation = pos.LayoutRotation
+
+		if err := s.fixtureRepo.Update(ctx, fixture); err != nil {
+			log.Printf("Warning: failed to update fixture %s position during restore: %v", pos.FixtureID, err)
+		}
+	}
+
+	return "", nil
 }

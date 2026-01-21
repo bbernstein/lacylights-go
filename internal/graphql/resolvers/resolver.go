@@ -3,6 +3,7 @@ package resolvers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -331,6 +332,190 @@ func (r *Resolver) publishOperationHistoryChanged(ctx context.Context, projectID
 	r.PubSub.Publish(pubsub.TopicOperationHistoryChanged, projectID, gqlStatus)
 }
 
+// publishLookDataChanged publishes a look data change event to subscribers.
+// This is called after undo/redo operations that affect looks.
+func (r *Resolver) publishLookDataChanged(lookID, projectID string, changeType generated.EntityDataChangeType) {
+	payload := &generated.LookDataChangedPayload{
+		LookID:     lookID,
+		ProjectID:  projectID,
+		ChangeType: changeType,
+		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+	}
+	r.PubSub.Publish(pubsub.TopicLookDataChanged, projectID, payload)
+}
+
+// publishLookBoardDataChanged publishes a look board data change event to subscribers.
+// This is called after undo/redo operations that affect look boards or buttons.
+func (r *Resolver) publishLookBoardDataChanged(lookBoardID, projectID string, changeType generated.EntityDataChangeType, affectedButtonIds []string) {
+	payload := &generated.LookBoardDataChangedPayload{
+		LookBoardID:       lookBoardID,
+		ProjectID:         projectID,
+		ChangeType:        changeType,
+		AffectedButtonIds: affectedButtonIds,
+		Timestamp:         time.Now().UTC().Format(time.RFC3339),
+	}
+	r.PubSub.Publish(pubsub.TopicLookBoardDataChanged, projectID, payload)
+}
+
+// publishFixtureDataChanged publishes a fixture data change event to subscribers.
+// This is called after undo/redo operations that affect fixture positions.
+func (r *Resolver) publishFixtureDataChanged(fixtureIDs []string, projectID string, changeType generated.EntityDataChangeType) {
+	payload := &generated.FixtureDataChangedPayload{
+		FixtureIds: fixtureIDs,
+		ProjectID:  projectID,
+		ChangeType: changeType,
+		Timestamp:  time.Now().UTC().Format(time.RFC3339),
+	}
+	r.PubSub.Publish(pubsub.TopicFixtureDataChanged, projectID, payload)
+}
+
+// publishEntityChangeFromUndo publishes entity-specific change events after undo/redo operations.
+// This routes based on the operation's entity type to publish appropriate real-time updates.
+// isUndo should be true for undo operations, false for redo operations.
+func (r *Resolver) publishEntityChangeFromUndo(ctx context.Context, projectID string, op *models.Operation, entityID string, isUndo bool) {
+	if op == nil {
+		return
+	}
+
+	// Determine the change type based on operation type and whether this is undo or redo
+	// Undo CREATE → entity was deleted; Redo CREATE → entity was created
+	// Undo DELETE → entity was restored/created; Redo DELETE → entity was deleted
+	var changeType generated.EntityDataChangeType
+	switch op.OperationType {
+	case "CREATE":
+		if isUndo {
+			changeType = generated.EntityDataChangeTypeDeleted
+		} else {
+			changeType = generated.EntityDataChangeTypeCreated
+		}
+	case "DELETE":
+		if isUndo {
+			changeType = generated.EntityDataChangeTypeCreated
+		} else {
+			changeType = generated.EntityDataChangeTypeDeleted
+		}
+	case "UPDATE":
+		changeType = generated.EntityDataChangeTypeUpdated
+	case "BULK":
+		// For bulk operations, we publish as UPDATE since it could involve multiple changes
+		changeType = generated.EntityDataChangeTypeUpdated
+	default:
+		changeType = generated.EntityDataChangeTypeUpdated
+	}
+
+	// Route based on entity type
+	switch op.EntityType {
+	case "Look":
+		lookID := entityID
+		if lookID == "" {
+			lookID = op.EntityID
+		}
+		r.publishLookDataChanged(lookID, projectID, changeType)
+
+		// If the look is currently active, refresh DMX output
+		r.refreshActiveLookDMX(ctx, lookID)
+
+	case "LookBoard":
+		lookBoardID := entityID
+		if lookBoardID == "" {
+			lookBoardID = op.EntityID
+		}
+		r.publishLookBoardDataChanged(lookBoardID, projectID, changeType, nil)
+
+	case "LookBoardButton":
+		// For button changes, we need to find the parent look board
+		buttonID := entityID
+		if buttonID == "" {
+			buttonID = op.EntityID
+		}
+		// Try to get the look board ID from the button
+		lookBoardID := r.getLookBoardIDForButton(ctx, buttonID)
+		if lookBoardID != "" {
+			r.publishLookBoardDataChanged(lookBoardID, projectID, changeType, []string{buttonID})
+		}
+
+	case "Cue":
+		// For cue changes, publish to the cue list data changed topic
+		cueID := entityID
+		if cueID == "" {
+			cueID = op.EntityID
+		}
+		cueListID := r.getCueListIDForCue(ctx, cueID)
+		if cueListID != "" {
+			var cueChangeType generated.CueListDataChangeType
+			switch changeType {
+			case generated.EntityDataChangeTypeCreated:
+				cueChangeType = generated.CueListDataChangeTypeCueAdded
+			case generated.EntityDataChangeTypeDeleted:
+				cueChangeType = generated.CueListDataChangeTypeCueRemoved
+			default:
+				cueChangeType = generated.CueListDataChangeTypeCueUpdated
+			}
+			r.publishCueListDataChanged(cueListID, cueChangeType, []string{cueID}, nil, nil)
+		}
+
+	case "CueList":
+		cueListID := entityID
+		if cueListID == "" {
+			cueListID = op.EntityID
+		}
+		r.publishCueListDataChanged(cueListID, generated.CueListDataChangeTypeCueListMetadataChanged, nil, nil, nil)
+
+	case "FixtureInstance":
+		// Fixture changes may affect looks that use them
+		// Publish a look data change for any affected looks
+		fixtureID := entityID
+		if fixtureID == "" {
+			fixtureID = op.EntityID
+		}
+		r.notifyFixtureAffectedLooks(ctx, fixtureID, projectID)
+
+	case "BulkFixturePosition":
+		// Bulk fixture position changes (from 2D Layout view)
+		// Extract fixture IDs from the RelatedIDs field (JSON array)
+		fixtureIDs := extractFixtureIDsFromRelatedIDs(op.RelatedIDs)
+		if len(fixtureIDs) > 0 {
+			r.publishFixtureDataChanged(fixtureIDs, projectID, changeType)
+		}
+	}
+}
+
+// refreshActiveLookDMX checks if a look is currently active and logs a message.
+// Note: We don't automatically refresh DMX output to avoid unexpected behavior.
+// Users can reactivate the look manually if they need the updated values on DMX.
+func (r *Resolver) refreshActiveLookDMX(_ context.Context, lookID string) {
+	activeLookID := r.DMXService.GetActiveLookID()
+	if activeLookID != nil && *activeLookID == lookID {
+		log.Printf("Info: Look %s was modified via undo/redo while active. Reactivate the look to see updated DMX values.", lookID)
+	}
+}
+
+// getLookBoardIDForButton retrieves the look board ID for a button.
+func (r *Resolver) getLookBoardIDForButton(ctx context.Context, buttonID string) string {
+	button, err := r.LookBoardRepo.FindButtonByID(ctx, buttonID)
+	if err != nil || button == nil {
+		return ""
+	}
+	return button.LookBoardID
+}
+
+// getCueListIDForCue retrieves the cue list ID for a cue.
+func (r *Resolver) getCueListIDForCue(ctx context.Context, cueID string) string {
+	cue, err := r.CueRepo.FindByID(ctx, cueID)
+	if err != nil || cue == nil {
+		return ""
+	}
+	return cue.CueListID
+}
+
+// notifyFixtureAffectedLooks notifies about fixtures that were changed.
+// Note: We don't currently track which looks use which fixtures efficiently,
+// so we just log the change. Looks that use this fixture will need to be
+// refreshed manually if needed.
+func (r *Resolver) notifyFixtureAffectedLooks(_ context.Context, fixtureID, projectID string) {
+	log.Printf("Info: Fixture %s in project %s was modified via undo/redo. Looks using this fixture may need refresh.", fixtureID, projectID)
+}
+
 // captureCuePlaybackState captures the current playback state for undo/redo.
 func (r *Resolver) captureCuePlaybackState(cueListID, projectID, cueListName string) *undo.CuePlaybackSnapshot {
 	status := r.PlaybackService.GetFormattedStatus(cueListID)
@@ -350,4 +535,18 @@ func (r *Resolver) captureCuePlaybackState(cueListID, projectID, cueListName str
 	}
 
 	return snapshot
+}
+
+// extractFixtureIDsFromRelatedIDs extracts fixture IDs from the RelatedIDs JSON field.
+// RelatedIDs is a JSON array of fixture IDs stored in bulk operations.
+func extractFixtureIDsFromRelatedIDs(relatedIDs *string) []string {
+	if relatedIDs == nil || *relatedIDs == "" {
+		return nil
+	}
+	var ids []string
+	if err := json.Unmarshal([]byte(*relatedIDs), &ids); err != nil {
+		log.Printf("Warning: failed to parse RelatedIDs: %v", err)
+		return nil
+	}
+	return ids
 }
