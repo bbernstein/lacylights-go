@@ -27,6 +27,7 @@ const (
 	EntityTypeProject             EntityType = "Project"
 	EntityTypeCuePlayback         EntityType = "CuePlayback"
 	EntityTypeBulkFixturePosition EntityType = "BulkFixturePosition"
+	EntityTypeBulkLookUpdate      EntityType = "BulkLookUpdate"
 )
 
 // OperationType represents the type of operation performed.
@@ -161,6 +162,12 @@ type FixturePositionEntry struct {
 // BulkFixturePositionSnapshot captures multiple fixture positions for undo/redo.
 type BulkFixturePositionSnapshot struct {
 	Positions []FixturePositionEntry `json:"positions"`
+}
+
+// BulkLookUpdateSnapshot captures multiple looks' state for atomic undo.
+// Used by copyFixturesToLooks to restore all target looks in a single undo operation.
+type BulkLookUpdateSnapshot struct {
+	Looks []LookSnapshot `json:"looks"`
 }
 
 // PlaybackController defines the interface for playback operations needed by undo.
@@ -436,6 +443,8 @@ func (s *Service) applySnapshot(ctx context.Context, entityType EntityType, snap
 		return s.applyCuePlaybackSnapshot(ctx, snapshotJSON)
 	case EntityTypeBulkFixturePosition:
 		return s.applyBulkFixturePositionSnapshot(ctx, snapshotJSON)
+	case EntityTypeBulkLookUpdate:
+		return s.applyBulkLookUpdateSnapshot(ctx, snapshotJSON)
 	default:
 		return "", fmt.Errorf("unsupported entity type for undo: %s", entityType)
 	}
@@ -1282,4 +1291,65 @@ func (s *Service) applyBulkFixturePositionSnapshot(ctx context.Context, snapshot
 		return "", firstError
 	}
 	return "", nil
+}
+
+// applyBulkLookUpdateSnapshot restores multiple looks from a snapshot.
+// Returns comma-separated list of restored look IDs.
+func (s *Service) applyBulkLookUpdateSnapshot(ctx context.Context, snapshotJSON string) (string, error) {
+	if snapshotJSON == "" {
+		return "", nil
+	}
+
+	var snapshot BulkLookUpdateSnapshot
+	if err := json.Unmarshal([]byte(snapshotJSON), &snapshot); err != nil {
+		return "", fmt.Errorf("failed to unmarshal bulk look update snapshot: %w", err)
+	}
+
+	// Restore each look's state
+	var restoredIDs []string
+	for _, lookSnapshot := range snapshot.Looks {
+		if lookSnapshot.Look == nil {
+			continue
+		}
+
+		// Re-marshal individual look snapshot to use existing applyLookSnapshot
+		lookJSON, err := json.Marshal(lookSnapshot)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal look snapshot for %s: %w", lookSnapshot.Look.ID, err)
+		}
+
+		entityID, err := s.applyLookSnapshot(ctx, string(lookJSON), OperationTypeUpdate, lookSnapshot.Look.ID)
+		if err != nil {
+			return "", fmt.Errorf("failed to restore look %s: %w", lookSnapshot.Look.ID, err)
+		}
+		restoredIDs = append(restoredIDs, entityID)
+	}
+
+	// Return comma-separated list of restored IDs
+	result := ""
+	for i, id := range restoredIDs {
+		if i > 0 {
+			result += ","
+		}
+		result += id
+	}
+	return result, nil
+}
+
+// CaptureBulkLookState captures the complete state of multiple looks for atomic undo.
+// Used by copyFixturesToLooks to enable single-undo for multi-look updates.
+func (s *Service) CaptureBulkLookState(ctx context.Context, lookIDs []string) (*BulkLookUpdateSnapshot, error) {
+	var looks []LookSnapshot
+
+	for _, lookID := range lookIDs {
+		snapshot, err := s.CaptureLookState(ctx, lookID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to capture look %s: %w", lookID, err)
+		}
+		if snapshot != nil {
+			looks = append(looks, *snapshot)
+		}
+	}
+
+	return &BulkLookUpdateSnapshot{Looks: looks}, nil
 }

@@ -2495,3 +2495,315 @@ func TestBuildInfo_DefaultValues(t *testing.T) {
 		t.Errorf("Expected default buildTime 'unknown', got %q", resp.BuildInfo.BuildTime)
 	}
 }
+
+// =============================================================================
+// CopyFixturesToLooks Tests
+// =============================================================================
+
+func TestCopyFixturesToLooks_Basic(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Create project
+	var projectResp struct {
+		CreateProject struct {
+			ID string `json:"id"`
+		} `json:"createProject"`
+	}
+	err := c.Post(`mutation { createProject(input: { name: "Copy Test Project" }) { id } }`, &projectResp)
+	if err != nil {
+		t.Fatalf("CreateProject mutation failed: %v", err)
+	}
+	projectID := projectResp.CreateProject.ID
+
+	// Create fixture definition
+	var defResp struct {
+		CreateFixtureDefinition struct {
+			ID string `json:"id"`
+		} `json:"createFixtureDefinition"`
+	}
+	err = c.Post(`mutation {
+		createFixtureDefinition(input: {
+			manufacturer: "Test"
+			model: "CopyTestPar"
+			type: LED_PAR
+			channels: [
+				{ name: "Dimmer", type: INTENSITY, offset: 0, minValue: 0, maxValue: 255, defaultValue: 0 }
+			]
+		}) {
+			id
+		}
+	}`, &defResp)
+	if err != nil {
+		t.Fatalf("CreateFixtureDefinition mutation failed: %v", err)
+	}
+	defID := defResp.CreateFixtureDefinition.ID
+
+	// Create fixture instance
+	var instanceResp struct {
+		CreateFixtureInstance struct {
+			ID string `json:"id"`
+		} `json:"createFixtureInstance"`
+	}
+	err = c.Post(`mutation($projectId: ID!, $defId: ID!) {
+		createFixtureInstance(input: {
+			name: "Copy Test Fixture"
+			projectId: $projectId
+			definitionId: $defId
+			universe: 1
+			startChannel: 1
+		}) {
+			id
+		}
+	}`, &instanceResp,
+		client.Var("projectId", projectID),
+		client.Var("defId", defID))
+	if err != nil {
+		t.Fatalf("CreateFixtureInstance mutation failed: %v", err)
+	}
+	fixtureID := instanceResp.CreateFixtureInstance.ID
+
+	// Create source look with fixture value = 200
+	var sourceLookResp struct {
+		CreateLook struct {
+			ID string `json:"id"`
+		} `json:"createLook"`
+	}
+	err = c.Post(`mutation($projectId: ID!, $fixtureId: ID!) {
+		createLook(input: {
+			name: "Source Look"
+			projectId: $projectId
+			fixtureValues: [
+				{ fixtureId: $fixtureId, channels: [{ offset: 0, value: 200 }] }
+			]
+		}) {
+			id
+		}
+	}`, &sourceLookResp,
+		client.Var("projectId", projectID),
+		client.Var("fixtureId", fixtureID))
+	if err != nil {
+		t.Fatalf("CreateLook (source) mutation failed: %v", err)
+	}
+	sourceLookID := sourceLookResp.CreateLook.ID
+
+	// Create target look with fixture value = 50
+	var targetLookResp struct {
+		CreateLook struct {
+			ID string `json:"id"`
+		} `json:"createLook"`
+	}
+	err = c.Post(`mutation($projectId: ID!, $fixtureId: ID!) {
+		createLook(input: {
+			name: "Target Look"
+			projectId: $projectId
+			fixtureValues: [
+				{ fixtureId: $fixtureId, channels: [{ offset: 0, value: 50 }] }
+			]
+		}) {
+			id
+		}
+	}`, &targetLookResp,
+		client.Var("projectId", projectID),
+		client.Var("fixtureId", fixtureID))
+	if err != nil {
+		t.Fatalf("CreateLook (target) mutation failed: %v", err)
+	}
+	targetLookID := targetLookResp.CreateLook.ID
+
+	// Copy fixture from source to target
+	var copyResp struct {
+		CopyFixturesToLooks struct {
+			UpdatedLookCount int    `json:"updatedLookCount"`
+			AffectedCueCount int    `json:"affectedCueCount"`
+			OperationID      string `json:"operationId"`
+			UpdatedLooks     []struct {
+				ID            string `json:"id"`
+				Name          string `json:"name"`
+				FixtureValues []struct {
+					Fixture struct {
+						ID string `json:"id"`
+					} `json:"fixture"`
+					Channels []struct {
+						Offset int `json:"offset"`
+						Value  int `json:"value"`
+					} `json:"channels"`
+				} `json:"fixtureValues"`
+			} `json:"updatedLooks"`
+		} `json:"copyFixturesToLooks"`
+	}
+	err = c.Post(`mutation($sourceLookId: ID!, $fixtureIds: [ID!]!, $targetLookIds: [ID!]!) {
+		copyFixturesToLooks(input: {
+			sourceLookId: $sourceLookId
+			fixtureIds: $fixtureIds
+			targetLookIds: $targetLookIds
+		}) {
+			updatedLookCount
+			affectedCueCount
+			operationId
+			updatedLooks {
+				id
+				name
+				fixtureValues {
+					fixture { id }
+					channels { offset value }
+				}
+			}
+		}
+	}`, &copyResp,
+		client.Var("sourceLookId", sourceLookID),
+		client.Var("fixtureIds", []string{fixtureID}),
+		client.Var("targetLookIds", []string{targetLookID}))
+	if err != nil {
+		t.Fatalf("CopyFixturesToLooks mutation failed: %v", err)
+	}
+
+	// Verify results
+	if copyResp.CopyFixturesToLooks.UpdatedLookCount != 1 {
+		t.Errorf("Expected updatedLookCount 1, got %d", copyResp.CopyFixturesToLooks.UpdatedLookCount)
+	}
+	// Note: operationId may be empty in test environment without undo tables
+	if len(copyResp.CopyFixturesToLooks.UpdatedLooks) != 1 {
+		t.Fatalf("Expected 1 updated look, got %d", len(copyResp.CopyFixturesToLooks.UpdatedLooks))
+	}
+
+	// Verify the target look has the source value (200)
+	updatedLook := copyResp.CopyFixturesToLooks.UpdatedLooks[0]
+	if updatedLook.ID != targetLookID {
+		t.Errorf("Expected updated look ID %s, got %s", targetLookID, updatedLook.ID)
+	}
+
+	foundFixture := false
+	for _, fv := range updatedLook.FixtureValues {
+		if fv.Fixture.ID == fixtureID {
+			foundFixture = true
+			for _, ch := range fv.Channels {
+				if ch.Offset == 0 && ch.Value != 200 {
+					t.Errorf("Expected channel value 200 (from source), got %d", ch.Value)
+				}
+			}
+		}
+	}
+	if !foundFixture {
+		t.Error("Fixture not found in updated look")
+	}
+}
+
+func TestCopyFixturesToLooks_CopiesEvenToSourceLook(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Create project
+	var projectResp struct {
+		CreateProject struct {
+			ID string `json:"id"`
+		} `json:"createProject"`
+	}
+	err := c.Post(`mutation { createProject(input: { name: "Copy To Source Test" }) { id } }`, &projectResp)
+	if err != nil {
+		t.Fatalf("CreateProject mutation failed: %v", err)
+	}
+	projectID := projectResp.CreateProject.ID
+
+	// Create fixture definition
+	var defResp struct {
+		CreateFixtureDefinition struct {
+			ID string `json:"id"`
+		} `json:"createFixtureDefinition"`
+	}
+	err = c.Post(`mutation {
+		createFixtureDefinition(input: {
+			manufacturer: "Test"
+			model: "SkipTestPar"
+			type: LED_PAR
+			channels: [
+				{ name: "Dimmer", type: INTENSITY, offset: 0, minValue: 0, maxValue: 255, defaultValue: 0 }
+			]
+		}) {
+			id
+		}
+	}`, &defResp)
+	if err != nil {
+		t.Fatalf("CreateFixtureDefinition mutation failed: %v", err)
+	}
+	defID := defResp.CreateFixtureDefinition.ID
+
+	// Create fixture instance
+	var instanceResp struct {
+		CreateFixtureInstance struct {
+			ID string `json:"id"`
+		} `json:"createFixtureInstance"`
+	}
+	err = c.Post(`mutation($projectId: ID!, $defId: ID!) {
+		createFixtureInstance(input: {
+			name: "Skip Test Fixture"
+			projectId: $projectId
+			definitionId: $defId
+			universe: 1
+			startChannel: 1
+		}) {
+			id
+		}
+	}`, &instanceResp,
+		client.Var("projectId", projectID),
+		client.Var("defId", defID))
+	if err != nil {
+		t.Fatalf("CreateFixtureInstance mutation failed: %v", err)
+	}
+	fixtureID := instanceResp.CreateFixtureInstance.ID
+
+	// Create source look
+	var sourceLookResp struct {
+		CreateLook struct {
+			ID string `json:"id"`
+		} `json:"createLook"`
+	}
+	err = c.Post(`mutation($projectId: ID!, $fixtureId: ID!) {
+		createLook(input: {
+			name: "Source Look"
+			projectId: $projectId
+			fixtureValues: [
+				{ fixtureId: $fixtureId, channels: [{ offset: 0, value: 255 }] }
+			]
+		}) {
+			id
+		}
+	}`, &sourceLookResp,
+		client.Var("projectId", projectID),
+		client.Var("fixtureId", fixtureID))
+	if err != nil {
+		t.Fatalf("CreateLook (source) mutation failed: %v", err)
+	}
+	sourceLookID := sourceLookResp.CreateLook.ID
+
+	// Copy to source look itself (resolver applies to all specified targets, including source)
+	var copyResp struct {
+		CopyFixturesToLooks struct {
+			UpdatedLookCount int `json:"updatedLookCount"`
+			UpdatedLooks     []struct {
+				ID string `json:"id"`
+			} `json:"updatedLooks"`
+		} `json:"copyFixturesToLooks"`
+	}
+	err = c.Post(`mutation($sourceLookId: ID!, $fixtureIds: [ID!]!, $targetLookIds: [ID!]!) {
+		copyFixturesToLooks(input: {
+			sourceLookId: $sourceLookId
+			fixtureIds: $fixtureIds
+			targetLookIds: $targetLookIds
+		}) {
+			updatedLookCount
+			updatedLooks { id }
+		}
+	}`, &copyResp,
+		client.Var("sourceLookId", sourceLookID),
+		client.Var("fixtureIds", []string{fixtureID}),
+		client.Var("targetLookIds", []string{sourceLookID})) // Source as target
+	if err != nil {
+		t.Fatalf("CopyFixturesToLooks mutation failed: %v", err)
+	}
+
+	// Should update 1 look - the resolver copies to all specified targets including source
+	if copyResp.CopyFixturesToLooks.UpdatedLookCount != 1 {
+		t.Errorf("Expected updatedLookCount 1, got %d", copyResp.CopyFixturesToLooks.UpdatedLookCount)
+	}
+}

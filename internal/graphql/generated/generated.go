@@ -153,6 +153,13 @@ type ComplexityRoot struct {
 		Value  func(childComplexity int) int
 	}
 
+	CopyFixturesToLooksResult struct {
+		AffectedCueCount func(childComplexity int) int
+		OperationID      func(childComplexity int) int
+		UpdatedLookCount func(childComplexity int) int
+		UpdatedLooks     func(childComplexity int) int
+	}
+
 	Cue struct {
 		CueList     func(childComplexity int) int
 		CueNumber   func(childComplexity int) int
@@ -234,6 +241,20 @@ type ComplexityRoot struct {
 		CueListName func(childComplexity int) int
 		CueName     func(childComplexity int) int
 		CueNumber   func(childComplexity int) int
+	}
+
+	CueWithLookInfo struct {
+		CueID           func(childComplexity int) int
+		CueName         func(childComplexity int) int
+		CueNumber       func(childComplexity int) int
+		LookID          func(childComplexity int) int
+		LookName        func(childComplexity int) int
+		OtherCueNumbers func(childComplexity int) int
+	}
+
+	CuesWithLookInfoResponse struct {
+		Cues        func(childComplexity int) int
+		OrphanLooks func(childComplexity int) int
 	}
 
 	Effect struct {
@@ -585,6 +606,7 @@ type ComplexityRoot struct {
 		CloneLook                              func(childComplexity int, lookID string, newName string) int
 		CommitPreviewSession                   func(childComplexity int, sessionID string) int
 		ConnectWiFi                            func(childComplexity int, ssid string, password *string) int
+		CopyFixturesToLooks                    func(childComplexity int, input CopyFixturesToLooksInput) int
 		CreateCue                              func(childComplexity int, input CreateCueInput) int
 		CreateCueList                          func(childComplexity int, input CreateCueListInput) int
 		CreateEffect                           func(childComplexity int, input CreateEffectInput) int
@@ -854,6 +876,7 @@ type ComplexityRoot struct {
 		CueLists                        func(childComplexity int, projectID string) int
 		CueListsByIds                   func(childComplexity int, ids []string) int
 		CuesByIds                       func(childComplexity int, ids []string) int
+		CuesWithLookInfo                func(childComplexity int, cueListID string) int
 		CurrentActiveLook               func(childComplexity int) int
 		DeletedProjects                 func(childComplexity int) int
 		DmxOutput                       func(childComplexity int, universe int) int
@@ -1158,6 +1181,7 @@ type MutationResolver interface {
 	RemoveFixturesFromLook(ctx context.Context, lookID string, fixtureIds []string) (*models.Look, error)
 	UpdateLookPartial(ctx context.Context, lookID string, name *string, description *string, fixtureValues []*FixtureValueInput, mergeFixtures *bool) (*models.Look, error)
 	BulkUpdateLooksPartial(ctx context.Context, input BulkLookPartialUpdateInput) ([]*models.Look, error)
+	CopyFixturesToLooks(ctx context.Context, input CopyFixturesToLooksInput) (*CopyFixturesToLooksResult, error)
 	CreateLookBoard(ctx context.Context, input CreateLookBoardInput) (*models.LookBoard, error)
 	UpdateLookBoard(ctx context.Context, id string, input UpdateLookBoardInput) (*models.LookBoard, error)
 	DeleteLookBoard(ctx context.Context, id string) (bool, error)
@@ -1298,6 +1322,7 @@ type QueryResolver interface {
 	CueList(ctx context.Context, id string, page *int, perPage *int, includeLookDetails *bool) (*models.CueList, error)
 	CueListPlaybackStatus(ctx context.Context, cueListID string) (*CueListPlaybackStatus, error)
 	GlobalPlaybackStatus(ctx context.Context) (*GlobalPlaybackStatus, error)
+	CuesWithLookInfo(ctx context.Context, cueListID string) (*CuesWithLookInfoResponse, error)
 	Cue(ctx context.Context, id string) (*models.Cue, error)
 	SearchCues(ctx context.Context, cueListID string, query string, page *int, perPage *int) (*CuePage, error)
 	DmxOutput(ctx context.Context, universe int) ([]int, error)
@@ -1691,6 +1716,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.ChannelValue.Value(childComplexity), true
 
+	case "CopyFixturesToLooksResult.affectedCueCount":
+		if e.complexity.CopyFixturesToLooksResult.AffectedCueCount == nil {
+			break
+		}
+
+		return e.complexity.CopyFixturesToLooksResult.AffectedCueCount(childComplexity), true
+	case "CopyFixturesToLooksResult.operationId":
+		if e.complexity.CopyFixturesToLooksResult.OperationID == nil {
+			break
+		}
+
+		return e.complexity.CopyFixturesToLooksResult.OperationID(childComplexity), true
+	case "CopyFixturesToLooksResult.updatedLookCount":
+		if e.complexity.CopyFixturesToLooksResult.UpdatedLookCount == nil {
+			break
+		}
+
+		return e.complexity.CopyFixturesToLooksResult.UpdatedLookCount(childComplexity), true
+	case "CopyFixturesToLooksResult.updatedLooks":
+		if e.complexity.CopyFixturesToLooksResult.UpdatedLooks == nil {
+			break
+		}
+
+		return e.complexity.CopyFixturesToLooksResult.UpdatedLooks(childComplexity), true
+
 	case "Cue.cueList":
 		if e.complexity.Cue.CueList == nil {
 			break
@@ -2052,6 +2102,56 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.CueUsageSummary.CueNumber(childComplexity), true
+
+	case "CueWithLookInfo.cueId":
+		if e.complexity.CueWithLookInfo.CueID == nil {
+			break
+		}
+
+		return e.complexity.CueWithLookInfo.CueID(childComplexity), true
+	case "CueWithLookInfo.cueName":
+		if e.complexity.CueWithLookInfo.CueName == nil {
+			break
+		}
+
+		return e.complexity.CueWithLookInfo.CueName(childComplexity), true
+	case "CueWithLookInfo.cueNumber":
+		if e.complexity.CueWithLookInfo.CueNumber == nil {
+			break
+		}
+
+		return e.complexity.CueWithLookInfo.CueNumber(childComplexity), true
+	case "CueWithLookInfo.lookId":
+		if e.complexity.CueWithLookInfo.LookID == nil {
+			break
+		}
+
+		return e.complexity.CueWithLookInfo.LookID(childComplexity), true
+	case "CueWithLookInfo.lookName":
+		if e.complexity.CueWithLookInfo.LookName == nil {
+			break
+		}
+
+		return e.complexity.CueWithLookInfo.LookName(childComplexity), true
+	case "CueWithLookInfo.otherCueNumbers":
+		if e.complexity.CueWithLookInfo.OtherCueNumbers == nil {
+			break
+		}
+
+		return e.complexity.CueWithLookInfo.OtherCueNumbers(childComplexity), true
+
+	case "CuesWithLookInfoResponse.cues":
+		if e.complexity.CuesWithLookInfoResponse.Cues == nil {
+			break
+		}
+
+		return e.complexity.CuesWithLookInfoResponse.Cues(childComplexity), true
+	case "CuesWithLookInfoResponse.orphanLooks":
+		if e.complexity.CuesWithLookInfoResponse.OrphanLooks == nil {
+			break
+		}
+
+		return e.complexity.CuesWithLookInfoResponse.OrphanLooks(childComplexity), true
 
 	case "Effect.amplitude":
 		if e.complexity.Effect.Amplitude == nil {
@@ -3775,6 +3875,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.ConnectWiFi(childComplexity, args["ssid"].(string), args["password"].(*string)), true
+	case "Mutation.copyFixturesToLooks":
+		if e.complexity.Mutation.CopyFixturesToLooks == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_copyFixturesToLooks_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.CopyFixturesToLooks(childComplexity, args["input"].(CopyFixturesToLooksInput)), true
 	case "Mutation.createCue":
 		if e.complexity.Mutation.CreateCue == nil {
 			break
@@ -5486,6 +5597,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.CuesByIds(childComplexity, args["ids"].([]string)), true
+	case "Query.cuesWithLookInfo":
+		if e.complexity.Query.CuesWithLookInfo == nil {
+			break
+		}
+
+		args, err := ec.field_Query_cuesWithLookInfo_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.CuesWithLookInfo(childComplexity, args["cueListId"].(string)), true
 	case "Query.currentActiveLook":
 		if e.complexity.Query.CurrentActiveLook == nil {
 			break
@@ -6493,6 +6615,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputChannelAssignmentInput,
 		ec.unmarshalInputChannelFadeBehaviorInput,
 		ec.unmarshalInputChannelValueInput,
+		ec.unmarshalInputCopyFixturesToLooksInput,
 		ec.unmarshalInputCreateChannelDefinitionInput,
 		ec.unmarshalInputCreateCueInput,
 		ec.unmarshalInputCreateCueListInput,
@@ -7369,6 +7492,29 @@ type CueListSummary {
   createdAt: String!
 }
 
+"""
+A cue with its associated look information for the copy modal.
+"""
+type CueWithLookInfo {
+  cueId: ID!
+  cueNumber: Float!
+  cueName: String!
+  lookId: ID!
+  lookName: String!
+  """Other cue numbers that use the same look (excluding this cue)"""
+  otherCueNumbers: [Float!]!
+}
+
+"""
+Response for the cuesWithLookInfo query.
+"""
+type CuesWithLookInfoResponse {
+  """Cues sorted by cue number"""
+  cues: [CueWithLookInfo!]!
+  """Looks in the project that are not used by any cue in this cue list"""
+  orphanLooks: [LookSummary!]!
+}
+
 type CuePage {
   cues: [Cue!]!
   pagination: PaginationInfo!
@@ -8167,6 +8313,32 @@ input LookPartialUpdateItem {
   mergeFixtures: Boolean = true
 }
 
+"""
+Input for copying fixtures from one look to multiple target looks.
+"""
+input CopyFixturesToLooksInput {
+  """ID of the look to copy fixtures from"""
+  sourceLookId: ID!
+  """IDs of fixtures to copy"""
+  fixtureIds: [ID!]!
+  """IDs of looks to copy fixtures to"""
+  targetLookIds: [ID!]!
+}
+
+"""
+Result of the copy fixtures operation.
+"""
+type CopyFixturesToLooksResult {
+  """Number of looks updated"""
+  updatedLookCount: Int!
+  """Number of cues affected (for UI feedback)"""
+  affectedCueCount: Int!
+  """The updated looks"""
+  updatedLooks: [Look!]!
+  """Operation ID for undo (single atomic operation)"""
+  operationId: ID!
+}
+
 input BulkCueListUpdateInput {
   cueLists: [CueListUpdateItem!]!
 }
@@ -8445,6 +8617,11 @@ type Query {
   cueListPlaybackStatus(cueListId: ID!): CueListPlaybackStatus
   "Get global playback status - which cue list is currently playing (if any)"
   globalPlaybackStatus: GlobalPlaybackStatus!
+  """
+  Get all cues in a cue list with their look info, plus orphan looks.
+  Used for the "Copy Fixtures to Other Looks" modal.
+  """
+  cuesWithLookInfo(cueListId: ID!): CuesWithLookInfoResponse!
 
   # Cues
   cue(id: ID!): Cue
@@ -8611,6 +8788,11 @@ type Mutation {
     mergeFixtures: Boolean = true
   ): Look!
   bulkUpdateLooksPartial(input: BulkLookPartialUpdateInput!): [Look!]!
+  """
+  Copy fixture values from one look to multiple target looks.
+  This is an atomic operation - a single undo reverses all changes.
+  """
+  copyFixturesToLooks(input: CopyFixturesToLooksInput!): CopyFixturesToLooksResult!
 
   # Look Boards
   createLookBoard(input: CreateLookBoardInput!): LookBoard!
@@ -9288,6 +9470,17 @@ func (ec *executionContext) field_Mutation_connectWiFi_args(ctx context.Context,
 		return nil, err
 	}
 	args["password"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_copyFixturesToLooks_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCopyFixturesToLooksInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCopyFixturesToLooksInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -10463,6 +10656,17 @@ func (ec *executionContext) field_Query_cuesByIds_args(ctx context.Context, rawA
 		return nil, err
 	}
 	args["ids"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_cuesWithLookInfo_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "cueListId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["cueListId"] = arg0
 	return args, nil
 }
 
@@ -12559,6 +12763,138 @@ func (ec *executionContext) fieldContext_ChannelValue_value(_ context.Context, f
 	return fc, nil
 }
 
+func (ec *executionContext) _CopyFixturesToLooksResult_updatedLookCount(ctx context.Context, field graphql.CollectedField, obj *CopyFixturesToLooksResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CopyFixturesToLooksResult_updatedLookCount,
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedLookCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CopyFixturesToLooksResult_updatedLookCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CopyFixturesToLooksResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CopyFixturesToLooksResult_affectedCueCount(ctx context.Context, field graphql.CollectedField, obj *CopyFixturesToLooksResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CopyFixturesToLooksResult_affectedCueCount,
+		func(ctx context.Context) (any, error) {
+			return obj.AffectedCueCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CopyFixturesToLooksResult_affectedCueCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CopyFixturesToLooksResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CopyFixturesToLooksResult_updatedLooks(ctx context.Context, field graphql.CollectedField, obj *CopyFixturesToLooksResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CopyFixturesToLooksResult_updatedLooks,
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedLooks, nil
+		},
+		nil,
+		ec.marshalNLook2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐLookᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CopyFixturesToLooksResult_updatedLooks(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CopyFixturesToLooksResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Look_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Look_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Look_description(ctx, field)
+			case "project":
+				return ec.fieldContext_Look_project(ctx, field)
+			case "fixtureValues":
+				return ec.fieldContext_Look_fixtureValues(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Look_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Look_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Look", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CopyFixturesToLooksResult_operationId(ctx context.Context, field graphql.CollectedField, obj *CopyFixturesToLooksResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CopyFixturesToLooksResult_operationId,
+		func(ctx context.Context) (any, error) {
+			return obj.OperationID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CopyFixturesToLooksResult_operationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CopyFixturesToLooksResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Cue_id(ctx context.Context, field graphql.CollectedField, obj *models.Cue) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -14535,6 +14871,266 @@ func (ec *executionContext) fieldContext_CueUsageSummary_cueListName(_ context.C
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CueWithLookInfo_cueId(ctx context.Context, field graphql.CollectedField, obj *CueWithLookInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CueWithLookInfo_cueId,
+		func(ctx context.Context) (any, error) {
+			return obj.CueID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CueWithLookInfo_cueId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CueWithLookInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CueWithLookInfo_cueNumber(ctx context.Context, field graphql.CollectedField, obj *CueWithLookInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CueWithLookInfo_cueNumber,
+		func(ctx context.Context) (any, error) {
+			return obj.CueNumber, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CueWithLookInfo_cueNumber(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CueWithLookInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CueWithLookInfo_cueName(ctx context.Context, field graphql.CollectedField, obj *CueWithLookInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CueWithLookInfo_cueName,
+		func(ctx context.Context) (any, error) {
+			return obj.CueName, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CueWithLookInfo_cueName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CueWithLookInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CueWithLookInfo_lookId(ctx context.Context, field graphql.CollectedField, obj *CueWithLookInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CueWithLookInfo_lookId,
+		func(ctx context.Context) (any, error) {
+			return obj.LookID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CueWithLookInfo_lookId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CueWithLookInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CueWithLookInfo_lookName(ctx context.Context, field graphql.CollectedField, obj *CueWithLookInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CueWithLookInfo_lookName,
+		func(ctx context.Context) (any, error) {
+			return obj.LookName, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CueWithLookInfo_lookName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CueWithLookInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CueWithLookInfo_otherCueNumbers(ctx context.Context, field graphql.CollectedField, obj *CueWithLookInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CueWithLookInfo_otherCueNumbers,
+		func(ctx context.Context) (any, error) {
+			return obj.OtherCueNumbers, nil
+		},
+		nil,
+		ec.marshalNFloat2ᚕfloat64ᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CueWithLookInfo_otherCueNumbers(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CueWithLookInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CuesWithLookInfoResponse_cues(ctx context.Context, field graphql.CollectedField, obj *CuesWithLookInfoResponse) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CuesWithLookInfoResponse_cues,
+		func(ctx context.Context) (any, error) {
+			return obj.Cues, nil
+		},
+		nil,
+		ec.marshalNCueWithLookInfo2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCueWithLookInfoᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CuesWithLookInfoResponse_cues(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CuesWithLookInfoResponse",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "cueId":
+				return ec.fieldContext_CueWithLookInfo_cueId(ctx, field)
+			case "cueNumber":
+				return ec.fieldContext_CueWithLookInfo_cueNumber(ctx, field)
+			case "cueName":
+				return ec.fieldContext_CueWithLookInfo_cueName(ctx, field)
+			case "lookId":
+				return ec.fieldContext_CueWithLookInfo_lookId(ctx, field)
+			case "lookName":
+				return ec.fieldContext_CueWithLookInfo_lookName(ctx, field)
+			case "otherCueNumbers":
+				return ec.fieldContext_CueWithLookInfo_otherCueNumbers(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CueWithLookInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CuesWithLookInfoResponse_orphanLooks(ctx context.Context, field graphql.CollectedField, obj *CuesWithLookInfoResponse) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CuesWithLookInfoResponse_orphanLooks,
+		func(ctx context.Context) (any, error) {
+			return obj.OrphanLooks, nil
+		},
+		nil,
+		ec.marshalNLookSummary2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐLookSummaryᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CuesWithLookInfoResponse_orphanLooks(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CuesWithLookInfoResponse",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_LookSummary_id(ctx, field)
+			case "name":
+				return ec.fieldContext_LookSummary_name(ctx, field)
+			case "description":
+				return ec.fieldContext_LookSummary_description(ctx, field)
+			case "fixtureCount":
+				return ec.fieldContext_LookSummary_fixtureCount(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_LookSummary_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_LookSummary_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type LookSummary", field.Name)
 		},
 	}
 	return fc, nil
@@ -23391,6 +23987,57 @@ func (ec *executionContext) fieldContext_Mutation_bulkUpdateLooksPartial(ctx con
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_bulkUpdateLooksPartial_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_copyFixturesToLooks(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_copyFixturesToLooks,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().CopyFixturesToLooks(ctx, fc.Args["input"].(CopyFixturesToLooksInput))
+		},
+		nil,
+		ec.marshalNCopyFixturesToLooksResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCopyFixturesToLooksResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_copyFixturesToLooks(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "updatedLookCount":
+				return ec.fieldContext_CopyFixturesToLooksResult_updatedLookCount(ctx, field)
+			case "affectedCueCount":
+				return ec.fieldContext_CopyFixturesToLooksResult_affectedCueCount(ctx, field)
+			case "updatedLooks":
+				return ec.fieldContext_CopyFixturesToLooksResult_updatedLooks(ctx, field)
+			case "operationId":
+				return ec.fieldContext_CopyFixturesToLooksResult_operationId(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CopyFixturesToLooksResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_copyFixturesToLooks_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -32590,6 +33237,53 @@ func (ec *executionContext) fieldContext_Query_globalPlaybackStatus(_ context.Co
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_cuesWithLookInfo(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_cuesWithLookInfo,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().CuesWithLookInfo(ctx, fc.Args["cueListId"].(string))
+		},
+		nil,
+		ec.marshalNCuesWithLookInfoResponse2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCuesWithLookInfoResponse,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_cuesWithLookInfo(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "cues":
+				return ec.fieldContext_CuesWithLookInfoResponse_cues(ctx, field)
+			case "orphanLooks":
+				return ec.fieldContext_CuesWithLookInfoResponse_orphanLooks(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CuesWithLookInfoResponse", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_cuesWithLookInfo_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_cue(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -39513,6 +40207,47 @@ func (ec *executionContext) unmarshalInputChannelValueInput(ctx context.Context,
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputCopyFixturesToLooksInput(ctx context.Context, obj any) (CopyFixturesToLooksInput, error) {
+	var it CopyFixturesToLooksInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sourceLookId", "fixtureIds", "targetLookIds"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sourceLookId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sourceLookId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SourceLookID = data
+		case "fixtureIds":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("fixtureIds"))
+			data, err := ec.unmarshalNID2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FixtureIds = data
+		case "targetLookIds":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("targetLookIds"))
+			data, err := ec.unmarshalNID2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TargetLookIds = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCreateChannelDefinitionInput(ctx context.Context, obj any) (CreateChannelDefinitionInput, error) {
 	var it CreateChannelDefinitionInput
 	asMap := map[string]any{}
@@ -42675,6 +43410,60 @@ func (ec *executionContext) _ChannelValue(ctx context.Context, sel ast.Selection
 	return out
 }
 
+var copyFixturesToLooksResultImplementors = []string{"CopyFixturesToLooksResult"}
+
+func (ec *executionContext) _CopyFixturesToLooksResult(ctx context.Context, sel ast.SelectionSet, obj *CopyFixturesToLooksResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, copyFixturesToLooksResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CopyFixturesToLooksResult")
+		case "updatedLookCount":
+			out.Values[i] = ec._CopyFixturesToLooksResult_updatedLookCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "affectedCueCount":
+			out.Values[i] = ec._CopyFixturesToLooksResult_affectedCueCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updatedLooks":
+			out.Values[i] = ec._CopyFixturesToLooksResult_updatedLooks(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "operationId":
+			out.Values[i] = ec._CopyFixturesToLooksResult_operationId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var cueImplementors = []string{"Cue"}
 
 func (ec *executionContext) _Cue(ctx context.Context, sel ast.SelectionSet, obj *models.Cue) graphql.Marshaler {
@@ -43512,6 +44301,114 @@ func (ec *executionContext) _CueUsageSummary(ctx context.Context, sel ast.Select
 			}
 		case "cueListName":
 			out.Values[i] = ec._CueUsageSummary_cueListName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var cueWithLookInfoImplementors = []string{"CueWithLookInfo"}
+
+func (ec *executionContext) _CueWithLookInfo(ctx context.Context, sel ast.SelectionSet, obj *CueWithLookInfo) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, cueWithLookInfoImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CueWithLookInfo")
+		case "cueId":
+			out.Values[i] = ec._CueWithLookInfo_cueId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cueNumber":
+			out.Values[i] = ec._CueWithLookInfo_cueNumber(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cueName":
+			out.Values[i] = ec._CueWithLookInfo_cueName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "lookId":
+			out.Values[i] = ec._CueWithLookInfo_lookId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "lookName":
+			out.Values[i] = ec._CueWithLookInfo_lookName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "otherCueNumbers":
+			out.Values[i] = ec._CueWithLookInfo_otherCueNumbers(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var cuesWithLookInfoResponseImplementors = []string{"CuesWithLookInfoResponse"}
+
+func (ec *executionContext) _CuesWithLookInfoResponse(ctx context.Context, sel ast.SelectionSet, obj *CuesWithLookInfoResponse) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, cuesWithLookInfoResponseImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CuesWithLookInfoResponse")
+		case "cues":
+			out.Values[i] = ec._CuesWithLookInfoResponse_cues(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "orphanLooks":
+			out.Values[i] = ec._CuesWithLookInfoResponse_orphanLooks(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -47051,6 +47948,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "copyFixturesToLooks":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_copyFixturesToLooks(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "createLookBoard":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createLookBoard(ctx, field)
@@ -50012,6 +50916,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "cuesWithLookInfo":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_cuesWithLookInfo(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "cue":
 			field := field
 
@@ -52637,6 +53563,25 @@ func (ec *executionContext) marshalNCompositionMode2githubᚗcomᚋbbernsteinᚋ
 	return v
 }
 
+func (ec *executionContext) unmarshalNCopyFixturesToLooksInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCopyFixturesToLooksInput(ctx context.Context, v any) (CopyFixturesToLooksInput, error) {
+	res, err := ec.unmarshalInputCopyFixturesToLooksInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNCopyFixturesToLooksResult2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCopyFixturesToLooksResult(ctx context.Context, sel ast.SelectionSet, v CopyFixturesToLooksResult) graphql.Marshaler {
+	return ec._CopyFixturesToLooksResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNCopyFixturesToLooksResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCopyFixturesToLooksResult(ctx context.Context, sel ast.SelectionSet, v *CopyFixturesToLooksResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._CopyFixturesToLooksResult(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNCreateChannelDefinitionInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateChannelDefinitionInputᚄ(ctx context.Context, v any) ([]*CreateChannelDefinitionInput, error) {
 	var vSlice []any
 	vSlice = graphql.CoerceList(v)
@@ -53239,6 +54184,74 @@ func (ec *executionContext) marshalNCueUsageSummary2ᚖgithubᚗcomᚋbbernstein
 		return graphql.Null
 	}
 	return ec._CueUsageSummary(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNCueWithLookInfo2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCueWithLookInfoᚄ(ctx context.Context, sel ast.SelectionSet, v []*CueWithLookInfo) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNCueWithLookInfo2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCueWithLookInfo(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNCueWithLookInfo2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCueWithLookInfo(ctx context.Context, sel ast.SelectionSet, v *CueWithLookInfo) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._CueWithLookInfo(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNCuesWithLookInfoResponse2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCuesWithLookInfoResponse(ctx context.Context, sel ast.SelectionSet, v CuesWithLookInfoResponse) graphql.Marshaler {
+	return ec._CuesWithLookInfoResponse(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNCuesWithLookInfoResponse2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCuesWithLookInfoResponse(ctx context.Context, sel ast.SelectionSet, v *CuesWithLookInfoResponse) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._CuesWithLookInfoResponse(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNDifferenceType2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDifferenceType(ctx context.Context, v any) (DifferenceType, error) {
@@ -54055,6 +55068,36 @@ func (ec *executionContext) marshalNFloat2float64(ctx context.Context, sel ast.S
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) unmarshalNFloat2ᚕfloat64ᚄ(ctx context.Context, v any) ([]float64, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]float64, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNFloat2float64(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNFloat2ᚕfloat64ᚄ(ctx context.Context, sel ast.SelectionSet, v []float64) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNFloat2float64(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) marshalNGlobalPlaybackStatus2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGlobalPlaybackStatus(ctx context.Context, sel ast.SelectionSet, v GlobalPlaybackStatus) graphql.Marshaler {

@@ -2293,6 +2293,172 @@ func (r *mutationResolver) BulkUpdateLooksPartial(ctx context.Context, input gen
 	return updatedLooks, nil
 }
 
+// CopyFixturesToLooks is the resolver for the copyFixturesToLooks field.
+func (r *mutationResolver) CopyFixturesToLooks(ctx context.Context, input generated.CopyFixturesToLooksInput) (*generated.CopyFixturesToLooksResult, error) {
+	// Validate inputs
+	if len(input.FixtureIds) == 0 {
+		return nil, fmt.Errorf("no fixtures specified to copy")
+	}
+	if len(input.TargetLookIds) == 0 {
+		return nil, fmt.Errorf("no target looks specified")
+	}
+
+	// Get source look
+	sourceLook, err := r.LookRepo.FindByID(ctx, input.SourceLookID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find source look: %w", err)
+	}
+	if sourceLook == nil {
+		return nil, fmt.Errorf("source look not found: %s", input.SourceLookID)
+	}
+	projectID := sourceLook.ProjectID
+
+	// Get source look's fixture values
+	sourceFixtureValues, err := r.LookRepo.GetFixtureValues(ctx, input.SourceLookID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get source fixture values: %w", err)
+	}
+
+	// Build a set of requested fixture IDs for filtering
+	requestedFixtures := make(map[string]bool)
+	for _, fixtureID := range input.FixtureIds {
+		requestedFixtures[fixtureID] = true
+	}
+
+	// Filter to only requested fixtures
+	var fixturesToCopy []models.FixtureValue
+	for _, fv := range sourceFixtureValues {
+		if requestedFixtures[fv.FixtureID] {
+			fixturesToCopy = append(fixturesToCopy, fv)
+		}
+	}
+
+	if len(fixturesToCopy) == 0 {
+		return nil, fmt.Errorf("none of the specified fixtures exist in the source look")
+	}
+
+	// Verify all target looks exist and are in the same project
+	for _, targetLookID := range input.TargetLookIds {
+		targetLook, err := r.LookRepo.FindByID(ctx, targetLookID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find target look %s: %w", targetLookID, err)
+		}
+		if targetLook == nil {
+			return nil, fmt.Errorf("target look not found: %s", targetLookID)
+		}
+		if targetLook.ProjectID != projectID {
+			return nil, fmt.Errorf("target look %s is in a different project", targetLookID)
+		}
+	}
+
+	// Capture bulk state of all target looks BEFORE making changes (for undo)
+	prevState, err := r.UndoService.CaptureBulkLookState(ctx, input.TargetLookIds)
+	if err != nil {
+		log.Printf("Warning: failed to capture bulk look state for undo: %v", err)
+	}
+
+	// Apply fixture values to each target look
+	var updatedLooks []*models.Look
+	for _, targetLookID := range input.TargetLookIds {
+		// Get existing fixture values for merge logic
+		existingValues, err := r.LookRepo.GetFixtureValues(ctx, targetLookID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get existing fixture values for look %s: %w", targetLookID, err)
+		}
+
+		existingMap := make(map[string]*models.FixtureValue)
+		maxOrder := -1
+		for i := range existingValues {
+			existingMap[existingValues[i].FixtureID] = &existingValues[i]
+			if existingValues[i].LookOrder != nil && *existingValues[i].LookOrder > maxOrder {
+				maxOrder = *existingValues[i].LookOrder
+			}
+		}
+
+		// Process each fixture value to copy
+		for _, fv := range fixturesToCopy {
+			if existing, exists := existingMap[fv.FixtureID]; exists {
+				// Update existing fixture value with source channels
+				existing.Channels = fv.Channels
+				if err := r.LookRepo.UpdateFixtureValue(ctx, existing); err != nil {
+					return nil, fmt.Errorf("failed to update fixture value in look %s: %w", targetLookID, err)
+				}
+			} else {
+				// Add new fixture value
+				maxOrder++
+				lookOrder := maxOrder
+				newFV := &models.FixtureValue{
+					LookID:    targetLookID,
+					FixtureID: fv.FixtureID,
+					Channels:  fv.Channels,
+					LookOrder: &lookOrder,
+				}
+				if err := r.LookRepo.CreateFixtureValue(ctx, newFV); err != nil {
+					return nil, fmt.Errorf("failed to create fixture value in look %s: %w", targetLookID, err)
+				}
+			}
+		}
+
+		// Get the updated look
+		look, err := r.LookRepo.FindByID(ctx, targetLookID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get updated look %s: %w", targetLookID, err)
+		}
+		updatedLooks = append(updatedLooks, look)
+
+		// Re-apply the look if it's currently active
+		if err := r.reapplyActiveLookIfNeeded(ctx, targetLookID); err != nil {
+			log.Printf("Warning: failed to re-apply active look %s: %v", targetLookID, err)
+		}
+	}
+
+	// Count affected cues
+	affectedCueCount, err := r.CueRepo.CountCuesByLookIDs(ctx, input.TargetLookIds)
+	if err != nil {
+		log.Printf("Warning: failed to count affected cues: %v", err)
+		affectedCueCount = 0
+	}
+
+	// Capture new state for undo
+	newState, _ := r.UndoService.CaptureBulkLookState(ctx, input.TargetLookIds)
+
+	// Record a single bulk undo operation
+	operationID := ""
+	if prevState != nil {
+		fixtureNames := make([]string, 0, len(fixturesToCopy))
+		for _, fv := range fixturesToCopy {
+			// Get fixture name for description
+			fixture, err := r.FixtureRepo.FindByID(ctx, fv.FixtureID)
+			if err == nil && fixture != nil {
+				fixtureNames = append(fixtureNames, fixture.Name)
+			}
+		}
+
+		description := fmt.Sprintf("Copy %d fixtures to %d looks", len(fixturesToCopy), len(input.TargetLookIds))
+		if len(fixtureNames) > 0 && len(fixtureNames) <= 3 {
+			description = fmt.Sprintf("Copy fixtures (%s) to %d looks", strings.Join(fixtureNames, ", "), len(input.TargetLookIds))
+		}
+
+		err := r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeBulk, undo.EntityTypeBulkLookUpdate, "",
+			description, prevState, newState, input.TargetLookIds)
+		if err == nil {
+			// Get the operation ID for the result
+			status, err := r.UndoService.GetStatus(ctx, projectID)
+			if err == nil && status != nil {
+				operationID = fmt.Sprintf("%d", status.CurrentSequence)
+			}
+		}
+		r.publishOperationHistoryChanged(ctx, projectID)
+	}
+
+	return &generated.CopyFixturesToLooksResult{
+		UpdatedLookCount: len(updatedLooks),
+		AffectedCueCount: int(affectedCueCount),
+		UpdatedLooks:     updatedLooks,
+		OperationID:      operationID,
+	}, nil
+}
+
 // CreateLookBoard is the resolver for the createLookBoard field.
 func (r *mutationResolver) CreateLookBoard(ctx context.Context, input generated.CreateLookBoardInput) (*models.LookBoard, error) {
 	board := &models.LookBoard{
@@ -5651,6 +5817,91 @@ func (r *queryResolver) GlobalPlaybackStatus(ctx context.Context) (*generated.Gl
 		CurrentCueName:  status.CurrentCueName,
 		FadeProgress:    &fadeProgress,
 		LastUpdated:     status.LastUpdated,
+	}, nil
+}
+
+// CuesWithLookInfo is the resolver for the cuesWithLookInfo field.
+func (r *queryResolver) CuesWithLookInfo(ctx context.Context, cueListID string) (*generated.CuesWithLookInfoResponse, error) {
+	// Get the cue list to find its project ID
+	cueList, err := r.CueListRepo.FindByID(ctx, cueListID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find cue list: %w", err)
+	}
+	if cueList == nil {
+		return nil, fmt.Errorf("cue list not found: %s", cueListID)
+	}
+
+	// Get all cues in the cue list, sorted by cue number
+	cues, err := r.CueRepo.FindByCueListID(ctx, cueListID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cues: %w", err)
+	}
+
+	// Build a map of look ID to cue numbers using that look
+	lookToCueNumbers := make(map[string][]float64)
+	for _, cue := range cues {
+		lookToCueNumbers[cue.LookID] = append(lookToCueNumbers[cue.LookID], cue.CueNumber)
+	}
+
+	// Get all looks in the project
+	allLooks, err := r.LookRepo.FindByProjectID(ctx, cueList.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get looks: %w", err)
+	}
+
+	// Build a map of look ID to look name
+	lookNames := make(map[string]string)
+	for _, look := range allLooks {
+		lookNames[look.ID] = look.Name
+	}
+
+	// Track which looks are used by cues
+	usedLookIDs := make(map[string]bool)
+
+	// Build the cues with look info response
+	var cuesWithLookInfo []*generated.CueWithLookInfo
+	for _, cue := range cues {
+		usedLookIDs[cue.LookID] = true
+
+		// Compute other cue numbers using the same look (excluding this cue)
+		var otherCueNumbers []float64
+		for _, num := range lookToCueNumbers[cue.LookID] {
+			if num != cue.CueNumber {
+				otherCueNumbers = append(otherCueNumbers, num)
+			}
+		}
+
+		cuesWithLookInfo = append(cuesWithLookInfo, &generated.CueWithLookInfo{
+			CueID:           cue.ID,
+			CueNumber:       cue.CueNumber,
+			CueName:         cue.Name,
+			LookID:          cue.LookID,
+			LookName:        lookNames[cue.LookID],
+			OtherCueNumbers: otherCueNumbers,
+		})
+	}
+
+	// Compute orphan looks (looks not used by any cue in this cue list)
+	var orphanLooks []*generated.LookSummary
+	for _, look := range allLooks {
+		if !usedLookIDs[look.ID] {
+			// Get fixture count for the look
+			fixtureCount, _ := r.LookRepo.CountFixtures(ctx, look.ID)
+
+			orphanLooks = append(orphanLooks, &generated.LookSummary{
+				ID:           look.ID,
+				Name:         look.Name,
+				Description:  look.Description,
+				FixtureCount: int(fixtureCount),
+				CreatedAt:    look.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+				UpdatedAt:    look.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			})
+		}
+	}
+
+	return &generated.CuesWithLookInfoResponse{
+		Cues:        cuesWithLookInfo,
+		OrphanLooks: orphanLooks,
 	}, nil
 }
 

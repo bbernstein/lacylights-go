@@ -145,3 +145,16 @@ func (r *CueRepository) FindCueListIDsByLookID(ctx context.Context, lookID strin
 		Pluck("cue_list_id", &cueListIDs)
 	return cueListIDs, result.Error
 }
+
+// CountCuesByLookIDs returns the total number of cues using any of the given look IDs.
+func (r *CueRepository) CountCuesByLookIDs(ctx context.Context, lookIDs []string) (int64, error) {
+	if len(lookIDs) == 0 {
+		return 0, nil
+	}
+	var count int64
+	result := r.db.WithContext(ctx).
+		Model(&models.Cue{}).
+		Where("look_id IN ?", lookIDs).
+		Count(&count)
+	return count, result.Error
+}

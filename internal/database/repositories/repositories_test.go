@@ -1296,6 +1296,98 @@ func TestCueRepository_FindCueListIDsByLookID(t *testing.T) {
 	}
 }
 
+// TestCueRepository_CountCuesByLookIDs tests counting cues by multiple look IDs.
+func TestCueRepository_CountCuesByLookIDs(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewCueRepository(testDB.DB)
+	ctx := context.Background()
+
+	// Create test project
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	testDB.DB.Create(project)
+
+	// Create looks
+	look1 := &models.Look{ID: cuid.New(), Name: "Look 1", ProjectID: project.ID}
+	look2 := &models.Look{ID: cuid.New(), Name: "Look 2", ProjectID: project.ID}
+	look3 := &models.Look{ID: cuid.New(), Name: "Look 3", ProjectID: project.ID}
+	testDB.DB.Create(look1)
+	testDB.DB.Create(look2)
+	testDB.DB.Create(look3)
+
+	// Create cue lists
+	cueList1 := &models.CueList{ID: cuid.New(), Name: "Cue List 1", ProjectID: project.ID}
+	cueList2 := &models.CueList{ID: cuid.New(), Name: "Cue List 2", ProjectID: project.ID}
+	testDB.DB.Create(cueList1)
+	testDB.DB.Create(cueList2)
+
+	// Create cues using look1 (3 cues)
+	testDB.DB.Create(&models.Cue{ID: cuid.New(), Name: "Cue 1", CueNumber: 1.0, CueListID: cueList1.ID, LookID: look1.ID})
+	testDB.DB.Create(&models.Cue{ID: cuid.New(), Name: "Cue 2", CueNumber: 2.0, CueListID: cueList1.ID, LookID: look1.ID})
+	testDB.DB.Create(&models.Cue{ID: cuid.New(), Name: "Cue 3", CueNumber: 3.0, CueListID: cueList2.ID, LookID: look1.ID})
+
+	// Create cues using look2 (2 cues)
+	testDB.DB.Create(&models.Cue{ID: cuid.New(), Name: "Cue 4", CueNumber: 1.0, CueListID: cueList2.ID, LookID: look2.ID})
+	testDB.DB.Create(&models.Cue{ID: cuid.New(), Name: "Cue 5", CueNumber: 2.0, CueListID: cueList2.ID, LookID: look2.ID})
+
+	// No cues for look3
+
+	// Test: Count cues using look1 only
+	count, err := repo.CountCuesByLookIDs(ctx, []string{look1.ID})
+	if err != nil {
+		t.Fatalf("CountCuesByLookIDs failed: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("Expected 3 cues for look1, got %d", count)
+	}
+
+	// Test: Count cues using look2 only
+	count, err = repo.CountCuesByLookIDs(ctx, []string{look2.ID})
+	if err != nil {
+		t.Fatalf("CountCuesByLookIDs failed: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("Expected 2 cues for look2, got %d", count)
+	}
+
+	// Test: Count cues using look1 and look2
+	count, err = repo.CountCuesByLookIDs(ctx, []string{look1.ID, look2.ID})
+	if err != nil {
+		t.Fatalf("CountCuesByLookIDs failed: %v", err)
+	}
+	if count != 5 {
+		t.Errorf("Expected 5 cues for look1 and look2, got %d", count)
+	}
+
+	// Test: Count cues using all looks (including look3 with no cues)
+	count, err = repo.CountCuesByLookIDs(ctx, []string{look1.ID, look2.ID, look3.ID})
+	if err != nil {
+		t.Fatalf("CountCuesByLookIDs failed: %v", err)
+	}
+	if count != 5 {
+		t.Errorf("Expected 5 cues for all looks, got %d", count)
+	}
+
+	// Test: Count cues using non-existent look
+	count, err = repo.CountCuesByLookIDs(ctx, []string{cuid.New()})
+	if err != nil {
+		t.Fatalf("CountCuesByLookIDs failed: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("Expected 0 cues for non-existent look, got %d", count)
+	}
+
+	// Test: Count cues with empty list
+	count, err = repo.CountCuesByLookIDs(ctx, []string{})
+	if err != nil {
+		t.Fatalf("CountCuesByLookIDs failed for empty list: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("Expected 0 cues for empty list, got %d", count)
+	}
+}
+
 // TestFixtureRepository_CRUD tests basic CRUD operations.
 func TestFixtureRepository_CRUD(t *testing.T) {
 	testDB, cleanup := setupTestDB(t)

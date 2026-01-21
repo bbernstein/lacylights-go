@@ -29,12 +29,12 @@ get_threshold() {
         "internal/services/import") echo 83 ;;  # Integration tests provide good coverage
         "internal/services/playback") echo 82 ;;  # Integration tests, handleFollowTime via timers
         "internal/services/modulator") echo 81 ;;  # Effect modulator service
-        "internal/services/undo") echo 73 ;;  # Undo/redo service, comprehensive unit tests for edge cases
+        "internal/services/undo") echo 74 ;;  # Undo/redo service, comprehensive unit tests for edge cases
         "internal/services/wifi") echo 39 ;;  # WiFi AP mode, platform-specific code paths
         "cmd/server") echo 39 ;;  # Server startup, helper functions covered
         "internal/services/ofl") echo 36 ;;  # OFL fixture library, bundle operations conditional
         "internal/services/version") echo 32 ;;  # Version info retrieval
-        "internal/graphql/resolvers") echo 22 ;;  # Auto-generated code, coverage via service/integration tests
+        "internal/graphql/resolvers") echo 23 ;;  # Auto-generated code, coverage via service/integration tests
         *) echo "" ;;
     esac
 }
