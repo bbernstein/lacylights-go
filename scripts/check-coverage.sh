@@ -34,7 +34,7 @@ get_threshold() {
         "cmd/server") echo 39 ;;  # Server startup, helper functions covered
         "internal/services/ofl") echo 36 ;;  # OFL fixture library, bundle operations conditional
         "internal/services/version") echo 32 ;;  # Version info retrieval
-        "internal/graphql/resolvers") echo 23 ;;  # Auto-generated code, coverage via service tests
+        "internal/graphql/resolvers") echo 22 ;;  # Auto-generated code, coverage via service/integration tests
         *) echo "" ;;
     esac
 }

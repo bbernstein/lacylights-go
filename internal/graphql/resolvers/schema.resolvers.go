@@ -111,12 +111,12 @@ func (r *cueListResolver) TotalDuration(ctx context.Context, obj *models.CueList
 
 // CreatedAt is the resolver for the createdAt field.
 func (r *cueListResolver) CreatedAt(ctx context.Context, obj *models.CueList) (string, error) {
-	return obj.CreatedAt.Format("2006-01-02T15:04:05.000Z"), nil
+	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // UpdatedAt is the resolver for the updatedAt field.
 func (r *cueListResolver) UpdatedAt(ctx context.Context, obj *models.CueList) (string, error) {
-	return obj.UpdatedAt.Format("2006-01-02T15:04:05.000Z"), nil
+	return obj.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // EffectType is the resolver for the effectType field.
@@ -146,12 +146,12 @@ func (r *effectResolver) Waveform(ctx context.Context, obj *models.Effect) (*gen
 
 // CreatedAt is the resolver for the createdAt field.
 func (r *effectResolver) CreatedAt(ctx context.Context, obj *models.Effect) (string, error) {
-	return obj.CreatedAt.Format("2006-01-02T15:04:05.000Z"), nil
+	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // UpdatedAt is the resolver for the updatedAt field.
 func (r *effectResolver) UpdatedAt(ctx context.Context, obj *models.Effect) (string, error) {
-	return obj.UpdatedAt.Format("2006-01-02T15:04:05.000Z"), nil
+	return obj.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // Type is the resolver for the type field.
@@ -189,7 +189,7 @@ func (r *fixtureDefinitionResolver) Modes(ctx context.Context, obj *models.Fixtu
 
 // CreatedAt is the resolver for the createdAt field.
 func (r *fixtureDefinitionResolver) CreatedAt(ctx context.Context, obj *models.FixtureDefinition) (string, error) {
-	return obj.CreatedAt.Format("2006-01-02T15:04:05.000Z"), nil
+	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // Manufacturer is the resolver for the manufacturer field.
@@ -266,7 +266,7 @@ func (r *fixtureInstanceResolver) Tags(ctx context.Context, obj *models.FixtureI
 
 // CreatedAt is the resolver for the createdAt field.
 func (r *fixtureInstanceResolver) CreatedAt(ctx context.Context, obj *models.FixtureInstance) (string, error) {
-	return obj.CreatedAt.Format("2006-01-02T15:04:05.000Z"), nil
+	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // Channels is the resolver for the channels field.
@@ -1593,6 +1593,33 @@ func (r *mutationResolver) ReorderLookFixtures(ctx context.Context, lookID strin
 
 // UpdateFixturePositions is the resolver for the updateFixturePositions field.
 func (r *mutationResolver) UpdateFixturePositions(ctx context.Context, positions []*generated.FixturePositionInput) (bool, error) {
+	if len(positions) == 0 {
+		return true, nil
+	}
+
+	// Collect fixture IDs and determine project ID, validating all fixtures belong to the same project
+	fixtureIDs := make([]string, len(positions))
+	var projectID string
+	for i, position := range positions {
+		fixtureIDs[i] = position.FixtureID
+		fixture, err := r.FixtureRepo.FindByID(ctx, position.FixtureID)
+		if err != nil {
+			return false, err
+		}
+		if fixture == nil {
+			return false, fmt.Errorf("fixture not found: %s", position.FixtureID)
+		}
+		if projectID == "" {
+			projectID = fixture.ProjectID
+		} else if fixture.ProjectID != projectID {
+			return false, fmt.Errorf("all fixtures must belong to the same project")
+		}
+	}
+
+	// Capture bulk previous state before updates
+	prevState, _ := r.UndoService.CaptureFixturePositions(ctx, fixtureIDs)
+
+	// Perform all updates
 	for _, position := range positions {
 		fixture, err := r.FixtureRepo.FindByID(ctx, position.FixtureID)
 		if err != nil {
@@ -1601,11 +1628,6 @@ func (r *mutationResolver) UpdateFixturePositions(ctx context.Context, positions
 		if fixture == nil {
 			return false, fmt.Errorf("fixture not found: %s", position.FixtureID)
 		}
-
-		// Capture previous state for undo
-		prevState, _ := r.UndoService.CaptureFixtureState(ctx, position.FixtureID)
-		projectID := fixture.ProjectID
-		fixtureName := fixture.Name
 
 		fixture.LayoutX = &position.LayoutX
 		fixture.LayoutY = &position.LayoutY
@@ -1616,14 +1638,24 @@ func (r *mutationResolver) UpdateFixturePositions(ctx context.Context, positions
 		if err := r.FixtureRepo.Update(ctx, fixture); err != nil {
 			return false, err
 		}
-
-		// Record undo operation (non-blocking on error)
-		if newState, err := r.UndoService.CaptureFixtureState(ctx, position.FixtureID); err == nil {
-			_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeUpdate, undo.EntityTypeFixtureInstance, position.FixtureID,
-				fmt.Sprintf("Update position for fixture '%s'", fixtureName), prevState, newState, nil)
-			r.publishOperationHistoryChanged(ctx, projectID)
-		}
 	}
+
+	// Capture bulk new state after all updates and record single operation
+	if newState, err := r.UndoService.CaptureFixturePositions(ctx, fixtureIDs); err == nil {
+		description := fmt.Sprintf("Update positions for %d fixtures", len(positions))
+		if len(positions) == 1 {
+			// Get fixture name for single-fixture updates
+			if fixture, err := r.FixtureRepo.FindByID(ctx, positions[0].FixtureID); err == nil && fixture != nil {
+				description = fmt.Sprintf("Update position for fixture '%s'", fixture.Name)
+			}
+		}
+		_ = r.UndoService.RecordOperation(ctx, projectID, undo.OperationTypeBulk, undo.EntityTypeBulkFixturePosition, "",
+			description, prevState, newState, fixtureIDs)
+		r.publishOperationHistoryChanged(ctx, projectID)
+	}
+
+	// Publish fixture data changed for real-time updates
+	r.publishFixtureDataChanged(fixtureIDs, projectID, generated.EntityDataChangeTypeUpdated)
 
 	return true, nil
 }
@@ -4373,6 +4405,11 @@ func (r *mutationResolver) Undo(ctx context.Context, projectID string) (*generat
 	// Publish operation history changed event
 	r.publishOperationHistoryChanged(ctx, projectID)
 
+	// Publish entity-specific change events for real-time UI updates
+	if result.Success && result.Operation != nil {
+		r.publishEntityChangeFromUndo(ctx, projectID, result.Operation, result.RestoredEntityID, true)
+	}
+
 	return gqlResult, nil
 }
 
@@ -4403,6 +4440,11 @@ func (r *mutationResolver) Redo(ctx context.Context, projectID string) (*generat
 	// Publish operation history changed event
 	r.publishOperationHistoryChanged(ctx, projectID)
 
+	// Publish entity-specific change events for real-time UI updates
+	if result.Success && result.Operation != nil {
+		r.publishEntityChangeFromUndo(ctx, projectID, result.Operation, result.RestoredEntityID, false)
+	}
+
 	return gqlResult, nil
 }
 
@@ -4432,6 +4474,13 @@ func (r *mutationResolver) JumpToOperation(ctx context.Context, projectID string
 
 	// Publish operation history changed event
 	r.publishOperationHistoryChanged(ctx, projectID)
+
+	// Note: JumpToOperation can move either forward or backward in history, but this resolver
+	// does not know the direction of the jump. Using undo-specific entity change publishing
+	// here would misclassify some forward jumps as undos (and vice versa). To avoid
+	// publishing incorrect entity change events, we only publish the operation history
+	// change above and do not emit entity-specific change events from this resolver.
+	// The UI should refetch data based on the operation history change notification.
 
 	return gqlResult, nil
 }
@@ -4495,7 +4544,7 @@ func (r *operationResolver) EntityType(ctx context.Context, obj *models.Operatio
 
 // CreatedAt is the resolver for the createdAt field.
 func (r *operationResolver) CreatedAt(ctx context.Context, obj *models.Operation) (string, error) {
-	return obj.CreatedAt.Format("2006-01-02T15:04:05.000Z"), nil
+	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // RelatedIds is the resolver for the relatedIds field.
@@ -4531,7 +4580,7 @@ func (r *previewSessionResolver) User(ctx context.Context, obj *models.PreviewSe
 
 // CreatedAt is the resolver for the createdAt field.
 func (r *previewSessionResolver) CreatedAt(ctx context.Context, obj *models.PreviewSession) (string, error) {
-	return obj.CreatedAt.Format("2006-01-02T15:04:05.000Z"), nil
+	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // DmxOutput is the resolver for the dmxOutput field.
@@ -4576,12 +4625,12 @@ func (r *projectResolver) CueListCount(ctx context.Context, obj *models.Project)
 
 // CreatedAt is the resolver for the createdAt field.
 func (r *projectResolver) CreatedAt(ctx context.Context, obj *models.Project) (string, error) {
-	return obj.CreatedAt.Format("2006-01-02T15:04:05.000Z"), nil
+	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // UpdatedAt is the resolver for the updatedAt field.
 func (r *projectResolver) UpdatedAt(ctx context.Context, obj *models.Project) (string, error) {
-	return obj.UpdatedAt.Format("2006-01-02T15:04:05.000Z"), nil
+	return obj.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // DeletedAt is the resolver for the deletedAt field.
@@ -4671,7 +4720,7 @@ func (r *projectUserResolver) Role(ctx context.Context, obj *models.ProjectUser)
 
 // JoinedAt is the resolver for the joinedAt field.
 func (r *projectUserResolver) JoinedAt(ctx context.Context, obj *models.ProjectUser) (string, error) {
-	return obj.JoinedAt.Format("2006-01-02T15:04:05.000Z"), nil
+	return obj.JoinedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // Projects is the resolver for the projects field.
@@ -5325,8 +5374,8 @@ func (r *queryResolver) FixtureUsage(ctx context.Context, fixtureID string) (*ge
 			Name:         look.Name,
 			Description:  look.Description,
 			FixtureCount: int(fixtureCount),
-			CreatedAt:    look.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-			UpdatedAt:    look.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
+			CreatedAt:    look.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
+			UpdatedAt:    look.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
 		}
 	}
 
@@ -5495,8 +5544,8 @@ func (r *queryResolver) CompareLooks(ctx context.Context, lookID1 string, lookID
 		Name:         look1.Name,
 		Description:  look1.Description,
 		FixtureCount: int(fixtureCount1),
-		CreatedAt:    look1.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		UpdatedAt:    look1.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
+		CreatedAt:    look1.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
+		UpdatedAt:    look1.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
 	}
 
 	look2Summary := generated.LookSummary{
@@ -5504,8 +5553,8 @@ func (r *queryResolver) CompareLooks(ctx context.Context, lookID1 string, lookID
 		Name:         look2.Name,
 		Description:  look2.Description,
 		FixtureCount: int(fixtureCount2),
-		CreatedAt:    look2.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		UpdatedAt:    look2.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
+		CreatedAt:    look2.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
+		UpdatedAt:    look2.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
 	}
 
 	return &generated.LookComparison{
@@ -5543,7 +5592,7 @@ func (r *queryResolver) CueLists(ctx context.Context, projectID string) ([]*gene
 			CueCount:      int(cueCount),
 			TotalDuration: totalDuration,
 			Loop:          cl.Loop,
-			CreatedAt:     cl.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+			CreatedAt:     cl.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
 		}
 	}
 	return result, nil
@@ -6197,7 +6246,7 @@ func (r *queryResolver) OperationHistory(ctx context.Context, projectID string, 
 			ID:          op.ID,
 			Description: op.Description,
 			Sequence:    op.Sequence,
-			CreatedAt:   op.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+			CreatedAt:   op.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
 			IsCurrent:   isCurrent,
 		}
 
@@ -6267,12 +6316,12 @@ func (r *queryResolver) Operation(ctx context.Context, operationID string) (*mod
 
 // CreatedAt is the resolver for the createdAt field.
 func (r *settingResolver) CreatedAt(ctx context.Context, obj *models.Setting) (string, error) {
-	return obj.CreatedAt.Format("2006-01-02T15:04:05.000Z"), nil
+	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // UpdatedAt is the resolver for the updatedAt field.
 func (r *settingResolver) UpdatedAt(ctx context.Context, obj *models.Setting) (string, error) {
-	return obj.UpdatedAt.Format("2006-01-02T15:04:05.000Z"), nil
+	return obj.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // DmxOutputChanged is the resolver for the dmxOutputChanged field.
@@ -6712,6 +6761,111 @@ func (r *subscriptionResolver) OperationHistoryChanged(ctx context.Context, proj
 	return outputChan, nil
 }
 
+// LookDataChanged is the resolver for the lookDataChanged field.
+func (r *subscriptionResolver) LookDataChanged(ctx context.Context, projectID string) (<-chan *generated.LookDataChangedPayload, error) {
+	// Subscribe to look data changes filtered by projectID
+	sub := r.PubSub.Subscribe(pubsub.TopicLookDataChanged, projectID, 10)
+
+	// Create the output channel
+	outputChan := make(chan *generated.LookDataChangedPayload, 10)
+
+	// Start a goroutine to forward messages
+	go func() {
+		defer close(outputChan)
+		for {
+			select {
+			case <-ctx.Done():
+				r.PubSub.Unsubscribe(sub)
+				return
+			case msg, ok := <-sub.Channel:
+				if !ok {
+					return
+				}
+				if payload, valid := msg.(*generated.LookDataChangedPayload); valid {
+					select {
+					case outputChan <- payload:
+					case <-ctx.Done():
+						r.PubSub.Unsubscribe(sub)
+						return
+					}
+				}
+			}
+		}
+	}()
+
+	return outputChan, nil
+}
+
+// LookBoardDataChanged is the resolver for the lookBoardDataChanged field.
+func (r *subscriptionResolver) LookBoardDataChanged(ctx context.Context, projectID string) (<-chan *generated.LookBoardDataChangedPayload, error) {
+	// Subscribe to look board data changes filtered by projectID
+	sub := r.PubSub.Subscribe(pubsub.TopicLookBoardDataChanged, projectID, 10)
+
+	// Create the output channel
+	outputChan := make(chan *generated.LookBoardDataChangedPayload, 10)
+
+	// Start a goroutine to forward messages
+	go func() {
+		defer close(outputChan)
+		for {
+			select {
+			case <-ctx.Done():
+				r.PubSub.Unsubscribe(sub)
+				return
+			case msg, ok := <-sub.Channel:
+				if !ok {
+					return
+				}
+				if payload, valid := msg.(*generated.LookBoardDataChangedPayload); valid {
+					select {
+					case outputChan <- payload:
+					case <-ctx.Done():
+						r.PubSub.Unsubscribe(sub)
+						return
+					}
+				}
+			}
+		}
+	}()
+
+	return outputChan, nil
+}
+
+// FixtureDataChanged is the resolver for the fixtureDataChanged field.
+func (r *subscriptionResolver) FixtureDataChanged(ctx context.Context, projectID string) (<-chan *generated.FixtureDataChangedPayload, error) {
+	// Subscribe to fixture data changes filtered by projectID
+	sub := r.PubSub.Subscribe(pubsub.TopicFixtureDataChanged, projectID, 10)
+
+	// Create the output channel
+	outputChan := make(chan *generated.FixtureDataChangedPayload, 10)
+
+	// Start a goroutine to forward messages
+	go func() {
+		defer close(outputChan)
+		for {
+			select {
+			case <-ctx.Done():
+				r.PubSub.Unsubscribe(sub)
+				return
+			case msg, ok := <-sub.Channel:
+				if !ok {
+					return
+				}
+				if payload, valid := msg.(*generated.FixtureDataChangedPayload); valid {
+					select {
+					case outputChan <- payload:
+					case <-ctx.Done():
+						r.PubSub.Unsubscribe(sub)
+						return
+					}
+				}
+			}
+		}
+	}()
+
+	return outputChan, nil
+}
+
 // Role is the resolver for the role field.
 func (r *userResolver) Role(ctx context.Context, obj *models.User) (generated.UserRole, error) {
 	if obj.Role != "" {
@@ -6722,7 +6876,7 @@ func (r *userResolver) Role(ctx context.Context, obj *models.User) (generated.Us
 
 // CreatedAt is the resolver for the createdAt field.
 func (r *userResolver) CreatedAt(ctx context.Context, obj *models.User) (string, error) {
-	return obj.CreatedAt.Format("2006-01-02T15:04:05.000Z"), nil
+	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // ChannelDefinition returns generated.ChannelDefinitionResolver implementation.

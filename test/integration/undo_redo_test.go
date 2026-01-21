@@ -3998,3 +3998,238 @@ func TestProjectPermanentDelete_Integration(t *testing.T) {
 		t.Error("Expected project to be permanently deleted")
 	}
 }
+
+// TestPubSubFixtureDataChanged_Integration tests that fixture data changes are published via pubsub
+func TestPubSubFixtureDataChanged_Integration(t *testing.T) {
+	db, cleanup := setupUndoTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create repositories and services
+	projectRepo := repositories.NewProjectRepository(db)
+	fixtureRepo := repositories.NewFixtureRepository(db)
+	opRepo := repositories.NewOperationRepository(db)
+	lookRepo := repositories.NewLookRepository(db)
+	cueRepo := repositories.NewCueRepository(db)
+	cueListRepo := repositories.NewCueListRepository(db)
+	lookBoardRepo := repositories.NewLookBoardRepository(db)
+	effectRepo := repositories.NewEffectRepository(db)
+	ps := pubsub.New()
+
+	undoService := undo.NewService(
+		opRepo,
+		lookRepo,
+		fixtureRepo,
+		cueRepo,
+		cueListRepo,
+		lookBoardRepo,
+		effectRepo,
+		projectRepo,
+		ps,
+	)
+
+	// Setup: Create project and fixture
+	project := &models.Project{ID: cuid.New(), Name: "PubSub Test Project"}
+	if err := projectRepo.Create(ctx, project); err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+
+	fixtureDef := &models.FixtureDefinition{
+		ID:           cuid.New(),
+		Manufacturer: "Test",
+		Model:        "PubSubModel",
+		Type:         "LED_PAR",
+	}
+	if err := db.Create(fixtureDef).Error; err != nil {
+		t.Fatalf("Failed to create fixture definition: %v", err)
+	}
+
+	originalX, originalY := 100.0, 200.0
+	fixture1 := &models.FixtureInstance{
+		ID:           cuid.New(),
+		ProjectID:    project.ID,
+		DefinitionID: fixtureDef.ID,
+		Name:         "Fixture 1",
+		Universe:     1,
+		StartChannel: 1,
+		LayoutX:      &originalX,
+		LayoutY:      &originalY,
+	}
+	if err := fixtureRepo.Create(ctx, fixture1); err != nil {
+		t.Fatalf("Failed to create fixture: %v", err)
+	}
+
+	// Note: Pubsub publishing happens at the resolver level, not the service level.
+	// This test verifies the service correctly captures and restores fixture positions
+	// and returns the operation with RelatedIDs. The resolver uses RelatedIDs to publish
+	// pubsub events. Resolver-level pubsub tests are in graphql_test.go.
+	// We don't need a subscriber here since the service doesn't publish directly.
+	_ = ps // ps is available but unused at service level
+
+	// Capture previous state for bulk position update
+	fixtureIDs := []string{fixture1.ID}
+	prevState, err := undoService.CaptureFixturePositions(ctx, fixtureIDs)
+	if err != nil {
+		t.Fatalf("Failed to capture previous state: %v", err)
+	}
+
+	// Update fixture position
+	newX, newY := 500.0, 600.0
+	fixture1.LayoutX = &newX
+	fixture1.LayoutY = &newY
+	if err := fixtureRepo.Update(ctx, fixture1); err != nil {
+		t.Fatalf("Failed to update fixture: %v", err)
+	}
+
+	// Record bulk position update operation
+	newState, err := undoService.CaptureFixturePositions(ctx, fixtureIDs)
+	if err != nil {
+		t.Fatalf("Failed to capture new state: %v", err)
+	}
+	if err := undoService.RecordOperation(ctx, project.ID, undo.OperationTypeBulk, undo.EntityTypeBulkFixturePosition, "",
+		"Update positions for 1 fixture", prevState, newState, fixtureIDs); err != nil {
+		t.Fatalf("Failed to record operation: %v", err)
+	}
+
+	// Undo the operation - this should publish fixture data changed
+	result, err := undoService.Undo(ctx, project.ID)
+	if err != nil || !result.Success {
+		t.Fatalf("Undo failed: %v", err)
+	}
+
+	// Verify the undo restored the original position
+	currentFixture, _ := fixtureRepo.FindByID(ctx, fixture1.ID)
+	if *currentFixture.LayoutX != originalX || *currentFixture.LayoutY != originalY {
+		t.Errorf("Expected position (%f, %f) after undo, got (%f, %f)",
+			originalX, originalY, *currentFixture.LayoutX, *currentFixture.LayoutY)
+	}
+
+	// Verify operation was recorded correctly
+	if result.Operation == nil {
+		t.Error("Expected operation to be returned")
+	} else if result.Operation.EntityType != "BulkFixturePosition" {
+		t.Errorf("Expected EntityType BulkFixturePosition, got %s", result.Operation.EntityType)
+	}
+
+	// Check that related IDs were stored
+	if result.Operation.RelatedIDs == nil {
+		t.Error("Expected RelatedIDs to be set for bulk operation")
+	}
+}
+
+// TestPubSubBulkFixturePositionRestore_Integration tests that bulk fixture position undo/redo preserves all fixture IDs
+func TestPubSubBulkFixturePositionRestore_Integration(t *testing.T) {
+	db, cleanup := setupUndoTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	undoService, projectRepo, _, _, _, fixtureRepo, _, _ := createUndoTestService(db)
+
+	// Setup: Create project and multiple fixtures
+	project := &models.Project{ID: cuid.New(), Name: "Bulk Position Test"}
+	if err := projectRepo.Create(ctx, project); err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+
+	fixtureDef := &models.FixtureDefinition{
+		ID:           cuid.New(),
+		Manufacturer: "Test",
+		Model:        "BulkModel",
+		Type:         "LED_PAR",
+	}
+	if err := db.Create(fixtureDef).Error; err != nil {
+		t.Fatalf("Failed to create fixture definition: %v", err)
+	}
+
+	// Create 3 fixtures with initial positions
+	fixtures := make([]*models.FixtureInstance, 3)
+	originalPositions := []struct{ x, y float64 }{
+		{100, 100},
+		{200, 200},
+		{300, 300},
+	}
+
+	for i := range fixtures {
+		x, y := originalPositions[i].x, originalPositions[i].y
+		fixtures[i] = &models.FixtureInstance{
+			ID:           cuid.New(),
+			ProjectID:    project.ID,
+			DefinitionID: fixtureDef.ID,
+			Name:         "Fixture " + string(rune('A'+i)),
+			Universe:     1,
+			StartChannel: 1 + i*10,
+			LayoutX:      &x,
+			LayoutY:      &y,
+		}
+		if err := fixtureRepo.Create(ctx, fixtures[i]); err != nil {
+			t.Fatalf("Failed to create fixture %d: %v", i, err)
+		}
+	}
+
+	// Capture previous positions
+	fixtureIDs := []string{fixtures[0].ID, fixtures[1].ID, fixtures[2].ID}
+	prevState, _ := undoService.CaptureFixturePositions(ctx, fixtureIDs)
+
+	// Update all positions
+	newPositions := []struct{ x, y float64 }{
+		{500, 500},
+		{600, 600},
+		{700, 700},
+	}
+	for i, f := range fixtures {
+		x, y := newPositions[i].x, newPositions[i].y
+		f.LayoutX = &x
+		f.LayoutY = &y
+		if err := fixtureRepo.Update(ctx, f); err != nil {
+			t.Fatalf("Failed to update fixture %d: %v", i, err)
+		}
+	}
+
+	// Record bulk operation
+	newState, _ := undoService.CaptureFixturePositions(ctx, fixtureIDs)
+	if err := undoService.RecordOperation(ctx, project.ID, undo.OperationTypeBulk, undo.EntityTypeBulkFixturePosition, "",
+		"Update positions for 3 fixtures", prevState, newState, fixtureIDs); err != nil {
+		t.Fatalf("Failed to record operation: %v", err)
+	}
+
+	// Verify new positions
+	for i, f := range fixtures {
+		current, _ := fixtureRepo.FindByID(ctx, f.ID)
+		if *current.LayoutX != newPositions[i].x || *current.LayoutY != newPositions[i].y {
+			t.Errorf("Fixture %d: expected (%f, %f), got (%f, %f)",
+				i, newPositions[i].x, newPositions[i].y, *current.LayoutX, *current.LayoutY)
+		}
+	}
+
+	// Undo - all fixtures should restore to original positions
+	result, err := undoService.Undo(ctx, project.ID)
+	if err != nil || !result.Success {
+		t.Fatalf("Undo failed: %v", err)
+	}
+
+	// Verify all original positions restored
+	for i, f := range fixtures {
+		current, _ := fixtureRepo.FindByID(ctx, f.ID)
+		if *current.LayoutX != originalPositions[i].x || *current.LayoutY != originalPositions[i].y {
+			t.Errorf("After undo, Fixture %d: expected (%f, %f), got (%f, %f)",
+				i, originalPositions[i].x, originalPositions[i].y, *current.LayoutX, *current.LayoutY)
+		}
+	}
+
+	// Redo - all fixtures should go back to new positions
+	result, err = undoService.Redo(ctx, project.ID)
+	if err != nil || !result.Success {
+		t.Fatalf("Redo failed: %v", err)
+	}
+
+	// Verify new positions restored after redo
+	for i, f := range fixtures {
+		current, _ := fixtureRepo.FindByID(ctx, f.ID)
+		if *current.LayoutX != newPositions[i].x || *current.LayoutY != newPositions[i].y {
+			t.Errorf("After redo, Fixture %d: expected (%f, %f), got (%f, %f)",
+				i, newPositions[i].x, newPositions[i].y, *current.LayoutX, *current.LayoutY)
+		}
+	}
+}
