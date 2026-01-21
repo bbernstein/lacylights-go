@@ -217,8 +217,8 @@ type CopyFixturesToLooksResult struct {
 	AffectedCueCount int `json:"affectedCueCount"`
 	// The updated looks
 	UpdatedLooks []*models.Look `json:"updatedLooks"`
-	// Operation ID for undo (single atomic operation)
-	OperationID string `json:"operationId"`
+	// Operation ID for undo (single atomic operation). Null if undo capture failed.
+	OperationID *string `json:"operationId,omitempty"`
 }
 
 type CreateChannelDefinitionInput struct {

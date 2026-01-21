@@ -2807,3 +2807,177 @@ func TestCopyFixturesToLooks_CopiesEvenToSourceLook(t *testing.T) {
 		t.Errorf("Expected updatedLookCount 1, got %d", copyResp.CopyFixturesToLooks.UpdatedLookCount)
 	}
 }
+
+func TestCopyFixturesToLooks_EmptyFixtureIds(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Create project and look
+	var projectResp struct {
+		CreateProject struct {
+			ID string `json:"id"`
+		} `json:"createProject"`
+	}
+	err := c.Post(`mutation { createProject(input: { name: "Empty Fixtures Test" }) { id } }`, &projectResp)
+	if err != nil {
+		t.Fatalf("CreateProject mutation failed: %v", err)
+	}
+
+	var lookResp struct {
+		CreateLook struct {
+			ID string `json:"id"`
+		} `json:"createLook"`
+	}
+	err = c.Post(`mutation($projectId: ID!) {
+		createLook(input: { name: "Test Look", projectId: $projectId, fixtureValues: [] }) { id }
+	}`, &lookResp, client.Var("projectId", projectResp.CreateProject.ID))
+	if err != nil {
+		t.Fatalf("CreateLook mutation failed: %v", err)
+	}
+
+	// Try to copy with empty fixtureIds - should fail
+	var copyResp struct {
+		CopyFixturesToLooks struct {
+			UpdatedLookCount int `json:"updatedLookCount"`
+		} `json:"copyFixturesToLooks"`
+	}
+	err = c.Post(`mutation($sourceLookId: ID!, $targetLookIds: [ID!]!) {
+		copyFixturesToLooks(input: {
+			sourceLookId: $sourceLookId
+			fixtureIds: []
+			targetLookIds: $targetLookIds
+		}) {
+			updatedLookCount
+		}
+	}`, &copyResp,
+		client.Var("sourceLookId", lookResp.CreateLook.ID),
+		client.Var("targetLookIds", []string{lookResp.CreateLook.ID}))
+
+	if err == nil {
+		t.Error("Expected error for empty fixtureIds, got none")
+	}
+}
+
+func TestCopyFixturesToLooks_EmptyTargetLookIds(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Create project and look
+	var projectResp struct {
+		CreateProject struct {
+			ID string `json:"id"`
+		} `json:"createProject"`
+	}
+	err := c.Post(`mutation { createProject(input: { name: "Empty Targets Test" }) { id } }`, &projectResp)
+	if err != nil {
+		t.Fatalf("CreateProject mutation failed: %v", err)
+	}
+
+	var lookResp struct {
+		CreateLook struct {
+			ID string `json:"id"`
+		} `json:"createLook"`
+	}
+	err = c.Post(`mutation($projectId: ID!) {
+		createLook(input: { name: "Test Look", projectId: $projectId, fixtureValues: [] }) { id }
+	}`, &lookResp, client.Var("projectId", projectResp.CreateProject.ID))
+	if err != nil {
+		t.Fatalf("CreateLook mutation failed: %v", err)
+	}
+
+	// Try to copy with empty targetLookIds - should fail
+	var copyResp struct {
+		CopyFixturesToLooks struct {
+			UpdatedLookCount int `json:"updatedLookCount"`
+		} `json:"copyFixturesToLooks"`
+	}
+	err = c.Post(`mutation($sourceLookId: ID!) {
+		copyFixturesToLooks(input: {
+			sourceLookId: $sourceLookId
+			fixtureIds: ["some-id"]
+			targetLookIds: []
+		}) {
+			updatedLookCount
+		}
+	}`, &copyResp,
+		client.Var("sourceLookId", lookResp.CreateLook.ID))
+
+	if err == nil {
+		t.Error("Expected error for empty targetLookIds, got none")
+	}
+}
+
+func TestCopyFixturesToLooks_SourceLookNotFound(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Try to copy from non-existent source look
+	var copyResp struct {
+		CopyFixturesToLooks struct {
+			UpdatedLookCount int `json:"updatedLookCount"`
+		} `json:"copyFixturesToLooks"`
+	}
+	err := c.Post(`mutation {
+		copyFixturesToLooks(input: {
+			sourceLookId: "non-existent-id"
+			fixtureIds: ["some-fixture-id"]
+			targetLookIds: ["some-target-id"]
+		}) {
+			updatedLookCount
+		}
+	}`, &copyResp)
+
+	if err == nil {
+		t.Error("Expected error for non-existent source look, got none")
+	}
+}
+
+func TestCopyFixturesToLooks_FixturesNotInSourceLook(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Create project and look with no fixtures
+	var projectResp struct {
+		CreateProject struct {
+			ID string `json:"id"`
+		} `json:"createProject"`
+	}
+	err := c.Post(`mutation { createProject(input: { name: "No Fixtures Test" }) { id } }`, &projectResp)
+	if err != nil {
+		t.Fatalf("CreateProject mutation failed: %v", err)
+	}
+
+	var lookResp struct {
+		CreateLook struct {
+			ID string `json:"id"`
+		} `json:"createLook"`
+	}
+	err = c.Post(`mutation($projectId: ID!) {
+		createLook(input: { name: "Empty Look", projectId: $projectId, fixtureValues: [] }) { id }
+	}`, &lookResp, client.Var("projectId", projectResp.CreateProject.ID))
+	if err != nil {
+		t.Fatalf("CreateLook mutation failed: %v", err)
+	}
+
+	// Try to copy fixtures that don't exist in source look
+	var copyResp struct {
+		CopyFixturesToLooks struct {
+			UpdatedLookCount int `json:"updatedLookCount"`
+		} `json:"copyFixturesToLooks"`
+	}
+	err = c.Post(`mutation($sourceLookId: ID!, $targetLookIds: [ID!]!) {
+		copyFixturesToLooks(input: {
+			sourceLookId: $sourceLookId
+			fixtureIds: ["non-existent-fixture"]
+			targetLookIds: $targetLookIds
+		}) {
+			updatedLookCount
+		}
+	}`, &copyResp,
+		client.Var("sourceLookId", lookResp.CreateLook.ID),
+		client.Var("targetLookIds", []string{lookResp.CreateLook.ID}))
+
+	if err == nil {
+		t.Error("Expected error for fixtures not in source look, got none")
+	}
+}

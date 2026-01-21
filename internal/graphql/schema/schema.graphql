@@ -1562,8 +1562,8 @@ type CopyFixturesToLooksResult {
   affectedCueCount: Int!
   """The updated looks"""
   updatedLooks: [Look!]!
-  """Operation ID for undo (single atomic operation)"""
-  operationId: ID!
+  """Operation ID for undo (single atomic operation). Null if undo capture failed."""
+  operationId: ID
 }
 
 input BulkCueListUpdateInput {

@@ -2430,7 +2430,7 @@ func (r *mutationResolver) CopyFixturesToLooks(ctx context.Context, input genera
 	newState, _ := r.UndoService.CaptureBulkLookState(ctx, input.TargetLookIds)
 
 	// Record a single bulk undo operation
-	operationID := ""
+	var operationID *string
 	if prevState != nil {
 		fixtureNames := make([]string, 0, len(fixturesToCopy))
 		for _, fv := range fixturesToCopy {
@@ -2452,7 +2452,8 @@ func (r *mutationResolver) CopyFixturesToLooks(ctx context.Context, input genera
 			// Get the operation ID for the result
 			status, err := r.UndoService.GetStatus(ctx, projectID)
 			if err == nil && status != nil {
-				operationID = fmt.Sprintf("%d", status.CurrentSequence)
+				opID := fmt.Sprintf("%d", status.CurrentSequence)
+				operationID = &opID
 			}
 		}
 		r.publishOperationHistoryChanged(ctx, projectID)

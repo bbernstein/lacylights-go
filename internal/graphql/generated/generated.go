@@ -8335,8 +8335,8 @@ type CopyFixturesToLooksResult {
   affectedCueCount: Int!
   """The updated looks"""
   updatedLooks: [Look!]!
-  """Operation ID for undo (single atomic operation)"""
-  operationId: ID!
+  """Operation ID for undo (single atomic operation). Null if undo capture failed."""
+  operationId: ID
 }
 
 input BulkCueListUpdateInput {
@@ -12876,9 +12876,9 @@ func (ec *executionContext) _CopyFixturesToLooksResult_operationId(ctx context.C
 			return obj.OperationID, nil
 		},
 		nil,
-		ec.marshalNID2string,
+		ec.marshalOID2ᚖstring,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -43438,9 +43438,6 @@ func (ec *executionContext) _CopyFixturesToLooksResult(ctx context.Context, sel 
 			}
 		case "operationId":
 			out.Values[i] = ec._CopyFixturesToLooksResult_operationId(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
