@@ -4060,9 +4060,12 @@ func TestPubSubFixtureDataChanged_Integration(t *testing.T) {
 		t.Fatalf("Failed to create fixture: %v", err)
 	}
 
-	// Subscribe to fixture data changes
-	subscriber := ps.Subscribe(pubsub.TopicFixtureDataChanged, project.ID, 10)
-	defer ps.Unsubscribe(subscriber)
+	// Note: Pubsub publishing happens at the resolver level, not the service level.
+	// This test verifies the service correctly captures and restores fixture positions
+	// and returns the operation with RelatedIDs. The resolver uses RelatedIDs to publish
+	// pubsub events. Resolver-level pubsub tests are in graphql_test.go.
+	// We don't need a subscriber here since the service doesn't publish directly.
+	_ = ps // ps is available but unused at service level
 
 	// Capture previous state for bulk position update
 	fixtureIDs := []string{fixture1.ID}
@@ -4085,7 +4088,7 @@ func TestPubSubFixtureDataChanged_Integration(t *testing.T) {
 		t.Fatalf("Failed to capture new state: %v", err)
 	}
 	if err := undoService.RecordOperation(ctx, project.ID, undo.OperationTypeBulk, undo.EntityTypeBulkFixturePosition, "",
-		"Update positions for 1 fixtures", prevState, newState, fixtureIDs); err != nil {
+		"Update positions for 1 fixture", prevState, newState, fixtureIDs); err != nil {
 		t.Fatalf("Failed to record operation: %v", err)
 	}
 

@@ -1247,14 +1247,22 @@ func (s *Service) applyBulkFixturePositionSnapshot(ctx context.Context, snapshot
 	}
 
 	// Restore each fixture's position
+	// We collect errors and report the first one to ensure the caller knows the restore was incomplete
+	var firstError error
 	for _, pos := range snapshot.Positions {
 		fixture, err := s.fixtureRepo.FindByID(ctx, pos.FixtureID)
 		if err != nil {
 			log.Printf("Warning: failed to find fixture %s during position restore: %v", pos.FixtureID, err)
+			if firstError == nil {
+				firstError = fmt.Errorf("failed to find fixture %s: %w", pos.FixtureID, err)
+			}
 			continue
 		}
 		if fixture == nil {
 			log.Printf("Warning: fixture %s not found during position restore", pos.FixtureID)
+			if firstError == nil {
+				firstError = fmt.Errorf("fixture %s not found", pos.FixtureID)
+			}
 			continue
 		}
 
@@ -1264,8 +1272,14 @@ func (s *Service) applyBulkFixturePositionSnapshot(ctx context.Context, snapshot
 
 		if err := s.fixtureRepo.Update(ctx, fixture); err != nil {
 			log.Printf("Warning: failed to update fixture %s position during restore: %v", pos.FixtureID, err)
+			if firstError == nil {
+				firstError = fmt.Errorf("failed to update fixture %s: %w", pos.FixtureID, err)
+			}
 		}
 	}
 
+	if firstError != nil {
+		return "", firstError
+	}
 	return "", nil
 }

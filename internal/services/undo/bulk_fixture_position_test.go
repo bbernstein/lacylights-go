@@ -291,12 +291,17 @@ func TestService_ApplyBulkFixturePositionSnapshot_MissingFixture(t *testing.T) {
 	}
 	snapshotJSON, _ := json.Marshal(snapshot)
 
-	// Apply snapshot - should not error (missing fixtures are logged and skipped)
+	// Apply snapshot - should return error for missing fixture
 	entityID, err := service.applyBulkFixturePositionSnapshot(ctx, string(snapshotJSON))
-	if err != nil {
-		t.Fatalf("Expected no error for missing fixture, got: %v", err)
+	if err == nil {
+		t.Fatal("Expected error for missing fixture, got nil")
 	}
 	if entityID != "" {
 		t.Errorf("Expected empty entityID, got: %s", entityID)
+	}
+	// Verify error message mentions the fixture
+	expectedMsg := "fixture nonexistent-id not found"
+	if err.Error() != expectedMsg {
+		t.Errorf("Expected error message %q, got %q", expectedMsg, err.Error())
 	}
 }

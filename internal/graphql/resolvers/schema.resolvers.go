@@ -1597,20 +1597,22 @@ func (r *mutationResolver) UpdateFixturePositions(ctx context.Context, positions
 		return true, nil
 	}
 
-	// Collect fixture IDs and determine project ID
+	// Collect fixture IDs and determine project ID, validating all fixtures belong to the same project
 	fixtureIDs := make([]string, len(positions))
 	var projectID string
 	for i, position := range positions {
 		fixtureIDs[i] = position.FixtureID
+		fixture, err := r.FixtureRepo.FindByID(ctx, position.FixtureID)
+		if err != nil {
+			return false, err
+		}
+		if fixture == nil {
+			return false, fmt.Errorf("fixture not found: %s", position.FixtureID)
+		}
 		if projectID == "" {
-			fixture, err := r.FixtureRepo.FindByID(ctx, position.FixtureID)
-			if err != nil {
-				return false, err
-			}
-			if fixture == nil {
-				return false, fmt.Errorf("fixture not found: %s", position.FixtureID)
-			}
 			projectID = fixture.ProjectID
+		} else if fixture.ProjectID != projectID {
+			return false, fmt.Errorf("all fixtures must belong to the same project")
 		}
 	}
 
@@ -4473,13 +4475,12 @@ func (r *mutationResolver) JumpToOperation(ctx context.Context, projectID string
 	// Publish operation history changed event
 	r.publishOperationHistoryChanged(ctx, projectID)
 
-	// Publish entity-specific change events for real-time UI updates
-	// Note: JumpToOperation can go either direction, so we can't determine if it's undo or redo.
-	// We treat the final result operation as if it were an "undo" for notification purposes,
-	// since the most common case is jumping back to a previous state.
-	if result.Success && result.Operation != nil {
-		r.publishEntityChangeFromUndo(ctx, projectID, result.Operation, result.RestoredEntityID, true)
-	}
+	// Note: JumpToOperation can move either forward or backward in history, but this resolver
+	// does not know the direction of the jump. Using undo-specific entity change publishing
+	// here would misclassify some forward jumps as undos (and vice versa). To avoid
+	// publishing incorrect entity change events, we only publish the operation history
+	// change above and do not emit entity-specific change events from this resolver.
+	// The UI should refetch data based on the operation history change notification.
 
 	return gqlResult, nil
 }
