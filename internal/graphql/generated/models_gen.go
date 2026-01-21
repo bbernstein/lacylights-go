@@ -199,6 +199,28 @@ type ChannelValueInput struct {
 	Value  int `json:"value"`
 }
 
+// Input for copying fixtures from one look to multiple target looks.
+type CopyFixturesToLooksInput struct {
+	// ID of the look to copy fixtures from
+	SourceLookID string `json:"sourceLookId"`
+	// IDs of fixtures to copy
+	FixtureIds []string `json:"fixtureIds"`
+	// IDs of looks to copy fixtures to
+	TargetLookIds []string `json:"targetLookIds"`
+}
+
+// Result of the copy fixtures operation.
+type CopyFixturesToLooksResult struct {
+	// Number of looks updated
+	UpdatedLookCount int `json:"updatedLookCount"`
+	// Number of cues affected (for UI feedback)
+	AffectedCueCount int `json:"affectedCueCount"`
+	// The updated looks
+	UpdatedLooks []*models.Look `json:"updatedLooks"`
+	// Operation ID for undo (single atomic operation). Null if undo capture failed.
+	OperationID *string `json:"operationId,omitempty"`
+}
+
 type CreateChannelDefinitionInput struct {
 	Name         string                           `json:"name"`
 	Type         ChannelType                      `json:"type"`
@@ -372,6 +394,25 @@ type CueUsageSummary struct {
 	CueName     string  `json:"cueName"`
 	CueListID   string  `json:"cueListId"`
 	CueListName string  `json:"cueListName"`
+}
+
+// A cue with its associated look information for the copy modal.
+type CueWithLookInfo struct {
+	CueID     string  `json:"cueId"`
+	CueNumber float64 `json:"cueNumber"`
+	CueName   string  `json:"cueName"`
+	LookID    string  `json:"lookId"`
+	LookName  string  `json:"lookName"`
+	// Other cue numbers that use the same look (excluding this cue)
+	OtherCueNumbers []float64 `json:"otherCueNumbers"`
+}
+
+// Response for the cuesWithLookInfo query.
+type CuesWithLookInfoResponse struct {
+	// Cues sorted by cue number
+	Cues []*CueWithLookInfo `json:"cues"`
+	// Looks in the project that are not used by any cue in this cue list
+	OrphanLooks []*LookSummary `json:"orphanLooks"`
 }
 
 // Input for adding or updating a channel within an effect fixture.

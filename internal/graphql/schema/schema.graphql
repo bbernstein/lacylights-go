@@ -719,6 +719,29 @@ type CueListSummary {
   createdAt: String!
 }
 
+"""
+A cue with its associated look information for the copy modal.
+"""
+type CueWithLookInfo {
+  cueId: ID!
+  cueNumber: Float!
+  cueName: String!
+  lookId: ID!
+  lookName: String!
+  """Other cue numbers that use the same look (excluding this cue)"""
+  otherCueNumbers: [Float!]!
+}
+
+"""
+Response for the cuesWithLookInfo query.
+"""
+type CuesWithLookInfoResponse {
+  """Cues sorted by cue number"""
+  cues: [CueWithLookInfo!]!
+  """Looks in the project that are not used by any cue in this cue list"""
+  orphanLooks: [LookSummary!]!
+}
+
 type CuePage {
   cues: [Cue!]!
   pagination: PaginationInfo!
@@ -1517,6 +1540,32 @@ input LookPartialUpdateItem {
   mergeFixtures: Boolean = true
 }
 
+"""
+Input for copying fixtures from one look to multiple target looks.
+"""
+input CopyFixturesToLooksInput {
+  """ID of the look to copy fixtures from"""
+  sourceLookId: ID!
+  """IDs of fixtures to copy"""
+  fixtureIds: [ID!]!
+  """IDs of looks to copy fixtures to"""
+  targetLookIds: [ID!]!
+}
+
+"""
+Result of the copy fixtures operation.
+"""
+type CopyFixturesToLooksResult {
+  """Number of looks updated"""
+  updatedLookCount: Int!
+  """Number of cues affected (for UI feedback)"""
+  affectedCueCount: Int!
+  """The updated looks"""
+  updatedLooks: [Look!]!
+  """Operation ID for undo (single atomic operation). Null if undo capture failed."""
+  operationId: ID
+}
+
 input BulkCueListUpdateInput {
   cueLists: [CueListUpdateItem!]!
 }
@@ -1795,6 +1844,11 @@ type Query {
   cueListPlaybackStatus(cueListId: ID!): CueListPlaybackStatus
   "Get global playback status - which cue list is currently playing (if any)"
   globalPlaybackStatus: GlobalPlaybackStatus!
+  """
+  Get all cues in a cue list with their look info, plus orphan looks.
+  Used for the "Copy Fixtures to Other Looks" modal.
+  """
+  cuesWithLookInfo(cueListId: ID!): CuesWithLookInfoResponse!
 
   # Cues
   cue(id: ID!): Cue
@@ -1961,6 +2015,11 @@ type Mutation {
     mergeFixtures: Boolean = true
   ): Look!
   bulkUpdateLooksPartial(input: BulkLookPartialUpdateInput!): [Look!]!
+  """
+  Copy fixture values from one look to multiple target looks.
+  This is an atomic operation - a single undo reverses all changes.
+  """
+  copyFixturesToLooks(input: CopyFixturesToLooksInput!): CopyFixturesToLooksResult!
 
   # Look Boards
   createLookBoard(input: CreateLookBoardInput!): LookBoard!
