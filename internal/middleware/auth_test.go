@@ -9,6 +9,7 @@ import (
 
 	"github.com/bbernstein/lacylights-go/internal/auth"
 	"github.com/bbernstein/lacylights-go/internal/auth/session"
+	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -20,6 +21,13 @@ func createTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("failed to create test database: %v", err)
 	}
+
+	// Run migrations for session and user tables
+	err = db.AutoMigrate(&models.Session{}, &models.User{})
+	if err != nil {
+		t.Fatalf("failed to migrate database: %v", err)
+	}
+
 	return db
 }
 
@@ -42,6 +50,42 @@ func createTestAuthService(t *testing.T, enabled bool) *auth.Service {
 		t.Fatalf("failed to create auth service: %v", err)
 	}
 	return svc
+}
+
+// createTestSession creates a session in the database for testing.
+func createTestSession(t *testing.T, db *gorm.DB, sessionID, userID string) {
+	t.Helper()
+	sess := &models.Session{
+		ID:             sessionID,
+		UserID:         userID,
+		TokenHash:      "token-hash-for-" + sessionID, // Unique token hash per session
+		ExpiresAt:      time.Now().Add(1 * time.Hour),
+		LastActivityAt: time.Now(),
+	}
+	if err := db.Create(sess).Error; err != nil {
+		t.Fatalf("failed to create test session: %v", err)
+	}
+}
+
+// createTestAuthServiceWithDB creates an auth service for testing and returns both the service and DB.
+func createTestAuthServiceWithDB(t *testing.T, enabled bool) (*auth.Service, *gorm.DB) {
+	t.Helper()
+	db := createTestDB(t)
+
+	svc, err := auth.NewService(auth.Config{
+		DB:                 db,
+		JWTSecret:          "test-secret-key-at-least-32-chars",
+		JWTIssuer:          "test-issuer",
+		JWTAccessTokenTTL:  15 * time.Minute,
+		JWTRefreshTokenTTL: 24 * time.Hour,
+		PasswordMinLength:  8,
+		Enabled:            enabled,
+		DeviceAuthEnabled:  false,
+	})
+	if err != nil {
+		t.Fatalf("failed to create auth service: %v", err)
+	}
+	return svc, db
 }
 
 func TestNewAuthMiddleware(t *testing.T) {
@@ -113,8 +157,11 @@ func TestAuthenticate_NoToken(t *testing.T) {
 }
 
 func TestAuthenticate_ValidBearerToken(t *testing.T) {
-	authSvc := createTestAuthService(t, true)
+	authSvc, db := createTestAuthServiceWithDB(t, true)
 	middleware := NewAuthMiddleware(authSvc)
+
+	// Create a session in the database first
+	createTestSession(t, db, "session456", "user123")
 
 	// Generate a valid token
 	jwtSvc := authSvc.JWTService()
@@ -164,8 +211,11 @@ func TestAuthenticate_ValidBearerToken(t *testing.T) {
 }
 
 func TestAuthenticate_ValidCookieToken(t *testing.T) {
-	authSvc := createTestAuthService(t, true)
+	authSvc, db := createTestAuthServiceWithDB(t, true)
 	middleware := NewAuthMiddleware(authSvc)
+
+	// Create a session in the database first
+	createTestSession(t, db, "session456", "user123")
 
 	// Generate a valid token
 	jwtSvc := authSvc.JWTService()
@@ -230,9 +280,50 @@ func TestAuthenticate_InvalidToken(t *testing.T) {
 	}
 }
 
-func TestAuthenticate_BearerTokenPrioritizedOverCookie(t *testing.T) {
+func TestAuthenticate_SessionRevoked(t *testing.T) {
 	authSvc := createTestAuthService(t, true)
 	middleware := NewAuthMiddleware(authSvc)
+
+	// Generate a valid token WITHOUT creating a session in the database
+	// This simulates a session that was revoked/deleted
+	jwtSvc := authSvc.JWTService()
+	pair, err := jwtSvc.GenerateTokenPair("user123", "test@example.com", "USER", "revoked-session")
+	if err != nil {
+		t.Fatalf("failed to generate token pair: %v", err)
+	}
+
+	handlerCalled := false
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled = true
+		sess := GetSessionFromContext(r.Context())
+		if sess != nil {
+			t.Error("expected no session when session is revoked")
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	rr := httptest.NewRecorder()
+
+	middleware.Authenticate(handler).ServeHTTP(rr, req)
+
+	if !handlerCalled {
+		t.Error("expected handler to be called even with revoked session")
+	}
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+}
+
+func TestAuthenticate_BearerTokenPrioritizedOverCookie(t *testing.T) {
+	authSvc, db := createTestAuthServiceWithDB(t, true)
+	middleware := NewAuthMiddleware(authSvc)
+
+	// Create sessions in the database first
+	createTestSession(t, db, "session1", "headerUser")
+	createTestSession(t, db, "session2", "cookieUser")
 
 	// Generate two different tokens
 	jwtSvc := authSvc.JWTService()

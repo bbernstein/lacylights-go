@@ -73,6 +73,15 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
+		// Verify the session still exists (not revoked)
+		// This prevents use of valid JWTs after session logout/revocation
+		dbSession, err := m.authService.SessionManager().GetByID(r.Context(), claims.SessionID)
+		if err != nil || dbSession == nil {
+			// Session not found or revoked - continue without auth context
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		// Create cached session from claims
 		sess := &session.CachedSession{
 			UserID:    claims.UserID,
