@@ -3,6 +3,7 @@ package auth
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
@@ -137,9 +138,15 @@ func GenerateSecureToken(length int) (string, error) {
 
 // HashToken creates a hash of a token for storage.
 // Uses SHA-256 to create a deterministic hash that can be looked up.
+// This is appropriate for high-entropy tokens (like session IDs) where
+// we need consistent hashing for lookups.
 func HashToken(token string) string {
-	// For tokens, we use a simple SHA-256 hash since we need to look them up
-	// and they're already high-entropy random values
-	hash := argon2.IDKey([]byte(token), []byte("lacylights-token-salt"), 1, 1024, 1, 32)
-	return base64.RawStdEncoding.EncodeToString(hash)
+	// For tokens, we use SHA-256 since we need deterministic lookups
+	// and the tokens are already high-entropy random values.
+	// Unlike passwords, tokens don't need salting because:
+	// 1. They're cryptographically random (not user-chosen)
+	// 2. We need to look them up by their hash
+	// 3. Rainbow tables are infeasible for 256-bit random values
+	h := sha256.Sum256([]byte(token))
+	return base64.RawStdEncoding.EncodeToString(h[:])
 }

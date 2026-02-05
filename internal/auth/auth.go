@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/lucsky/cuid"
@@ -221,7 +222,9 @@ func (s *Service) Login(ctx context.Context, email, password string, ipAddress, 
 			lockUntil := time.Now().Add(15 * time.Minute)
 			creds.LockedUntil = &lockUntil
 		}
-		_ = s.db.WithContext(ctx).Save(&creds)
+		if saveErr := s.db.WithContext(ctx).Save(&creds).Error; saveErr != nil {
+			log.Printf("Warning: failed to save failed login attempt count for user %s: %v", user.ID, saveErr)
+		}
 		return nil, ErrInvalidCredentials
 	}
 
@@ -229,13 +232,17 @@ func (s *Service) Login(ctx context.Context, email, password string, ipAddress, 
 	if creds.FailedAttempts > 0 {
 		creds.FailedAttempts = 0
 		creds.LockedUntil = nil
-		_ = s.db.WithContext(ctx).Save(&creds)
+		if saveErr := s.db.WithContext(ctx).Save(&creds).Error; saveErr != nil {
+			log.Printf("Warning: failed to reset failed login attempts for user %s: %v", user.ID, saveErr)
+		}
 	}
 
 	// Update last login time
 	now := time.Now()
 	user.LastLoginAt = &now
-	_ = s.db.WithContext(ctx).Save(&user)
+	if saveErr := s.db.WithContext(ctx).Save(&user).Error; saveErr != nil {
+		log.Printf("Warning: failed to update last login time for user %s: %v", user.ID, saveErr)
+	}
 
 	// Create session and generate tokens
 	return s.createSessionAndTokens(ctx, &user, ipAddress, userAgent)
@@ -443,7 +450,7 @@ func (s *Service) EnsureDefaultAdmin(ctx context.Context, email, password string
 	}
 
 	if password == "" {
-		return errors.New("DEFAULT_ADMIN_PASSWORD environment variable is required when AUTH_ENABLED=true")
+		return errors.New("default admin password is required when authentication is enabled")
 	}
 
 	// Check if any users exist
