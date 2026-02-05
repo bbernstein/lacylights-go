@@ -137,6 +137,14 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 | `OFL_IMPORT_ENABLED` | `true` | Auto-import OFL fixtures on startup |
 | `OFL_CACHE_PATH` | `./.ofl-cache` | Path to the OFL fixture cache directory |
 | `NON_INTERACTIVE` | `false` | Disable interactive prompts (CI/Docker) |
+| `AUTH_ENABLED` | `false` | Enable authentication (default: false for easy onboarding) |
+| `DEFAULT_ADMIN_EMAIL` | `admin@lacylights.local` | Default admin email (used when auth first enabled) |
+| `DEFAULT_ADMIN_PASSWORD` | (required when AUTH_ENABLED) | Default admin password |
+| `JWT_SECRET` | (auto-generated) | Secret key for signing JWTs |
+| `JWT_ACCESS_TTL` | `15m` | Access token lifetime |
+| `JWT_REFRESH_TTL` | `168h` | Refresh token lifetime (7 days) |
+| `PASSWORD_MIN_LENGTH` | `8` | Minimum password length |
+| `DEVICE_AUTH_ENABLED` | `true` | Enable device-based authentication |
 
 ### Database Environments
 

@@ -25,12 +25,14 @@ import (
 	"github.com/rs/cors"
 	"github.com/vektah/gqlparser/v2/ast"
 
+	"github.com/bbernstein/lacylights-go/internal/auth"
 	"github.com/bbernstein/lacylights-go/internal/config"
 	"github.com/bbernstein/lacylights-go/internal/database"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 	"github.com/bbernstein/lacylights-go/internal/graphql/resolvers"
+	authmiddleware "github.com/bbernstein/lacylights-go/internal/middleware"
 	"github.com/bbernstein/lacylights-go/internal/services/dmx"
 	"github.com/bbernstein/lacylights-go/internal/services/modulator"
 	"github.com/bbernstein/lacylights-go/internal/services/ofl"
@@ -86,6 +88,9 @@ func main() {
 		&models.OFLImportMeta{},
 		&models.Operation{},
 		&models.OperationPointer{},
+		// Auth tables without FK constraints
+		&models.UserGroup{},
+		&models.AuthSetting{},
 	); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
@@ -116,6 +121,13 @@ func main() {
 		{"effect_fixtures", &models.EffectFixture{}, []string{"id", "effect_id", "fixture_id"}},
 		{"effect_channels", &models.EffectChannel{}, []string{"id", "effect_fixture_id"}},
 		{"cue_effects", &models.CueEffect{}, []string{"id", "cue_id", "effect_id"}},
+		// Auth tables with FK constraints
+		{"user_credentials", &models.UserCredential{}, []string{"id", "user_id"}},
+		{"user_oauth", &models.UserOAuth{}, []string{"id", "user_id", "provider"}},
+		{"devices", &models.Device{}, []string{"id", "fingerprint"}},
+		{"sessions", &models.Session{}, []string{"id", "user_id", "token_hash"}},
+		{"verification_tokens", &models.VerificationToken{}, []string{"id", "token_hash"}},
+		{"user_group_members", &models.UserGroupMember{}, []string{"id", "user_id", "group_id"}},
 	}
 
 	for _, t := range tablesWithFK {
@@ -276,8 +288,47 @@ func main() {
 	corsMiddleware := cors.New(corsOptions)
 	router.Use(corsMiddleware.Handler)
 
+	// Initialize auth service if enabled
+	var authService *auth.Service
+	if cfg.AuthEnabled {
+		var err error
+		authService, err = auth.NewService(auth.Config{
+			DB:                   db,
+			JWTSecret:            cfg.JWTSecret,
+			JWTIssuer:            cfg.JWTIssuer,
+			JWTAccessTokenTTL:    cfg.JWTAccessTokenTTL,
+			JWTRefreshTokenTTL:   cfg.JWTRefreshTokenTTL,
+			SessionDurationHours: cfg.SessionDurationHours,
+			CacheMaxSize:         1000, // Default session cache size
+			CacheTTL:             5 * time.Minute,
+			PasswordMinLength:    cfg.PasswordMinLength,
+			Enabled:              cfg.AuthEnabled,
+			DeviceAuthEnabled:    cfg.DeviceAuthEnabled,
+		})
+		if err != nil {
+			log.Fatalf("Failed to initialize auth service: %v", err)
+		}
+		log.Println("🔐 Auth service initialized")
+
+		// Ensure default admin user exists (creates one if no users exist)
+		if err := authService.EnsureDefaultAdmin(context.Background(), cfg.DefaultAdminEmail, cfg.DefaultAdminPassword); err != nil {
+			log.Fatalf("Failed to ensure default admin: %v", err)
+		}
+
+		// Add auth middleware
+		authMiddleware := authmiddleware.NewAuthMiddleware(authService)
+		router.Use(authMiddleware.Authenticate)
+	} else {
+		log.Println("Auth service disabled")
+	}
+
 	// Create resolver with dependencies
 	resolver := resolvers.NewResolver(db, dmxService, fadeEngine, playbackService, cfg.OFLCachePath)
+
+	// Wire auth service to resolver if enabled
+	if authService != nil {
+		resolver.SetAuthService(authService)
+	}
 
 	// Create GraphQL server
 	srv := handler.New(generated.NewExecutableSchema(generated.Config{

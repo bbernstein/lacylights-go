@@ -8,6 +8,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/bbernstein/lacylights-go/internal/auth"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
@@ -54,6 +55,9 @@ type Resolver struct {
 	WiFiService     *wifi.Service
 	UndoService     *undo.Service
 	PubSub          *pubsub.PubSub
+
+	// Auth service (optional - nil if auth is disabled)
+	AuthService *auth.Service
 }
 
 // NewResolver creates a new Resolver instance with all dependencies.
@@ -117,6 +121,12 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *modulator.Eng
 	r.wirePubSub()
 
 	return r
+}
+
+// SetAuthService sets the auth service on the resolver.
+// This is called during server initialization if auth is enabled.
+func (r *Resolver) SetAuthService(authService *auth.Service) {
+	r.AuthService = authService
 }
 
 // wirePubSub connects services to the PubSub system for real-time updates.

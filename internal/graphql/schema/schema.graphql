@@ -246,6 +246,169 @@ enum CompositionMode {
   MULTIPLY
 }
 
+# =============================================================================
+# AUTHENTICATION ENUMS
+# =============================================================================
+
+"""
+OAuth provider type for authentication.
+"""
+enum OAuthProvider {
+  APPLE
+}
+
+"""
+Type of verification token.
+"""
+enum VerificationTokenType {
+  EMAIL_VERIFY
+  PHONE_VERIFY
+  PASSWORD_RESET
+}
+
+"""
+Default role for device-authenticated users.
+"""
+enum DeviceRole {
+  PLAYER
+  OPERATOR
+  DESIGNER
+}
+
+# =============================================================================
+# AUTHENTICATION TYPES
+# =============================================================================
+
+"""
+Authentication result returned after login or registration.
+"""
+type AuthPayload {
+  "The authenticated user"
+  user: User!
+  "JWT access token for API requests"
+  accessToken: String!
+  "JWT refresh token for obtaining new access tokens"
+  refreshToken: String!
+  "When the access token expires"
+  expiresAt: String!
+}
+
+"""
+Extended user information for authenticated context.
+"""
+type AuthUser {
+  id: ID!
+  email: String!
+  name: String
+  phone: String
+  role: UserRole!
+  emailVerified: Boolean!
+  phoneVerified: Boolean!
+  isActive: Boolean!
+  lastLoginAt: String
+  createdAt: String!
+  updatedAt: String!
+  "User's permission groups"
+  groups: [UserGroup!]!
+  "Effective permissions from role and groups"
+  permissions: [String!]!
+}
+
+"""
+User group for permission management.
+"""
+type UserGroup {
+  id: ID!
+  name: String!
+  description: String
+  "JSON array of permission strings"
+  permissions: [String!]!
+  "Number of members in this group"
+  memberCount: Int!
+  createdAt: String!
+  updatedAt: String!
+}
+
+"""
+User session information.
+"""
+type Session {
+  id: ID!
+  userId: ID!
+  "Device associated with this session (if device auth)"
+  deviceId: ID
+  device: Device
+  ipAddress: String
+  userAgent: String
+  expiresAt: String!
+  lastActivityAt: String!
+  createdAt: String!
+}
+
+"""
+Pre-authorized device for device-based authentication.
+"""
+type Device {
+  id: ID!
+  name: String!
+  "Unique device fingerprint"
+  fingerprint: String!
+  "Whether this device is authorized"
+  isAuthorized: Boolean!
+  "Default user to authenticate as when device connects"
+  defaultUser: User
+  "Default role when no user is specified"
+  defaultRole: DeviceRole!
+  lastSeenAt: String
+  lastIPAddress: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+"""
+Result of checking device authorization status.
+"""
+type DeviceAuthStatus {
+  "Whether the device is known and authorized"
+  isAuthorized: Boolean!
+  "Whether the device is known but not yet authorized"
+  isPending: Boolean!
+  "The device record if it exists"
+  device: Device
+  "Default user for auto-login (if authorized)"
+  defaultUser: User
+}
+
+"""
+Global authentication settings.
+"""
+type AuthSettings {
+  "Whether authentication is enabled"
+  authEnabled: Boolean!
+  "Allowed authentication methods"
+  allowedMethods: [String!]!
+  "Whether device authentication is enabled"
+  deviceAuthEnabled: Boolean!
+  "Session duration in hours"
+  sessionDurationHours: Int!
+  "Minimum password length"
+  passwordMinLength: Int!
+  "Whether email verification is required"
+  requireEmailVerification: Boolean!
+}
+
+"""
+Device authorization code for pre-authorizing devices.
+"""
+type DeviceAuthCode {
+  "The authorization code (6 digits)"
+  code: String!
+  "When the code expires"
+  expiresAt: String!
+  "Device ID this code is for"
+  deviceId: ID!
+}
+
 "Payload for cue list data change notifications"
 type CueListDataChangedPayload {
   cueListId: ID!
@@ -1241,6 +1404,56 @@ type QLCFixtureMappingResult {
 # INPUT TYPES
 # =============================================================================
 
+# Authentication Inputs
+input RegisterInput {
+  email: String!
+  password: String!
+  name: String
+}
+
+input CreateUserInput {
+  email: String!
+  password: String!
+  name: String
+  role: UserRole = USER
+}
+
+input UpdateUserInput {
+  email: String
+  name: String
+  phone: String
+  role: UserRole
+  isActive: Boolean
+}
+
+input CreateUserGroupInput {
+  name: String!
+  description: String
+  permissions: [String!]
+}
+
+input UpdateUserGroupInput {
+  name: String
+  description: String
+  permissions: [String!]
+}
+
+input UpdateDeviceInput {
+  name: String
+  defaultUserId: ID
+  defaultRole: DeviceRole
+  isAuthorized: Boolean
+}
+
+input UpdateAuthSettingsInput {
+  authEnabled: Boolean
+  allowedMethods: [String!]
+  deviceAuthEnabled: Boolean
+  sessionDurationHours: Int
+  passwordMinLength: Int
+  requireEmailVerification: Boolean
+}
+
 input CreateProjectInput {
   name: String!
   description: String
@@ -1775,6 +1988,32 @@ input UpdateEffectFixtureInput {
 # =============================================================================
 
 type Query {
+  # Authentication
+  "Get the currently authenticated user (null if not authenticated)"
+  me: AuthUser
+  "Check if authentication is enabled"
+  authEnabled: Boolean!
+  "Get global authentication settings (admin only when auth enabled)"
+  authSettings: AuthSettings!
+  "Check if a device is authorized by fingerprint"
+  checkDeviceAuthorization(fingerprint: String!): DeviceAuthStatus!
+  "Get the current user's active sessions"
+  mySessions: [Session!]!
+
+  # User Management (admin only)
+  "List all users (admin only)"
+  users(page: Int = 1, perPage: Int = 50): [User!]!
+  "Get a user by ID (admin only)"
+  user(id: ID!): User
+  "List all user groups (admin only)"
+  userGroups: [UserGroup!]!
+  "Get a user group by ID (admin only)"
+  userGroup(id: ID!): UserGroup
+  "List all devices (admin only)"
+  devices: [Device!]!
+  "Get a device by ID (admin only)"
+  device(id: ID!): Device
+
   # Projects
   projects: [Project!]!
   project(id: ID!): Project
@@ -1933,6 +2172,74 @@ type Query {
 # =============================================================================
 
 type Mutation {
+  # Authentication
+  "Register a new user with email and password"
+  register(input: RegisterInput!): AuthPayload!
+  "Login with email and password"
+  login(email: String!, password: String!): AuthPayload!
+  "Logout the current session"
+  logout: Boolean!
+  "Logout all sessions for the current user"
+  logoutAll: Boolean!
+  "Refresh the access token using a refresh token"
+  refreshToken(refreshToken: String!): AuthPayload!
+  "Change the current user's password"
+  changePassword(oldPassword: String!, newPassword: String!): Boolean!
+  "Request a password reset email"
+  requestPasswordReset(email: String!): Boolean!
+  "Reset password using a reset token"
+  resetPassword(token: String!, newPassword: String!): Boolean!
+  "Request email verification"
+  requestEmailVerification: Boolean!
+  "Verify email with token"
+  verifyEmail(token: String!): Boolean!
+
+  # OAuth Authentication
+  "Sign in with Apple"
+  appleSignIn(identityToken: String!, authorizationCode: String!): AuthPayload!
+
+  # Device Authentication
+  "Register a device for device-based auth"
+  registerDevice(fingerprint: String!, name: String!): Device!
+  "Authorize a device using an authorization code"
+  authorizeDevice(fingerprint: String!, authorizationCode: String!): AuthPayload!
+
+  # User Management (admin only)
+  "Create a new user (admin only)"
+  createUser(input: CreateUserInput!): User!
+  "Update a user (admin only)"
+  updateUser(id: ID!, input: UpdateUserInput!): User!
+  "Delete a user (admin only)"
+  deleteUser(id: ID!): Boolean!
+  "Create a user group (admin only)"
+  createUserGroup(input: CreateUserGroupInput!): UserGroup!
+  "Update a user group (admin only)"
+  updateUserGroup(id: ID!, input: UpdateUserGroupInput!): UserGroup!
+  "Delete a user group (admin only)"
+  deleteUserGroup(id: ID!): Boolean!
+  "Add a user to a group (admin only)"
+  addUserToGroup(userId: ID!, groupId: ID!): Boolean!
+  "Remove a user from a group (admin only)"
+  removeUserFromGroup(userId: ID!, groupId: ID!): Boolean!
+
+  # Device Management (admin only)
+  "Create a device authorization code (admin only)"
+  createDeviceAuthCode(deviceId: ID!): DeviceAuthCode!
+  "Update a device (admin only)"
+  updateDevice(id: ID!, input: UpdateDeviceInput!): Device!
+  "Revoke a device's authorization (admin only)"
+  revokeDevice(id: ID!): Boolean!
+
+  # Session Management (admin only)
+  "Revoke a specific session (admin only)"
+  revokeSession(sessionId: ID!): Boolean!
+  "Revoke all sessions for a user (admin only)"
+  revokeAllUserSessions(userId: ID!): Boolean!
+
+  # Auth Settings (admin only)
+  "Update authentication settings (admin only)"
+  updateAuthSettings(input: UpdateAuthSettingsInput!): AuthSettings!
+
   # Project Management
   createProject(input: CreateProjectInput!): Project!
   updateProject(id: ID!, input: CreateProjectInput!): Project!

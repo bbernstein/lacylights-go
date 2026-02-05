@@ -119,6 +119,26 @@ func (r *cueListResolver) UpdatedAt(ctx context.Context, obj *models.CueList) (s
 	return obj.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
+// DefaultRole is the resolver for the defaultRole field.
+func (r *deviceResolver) DefaultRole(ctx context.Context, obj *models.Device) (generated.DeviceRole, error) {
+	panic(fmt.Errorf("not implemented: DefaultRole - defaultRole"))
+}
+
+// LastSeenAt is the resolver for the lastSeenAt field.
+func (r *deviceResolver) LastSeenAt(ctx context.Context, obj *models.Device) (*string, error) {
+	panic(fmt.Errorf("not implemented: LastSeenAt - lastSeenAt"))
+}
+
+// CreatedAt is the resolver for the createdAt field.
+func (r *deviceResolver) CreatedAt(ctx context.Context, obj *models.Device) (string, error) {
+	panic(fmt.Errorf("not implemented: CreatedAt - createdAt"))
+}
+
+// UpdatedAt is the resolver for the updatedAt field.
+func (r *deviceResolver) UpdatedAt(ctx context.Context, obj *models.Device) (string, error) {
+	panic(fmt.Errorf("not implemented: UpdatedAt - updatedAt"))
+}
+
 // EffectType is the resolver for the effectType field.
 func (r *effectResolver) EffectType(ctx context.Context, obj *models.Effect) (generated.EffectType, error) {
 	return ResolveEffectType(obj)
@@ -403,6 +423,152 @@ func (r *modeChannelResolver) Channel(ctx context.Context, obj *models.ModeChann
 		return nil, result.Error
 	}
 	return &channel, nil
+}
+
+// Register is the resolver for the register field.
+func (r *mutationResolver) Register(ctx context.Context, input generated.RegisterInput) (*generated.AuthPayload, error) {
+	return r.registerUser(ctx, input)
+}
+
+// Login is the resolver for the login field.
+func (r *mutationResolver) Login(ctx context.Context, email string, password string) (*generated.AuthPayload, error) {
+	return r.loginUser(ctx, email, password)
+}
+
+// Logout is the resolver for the logout field.
+func (r *mutationResolver) Logout(ctx context.Context) (bool, error) {
+	return r.logoutUser(ctx)
+}
+
+// LogoutAll is the resolver for the logoutAll field.
+func (r *mutationResolver) LogoutAll(ctx context.Context) (bool, error) {
+	return r.logoutAllSessions(ctx)
+}
+
+// RefreshToken is the resolver for the refreshToken field.
+func (r *mutationResolver) RefreshToken(ctx context.Context, refreshToken string) (*generated.AuthPayload, error) {
+	return r.refreshUserToken(ctx, refreshToken)
+}
+
+// ChangePassword is the resolver for the changePassword field.
+func (r *mutationResolver) ChangePassword(ctx context.Context, oldPassword string, newPassword string) (bool, error) {
+	return r.changeUserPassword(ctx, oldPassword, newPassword)
+}
+
+// RequestPasswordReset is the resolver for the requestPasswordReset field.
+func (r *mutationResolver) RequestPasswordReset(ctx context.Context, email string) (bool, error) {
+	// TODO: Implement password reset email sending
+	return false, ErrFeatureNotEnabled
+}
+
+// ResetPassword is the resolver for the resetPassword field.
+func (r *mutationResolver) ResetPassword(ctx context.Context, token string, newPassword string) (bool, error) {
+	// TODO: Implement password reset with token
+	return false, ErrFeatureNotEnabled
+}
+
+// RequestEmailVerification is the resolver for the requestEmailVerification field.
+func (r *mutationResolver) RequestEmailVerification(ctx context.Context) (bool, error) {
+	// TODO: Implement email verification sending
+	return false, ErrFeatureNotEnabled
+}
+
+// VerifyEmail is the resolver for the verifyEmail field.
+func (r *mutationResolver) VerifyEmail(ctx context.Context, token string) (bool, error) {
+	// TODO: Implement email verification with token
+	return false, ErrFeatureNotEnabled
+}
+
+// AppleSignIn is the resolver for the appleSignIn field.
+func (r *mutationResolver) AppleSignIn(ctx context.Context, identityToken string, authorizationCode string) (*generated.AuthPayload, error) {
+	// TODO: Implement Apple Sign-In OAuth flow
+	return nil, ErrFeatureNotEnabled
+}
+
+// RegisterDevice is the resolver for the registerDevice field.
+func (r *mutationResolver) RegisterDevice(ctx context.Context, fingerprint string, name string) (*models.Device, error) {
+	// TODO: Implement device registration
+	return nil, ErrFeatureNotEnabled
+}
+
+// AuthorizeDevice is the resolver for the authorizeDevice field.
+func (r *mutationResolver) AuthorizeDevice(ctx context.Context, fingerprint string, authorizationCode string) (*generated.AuthPayload, error) {
+	// TODO: Implement device authorization
+	return nil, ErrFeatureNotEnabled
+}
+
+// CreateUser is the resolver for the createUser field.
+func (r *mutationResolver) CreateUser(ctx context.Context, input generated.CreateUserInput) (*models.User, error) {
+	return r.createUser(ctx, input)
+}
+
+// UpdateUser is the resolver for the updateUser field.
+func (r *mutationResolver) UpdateUser(ctx context.Context, id string, input generated.UpdateUserInput) (*models.User, error) {
+	return r.updateUser(ctx, id, input)
+}
+
+// DeleteUser is the resolver for the deleteUser field.
+func (r *mutationResolver) DeleteUser(ctx context.Context, id string) (bool, error) {
+	return r.deleteUser(ctx, id)
+}
+
+// CreateUserGroup is the resolver for the createUserGroup field.
+func (r *mutationResolver) CreateUserGroup(ctx context.Context, input generated.CreateUserGroupInput) (*models.UserGroup, error) {
+	return r.createUserGroup(ctx, input)
+}
+
+// UpdateUserGroup is the resolver for the updateUserGroup field.
+func (r *mutationResolver) UpdateUserGroup(ctx context.Context, id string, input generated.UpdateUserGroupInput) (*models.UserGroup, error) {
+	return r.updateUserGroup(ctx, id, input)
+}
+
+// DeleteUserGroup is the resolver for the deleteUserGroup field.
+func (r *mutationResolver) DeleteUserGroup(ctx context.Context, id string) (bool, error) {
+	return r.deleteUserGroup(ctx, id)
+}
+
+// AddUserToGroup is the resolver for the addUserToGroup field.
+func (r *mutationResolver) AddUserToGroup(ctx context.Context, userID string, groupID string) (bool, error) {
+	return r.addUserToGroup(ctx, userID, groupID)
+}
+
+// RemoveUserFromGroup is the resolver for the removeUserFromGroup field.
+func (r *mutationResolver) RemoveUserFromGroup(ctx context.Context, userID string, groupID string) (bool, error) {
+	return r.removeUserFromGroup(ctx, userID, groupID)
+}
+
+// CreateDeviceAuthCode is the resolver for the createDeviceAuthCode field.
+func (r *mutationResolver) CreateDeviceAuthCode(ctx context.Context, deviceID string) (*generated.DeviceAuthCode, error) {
+	// TODO: Implement device auth code generation
+	return nil, ErrFeatureNotEnabled
+}
+
+// UpdateDevice is the resolver for the updateDevice field.
+func (r *mutationResolver) UpdateDevice(ctx context.Context, id string, input generated.UpdateDeviceInput) (*models.Device, error) {
+	// TODO: Implement device update
+	return nil, ErrFeatureNotEnabled
+}
+
+// RevokeDevice is the resolver for the revokeDevice field.
+func (r *mutationResolver) RevokeDevice(ctx context.Context, id string) (bool, error) {
+	// TODO: Implement device revocation
+	return false, ErrFeatureNotEnabled
+}
+
+// RevokeSession is the resolver for the revokeSession field.
+func (r *mutationResolver) RevokeSession(ctx context.Context, sessionID string) (bool, error) {
+	return r.revokeSession(ctx, sessionID)
+}
+
+// RevokeAllUserSessions is the resolver for the revokeAllUserSessions field.
+func (r *mutationResolver) RevokeAllUserSessions(ctx context.Context, userID string) (bool, error) {
+	return r.revokeAllUserSessions(ctx, userID)
+}
+
+// UpdateAuthSettings is the resolver for the updateAuthSettings field.
+func (r *mutationResolver) UpdateAuthSettings(ctx context.Context, input generated.UpdateAuthSettingsInput) (*generated.AuthSettings, error) {
+	// TODO: Implement auth settings update
+	return nil, ErrFeatureNotEnabled
 }
 
 // CreateProject is the resolver for the createProject field.
@@ -4897,6 +5063,61 @@ func (r *projectUserResolver) JoinedAt(ctx context.Context, obj *models.ProjectU
 	return obj.JoinedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
+// Me is the resolver for the me field.
+func (r *queryResolver) Me(ctx context.Context) (*generated.AuthUser, error) {
+	return r.getCurrentUser(ctx)
+}
+
+// AuthEnabled is the resolver for the authEnabled field.
+func (r *queryResolver) AuthEnabled(ctx context.Context) (bool, error) {
+	return r.isAuthEnabled(ctx), nil
+}
+
+// AuthSettings is the resolver for the authSettings field.
+func (r *queryResolver) AuthSettings(ctx context.Context) (*generated.AuthSettings, error) {
+	return r.getAuthSettings(ctx)
+}
+
+// CheckDeviceAuthorization is the resolver for the checkDeviceAuthorization field.
+func (r *queryResolver) CheckDeviceAuthorization(ctx context.Context, fingerprint string) (*generated.DeviceAuthStatus, error) {
+	return r.checkDeviceAuth(ctx, fingerprint)
+}
+
+// MySessions is the resolver for the mySessions field.
+func (r *queryResolver) MySessions(ctx context.Context) ([]*models.Session, error) {
+	return r.getUserSessions(ctx)
+}
+
+// Users is the resolver for the users field.
+func (r *queryResolver) Users(ctx context.Context, page *int, perPage *int) ([]*models.User, error) {
+	return r.getUsers(ctx, page, perPage)
+}
+
+// User is the resolver for the user field.
+func (r *queryResolver) User(ctx context.Context, id string) (*models.User, error) {
+	return r.getUser(ctx, id)
+}
+
+// UserGroups is the resolver for the userGroups field.
+func (r *queryResolver) UserGroups(ctx context.Context) ([]*models.UserGroup, error) {
+	return r.getUserGroups(ctx)
+}
+
+// UserGroup is the resolver for the userGroup field.
+func (r *queryResolver) UserGroup(ctx context.Context, id string) (*models.UserGroup, error) {
+	return r.getUserGroup(ctx, id)
+}
+
+// Devices is the resolver for the devices field.
+func (r *queryResolver) Devices(ctx context.Context) ([]*models.Device, error) {
+	return r.getDevices(ctx)
+}
+
+// Device is the resolver for the device field.
+func (r *queryResolver) Device(ctx context.Context, id string) (*models.Device, error) {
+	return r.getDevice(ctx, id)
+}
+
 // Projects is the resolver for the projects field.
 func (r *queryResolver) Projects(ctx context.Context) ([]*models.Project, error) {
 	projects, err := r.ProjectRepo.FindAll(ctx)
@@ -6573,6 +6794,21 @@ func (r *queryResolver) Operation(ctx context.Context, operationID string) (*mod
 	return op, nil
 }
 
+// ExpiresAt is the resolver for the expiresAt field.
+func (r *sessionResolver) ExpiresAt(ctx context.Context, obj *models.Session) (string, error) {
+	panic(fmt.Errorf("not implemented: ExpiresAt - expiresAt"))
+}
+
+// LastActivityAt is the resolver for the lastActivityAt field.
+func (r *sessionResolver) LastActivityAt(ctx context.Context, obj *models.Session) (string, error) {
+	panic(fmt.Errorf("not implemented: LastActivityAt - lastActivityAt"))
+}
+
+// CreatedAt is the resolver for the createdAt field.
+func (r *sessionResolver) CreatedAt(ctx context.Context, obj *models.Session) (string, error) {
+	panic(fmt.Errorf("not implemented: CreatedAt - createdAt"))
+}
+
 // CreatedAt is the resolver for the createdAt field.
 func (r *settingResolver) CreatedAt(ctx context.Context, obj *models.Setting) (string, error) {
 	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
@@ -7138,6 +7374,26 @@ func (r *userResolver) CreatedAt(ctx context.Context, obj *models.User) (string,
 	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
+// Permissions is the resolver for the permissions field.
+func (r *userGroupResolver) Permissions(ctx context.Context, obj *models.UserGroup) ([]string, error) {
+	panic(fmt.Errorf("not implemented: Permissions - permissions"))
+}
+
+// MemberCount is the resolver for the memberCount field.
+func (r *userGroupResolver) MemberCount(ctx context.Context, obj *models.UserGroup) (int, error) {
+	panic(fmt.Errorf("not implemented: MemberCount - memberCount"))
+}
+
+// CreatedAt is the resolver for the createdAt field.
+func (r *userGroupResolver) CreatedAt(ctx context.Context, obj *models.UserGroup) (string, error) {
+	panic(fmt.Errorf("not implemented: CreatedAt - createdAt"))
+}
+
+// UpdatedAt is the resolver for the updatedAt field.
+func (r *userGroupResolver) UpdatedAt(ctx context.Context, obj *models.UserGroup) (string, error) {
+	panic(fmt.Errorf("not implemented: UpdatedAt - updatedAt"))
+}
+
 // ChannelDefinition returns generated.ChannelDefinitionResolver implementation.
 func (r *Resolver) ChannelDefinition() generated.ChannelDefinitionResolver {
 	return &channelDefinitionResolver{r}
@@ -7151,6 +7407,9 @@ func (r *Resolver) CueEffect() generated.CueEffectResolver { return &cueEffectRe
 
 // CueList returns generated.CueListResolver implementation.
 func (r *Resolver) CueList() generated.CueListResolver { return &cueListResolver{r} }
+
+// Device returns generated.DeviceResolver implementation.
+func (r *Resolver) Device() generated.DeviceResolver { return &deviceResolver{r} }
 
 // Effect returns generated.EffectResolver implementation.
 func (r *Resolver) Effect() generated.EffectResolver { return &effectResolver{r} }
@@ -7210,6 +7469,9 @@ func (r *Resolver) ProjectUser() generated.ProjectUserResolver { return &project
 // Query returns generated.QueryResolver implementation.
 func (r *Resolver) Query() generated.QueryResolver { return &queryResolver{r} }
 
+// Session returns generated.SessionResolver implementation.
+func (r *Resolver) Session() generated.SessionResolver { return &sessionResolver{r} }
+
 // Setting returns generated.SettingResolver implementation.
 func (r *Resolver) Setting() generated.SettingResolver { return &settingResolver{r} }
 
@@ -7219,10 +7481,14 @@ func (r *Resolver) Subscription() generated.SubscriptionResolver { return &subsc
 // User returns generated.UserResolver implementation.
 func (r *Resolver) User() generated.UserResolver { return &userResolver{r} }
 
+// UserGroup returns generated.UserGroupResolver implementation.
+func (r *Resolver) UserGroup() generated.UserGroupResolver { return &userGroupResolver{r} }
+
 type channelDefinitionResolver struct{ *Resolver }
 type cueResolver struct{ *Resolver }
 type cueEffectResolver struct{ *Resolver }
 type cueListResolver struct{ *Resolver }
+type deviceResolver struct{ *Resolver }
 type effectResolver struct{ *Resolver }
 type fixtureDefinitionResolver struct{ *Resolver }
 type fixtureInstanceResolver struct{ *Resolver }
@@ -7239,6 +7505,8 @@ type previewSessionResolver struct{ *Resolver }
 type projectResolver struct{ *Resolver }
 type projectUserResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
+type sessionResolver struct{ *Resolver }
 type settingResolver struct{ *Resolver }
 type subscriptionResolver struct{ *Resolver }
 type userResolver struct{ *Resolver }
+type userGroupResolver struct{ *Resolver }
