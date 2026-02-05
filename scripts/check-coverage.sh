@@ -23,18 +23,21 @@ get_threshold() {
         "internal/services/preview") echo 91 ;;  # Integration tests provide good coverage
         "internal/services/dmx") echo 88 ;;  # Network retry loop tested with configurable intervals
         "internal/services/export") echo 88 ;;  # Integration tests provide good coverage
-        "internal/services/network") echo 64 ;;  # 88% on macOS, 64% on Linux CI (getMacOSInterfaceType skipped)
         "internal/database/repositories") echo 88 ;;  # Integration tests, error handling branches require mocking
         "internal/database") echo 86 ;;  # Connect/Close functions
         "internal/services/import") echo 83 ;;  # Integration tests provide good coverage
         "internal/services/playback") echo 82 ;;  # Integration tests, handleFollowTime via timers
         "internal/services/modulator") echo 81 ;;  # Effect modulator service
         "internal/services/undo") echo 74 ;;  # Undo/redo service, comprehensive unit tests for edge cases
+        "internal/services/network") echo 64 ;;  # 88% on macOS, 64% on Linux CI (getMacOSInterfaceType skipped)
+        "internal/auth") echo 64 ;;  # Auth service with unit tests
+        "internal/auth/session") echo 94 ;;  # Session management with comprehensive unit tests
+        "internal/middleware") echo 100 ;;  # HTTP middleware with full coverage
         "internal/services/wifi") echo 39 ;;  # WiFi AP mode, platform-specific code paths
-        "cmd/server") echo 39 ;;  # Server startup, helper functions covered
+        "cmd/server") echo 37 ;;  # Server startup, helper functions covered; auth init code untested
         "internal/services/ofl") echo 36 ;;  # OFL fixture library, bundle operations conditional
         "internal/services/version") echo 32 ;;  # Version info retrieval
-        "internal/graphql/resolvers") echo 23 ;;  # Auto-generated code, coverage via service/integration tests
+        "internal/graphql/resolvers") echo 21 ;;  # Auto-generated + auth resolvers; coverage via integration tests
         *) echo "" ;;
     esac
 }

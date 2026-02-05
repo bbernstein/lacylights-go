@@ -9,15 +9,161 @@ import (
 // User represents a user in the system.
 // Table: users
 type User struct {
+	ID            string     `gorm:"column:id;primaryKey"`
+	Email         string     `gorm:"column:email;uniqueIndex"`
+	Name          *string    `gorm:"column:name"`
+	Phone         *string    `gorm:"column:phone"`
+	Role          string     `gorm:"column:role;default:USER"`
+	EmailVerified bool       `gorm:"column:email_verified;default:false"`
+	PhoneVerified bool       `gorm:"column:phone_verified;default:false"`
+	IsActive      bool       `gorm:"column:is_active;default:true"`
+	LastLoginAt   *time.Time `gorm:"column:last_login_at"`
+	CreatedAt     time.Time  `gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt     time.Time  `gorm:"column:updated_at;autoUpdateTime"`
+}
+
+func (User) TableName() string { return "users" }
+
+// UserCredential stores password credentials for a user.
+// Table: user_credentials
+type UserCredential struct {
+	ID                string     `gorm:"column:id;primaryKey"`
+	UserID            string     `gorm:"column:user_id;uniqueIndex"`
+	PasswordHash      string     `gorm:"column:password_hash"`
+	PasswordUpdatedAt time.Time  `gorm:"column:password_updated_at"`
+	FailedAttempts    int        `gorm:"column:failed_attempts;default:0"`
+	LockedUntil       *time.Time `gorm:"column:locked_until"`
+	CreatedAt         time.Time  `gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt         time.Time  `gorm:"column:updated_at;autoUpdateTime"`
+
+	// Relations
+	User *User `gorm:"foreignKey:UserID"`
+}
+
+func (UserCredential) TableName() string { return "user_credentials" }
+
+// UserOAuth stores OAuth provider connections for a user.
+// Table: user_oauth
+type UserOAuth struct {
+	ID             string    `gorm:"column:id;primaryKey"`
+	UserID         string    `gorm:"column:user_id;index"`
+	Provider       string    `gorm:"column:provider"`
+	ProviderUserID string    `gorm:"column:provider_user_id"`
+	Email          *string   `gorm:"column:email"`
+	RefreshToken   *string   `gorm:"column:refresh_token"`
+	CreatedAt      time.Time `gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt      time.Time `gorm:"column:updated_at;autoUpdateTime"`
+
+	// Relations
+	User *User `gorm:"foreignKey:UserID"`
+}
+
+func (UserOAuth) TableName() string { return "user_oauth" }
+
+// Session represents an active user session.
+// Table: sessions
+type Session struct {
+	ID             string    `gorm:"column:id;primaryKey"`
+	UserID         string    `gorm:"column:user_id;index"`
+	TokenHash      string    `gorm:"column:token_hash;uniqueIndex"`
+	DeviceID       *string   `gorm:"column:device_id;index"`
+	IPAddress      *string   `gorm:"column:ip_address"`
+	UserAgent      *string   `gorm:"column:user_agent"`
+	ExpiresAt      time.Time `gorm:"column:expires_at"`
+	LastActivityAt time.Time `gorm:"column:last_activity_at"`
+	CreatedAt      time.Time `gorm:"column:created_at;autoCreateTime"`
+
+	// Relations
+	User   *User   `gorm:"foreignKey:UserID"`
+	Device *Device `gorm:"foreignKey:DeviceID"`
+}
+
+func (Session) TableName() string { return "sessions" }
+
+// Device represents a pre-authorized device for device-based authentication.
+// Table: devices
+type Device struct {
+	ID                         string     `gorm:"column:id;primaryKey"`
+	Name                       string     `gorm:"column:name"`
+	Fingerprint                string     `gorm:"column:fingerprint;uniqueIndex"`
+	FingerprintComponents      *string    `gorm:"column:fingerprint_components"` // JSON
+	IsAuthorized               bool       `gorm:"column:is_authorized;default:false"`
+	AuthorizationCode          *string    `gorm:"column:authorization_code"`
+	AuthorizationCodeExpiresAt *time.Time `gorm:"column:authorization_code_expires_at"`
+	DefaultUserID              *string    `gorm:"column:default_user_id;index"`
+	DefaultRole                string     `gorm:"column:default_role;default:PLAYER"`
+	LastSeenAt                 *time.Time `gorm:"column:last_seen_at"`
+	LastIPAddress              *string    `gorm:"column:last_ip_address"`
+	CreatedAt                  time.Time  `gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt                  time.Time  `gorm:"column:updated_at;autoUpdateTime"`
+
+	// Relations
+	DefaultUser *User `gorm:"foreignKey:DefaultUserID"`
+}
+
+func (Device) TableName() string { return "devices" }
+
+// VerificationToken stores tokens for email/phone verification and password reset.
+// Table: verification_tokens
+type VerificationToken struct {
+	ID        string     `gorm:"column:id;primaryKey"`
+	UserID    *string    `gorm:"column:user_id;index"`
+	Email     *string    `gorm:"column:email"`
+	Phone     *string    `gorm:"column:phone"`
+	TokenHash string     `gorm:"column:token_hash"`
+	TokenType string     `gorm:"column:token_type"` // EMAIL_VERIFY, PHONE_VERIFY, PASSWORD_RESET
+	ExpiresAt time.Time  `gorm:"column:expires_at"`
+	UsedAt    *time.Time `gorm:"column:used_at"`
+	CreatedAt time.Time  `gorm:"column:created_at;autoCreateTime"`
+
+	// Relations
+	User *User `gorm:"foreignKey:UserID"`
+}
+
+func (VerificationToken) TableName() string { return "verification_tokens" }
+
+// UserGroup represents a permission group for users.
+// Table: user_groups
+type UserGroup struct {
+	ID          string    `gorm:"column:id;primaryKey"`
+	Name        string    `gorm:"column:name;uniqueIndex"`
+	Description *string   `gorm:"column:description"`
+	Permissions *string   `gorm:"column:permissions"` // JSON array of permission strings
+	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime"`
+
+	// Relations
+	Members []UserGroupMember `gorm:"foreignKey:GroupID"`
+}
+
+func (UserGroup) TableName() string { return "user_groups" }
+
+// UserGroupMember represents a user's membership in a group.
+// Table: user_group_members
+type UserGroupMember struct {
 	ID        string    `gorm:"column:id;primaryKey"`
-	Email     string    `gorm:"column:email;uniqueIndex"`
-	Name      *string   `gorm:"column:name"`
-	Role      string    `gorm:"column:role;default:USER"`
+	UserID    string    `gorm:"column:user_id;index"`
+	GroupID   string    `gorm:"column:group_id;index"`
+	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime"`
+
+	// Relations
+	User  *User      `gorm:"foreignKey:UserID"`
+	Group *UserGroup `gorm:"foreignKey:GroupID"`
+}
+
+func (UserGroupMember) TableName() string { return "user_group_members" }
+
+// AuthSetting stores global authentication configuration settings.
+// Table: auth_settings
+type AuthSetting struct {
+	ID        string    `gorm:"column:id;primaryKey"`
+	Key       string    `gorm:"column:key;uniqueIndex"`
+	Value     string    `gorm:"column:value"`
 	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt time.Time `gorm:"column:updated_at;autoUpdateTime"`
 }
 
-func (User) TableName() string { return "users" }
+func (AuthSetting) TableName() string { return "auth_settings" }
 
 // Project represents a lighting project.
 // Table: projects

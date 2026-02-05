@@ -44,6 +44,22 @@ type Config struct {
 	// OFL (Open Fixture Library) import configuration
 	OFLImportEnabled bool   // Enable automatic OFL import on startup
 	OFLCachePath     string // Path to cache downloaded OFL data
+
+	// Authentication configuration
+	AuthEnabled          bool          // Enable authentication (default: false for easy onboarding)
+	JWTSecret            string        // Secret key for signing JWTs (auto-generated if empty)
+	JWTIssuer            string        // JWT issuer claim
+	JWTAccessTokenTTL    time.Duration // Access token lifetime (default: 15m)
+	JWTRefreshTokenTTL   time.Duration // Refresh token lifetime (default: 7d)
+	SessionDurationHours int           // Session duration in hours (default: 24)
+	PasswordMinLength    int           // Minimum password length (default: 8)
+	DeviceAuthEnabled    bool          // Enable device-based authentication
+	DefaultAdminEmail    string        // Default admin email (for initial setup)
+	DefaultAdminPassword string        // Default admin password (for initial setup)
+	AppleClientID        string        // Apple Sign-In client ID (bundle ID)
+	AppleTeamID          string        // Apple Sign-In team ID
+	AppleKeyID           string        // Apple Sign-In key ID
+	ApplePrivateKeyPath  string        // Path to Apple Sign-In private key (.p8)
 }
 
 // Load loads configuration from environment variables with sensible defaults.
@@ -85,6 +101,22 @@ func Load() *Config {
 		// OFL Import
 		OFLImportEnabled: getEnvBool("OFL_IMPORT_ENABLED", true),
 		OFLCachePath:     getEnv("OFL_CACHE_PATH", "./.ofl-cache"),
+
+		// Authentication
+		AuthEnabled:          getEnvBool("AUTH_ENABLED", false),
+		JWTSecret:            getEnv("JWT_SECRET", ""), // Auto-generated on first run if empty
+		JWTIssuer:            getEnv("JWT_ISSUER", "lacylights"),
+		JWTAccessTokenTTL:    getEnvDuration("JWT_ACCESS_TTL", 15*time.Minute),
+		JWTRefreshTokenTTL:   getEnvDuration("JWT_REFRESH_TTL", 168*time.Hour), // 7 days
+		SessionDurationHours: getEnvInt("SESSION_DURATION_HOURS", 24),
+		PasswordMinLength:    getEnvInt("PASSWORD_MIN_LENGTH", 8),
+		DeviceAuthEnabled:    getEnvBool("DEVICE_AUTH_ENABLED", true),
+		DefaultAdminEmail:    getEnv("DEFAULT_ADMIN_EMAIL", "admin@lacylights.local"),
+		DefaultAdminPassword: getEnv("DEFAULT_ADMIN_PASSWORD", ""),
+		AppleClientID:        getEnv("APPLE_CLIENT_ID", ""),
+		AppleTeamID:          getEnv("APPLE_TEAM_ID", ""),
+		AppleKeyID:           getEnv("APPLE_KEY_ID", ""),
+		ApplePrivateKeyPath:  getEnv("APPLE_PRIVATE_KEY_PATH", ""),
 	}
 }
 
@@ -121,6 +153,23 @@ func getEnvBool(key string, defaultValue bool) bool {
 	if value, exists := os.LookupEnv(key); exists {
 		if boolVal, err := strconv.ParseBool(value); err == nil {
 			return boolVal
+		}
+	}
+	return defaultValue
+}
+
+// getEnvDuration returns the duration value of an environment variable or a default value.
+// Accepts Go duration format (e.g., "15m", "24h", "7d" where d is converted to hours).
+func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
+	if value, exists := os.LookupEnv(key); exists {
+		// Handle "d" suffix for days (not natively supported by time.ParseDuration)
+		if len(value) > 1 && value[len(value)-1] == 'd' {
+			if days, err := strconv.Atoi(value[:len(value)-1]); err == nil {
+				return time.Duration(days) * 24 * time.Hour
+			}
+		}
+		if duration, err := time.ParseDuration(value); err == nil {
+			return duration
 		}
 	}
 	return defaultValue

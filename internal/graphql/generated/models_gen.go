@@ -63,6 +63,53 @@ type ArtNetStatus struct {
 	BroadcastAddress string `json:"broadcastAddress"`
 }
 
+// Authentication result returned after login or registration.
+type AuthPayload struct {
+	// The authenticated user
+	User models.User `json:"user"`
+	// JWT access token for API requests
+	AccessToken string `json:"accessToken"`
+	// JWT refresh token for obtaining new access tokens
+	RefreshToken string `json:"refreshToken"`
+	// When the access token expires
+	ExpiresAt string `json:"expiresAt"`
+}
+
+// Global authentication settings.
+type AuthSettings struct {
+	// Whether authentication is enabled
+	AuthEnabled bool `json:"authEnabled"`
+	// Allowed authentication methods
+	AllowedMethods []string `json:"allowedMethods"`
+	// Whether device authentication is enabled
+	DeviceAuthEnabled bool `json:"deviceAuthEnabled"`
+	// Session duration in hours
+	SessionDurationHours int `json:"sessionDurationHours"`
+	// Minimum password length
+	PasswordMinLength int `json:"passwordMinLength"`
+	// Whether email verification is required
+	RequireEmailVerification bool `json:"requireEmailVerification"`
+}
+
+// Extended user information for authenticated context.
+type AuthUser struct {
+	ID            string   `json:"id"`
+	Email         string   `json:"email"`
+	Name          *string  `json:"name,omitempty"`
+	Phone         *string  `json:"phone,omitempty"`
+	Role          UserRole `json:"role"`
+	EmailVerified bool     `json:"emailVerified"`
+	PhoneVerified bool     `json:"phoneVerified"`
+	IsActive      bool     `json:"isActive"`
+	LastLoginAt   *string  `json:"lastLoginAt,omitempty"`
+	CreatedAt     string   `json:"createdAt"`
+	UpdatedAt     string   `json:"updatedAt"`
+	// User's permission groups
+	Groups []*models.UserGroup `json:"groups"`
+	// Effective permissions from role and groups
+	Permissions []string `json:"permissions"`
+}
+
 // Server build information for version verification
 type BuildInfo struct {
 	// Semantic version (e.g., v0.8.10)
@@ -331,6 +378,19 @@ type CreateProjectInput struct {
 	LayoutCanvasHeight graphql.Omittable[*int]    `json:"layoutCanvasHeight,omitempty"`
 }
 
+type CreateUserGroupInput struct {
+	Name        string                      `json:"name"`
+	Description graphql.Omittable[*string]  `json:"description,omitempty"`
+	Permissions graphql.Omittable[[]string] `json:"permissions,omitempty"`
+}
+
+type CreateUserInput struct {
+	Email    string                       `json:"email"`
+	Password string                       `json:"password"`
+	Name     graphql.Omittable[*string]   `json:"name,omitempty"`
+	Role     graphql.Omittable[*UserRole] `json:"role,omitempty"`
+}
+
 // Payload for cue list data change notifications
 type CueListDataChangedPayload struct {
 	CueListID  string                `json:"cueListId"`
@@ -413,6 +473,28 @@ type CuesWithLookInfoResponse struct {
 	Cues []*CueWithLookInfo `json:"cues"`
 	// Looks in the project that are not used by any cue in this cue list
 	OrphanLooks []*LookSummary `json:"orphanLooks"`
+}
+
+// Device authorization code for pre-authorizing devices.
+type DeviceAuthCode struct {
+	// The authorization code (6 digits)
+	Code string `json:"code"`
+	// When the code expires
+	ExpiresAt string `json:"expiresAt"`
+	// Device ID this code is for
+	DeviceID string `json:"deviceId"`
+}
+
+// Result of checking device authorization status.
+type DeviceAuthStatus struct {
+	// Whether the device is known and authorized
+	IsAuthorized bool `json:"isAuthorized"`
+	// Whether the device is known but not yet authorized
+	IsPending bool `json:"isPending"`
+	// The device record if it exists
+	Device *models.Device `json:"device,omitempty"`
+	// Default user for auto-login (if authorized)
+	DefaultUser *models.User `json:"defaultUser,omitempty"`
 }
 
 // Input for adding or updating a channel within an effect fixture.
@@ -942,6 +1024,12 @@ type QLCImportResult struct {
 type Query struct {
 }
 
+type RegisterInput struct {
+	Email    string                     `json:"email"`
+	Password string                     `json:"password"`
+	Name     graphql.Omittable[*string] `json:"name,omitempty"`
+}
+
 type RepositoryVersion struct {
 	Repository      string `json:"repository"`
 	Installed       string `json:"installed"`
@@ -997,6 +1085,22 @@ type UniverseChannelMap struct {
 type UniverseOutput struct {
 	Universe int   `json:"universe"`
 	Channels []int `json:"channels"`
+}
+
+type UpdateAuthSettingsInput struct {
+	AuthEnabled              graphql.Omittable[*bool]    `json:"authEnabled,omitempty"`
+	AllowedMethods           graphql.Omittable[[]string] `json:"allowedMethods,omitempty"`
+	DeviceAuthEnabled        graphql.Omittable[*bool]    `json:"deviceAuthEnabled,omitempty"`
+	SessionDurationHours     graphql.Omittable[*int]     `json:"sessionDurationHours,omitempty"`
+	PasswordMinLength        graphql.Omittable[*int]     `json:"passwordMinLength,omitempty"`
+	RequireEmailVerification graphql.Omittable[*bool]    `json:"requireEmailVerification,omitempty"`
+}
+
+type UpdateDeviceInput struct {
+	Name          graphql.Omittable[*string]     `json:"name,omitempty"`
+	DefaultUserID graphql.Omittable[*string]     `json:"defaultUserId,omitempty"`
+	DefaultRole   graphql.Omittable[*DeviceRole] `json:"defaultRole,omitempty"`
+	IsAuthorized  graphql.Omittable[*bool]       `json:"isAuthorized,omitempty"`
 }
 
 // Input for updating an effect fixture's settings.
@@ -1076,6 +1180,20 @@ type UpdateResult struct {
 type UpdateSettingInput struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
+}
+
+type UpdateUserGroupInput struct {
+	Name        graphql.Omittable[*string]  `json:"name,omitempty"`
+	Description graphql.Omittable[*string]  `json:"description,omitempty"`
+	Permissions graphql.Omittable[[]string] `json:"permissions,omitempty"`
+}
+
+type UpdateUserInput struct {
+	Email    graphql.Omittable[*string]   `json:"email,omitempty"`
+	Name     graphql.Omittable[*string]   `json:"name,omitempty"`
+	Phone    graphql.Omittable[*string]   `json:"phone,omitempty"`
+	Role     graphql.Omittable[*UserRole] `json:"role,omitempty"`
+	IsActive graphql.Omittable[*bool]     `json:"isActive,omitempty"`
 }
 
 type WiFiConnectionResult struct {
@@ -1333,6 +1451,64 @@ func (e *CueListDataChangeType) UnmarshalJSON(b []byte) error {
 }
 
 func (e CueListDataChangeType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Default role for device-authenticated users.
+type DeviceRole string
+
+const (
+	DeviceRolePlayer   DeviceRole = "PLAYER"
+	DeviceRoleOperator DeviceRole = "OPERATOR"
+	DeviceRoleDesigner DeviceRole = "DESIGNER"
+)
+
+var AllDeviceRole = []DeviceRole{
+	DeviceRolePlayer,
+	DeviceRoleOperator,
+	DeviceRoleDesigner,
+}
+
+func (e DeviceRole) IsValid() bool {
+	switch e {
+	case DeviceRolePlayer, DeviceRoleOperator, DeviceRoleDesigner:
+		return true
+	}
+	return false
+}
+
+func (e DeviceRole) String() string {
+	return string(e)
+}
+
+func (e *DeviceRole) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = DeviceRole(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid DeviceRole", str)
+	}
+	return nil
+}
+
+func (e DeviceRole) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *DeviceRole) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e DeviceRole) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
@@ -1874,6 +2050,60 @@ func (e LookSortField) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// OAuth provider type for authentication.
+type OAuthProvider string
+
+const (
+	OAuthProviderApple OAuthProvider = "APPLE"
+)
+
+var AllOAuthProvider = []OAuthProvider{
+	OAuthProviderApple,
+}
+
+func (e OAuthProvider) IsValid() bool {
+	switch e {
+	case OAuthProviderApple:
+		return true
+	}
+	return false
+}
+
+func (e OAuthProvider) String() string {
+	return string(e)
+}
+
+func (e *OAuthProvider) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = OAuthProvider(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid OAuthProvider", str)
+	}
+	return nil
+}
+
+func (e OAuthProvider) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *OAuthProvider) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e OAuthProvider) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 // Type of fixture change detected during OFL update check
 type OFLFixtureChangeType string
 
@@ -2362,6 +2592,64 @@ func (e *UserRole) UnmarshalJSON(b []byte) error {
 }
 
 func (e UserRole) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Type of verification token.
+type VerificationTokenType string
+
+const (
+	VerificationTokenTypeEmailVerify   VerificationTokenType = "EMAIL_VERIFY"
+	VerificationTokenTypePhoneVerify   VerificationTokenType = "PHONE_VERIFY"
+	VerificationTokenTypePasswordReset VerificationTokenType = "PASSWORD_RESET"
+)
+
+var AllVerificationTokenType = []VerificationTokenType{
+	VerificationTokenTypeEmailVerify,
+	VerificationTokenTypePhoneVerify,
+	VerificationTokenTypePasswordReset,
+}
+
+func (e VerificationTokenType) IsValid() bool {
+	switch e {
+	case VerificationTokenTypeEmailVerify, VerificationTokenTypePhoneVerify, VerificationTokenTypePasswordReset:
+		return true
+	}
+	return false
+}
+
+func (e VerificationTokenType) String() string {
+	return string(e)
+}
+
+func (e *VerificationTokenType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = VerificationTokenType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid VerificationTokenType", str)
+	}
+	return nil
+}
+
+func (e VerificationTokenType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *VerificationTokenType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e VerificationTokenType) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
