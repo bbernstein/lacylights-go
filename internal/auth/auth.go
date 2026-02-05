@@ -15,8 +15,8 @@ import (
 )
 
 // emailRegex provides basic email format validation.
-// This is intentionally permissive to avoid false rejections.
-var emailRegex = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+// This is intentionally permissive to avoid false rejections, but requires a TLD of at least 2 characters.
+var emailRegex = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]{2,}$`)
 
 // Service provides authentication functionality.
 type Service struct {
@@ -334,16 +334,30 @@ func (s *Service) ValidateSession(ctx context.Context, accessToken string) (*ses
 		return nil, err
 	}
 
-	// Get session from cache/database
-	sess, err := s.sessionManager.GetByTokenHash(ctx, HashToken(claims.SessionID))
+	// Get session by ID from the claims
+	// The session ID is stored directly in the JWT, so we use GetByID
+	dbSession, err := s.sessionManager.GetByID(ctx, claims.SessionID)
 	if err != nil {
 		return nil, err
 	}
-	if sess == nil {
+	if dbSession == nil {
 		return nil, ErrSessionNotFound
 	}
 
-	return sess, nil
+	// Check if session has expired
+	if time.Now().After(dbSession.ExpiresAt) {
+		return nil, ErrSessionExpired
+	}
+
+	// Convert to CachedSession format
+	return &session.CachedSession{
+		UserID:    dbSession.UserID,
+		Email:     claims.Email,
+		Role:      claims.Role,
+		SessionID: dbSession.ID,
+		DeviceID:  dbSession.DeviceID,
+		ExpiresAt: dbSession.ExpiresAt,
+	}, nil
 }
 
 // GetUserByID retrieves a user by their ID.

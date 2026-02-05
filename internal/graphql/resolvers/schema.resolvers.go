@@ -7415,7 +7415,7 @@ func (r *userGroupResolver) MemberCount(ctx context.Context, obj *models.UserGro
 	var count int64
 	if err := r.db.WithContext(ctx).
 		Model(&models.UserGroupMember{}).
-		Where("user_group_id = ?", obj.ID).
+		Where("group_id = ?", obj.ID).
 		Count(&count).Error; err != nil {
 		return 0, err
 	}
