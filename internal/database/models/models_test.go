@@ -8,7 +8,17 @@ func TestTableNames(t *testing.T) {
 		model     interface{ TableName() string }
 		tableName string
 	}{
+		// Auth models
 		{"User", User{}, "users"},
+		{"UserCredential", UserCredential{}, "user_credentials"},
+		{"UserOAuth", UserOAuth{}, "user_oauth"},
+		{"Session", Session{}, "sessions"},
+		{"Device", Device{}, "devices"},
+		{"VerificationToken", VerificationToken{}, "verification_tokens"},
+		{"UserGroup", UserGroup{}, "user_groups"},
+		{"UserGroupMember", UserGroupMember{}, "user_group_members"},
+		{"AuthSetting", AuthSetting{}, "auth_settings"},
+		// Lighting models
 		{"Project", Project{}, "projects"},
 		{"ProjectUser", ProjectUser{}, "project_users"},
 		{"FixtureDefinition", FixtureDefinition{}, "fixture_definitions"},

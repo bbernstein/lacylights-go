@@ -16,6 +16,8 @@ get_threshold() {
     local pkg="$1"
     case "$pkg" in
         "pkg/artnet") echo 100 ;;
+        "internal/config") echo 100 ;;
+        "internal/database/models") echo 100 ;;  # TableName methods
         "internal/services/pubsub") echo 100 ;;
         "internal/services/fade") echo 97 ;;  # Fade engine with comprehensive timing tests
         "internal/services/preview") echo 91 ;;  # Integration tests provide good coverage
@@ -26,16 +28,16 @@ get_threshold() {
         "internal/services/import") echo 83 ;;  # Integration tests provide good coverage
         "internal/services/playback") echo 82 ;;  # Integration tests, handleFollowTime via timers
         "internal/services/modulator") echo 81 ;;  # Effect modulator service
-        "internal/config") echo 81 ;;  # Lowered: new auth config options not all tested
-        "internal/database/models") echo 75 ;;  # Lowered: new auth models (User, Session, etc.)
         "internal/services/undo") echo 74 ;;  # Undo/redo service, comprehensive unit tests for edge cases
         "internal/services/network") echo 64 ;;  # 88% on macOS, 64% on Linux CI (getMacOSInterfaceType skipped)
+        "internal/auth") echo 64 ;;  # Auth service with unit tests
+        "internal/auth/session") echo 94 ;;  # Session management with comprehensive unit tests
+        "internal/middleware") echo 100 ;;  # HTTP middleware with full coverage
         "internal/services/wifi") echo 39 ;;  # WiFi AP mode, platform-specific code paths
-        "cmd/server") echo 37 ;;  # Lowered: new auth initialization code
+        "cmd/server") echo 37 ;;  # Server startup, helper functions covered; auth init code untested
         "internal/services/ofl") echo 36 ;;  # OFL fixture library, bundle operations conditional
         "internal/services/version") echo 32 ;;  # Version info retrieval
-        "internal/auth") echo 22 ;;  # New: auth service, tested via integration tests
-        "internal/graphql/resolvers") echo 21 ;;  # Lowered: new auth resolvers, coverage via integration tests
+        "internal/graphql/resolvers") echo 21 ;;  # Auto-generated + auth resolvers; coverage via integration tests
         *) echo "" ;;
     esac
 }
@@ -47,8 +49,6 @@ should_skip() {
         "github.com/bbernstein/lacylights-go/internal/graphql/generated") return 0 ;;  # Auto-generated code
         "github.com/bbernstein/lacylights-go/internal/services/testutil") return 0 ;;  # Test utilities only
         "github.com/bbernstein/lacylights-go/cmd/migrate-layout") return 0 ;;  # One-time migration script
-        "github.com/bbernstein/lacylights-go/internal/auth/session") return 0 ;;  # Session management, integration tested
-        "github.com/bbernstein/lacylights-go/internal/middleware") return 0 ;;  # HTTP middleware, integration tested
         *) return 1 ;;
     esac
 }

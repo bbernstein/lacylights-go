@@ -402,3 +402,392 @@ func TestLoad_DatabaseURL_OverridesTakePrecedence(t *testing.T) {
 		t.Errorf("Expected DATABASE_URL override to take precedence, got %q", cfg.DatabaseURL)
 	}
 }
+
+func TestGetEnvDuration(t *testing.T) {
+	tests := []struct {
+		name         string
+		envValue     string
+		defaultValue time.Duration
+		expected     time.Duration
+		setEnv       bool
+	}{
+		{
+			name:         "valid_days_suffix",
+			envValue:     "7d",
+			defaultValue: time.Hour,
+			expected:     7 * 24 * time.Hour,
+			setEnv:       true,
+		},
+		{
+			name:         "valid_days_suffix_single_day",
+			envValue:     "1d",
+			defaultValue: time.Hour,
+			expected:     24 * time.Hour,
+			setEnv:       true,
+		},
+		{
+			name:         "invalid_days_suffix_non_numeric",
+			envValue:     "abcd",
+			defaultValue: 5 * time.Minute,
+			expected:     5 * time.Minute, // returns default
+			setEnv:       true,
+		},
+		{
+			name:         "valid_go_duration_minutes",
+			envValue:     "15m",
+			defaultValue: time.Hour,
+			expected:     15 * time.Minute,
+			setEnv:       true,
+		},
+		{
+			name:         "valid_go_duration_hours",
+			envValue:     "24h",
+			defaultValue: time.Minute,
+			expected:     24 * time.Hour,
+			setEnv:       true,
+		},
+		{
+			name:         "valid_go_duration_seconds",
+			envValue:     "30s",
+			defaultValue: time.Hour,
+			expected:     30 * time.Second,
+			setEnv:       true,
+		},
+		{
+			name:         "invalid_duration_format",
+			envValue:     "invalid",
+			defaultValue: 10 * time.Minute,
+			expected:     10 * time.Minute, // returns default
+			setEnv:       true,
+		},
+		{
+			name:         "env_not_set_returns_default",
+			envValue:     "",
+			defaultValue: 20 * time.Minute,
+			expected:     20 * time.Minute,
+			setEnv:       false,
+		},
+		{
+			name:         "single_char_d_not_treated_as_days",
+			envValue:     "d",
+			defaultValue: 3 * time.Hour,
+			expected:     3 * time.Hour, // "d" alone is not valid (len must be > 1)
+			setEnv:       true,
+		},
+		{
+			name:         "empty_string_returns_default",
+			envValue:     "",
+			defaultValue: 15 * time.Minute,
+			expected:     15 * time.Minute,
+			setEnv:       true, // set to empty string
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			envKey := "TEST_DURATION_VAR_" + tt.name + "_UNIQUE"
+			if tt.setEnv {
+				t.Setenv(envKey, tt.envValue)
+			}
+
+			result := getEnvDuration(envKey, tt.defaultValue)
+			if result != tt.expected {
+				t.Errorf("getEnvDuration(%s, %v) = %v, want %v", envKey, tt.defaultValue, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestLoad_AuthenticationConfig(t *testing.T) {
+	// Test AUTH_ENABLED
+	t.Run("auth_enabled_true", func(t *testing.T) {
+		t.Setenv("AUTH_ENABLED", "true")
+		cfg := Load()
+		if !cfg.AuthEnabled {
+			t.Error("Expected AuthEnabled to be true")
+		}
+	})
+
+	t.Run("auth_enabled_false", func(t *testing.T) {
+		t.Setenv("AUTH_ENABLED", "false")
+		cfg := Load()
+		if cfg.AuthEnabled {
+			t.Error("Expected AuthEnabled to be false")
+		}
+	})
+
+	t.Run("auth_enabled_default", func(t *testing.T) {
+		// Don't set AUTH_ENABLED
+		cfg := Load()
+		if cfg.AuthEnabled {
+			t.Error("Expected AuthEnabled to default to false")
+		}
+	})
+}
+
+func TestLoad_JWTConfig(t *testing.T) {
+	// Test JWT_SECRET
+	t.Run("jwt_secret_custom", func(t *testing.T) {
+		t.Setenv("JWT_SECRET", "my-super-secret-key")
+		cfg := Load()
+		if cfg.JWTSecret != "my-super-secret-key" {
+			t.Errorf("Expected JWTSecret to be 'my-super-secret-key', got '%s'", cfg.JWTSecret)
+		}
+	})
+
+	t.Run("jwt_secret_default_empty", func(t *testing.T) {
+		cfg := Load()
+		if cfg.JWTSecret != "" {
+			t.Errorf("Expected JWTSecret to default to empty string, got '%s'", cfg.JWTSecret)
+		}
+	})
+
+	// Test JWT_ACCESS_TTL
+	t.Run("jwt_access_ttl_custom", func(t *testing.T) {
+		t.Setenv("JWT_ACCESS_TTL", "30m")
+		cfg := Load()
+		if cfg.JWTAccessTokenTTL != 30*time.Minute {
+			t.Errorf("Expected JWTAccessTokenTTL to be 30m, got %v", cfg.JWTAccessTokenTTL)
+		}
+	})
+
+	t.Run("jwt_access_ttl_default", func(t *testing.T) {
+		cfg := Load()
+		if cfg.JWTAccessTokenTTL != 15*time.Minute {
+			t.Errorf("Expected JWTAccessTokenTTL to default to 15m, got %v", cfg.JWTAccessTokenTTL)
+		}
+	})
+
+	// Test JWT_REFRESH_TTL with days suffix
+	t.Run("jwt_refresh_ttl_custom_days", func(t *testing.T) {
+		t.Setenv("JWT_REFRESH_TTL", "14d")
+		cfg := Load()
+		if cfg.JWTRefreshTokenTTL != 14*24*time.Hour {
+			t.Errorf("Expected JWTRefreshTokenTTL to be 14 days, got %v", cfg.JWTRefreshTokenTTL)
+		}
+	})
+
+	t.Run("jwt_refresh_ttl_custom_hours", func(t *testing.T) {
+		t.Setenv("JWT_REFRESH_TTL", "72h")
+		cfg := Load()
+		if cfg.JWTRefreshTokenTTL != 72*time.Hour {
+			t.Errorf("Expected JWTRefreshTokenTTL to be 72h, got %v", cfg.JWTRefreshTokenTTL)
+		}
+	})
+
+	t.Run("jwt_refresh_ttl_default", func(t *testing.T) {
+		cfg := Load()
+		if cfg.JWTRefreshTokenTTL != 168*time.Hour {
+			t.Errorf("Expected JWTRefreshTokenTTL to default to 168h (7 days), got %v", cfg.JWTRefreshTokenTTL)
+		}
+	})
+
+	// Test JWT_ISSUER
+	t.Run("jwt_issuer_custom", func(t *testing.T) {
+		t.Setenv("JWT_ISSUER", "my-custom-issuer")
+		cfg := Load()
+		if cfg.JWTIssuer != "my-custom-issuer" {
+			t.Errorf("Expected JWTIssuer to be 'my-custom-issuer', got '%s'", cfg.JWTIssuer)
+		}
+	})
+
+	t.Run("jwt_issuer_default", func(t *testing.T) {
+		cfg := Load()
+		if cfg.JWTIssuer != "lacylights" {
+			t.Errorf("Expected JWTIssuer to default to 'lacylights', got '%s'", cfg.JWTIssuer)
+		}
+	})
+}
+
+func TestLoad_DefaultAdminConfig(t *testing.T) {
+	// Test DEFAULT_ADMIN_EMAIL
+	t.Run("default_admin_email_custom", func(t *testing.T) {
+		t.Setenv("DEFAULT_ADMIN_EMAIL", "admin@example.com")
+		cfg := Load()
+		if cfg.DefaultAdminEmail != "admin@example.com" {
+			t.Errorf("Expected DefaultAdminEmail to be 'admin@example.com', got '%s'", cfg.DefaultAdminEmail)
+		}
+	})
+
+	t.Run("default_admin_email_default", func(t *testing.T) {
+		cfg := Load()
+		if cfg.DefaultAdminEmail != "admin@lacylights.local" {
+			t.Errorf("Expected DefaultAdminEmail to default to 'admin@lacylights.local', got '%s'", cfg.DefaultAdminEmail)
+		}
+	})
+
+	// Test DEFAULT_ADMIN_PASSWORD
+	t.Run("default_admin_password_custom", func(t *testing.T) {
+		t.Setenv("DEFAULT_ADMIN_PASSWORD", "mysecretpassword")
+		cfg := Load()
+		if cfg.DefaultAdminPassword != "mysecretpassword" {
+			t.Errorf("Expected DefaultAdminPassword to be 'mysecretpassword', got '%s'", cfg.DefaultAdminPassword)
+		}
+	})
+
+	t.Run("default_admin_password_default_empty", func(t *testing.T) {
+		cfg := Load()
+		if cfg.DefaultAdminPassword != "" {
+			t.Errorf("Expected DefaultAdminPassword to default to empty string, got '%s'", cfg.DefaultAdminPassword)
+		}
+	})
+}
+
+func TestLoad_PasswordConfig(t *testing.T) {
+	// Test PASSWORD_MIN_LENGTH
+	t.Run("password_min_length_custom", func(t *testing.T) {
+		t.Setenv("PASSWORD_MIN_LENGTH", "12")
+		cfg := Load()
+		if cfg.PasswordMinLength != 12 {
+			t.Errorf("Expected PasswordMinLength to be 12, got %d", cfg.PasswordMinLength)
+		}
+	})
+
+	t.Run("password_min_length_default", func(t *testing.T) {
+		cfg := Load()
+		if cfg.PasswordMinLength != 8 {
+			t.Errorf("Expected PasswordMinLength to default to 8, got %d", cfg.PasswordMinLength)
+		}
+	})
+}
+
+func TestLoad_DeviceAuthConfig(t *testing.T) {
+	// Test DEVICE_AUTH_ENABLED
+	t.Run("device_auth_enabled_true", func(t *testing.T) {
+		t.Setenv("DEVICE_AUTH_ENABLED", "true")
+		cfg := Load()
+		if !cfg.DeviceAuthEnabled {
+			t.Error("Expected DeviceAuthEnabled to be true")
+		}
+	})
+
+	t.Run("device_auth_enabled_false", func(t *testing.T) {
+		t.Setenv("DEVICE_AUTH_ENABLED", "false")
+		cfg := Load()
+		if cfg.DeviceAuthEnabled {
+			t.Error("Expected DeviceAuthEnabled to be false")
+		}
+	})
+
+	t.Run("device_auth_enabled_default", func(t *testing.T) {
+		cfg := Load()
+		if !cfg.DeviceAuthEnabled {
+			t.Error("Expected DeviceAuthEnabled to default to true")
+		}
+	})
+}
+
+func TestLoad_SessionConfig(t *testing.T) {
+	// Test SESSION_DURATION_HOURS
+	t.Run("session_duration_hours_custom", func(t *testing.T) {
+		t.Setenv("SESSION_DURATION_HOURS", "48")
+		cfg := Load()
+		if cfg.SessionDurationHours != 48 {
+			t.Errorf("Expected SessionDurationHours to be 48, got %d", cfg.SessionDurationHours)
+		}
+	})
+
+	t.Run("session_duration_hours_default", func(t *testing.T) {
+		cfg := Load()
+		if cfg.SessionDurationHours != 24 {
+			t.Errorf("Expected SessionDurationHours to default to 24, got %d", cfg.SessionDurationHours)
+		}
+	})
+}
+
+func TestLoad_AppleSignInConfig(t *testing.T) {
+	// Test Apple Sign-In configuration
+	t.Run("apple_client_id_custom", func(t *testing.T) {
+		t.Setenv("APPLE_CLIENT_ID", "com.example.app")
+		cfg := Load()
+		if cfg.AppleClientID != "com.example.app" {
+			t.Errorf("Expected AppleClientID to be 'com.example.app', got '%s'", cfg.AppleClientID)
+		}
+	})
+
+	t.Run("apple_client_id_default_empty", func(t *testing.T) {
+		cfg := Load()
+		if cfg.AppleClientID != "" {
+			t.Errorf("Expected AppleClientID to default to empty string, got '%s'", cfg.AppleClientID)
+		}
+	})
+
+	t.Run("apple_team_id_custom", func(t *testing.T) {
+		t.Setenv("APPLE_TEAM_ID", "ABC123DEF")
+		cfg := Load()
+		if cfg.AppleTeamID != "ABC123DEF" {
+			t.Errorf("Expected AppleTeamID to be 'ABC123DEF', got '%s'", cfg.AppleTeamID)
+		}
+	})
+
+	t.Run("apple_team_id_default_empty", func(t *testing.T) {
+		cfg := Load()
+		if cfg.AppleTeamID != "" {
+			t.Errorf("Expected AppleTeamID to default to empty string, got '%s'", cfg.AppleTeamID)
+		}
+	})
+
+	t.Run("apple_key_id_custom", func(t *testing.T) {
+		t.Setenv("APPLE_KEY_ID", "KEY123")
+		cfg := Load()
+		if cfg.AppleKeyID != "KEY123" {
+			t.Errorf("Expected AppleKeyID to be 'KEY123', got '%s'", cfg.AppleKeyID)
+		}
+	})
+
+	t.Run("apple_key_id_default_empty", func(t *testing.T) {
+		cfg := Load()
+		if cfg.AppleKeyID != "" {
+			t.Errorf("Expected AppleKeyID to default to empty string, got '%s'", cfg.AppleKeyID)
+		}
+	})
+
+	t.Run("apple_private_key_path_custom", func(t *testing.T) {
+		t.Setenv("APPLE_PRIVATE_KEY_PATH", "/path/to/key.p8")
+		cfg := Load()
+		if cfg.ApplePrivateKeyPath != "/path/to/key.p8" {
+			t.Errorf("Expected ApplePrivateKeyPath to be '/path/to/key.p8', got '%s'", cfg.ApplePrivateKeyPath)
+		}
+	})
+
+	t.Run("apple_private_key_path_default_empty", func(t *testing.T) {
+		cfg := Load()
+		if cfg.ApplePrivateKeyPath != "" {
+			t.Errorf("Expected ApplePrivateKeyPath to default to empty string, got '%s'", cfg.ApplePrivateKeyPath)
+		}
+	})
+}
+
+func TestLoad_OFLConfig(t *testing.T) {
+	// Test OFL_IMPORT_ENABLED
+	t.Run("ofl_import_enabled_false", func(t *testing.T) {
+		t.Setenv("OFL_IMPORT_ENABLED", "false")
+		cfg := Load()
+		if cfg.OFLImportEnabled {
+			t.Error("Expected OFLImportEnabled to be false")
+		}
+	})
+
+	t.Run("ofl_import_enabled_default_true", func(t *testing.T) {
+		cfg := Load()
+		if !cfg.OFLImportEnabled {
+			t.Error("Expected OFLImportEnabled to default to true")
+		}
+	})
+
+	// Test OFL_CACHE_PATH
+	t.Run("ofl_cache_path_custom", func(t *testing.T) {
+		t.Setenv("OFL_CACHE_PATH", "/custom/ofl/path")
+		cfg := Load()
+		if cfg.OFLCachePath != "/custom/ofl/path" {
+			t.Errorf("Expected OFLCachePath to be '/custom/ofl/path', got '%s'", cfg.OFLCachePath)
+		}
+	})
+
+	t.Run("ofl_cache_path_default", func(t *testing.T) {
+		cfg := Load()
+		if cfg.OFLCachePath != "./.ofl-cache" {
+			t.Errorf("Expected OFLCachePath to default to './.ofl-cache', got '%s'", cfg.OFLCachePath)
+		}
+	})
+}
