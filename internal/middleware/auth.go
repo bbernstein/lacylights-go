@@ -11,17 +11,18 @@ import (
 )
 
 // ContextKey is a type for context keys used by auth middleware.
+// It is defined as its own type to reduce the risk of collisions with context keys from other packages.
 type ContextKey string
 
 const (
 	// ContextKeySession is the context key for the authenticated session.
-	ContextKeySession ContextKey = "session"
+	ContextKeySession ContextKey = "lacylights:auth:session"
 	// ContextKeyUserID is the context key for the authenticated user's ID.
-	ContextKeyUserID ContextKey = "userID"
+	ContextKeyUserID ContextKey = "lacylights:auth:userID"
 	// ContextKeyUserEmail is the context key for the authenticated user's email.
-	ContextKeyUserEmail ContextKey = "userEmail"
+	ContextKeyUserEmail ContextKey = "lacylights:auth:userEmail"
 	// ContextKeyUserRole is the context key for the authenticated user's role.
-	ContextKeyUserRole ContextKey = "userRole"
+	ContextKeyUserRole ContextKey = "lacylights:auth:userRole"
 )
 
 // AuthMiddleware provides authentication middleware.

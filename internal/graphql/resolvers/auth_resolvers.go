@@ -6,7 +6,9 @@ package resolvers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/lucsky/cuid"
 	"gorm.io/gorm"
@@ -435,15 +437,13 @@ func (r *Resolver) createUserGroup(ctx context.Context, input generated.CreateUs
 	}
 	if input.Permissions.IsSet() {
 		perms := input.Permissions.Value()
-		// Store permissions as comma-separated string
+		// Store permissions as JSON array for consistent parsing
 		if len(perms) > 0 {
-			permStr := ""
-			for i, p := range perms {
-				if i > 0 {
-					permStr += ","
-				}
-				permStr += p
+			permBytes, err := json.Marshal(perms)
+			if err != nil {
+				return nil, fmt.Errorf("failed to encode permissions: %w", err)
 			}
+			permStr := string(permBytes)
 			group.Permissions = &permStr
 		}
 	}
@@ -477,14 +477,13 @@ func (r *Resolver) updateUserGroup(ctx context.Context, id string, input generat
 	}
 	if input.Permissions.IsSet() {
 		perms := input.Permissions.Value()
+		// Store permissions as JSON array for consistent parsing
 		if len(perms) > 0 {
-			permStr := ""
-			for i, p := range perms {
-				if i > 0 {
-					permStr += ","
-				}
-				permStr += p
+			permBytes, err := json.Marshal(perms)
+			if err != nil {
+				return nil, fmt.Errorf("failed to encode permissions: %w", err)
 			}
+			permStr := string(permBytes)
 			group.Permissions = &permStr
 		} else {
 			group.Permissions = nil
