@@ -21,10 +21,11 @@ type CachedSession struct {
 // Cache provides an in-memory cache for sessions.
 // It's designed for O(1) lookups to avoid database hits during authentication.
 type Cache struct {
-	mu      sync.RWMutex
-	cache   map[string]*CachedSession // tokenHash -> session
-	maxSize int
-	ttl     time.Duration
+	mu       sync.RWMutex
+	cache    map[string]*CachedSession // tokenHash -> session
+	maxSize  int
+	ttl      time.Duration
+	stopChan chan struct{}
 }
 
 // CacheConfig holds configuration for the session cache.
@@ -46,15 +47,22 @@ func NewCache(cfg CacheConfig) *Cache {
 	}
 
 	c := &Cache{
-		cache:   make(map[string]*CachedSession),
-		maxSize: maxSize,
-		ttl:     ttl,
+		cache:    make(map[string]*CachedSession),
+		maxSize:  maxSize,
+		ttl:      ttl,
+		stopChan: make(chan struct{}),
 	}
 
 	// Start background cleanup goroutine
 	go c.cleanupLoop()
 
 	return c
+}
+
+// Stop stops the cache cleanup goroutine.
+// Call this when shutting down the application to prevent goroutine leaks.
+func (c *Cache) Stop() {
+	close(c.stopChan)
 }
 
 // Get retrieves a session from the cache by token hash.
@@ -164,8 +172,13 @@ func (c *Cache) cleanupLoop() {
 	ticker := time.NewTicker(c.ttl / 2)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		c.cleanup()
+	for {
+		select {
+		case <-c.stopChan:
+			return
+		case <-ticker.C:
+			c.cleanup()
+		}
 	}
 }
 

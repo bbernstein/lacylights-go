@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -63,6 +64,7 @@ func NewJWTService(cfg JWTConfig) (*JWTService, error) {
 		if _, err := rand.Read(secret); err != nil {
 			return nil, fmt.Errorf("failed to generate JWT secret: %w", err)
 		}
+		log.Printf("Warning: JWT_SECRET not set, using auto-generated secret. Sessions will be invalidated on server restart. Set JWT_SECRET for production use.")
 	}
 
 	accessTTL := cfg.AccessTokenTTL

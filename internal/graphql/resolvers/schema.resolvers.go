@@ -121,22 +121,35 @@ func (r *cueListResolver) UpdatedAt(ctx context.Context, obj *models.CueList) (s
 
 // DefaultRole is the resolver for the defaultRole field.
 func (r *deviceResolver) DefaultRole(ctx context.Context, obj *models.Device) (generated.DeviceRole, error) {
-	panic(fmt.Errorf("not implemented: DefaultRole - defaultRole"))
+	switch obj.DefaultRole {
+	case "DESIGNER":
+		return generated.DeviceRoleDesigner, nil
+	case "OPERATOR":
+		return generated.DeviceRoleOperator, nil
+	case "PLAYER":
+		return generated.DeviceRolePlayer, nil
+	default:
+		return generated.DeviceRolePlayer, nil
+	}
 }
 
 // LastSeenAt is the resolver for the lastSeenAt field.
 func (r *deviceResolver) LastSeenAt(ctx context.Context, obj *models.Device) (*string, error) {
-	panic(fmt.Errorf("not implemented: LastSeenAt - lastSeenAt"))
+	if obj.LastSeenAt == nil {
+		return nil, nil
+	}
+	formatted := obj.LastSeenAt.UTC().Format("2006-01-02T15:04:05.000Z")
+	return &formatted, nil
 }
 
 // CreatedAt is the resolver for the createdAt field.
 func (r *deviceResolver) CreatedAt(ctx context.Context, obj *models.Device) (string, error) {
-	panic(fmt.Errorf("not implemented: CreatedAt - createdAt"))
+	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // UpdatedAt is the resolver for the updatedAt field.
 func (r *deviceResolver) UpdatedAt(ctx context.Context, obj *models.Device) (string, error) {
-	panic(fmt.Errorf("not implemented: UpdatedAt - updatedAt"))
+	return obj.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // EffectType is the resolver for the effectType field.
@@ -6796,17 +6809,17 @@ func (r *queryResolver) Operation(ctx context.Context, operationID string) (*mod
 
 // ExpiresAt is the resolver for the expiresAt field.
 func (r *sessionResolver) ExpiresAt(ctx context.Context, obj *models.Session) (string, error) {
-	panic(fmt.Errorf("not implemented: ExpiresAt - expiresAt"))
+	return obj.ExpiresAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // LastActivityAt is the resolver for the lastActivityAt field.
 func (r *sessionResolver) LastActivityAt(ctx context.Context, obj *models.Session) (string, error) {
-	panic(fmt.Errorf("not implemented: LastActivityAt - lastActivityAt"))
+	return obj.LastActivityAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // CreatedAt is the resolver for the createdAt field.
 func (r *sessionResolver) CreatedAt(ctx context.Context, obj *models.Session) (string, error) {
-	panic(fmt.Errorf("not implemented: CreatedAt - createdAt"))
+	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // CreatedAt is the resolver for the createdAt field.
@@ -7376,22 +7389,47 @@ func (r *userResolver) CreatedAt(ctx context.Context, obj *models.User) (string,
 
 // Permissions is the resolver for the permissions field.
 func (r *userGroupResolver) Permissions(ctx context.Context, obj *models.UserGroup) ([]string, error) {
-	panic(fmt.Errorf("not implemented: Permissions - permissions"))
+	if obj.Permissions == nil || *obj.Permissions == "" {
+		return []string{}, nil
+	}
+
+	// Parse JSON array of permissions
+	var perms []string
+	if err := json.Unmarshal([]byte(*obj.Permissions), &perms); err != nil {
+		// Fall back to comma-separated for backwards compatibility
+		parts := strings.Split(*obj.Permissions, ",")
+		result := make([]string, 0, len(parts))
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				result = append(result, p)
+			}
+		}
+		return result, nil
+	}
+	return perms, nil
 }
 
 // MemberCount is the resolver for the memberCount field.
 func (r *userGroupResolver) MemberCount(ctx context.Context, obj *models.UserGroup) (int, error) {
-	panic(fmt.Errorf("not implemented: MemberCount - memberCount"))
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&models.UserGroupMember{}).
+		Where("user_group_id = ?", obj.ID).
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return int(count), nil
 }
 
 // CreatedAt is the resolver for the createdAt field.
 func (r *userGroupResolver) CreatedAt(ctx context.Context, obj *models.UserGroup) (string, error) {
-	panic(fmt.Errorf("not implemented: CreatedAt - createdAt"))
+	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // UpdatedAt is the resolver for the updatedAt field.
 func (r *userGroupResolver) UpdatedAt(ctx context.Context, obj *models.UserGroup) (string, error) {
-	panic(fmt.Errorf("not implemented: UpdatedAt - updatedAt"))
+	return obj.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // ChannelDefinition returns generated.ChannelDefinitionResolver implementation.

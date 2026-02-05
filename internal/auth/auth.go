@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"regexp"
 	"time"
 
 	"github.com/lucsky/cuid"
@@ -12,6 +13,10 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/auth/session"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 )
+
+// emailRegex provides basic email format validation.
+// This is intentionally permissive to avoid false rejections.
+var emailRegex = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 
 // Service provides authentication functionality.
 type Service struct {
@@ -53,6 +58,7 @@ var (
 	ErrUserNotFound       = errors.New("user not found")
 	ErrUserExists         = errors.New("user already exists")
 	ErrInvalidCredentials = errors.New("invalid email or password")
+	ErrInvalidEmail       = errors.New("invalid email format")
 	ErrAccountLocked      = errors.New("account is locked")
 	ErrAccountInactive    = errors.New("account is inactive")
 	ErrPasswordTooShort   = errors.New("password is too short")
@@ -122,6 +128,11 @@ type AuthResult struct {
 func (s *Service) Register(ctx context.Context, input RegisterInput, ipAddress, userAgent *string) (*AuthResult, error) {
 	if !s.enabled {
 		return nil, ErrAuthDisabled
+	}
+
+	// Validate email format
+	if !emailRegex.MatchString(input.Email) {
+		return nil, ErrInvalidEmail
 	}
 
 	// Validate password length

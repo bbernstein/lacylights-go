@@ -285,35 +285,45 @@ func (r *Resolver) createUser(ctx context.Context, input generated.CreateUserInp
 		return nil, err
 	}
 
-	user := &models.User{
-		ID:       cuid.New(),
-		Email:    input.Email,
-		Role:     "USER",
-		IsActive: true,
-	}
+	var user *models.User
 
-	if input.Name.IsSet() && input.Name.Value() != nil {
-		user.Name = input.Name.Value()
-	}
-	if input.Role.IsSet() && input.Role.Value() != nil {
-		user.Role = string(*input.Role.Value())
-	}
+	// Use transaction to ensure atomicity of user and credentials creation
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		user = &models.User{
+			ID:       cuid.New(),
+			Email:    input.Email,
+			Role:     "USER",
+			IsActive: true,
+		}
 
-	if err := r.db.WithContext(ctx).Create(user).Error; err != nil {
-		return nil, err
-	}
+		if input.Name.IsSet() && input.Name.Value() != nil {
+			user.Name = input.Name.Value()
+		}
+		if input.Role.IsSet() && input.Role.Value() != nil {
+			user.Role = string(*input.Role.Value())
+		}
 
-	// Create credentials with the password
-	passwordHash, err := auth.HashPassword(input.Password)
+		if err := tx.Create(user).Error; err != nil {
+			return err
+		}
+
+		// Create credentials with the password
+		passwordHash, err := auth.HashPassword(input.Password)
+		if err != nil {
+			return err
+		}
+		creds := &models.UserCredential{
+			ID:           cuid.New(),
+			UserID:       user.ID,
+			PasswordHash: passwordHash,
+		}
+		if err := tx.Create(creds).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
 	if err != nil {
-		return nil, err
-	}
-	creds := &models.UserCredential{
-		ID:           cuid.New(),
-		UserID:       user.ID,
-		PasswordHash: passwordHash,
-	}
-	if err := r.db.WithContext(ctx).Create(creds).Error; err != nil {
 		return nil, err
 	}
 
@@ -686,11 +696,15 @@ func (r *Resolver) toAuthUser(user *models.User) *generated.AuthUser {
 		ID:            user.ID,
 		Email:         user.Email,
 		Name:          user.Name,
+		Phone:         user.Phone,
 		Role:          generated.UserRole(user.Role),
 		EmailVerified: user.EmailVerified,
+		PhoneVerified: user.PhoneVerified,
 		IsActive:      user.IsActive,
 		CreatedAt:     user.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
+		UpdatedAt:     user.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
 		LastLoginAt:   lastLoginAt,
+		Groups:        nil,        // Groups will be populated by field resolver if queried
 		Permissions:   []string{}, // TODO: Compute permissions from groups
 	}
 }
