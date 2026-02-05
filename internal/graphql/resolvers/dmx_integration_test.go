@@ -696,8 +696,8 @@ func TestLookBoardFadeBehavior(t *testing.T) {
 		t.Errorf("FADE channel 'Blue' should be interpolating (0 < x < 50), got %d", blueValue)
 	}
 
-	// Wait for fade to complete
-	time.Sleep(300 * time.Millisecond)
+	// Wait for fade to complete (fade is 500ms, so wait extra to ensure it finishes on slow CI)
+	time.Sleep(500 * time.Millisecond)
 
 	// All channels should now be at their target values
 	if resolver.DMXService.GetChannelValue(1, 1) != 200 {
