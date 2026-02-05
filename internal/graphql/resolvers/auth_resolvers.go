@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/lucsky/cuid"
 	"gorm.io/gorm"
@@ -544,14 +545,36 @@ func (r *Resolver) removeUserFromGroup(ctx context.Context, userID, groupID stri
 
 // Device operations
 
-// getDevices returns all devices (admin only).
-func (r *Resolver) getDevices(ctx context.Context) ([]*models.Device, error) {
+// getDevicesByStatus returns devices filtered by status (admin only).
+func (r *Resolver) getDevicesByStatus(ctx context.Context, status *generated.DeviceStatus) ([]*models.Device, error) {
 	if err := r.requireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
 	var devices []models.Device
-	if err := r.db.WithContext(ctx).Find(&devices).Error; err != nil {
+	query := r.db.WithContext(ctx)
+	if status != nil {
+		query = query.Where("status = ?", string(*status))
+	}
+	if err := query.Find(&devices).Error; err != nil {
+		return nil, err
+	}
+
+	result := make([]*models.Device, len(devices))
+	for i := range devices {
+		result[i] = &devices[i]
+	}
+	return result, nil
+}
+
+// getPendingDevices returns all devices with PENDING status (admin only).
+func (r *Resolver) getPendingDevices(ctx context.Context) ([]*models.Device, error) {
+	if err := r.requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+
+	var devices []models.Device
+	if err := r.db.WithContext(ctx).Where("status = ?", models.DeviceStatusPending).Find(&devices).Error; err != nil {
 		return nil, err
 	}
 
@@ -578,7 +601,7 @@ func (r *Resolver) getDevice(ctx context.Context, id string) (*models.Device, er
 	return &device, nil
 }
 
-// checkDeviceAuth checks if a device fingerprint is authorized.
+// checkDeviceAuth checks if a device fingerprint is authorized (legacy).
 func (r *Resolver) checkDeviceAuth(ctx context.Context, fingerprint string) (*generated.DeviceAuthStatus, error) {
 	if r.AuthService == nil || !r.AuthService.IsDeviceAuthEnabled() {
 		return &generated.DeviceAuthStatus{
@@ -603,10 +626,13 @@ func (r *Resolver) checkDeviceAuth(ctx context.Context, fingerprint string) (*ge
 		return nil, err
 	}
 
-	if !device.IsAuthorized {
+	isAuthorized := device.Status == models.DeviceStatusApproved
+	isPending := device.Status == models.DeviceStatusPending
+
+	if !isAuthorized {
 		return &generated.DeviceAuthStatus{
 			IsAuthorized: false,
-			IsPending:    true,
+			IsPending:    isPending,
 			Device:       &device,
 			DefaultUser:  nil,
 		}, nil
@@ -627,6 +653,217 @@ func (r *Resolver) checkDeviceAuth(ctx context.Context, fingerprint string) (*ge
 		Device:       &device,
 		DefaultUser:  defaultUser,
 	}, nil
+}
+
+// checkDevice checks a device's status by fingerprint (unauthenticated, for registration flow).
+func (r *Resolver) checkDevice(ctx context.Context, fingerprint string) (*generated.DeviceCheckResult, error) {
+	// If auth or device auth is not enabled, return a status indicating no registration needed
+	if r.AuthService == nil || !r.AuthService.IsEnabled() {
+		return &generated.DeviceCheckResult{
+			Status:  generated.DeviceStatusApproved,
+			Device:  nil,
+			Message: stringPtr("Authentication is disabled - all devices have access"),
+		}, nil
+	}
+
+	if !r.AuthService.IsDeviceAuthEnabled() {
+		return &generated.DeviceCheckResult{
+			Status:  generated.DeviceStatusApproved,
+			Device:  nil,
+			Message: stringPtr("Device authentication is disabled - use standard authentication"),
+		}, nil
+	}
+
+	var device models.Device
+	err := r.db.WithContext(ctx).Where("fingerprint = ?", fingerprint).First(&device).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Device not found - client should register
+			return &generated.DeviceCheckResult{
+				Status:  generated.DeviceStatusPending, // Return PENDING to indicate registration needed
+				Device:  nil,
+				Message: stringPtr("Device not registered - please register this device"),
+			}, nil
+		}
+		return nil, err
+	}
+
+	// Map database status to GraphQL enum
+	var status generated.DeviceStatus
+	var message string
+	switch device.Status {
+	case models.DeviceStatusApproved:
+		status = generated.DeviceStatusApproved
+		message = "Device is approved"
+	case models.DeviceStatusPending:
+		status = generated.DeviceStatusPending
+		message = "Device is pending approval"
+	case models.DeviceStatusRevoked:
+		status = generated.DeviceStatusRevoked
+		message = "Device access has been revoked"
+	default:
+		status = generated.DeviceStatusPending
+		message = "Unknown device status"
+	}
+
+	return &generated.DeviceCheckResult{
+		Status:  status,
+		Device:  &device,
+		Message: stringPtr(message),
+	}, nil
+}
+
+// registerDevice registers a new device for device-based auth (unauthenticated).
+func (r *Resolver) registerDevice(ctx context.Context, fingerprint string, name string) (*generated.DeviceRegistrationResult, error) {
+	// If auth or device auth is not enabled, return success (no registration needed)
+	if r.AuthService == nil || !r.AuthService.IsEnabled() {
+		return &generated.DeviceRegistrationResult{
+			Success: true,
+			Device:  nil,
+			Message: "Authentication is disabled - device registration not required",
+		}, nil
+	}
+
+	if !r.AuthService.IsDeviceAuthEnabled() {
+		return &generated.DeviceRegistrationResult{
+			Success: false,
+			Device:  nil,
+			Message: "Device authentication is not enabled",
+		}, nil
+	}
+
+	// Validate input
+	if fingerprint == "" {
+		return &generated.DeviceRegistrationResult{
+			Success: false,
+			Device:  nil,
+			Message: "Fingerprint is required",
+		}, nil
+	}
+	if name == "" {
+		return &generated.DeviceRegistrationResult{
+			Success: false,
+			Device:  nil,
+			Message: "Device name is required",
+		}, nil
+	}
+
+	// Check if device already exists
+	var existingDevice models.Device
+	err := r.db.WithContext(ctx).Where("fingerprint = ?", fingerprint).First(&existingDevice).Error
+	if err == nil {
+		// Device already exists
+		return &generated.DeviceRegistrationResult{
+			Success: true,
+			Device:  &existingDevice,
+			Message: fmt.Sprintf("Device already registered with status: %s", existingDevice.Status),
+		}, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	// Create new device with PENDING status
+	device := models.Device{
+		ID:          cuid.New(),
+		Name:        name,
+		Fingerprint: fingerprint,
+		Status:      models.DeviceStatusPending,
+		Permissions: models.DevicePermissionsReadOnly,
+		DefaultRole: "PLAYER",
+	}
+
+	if err := r.db.WithContext(ctx).Create(&device).Error; err != nil {
+		return nil, fmt.Errorf("failed to register device: %w", err)
+	}
+
+	return &generated.DeviceRegistrationResult{
+		Success: true,
+		Device:  &device,
+		Message: "Device registered successfully. Please wait for admin approval.",
+	}, nil
+}
+
+// approveDevice approves a pending device (admin only).
+func (r *Resolver) approveDevice(ctx context.Context, deviceID string, permissions generated.DevicePermissions) (*models.Device, error) {
+	if err := r.requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+
+	var device models.Device
+	if err := r.db.WithContext(ctx).First(&device, "id = ?", deviceID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrDeviceNotFound
+		}
+		return nil, err
+	}
+
+	// Update device status and permissions
+	now := time.Now()
+	device.Status = models.DeviceStatusApproved
+	device.IsAuthorized = true
+	device.Permissions = string(permissions)
+	device.ApprovedAt = &now
+
+	// Get the approving user's ID from context if available
+	userID := middleware.GetUserIDFromContext(ctx)
+	if userID != "" {
+		device.ApprovedByID = &userID
+	}
+
+	if err := r.db.WithContext(ctx).Save(&device).Error; err != nil {
+		return nil, err
+	}
+
+	return &device, nil
+}
+
+// revokeDeviceAuth revokes a device's authorization (admin only).
+func (r *Resolver) revokeDeviceAuth(ctx context.Context, deviceID string) (*models.Device, error) {
+	if err := r.requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+
+	var device models.Device
+	if err := r.db.WithContext(ctx).First(&device, "id = ?", deviceID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrDeviceNotFound
+		}
+		return nil, err
+	}
+
+	// Update device status
+	device.Status = models.DeviceStatusRevoked
+	device.IsAuthorized = false
+
+	if err := r.db.WithContext(ctx).Save(&device).Error; err != nil {
+		return nil, err
+	}
+
+	return &device, nil
+}
+
+// updateDevicePermissions updates a device's permissions (admin only).
+func (r *Resolver) updateDevicePermissions(ctx context.Context, deviceID string, permissions generated.DevicePermissions) (*models.Device, error) {
+	if err := r.requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+
+	var device models.Device
+	if err := r.db.WithContext(ctx).First(&device, "id = ?", deviceID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrDeviceNotFound
+		}
+		return nil, err
+	}
+
+	device.Permissions = string(permissions)
+
+	if err := r.db.WithContext(ctx).Save(&device).Error; err != nil {
+		return nil, err
+	}
+
+	return &device, nil
 }
 
 // Session management

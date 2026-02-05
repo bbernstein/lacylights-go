@@ -80,6 +80,20 @@ type Session struct {
 
 func (Session) TableName() string { return "sessions" }
 
+// DeviceStatus represents the current status of a device.
+const (
+	DeviceStatusPending  = "PENDING"
+	DeviceStatusApproved = "APPROVED"
+	DeviceStatusRevoked  = "REVOKED"
+)
+
+// DevicePermissions represents the permission level for a device.
+const (
+	DevicePermissionsReadOnly = "READ_ONLY"
+	DevicePermissionsOperator = "OPERATOR"
+	DevicePermissionsAdmin    = "ADMIN"
+)
+
 // Device represents a pre-authorized device for device-based authentication.
 // Table: devices
 type Device struct {
@@ -87,7 +101,9 @@ type Device struct {
 	Name                       string     `gorm:"column:name"`
 	Fingerprint                string     `gorm:"column:fingerprint;uniqueIndex"`
 	FingerprintComponents      *string    `gorm:"column:fingerprint_components"` // JSON
-	IsAuthorized               bool       `gorm:"column:is_authorized;default:false"`
+	Status                     string     `gorm:"column:status;default:PENDING;index"` // PENDING, APPROVED, REVOKED
+	Permissions                string     `gorm:"column:permissions;default:READ_ONLY"` // READ_ONLY, OPERATOR, ADMIN
+	IsAuthorized               bool       `gorm:"column:is_authorized;default:false"` // Computed from Status == APPROVED
 	AuthorizationCode          *string    `gorm:"column:authorization_code"`
 	AuthorizationCodeExpiresAt *time.Time `gorm:"column:authorization_code_expires_at"`
 	DefaultUserID              *string    `gorm:"column:default_user_id;index"`
@@ -96,9 +112,12 @@ type Device struct {
 	LastIPAddress              *string    `gorm:"column:last_ip_address"`
 	CreatedAt                  time.Time  `gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt                  time.Time  `gorm:"column:updated_at;autoUpdateTime"`
+	ApprovedAt                 *time.Time `gorm:"column:approved_at"`
+	ApprovedByID               *string    `gorm:"column:approved_by;index"`
 
 	// Relations
 	DefaultUser *User `gorm:"foreignKey:DefaultUserID"`
+	ApprovedBy  *User `gorm:"foreignKey:ApprovedByID"`
 }
 
 func (Device) TableName() string { return "devices" }

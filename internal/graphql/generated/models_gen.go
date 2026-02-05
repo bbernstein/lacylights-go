@@ -497,6 +497,27 @@ type DeviceAuthStatus struct {
 	DefaultUser *models.User `json:"defaultUser,omitempty"`
 }
 
+// Result of checking a device's status by fingerprint.
+// Used by clients to determine if they need to register.
+type DeviceCheckResult struct {
+	// Current status of the device (PENDING, APPROVED, REVOKED, or UNKNOWN if not registered)
+	Status DeviceStatus `json:"status"`
+	// The device record if it exists
+	Device *models.Device `json:"device,omitempty"`
+	// Human-readable message about the device status
+	Message *string `json:"message,omitempty"`
+}
+
+// Result of registering a new device.
+type DeviceRegistrationResult struct {
+	// Whether the registration was successful
+	Success bool `json:"success"`
+	// The registered device (null if registration failed)
+	Device *models.Device `json:"device,omitempty"`
+	// Human-readable message about the result
+	Message string `json:"message"`
+}
+
 // Input for adding or updating a channel within an effect fixture.
 // Target by offset OR type (not both).
 type EffectChannelInput struct {
@@ -1097,10 +1118,11 @@ type UpdateAuthSettingsInput struct {
 }
 
 type UpdateDeviceInput struct {
-	Name          graphql.Omittable[*string]     `json:"name,omitempty"`
-	DefaultUserID graphql.Omittable[*string]     `json:"defaultUserId,omitempty"`
-	DefaultRole   graphql.Omittable[*DeviceRole] `json:"defaultRole,omitempty"`
-	IsAuthorized  graphql.Omittable[*bool]       `json:"isAuthorized,omitempty"`
+	Name          graphql.Omittable[*string]            `json:"name,omitempty"`
+	DefaultUserID graphql.Omittable[*string]            `json:"defaultUserId,omitempty"`
+	DefaultRole   graphql.Omittable[*DeviceRole]        `json:"defaultRole,omitempty"`
+	IsAuthorized  graphql.Omittable[*bool]              `json:"isAuthorized,omitempty"`
+	Permissions   graphql.Omittable[*DevicePermissions] `json:"permissions,omitempty"`
 }
 
 // Input for updating an effect fixture's settings.
@@ -1456,6 +1478,67 @@ func (e CueListDataChangeType) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Permission level for device-based authentication.
+type DevicePermissions string
+
+const (
+	// Can only view data, no modifications
+	DevicePermissionsReadOnly DevicePermissions = "READ_ONLY"
+	// Can control lights and make operational changes
+	DevicePermissionsOperator DevicePermissions = "OPERATOR"
+	// Full access including device management
+	DevicePermissionsAdmin DevicePermissions = "ADMIN"
+)
+
+var AllDevicePermissions = []DevicePermissions{
+	DevicePermissionsReadOnly,
+	DevicePermissionsOperator,
+	DevicePermissionsAdmin,
+}
+
+func (e DevicePermissions) IsValid() bool {
+	switch e {
+	case DevicePermissionsReadOnly, DevicePermissionsOperator, DevicePermissionsAdmin:
+		return true
+	}
+	return false
+}
+
+func (e DevicePermissions) String() string {
+	return string(e)
+}
+
+func (e *DevicePermissions) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = DevicePermissions(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid DevicePermissions", str)
+	}
+	return nil
+}
+
+func (e DevicePermissions) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *DevicePermissions) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e DevicePermissions) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 // Default role for device-authenticated users.
 type DeviceRole string
 
@@ -1509,6 +1592,67 @@ func (e *DeviceRole) UnmarshalJSON(b []byte) error {
 }
 
 func (e DeviceRole) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Status of a device in the authentication system.
+type DeviceStatus string
+
+const (
+	// Device is registered but not yet approved
+	DeviceStatusPending DeviceStatus = "PENDING"
+	// Device is approved and can access the system
+	DeviceStatusApproved DeviceStatus = "APPROVED"
+	// Device access has been revoked
+	DeviceStatusRevoked DeviceStatus = "REVOKED"
+)
+
+var AllDeviceStatus = []DeviceStatus{
+	DeviceStatusPending,
+	DeviceStatusApproved,
+	DeviceStatusRevoked,
+}
+
+func (e DeviceStatus) IsValid() bool {
+	switch e {
+	case DeviceStatusPending, DeviceStatusApproved, DeviceStatusRevoked:
+		return true
+	}
+	return false
+}
+
+func (e DeviceStatus) String() string {
+	return string(e)
+}
+
+func (e *DeviceStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = DeviceStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid DeviceStatus", str)
+	}
+	return nil
+}
+
+func (e DeviceStatus) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *DeviceStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e DeviceStatus) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

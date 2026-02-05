@@ -293,6 +293,8 @@ type ComplexityRoot struct {
 	}
 
 	Device struct {
+		ApprovedAt    func(childComplexity int) int
+		ApprovedBy    func(childComplexity int) int
 		CreatedAt     func(childComplexity int) int
 		DefaultRole   func(childComplexity int) int
 		DefaultUser   func(childComplexity int) int
@@ -302,6 +304,8 @@ type ComplexityRoot struct {
 		LastIPAddress func(childComplexity int) int
 		LastSeenAt    func(childComplexity int) int
 		Name          func(childComplexity int) int
+		Permissions   func(childComplexity int) int
+		Status        func(childComplexity int) int
 		UpdatedAt     func(childComplexity int) int
 	}
 
@@ -316,6 +320,18 @@ type ComplexityRoot struct {
 		Device       func(childComplexity int) int
 		IsAuthorized func(childComplexity int) int
 		IsPending    func(childComplexity int) int
+	}
+
+	DeviceCheckResult struct {
+		Device  func(childComplexity int) int
+		Message func(childComplexity int) int
+		Status  func(childComplexity int) int
+	}
+
+	DeviceRegistrationResult struct {
+		Device  func(childComplexity int) int
+		Message func(childComplexity int) int
+		Success func(childComplexity int) int
 	}
 
 	Effect struct {
@@ -637,6 +653,7 @@ type ComplexityRoot struct {
 		AddLookToBoard                         func(childComplexity int, input CreateLookBoardButtonInput) int
 		AddUserToGroup                         func(childComplexity int, userID string, groupID string) int
 		AppleSignIn                            func(childComplexity int, identityToken string, authorizationCode string) int
+		ApproveDevice                          func(childComplexity int, deviceID string, permissions DevicePermissions) int
 		AuthorizeDevice                        func(childComplexity int, fingerprint string, authorizationCode string) int
 		BulkCreateCueLists                     func(childComplexity int, input BulkCueListCreateInput) int
 		BulkCreateCues                         func(childComplexity int, input BulkCueCreateInput) int
@@ -754,6 +771,7 @@ type ComplexityRoot struct {
 		UpdateCue                              func(childComplexity int, id string, input CreateCueInput) int
 		UpdateCueList                          func(childComplexity int, id string, input CreateCueListInput) int
 		UpdateDevice                           func(childComplexity int, id string, input UpdateDeviceInput) int
+		UpdateDevicePermissions                func(childComplexity int, deviceID string, permissions DevicePermissions) int
 		UpdateEffect                           func(childComplexity int, id string, input UpdateEffectInput) int
 		UpdateEffectChannel                    func(childComplexity int, id string, input EffectChannelInput) int
 		UpdateEffectFixture                    func(childComplexity int, id string, input UpdateEffectFixtureInput) int
@@ -958,6 +976,7 @@ type ComplexityRoot struct {
 		AvailableVersions               func(childComplexity int, repository string) int
 		BuildInfo                       func(childComplexity int) int
 		ChannelMap                      func(childComplexity int, projectID string, universe *int) int
+		CheckDevice                     func(childComplexity int, fingerprint string) int
 		CheckDeviceAuthorization        func(childComplexity int, fingerprint string) int
 		CheckOFLUpdates                 func(childComplexity int) int
 		CompareLooks                    func(childComplexity int, lookID1 string, lookID2 string) int
@@ -971,7 +990,7 @@ type ComplexityRoot struct {
 		CurrentActiveLook               func(childComplexity int) int
 		DeletedProjects                 func(childComplexity int) int
 		Device                          func(childComplexity int, id string) int
-		Devices                         func(childComplexity int) int
+		Devices                         func(childComplexity int, status *DeviceStatus) int
 		DmxOutput                       func(childComplexity int, universe int) int
 		Effect                          func(childComplexity int, id string) int
 		Effects                         func(childComplexity int, projectID string) int
@@ -1000,6 +1019,7 @@ type ComplexityRoot struct {
 		OflImportStatus                 func(childComplexity int) int
 		Operation                       func(childComplexity int, operationID string) int
 		OperationHistory                func(childComplexity int, projectID string, page *int, perPage *int) int
+		PendingDevices                  func(childComplexity int) int
 		PreviewSession                  func(childComplexity int, sessionID string) int
 		Project                         func(childComplexity int, id string) int
 		Projects                        func(childComplexity int) int
@@ -1197,11 +1217,16 @@ type CueListResolver interface {
 	UpdatedAt(ctx context.Context, obj *models.CueList) (string, error)
 }
 type DeviceResolver interface {
+	Status(ctx context.Context, obj *models.Device) (DeviceStatus, error)
+	Permissions(ctx context.Context, obj *models.Device) (DevicePermissions, error)
+
 	DefaultRole(ctx context.Context, obj *models.Device) (DeviceRole, error)
 	LastSeenAt(ctx context.Context, obj *models.Device) (*string, error)
 
 	CreatedAt(ctx context.Context, obj *models.Device) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.Device) (string, error)
+	ApprovedAt(ctx context.Context, obj *models.Device) (*string, error)
+	ApprovedBy(ctx context.Context, obj *models.Device) (*models.User, error)
 }
 type EffectResolver interface {
 	EffectType(ctx context.Context, obj *models.Effect) (EffectType, error)
@@ -1282,7 +1307,7 @@ type MutationResolver interface {
 	RequestEmailVerification(ctx context.Context) (bool, error)
 	VerifyEmail(ctx context.Context, token string) (bool, error)
 	AppleSignIn(ctx context.Context, identityToken string, authorizationCode string) (*AuthPayload, error)
-	RegisterDevice(ctx context.Context, fingerprint string, name string) (*models.Device, error)
+	RegisterDevice(ctx context.Context, fingerprint string, name string) (*DeviceRegistrationResult, error)
 	AuthorizeDevice(ctx context.Context, fingerprint string, authorizationCode string) (*AuthPayload, error)
 	CreateUser(ctx context.Context, input CreateUserInput) (*models.User, error)
 	UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*models.User, error)
@@ -1293,8 +1318,10 @@ type MutationResolver interface {
 	AddUserToGroup(ctx context.Context, userID string, groupID string) (bool, error)
 	RemoveUserFromGroup(ctx context.Context, userID string, groupID string) (bool, error)
 	CreateDeviceAuthCode(ctx context.Context, deviceID string) (*DeviceAuthCode, error)
+	ApproveDevice(ctx context.Context, deviceID string, permissions DevicePermissions) (*models.Device, error)
 	UpdateDevice(ctx context.Context, id string, input UpdateDeviceInput) (*models.Device, error)
-	RevokeDevice(ctx context.Context, id string) (bool, error)
+	UpdateDevicePermissions(ctx context.Context, deviceID string, permissions DevicePermissions) (*models.Device, error)
+	RevokeDevice(ctx context.Context, id string) (*models.Device, error)
 	RevokeSession(ctx context.Context, sessionID string) (bool, error)
 	RevokeAllUserSessions(ctx context.Context, userID string) (bool, error)
 	UpdateAuthSettings(ctx context.Context, input UpdateAuthSettingsInput) (*AuthSettings, error)
@@ -1457,12 +1484,14 @@ type QueryResolver interface {
 	AuthEnabled(ctx context.Context) (bool, error)
 	AuthSettings(ctx context.Context) (*AuthSettings, error)
 	CheckDeviceAuthorization(ctx context.Context, fingerprint string) (*DeviceAuthStatus, error)
+	CheckDevice(ctx context.Context, fingerprint string) (*DeviceCheckResult, error)
 	MySessions(ctx context.Context) ([]*models.Session, error)
 	Users(ctx context.Context, page *int, perPage *int) ([]*models.User, error)
 	User(ctx context.Context, id string) (*models.User, error)
 	UserGroups(ctx context.Context) ([]*models.UserGroup, error)
 	UserGroup(ctx context.Context, id string) (*models.UserGroup, error)
-	Devices(ctx context.Context) ([]*models.Device, error)
+	Devices(ctx context.Context, status *DeviceStatus) ([]*models.Device, error)
+	PendingDevices(ctx context.Context) ([]*models.Device, error)
 	Device(ctx context.Context, id string) (*models.Device, error)
 	Projects(ctx context.Context) ([]*models.Project, error)
 	Project(ctx context.Context, id string) (*models.Project, error)
@@ -2471,6 +2500,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.CuesWithLookInfoResponse.OrphanLooks(childComplexity), true
 
+	case "Device.approvedAt":
+		if e.complexity.Device.ApprovedAt == nil {
+			break
+		}
+
+		return e.complexity.Device.ApprovedAt(childComplexity), true
+	case "Device.approvedBy":
+		if e.complexity.Device.ApprovedBy == nil {
+			break
+		}
+
+		return e.complexity.Device.ApprovedBy(childComplexity), true
 	case "Device.createdAt":
 		if e.complexity.Device.CreatedAt == nil {
 			break
@@ -2525,6 +2566,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Device.Name(childComplexity), true
+	case "Device.permissions":
+		if e.complexity.Device.Permissions == nil {
+			break
+		}
+
+		return e.complexity.Device.Permissions(childComplexity), true
+	case "Device.status":
+		if e.complexity.Device.Status == nil {
+			break
+		}
+
+		return e.complexity.Device.Status(childComplexity), true
 	case "Device.updatedAt":
 		if e.complexity.Device.UpdatedAt == nil {
 			break
@@ -2575,6 +2628,44 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.DeviceAuthStatus.IsPending(childComplexity), true
+
+	case "DeviceCheckResult.device":
+		if e.complexity.DeviceCheckResult.Device == nil {
+			break
+		}
+
+		return e.complexity.DeviceCheckResult.Device(childComplexity), true
+	case "DeviceCheckResult.message":
+		if e.complexity.DeviceCheckResult.Message == nil {
+			break
+		}
+
+		return e.complexity.DeviceCheckResult.Message(childComplexity), true
+	case "DeviceCheckResult.status":
+		if e.complexity.DeviceCheckResult.Status == nil {
+			break
+		}
+
+		return e.complexity.DeviceCheckResult.Status(childComplexity), true
+
+	case "DeviceRegistrationResult.device":
+		if e.complexity.DeviceRegistrationResult.Device == nil {
+			break
+		}
+
+		return e.complexity.DeviceRegistrationResult.Device(childComplexity), true
+	case "DeviceRegistrationResult.message":
+		if e.complexity.DeviceRegistrationResult.Message == nil {
+			break
+		}
+
+		return e.complexity.DeviceRegistrationResult.Message(childComplexity), true
+	case "DeviceRegistrationResult.success":
+		if e.complexity.DeviceRegistrationResult.Success == nil {
+			break
+		}
+
+		return e.complexity.DeviceRegistrationResult.Success(childComplexity), true
 
 	case "Effect.amplitude":
 		if e.complexity.Effect.Amplitude == nil {
@@ -3973,6 +4064,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.AppleSignIn(childComplexity, args["identityToken"].(string), args["authorizationCode"].(string)), true
+	case "Mutation.approveDevice":
+		if e.complexity.Mutation.ApproveDevice == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_approveDevice_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.ApproveDevice(childComplexity, args["deviceId"].(string), args["permissions"].(DevicePermissions)), true
 	case "Mutation.authorizeDevice":
 		if e.complexity.Mutation.AuthorizeDevice == nil {
 			break
@@ -5220,6 +5322,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.UpdateDevice(childComplexity, args["id"].(string), args["input"].(UpdateDeviceInput)), true
+	case "Mutation.updateDevicePermissions":
+		if e.complexity.Mutation.UpdateDevicePermissions == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateDevicePermissions_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UpdateDevicePermissions(childComplexity, args["deviceId"].(string), args["permissions"].(DevicePermissions)), true
 	case "Mutation.updateEffect":
 		if e.complexity.Mutation.UpdateEffect == nil {
 			break
@@ -6231,6 +6344,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.ChannelMap(childComplexity, args["projectId"].(string), args["universe"].(*int)), true
+	case "Query.checkDevice":
+		if e.complexity.Query.CheckDevice == nil {
+			break
+		}
+
+		args, err := ec.field_Query_checkDevice_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.CheckDevice(childComplexity, args["fingerprint"].(string)), true
 	case "Query.checkDeviceAuthorization":
 		if e.complexity.Query.CheckDeviceAuthorization == nil {
 			break
@@ -6364,7 +6488,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			break
 		}
 
-		return e.complexity.Query.Devices(childComplexity), true
+		args, err := ec.field_Query_devices_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.Devices(childComplexity, args["status"].(*DeviceStatus)), true
 	case "Query.dmxOutput":
 		if e.complexity.Query.DmxOutput == nil {
 			break
@@ -6643,6 +6772,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.OperationHistory(childComplexity, args["projectId"].(string), args["page"].(*int), args["perPage"].(*int)), true
+	case "Query.pendingDevices":
+		if e.complexity.Query.PendingDevices == nil {
+			break
+		}
+
+		return e.complexity.Query.PendingDevices(childComplexity), true
 	case "Query.previewSession":
 		if e.complexity.Query.PreviewSession == nil {
 			break
@@ -7949,6 +8084,30 @@ enum DeviceRole {
   DESIGNER
 }
 
+"""
+Status of a device in the authentication system.
+"""
+enum DeviceStatus {
+  "Device is registered but not yet approved"
+  PENDING
+  "Device is approved and can access the system"
+  APPROVED
+  "Device access has been revoked"
+  REVOKED
+}
+
+"""
+Permission level for device-based authentication.
+"""
+enum DevicePermissions {
+  "Can only view data, no modifications"
+  READ_ONLY
+  "Can control lights and make operational changes"
+  OPERATOR
+  "Full access including device management"
+  ADMIN
+}
+
 # =============================================================================
 # AUTHENTICATION TYPES
 # =============================================================================
@@ -8027,7 +8186,11 @@ type Device {
   name: String!
   "Unique device fingerprint"
   fingerprint: String!
-  "Whether this device is authorized"
+  "Current status of the device"
+  status: DeviceStatus!
+  "Permission level for this device"
+  permissions: DevicePermissions!
+  "Whether this device is authorized (convenience field, equivalent to status == APPROVED)"
   isAuthorized: Boolean!
   "Default user to authenticate as when device connects"
   defaultUser: User
@@ -8037,6 +8200,10 @@ type Device {
   lastIPAddress: String
   createdAt: String!
   updatedAt: String!
+  "When the device was approved"
+  approvedAt: String
+  "User who approved this device"
+  approvedBy: User
 }
 
 """
@@ -8051,6 +8218,31 @@ type DeviceAuthStatus {
   device: Device
   "Default user for auto-login (if authorized)"
   defaultUser: User
+}
+
+"""
+Result of checking a device's status by fingerprint.
+Used by clients to determine if they need to register.
+"""
+type DeviceCheckResult {
+  "Current status of the device (PENDING, APPROVED, REVOKED, or UNKNOWN if not registered)"
+  status: DeviceStatus!
+  "The device record if it exists"
+  device: Device
+  "Human-readable message about the device status"
+  message: String
+}
+
+"""
+Result of registering a new device.
+"""
+type DeviceRegistrationResult {
+  "Whether the registration was successful"
+  success: Boolean!
+  "The registered device (null if registration failed)"
+  device: Device
+  "Human-readable message about the result"
+  message: String!
 }
 
 """
@@ -9117,6 +9309,7 @@ input UpdateDeviceInput {
   defaultUserId: ID
   defaultRole: DeviceRole
   isAuthorized: Boolean
+  permissions: DevicePermissions
 }
 
 input UpdateAuthSettingsInput {
@@ -9671,6 +9864,8 @@ type Query {
   authSettings: AuthSettings!
   "Check if a device is authorized by fingerprint"
   checkDeviceAuthorization(fingerprint: String!): DeviceAuthStatus!
+  "Check device status by fingerprint (unauthenticated, for registration flow)"
+  checkDevice(fingerprint: String!): DeviceCheckResult!
   "Get the current user's active sessions"
   mySessions: [Session!]!
 
@@ -9683,8 +9878,10 @@ type Query {
   userGroups: [UserGroup!]!
   "Get a user group by ID (admin only)"
   userGroup(id: ID!): UserGroup
-  "List all devices (admin only)"
-  devices: [Device!]!
+  "List all devices, optionally filtered by status (admin only)"
+  devices(status: DeviceStatus): [Device!]!
+  "Get devices pending approval (admin only)"
+  pendingDevices: [Device!]!
   "Get a device by ID (admin only)"
   device(id: ID!): Device
 
@@ -9873,8 +10070,8 @@ type Mutation {
   appleSignIn(identityToken: String!, authorizationCode: String!): AuthPayload!
 
   # Device Authentication
-  "Register a device for device-based auth"
-  registerDevice(fingerprint: String!, name: String!): Device!
+  "Register a device for device-based auth (unauthenticated)"
+  registerDevice(fingerprint: String!, name: String!): DeviceRegistrationResult!
   "Authorize a device using an authorization code"
   authorizeDevice(fingerprint: String!, authorizationCode: String!): AuthPayload!
 
@@ -9899,10 +10096,14 @@ type Mutation {
   # Device Management (admin only)
   "Create a device authorization code (admin only)"
   createDeviceAuthCode(deviceId: ID!): DeviceAuthCode!
+  "Approve a pending device (admin only)"
+  approveDevice(deviceId: ID!, permissions: DevicePermissions!): Device!
   "Update a device (admin only)"
   updateDevice(id: ID!, input: UpdateDeviceInput!): Device!
+  "Update device permissions (admin only)"
+  updateDevicePermissions(deviceId: ID!, permissions: DevicePermissions!): Device!
   "Revoke a device's authorization (admin only)"
-  revokeDevice(id: ID!): Boolean!
+  revokeDevice(id: ID!): Device!
 
   # Session Management (admin only)
   "Revoke a specific session (admin only)"
@@ -10354,6 +10555,22 @@ func (ec *executionContext) field_Mutation_appleSignIn_args(ctx context.Context,
 		return nil, err
 	}
 	args["authorizationCode"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_approveDevice_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "deviceId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["deviceId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "permissions", ec.unmarshalNDevicePermissions2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDevicePermissions)
+	if err != nil {
+		return nil, err
+	}
+	args["permissions"] = arg1
 	return args, nil
 }
 
@@ -11715,6 +11932,22 @@ func (ec *executionContext) field_Mutation_updateCue_args(ctx context.Context, r
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_updateDevicePermissions_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "deviceId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["deviceId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "permissions", ec.unmarshalNDevicePermissions2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDevicePermissions)
+	if err != nil {
+		return nil, err
+	}
+	args["permissions"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_updateDevice_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -12100,6 +12333,17 @@ func (ec *executionContext) field_Query_checkDeviceAuthorization_args(ctx contex
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_checkDevice_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "fingerprint", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["fingerprint"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_compareLooks_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -12216,6 +12460,17 @@ func (ec *executionContext) field_Query_device_args(ctx context.Context, rawArgs
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_devices_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "status", ec.unmarshalODeviceStatus2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDeviceStatus)
+	if err != nil {
+		return nil, err
+	}
+	args["status"] = arg0
 	return args, nil
 }
 
@@ -17505,6 +17760,64 @@ func (ec *executionContext) fieldContext_Device_fingerprint(_ context.Context, f
 	return fc, nil
 }
 
+func (ec *executionContext) _Device_status(ctx context.Context, field graphql.CollectedField, obj *models.Device) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Device_status,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Device().Status(ctx, obj)
+		},
+		nil,
+		ec.marshalNDeviceStatus2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDeviceStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Device_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Device",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type DeviceStatus does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Device_permissions(ctx context.Context, field graphql.CollectedField, obj *models.Device) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Device_permissions,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Device().Permissions(ctx, obj)
+		},
+		nil,
+		ec.marshalNDevicePermissions2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDevicePermissions,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Device_permissions(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Device",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type DevicePermissions does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Device_isAuthorized(ctx context.Context, field graphql.CollectedField, obj *models.Device) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -17720,6 +18033,76 @@ func (ec *executionContext) fieldContext_Device_updatedAt(_ context.Context, fie
 	return fc, nil
 }
 
+func (ec *executionContext) _Device_approvedAt(ctx context.Context, field graphql.CollectedField, obj *models.Device) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Device_approvedAt,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Device().ApprovedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Device_approvedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Device",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Device_approvedBy(ctx context.Context, field graphql.CollectedField, obj *models.Device) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Device_approvedBy,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Device().ApprovedBy(ctx, obj)
+		},
+		nil,
+		ec.marshalOUser2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐUser,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Device_approvedBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Device",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_User_id(ctx, field)
+			case "email":
+				return ec.fieldContext_User_email(ctx, field)
+			case "name":
+				return ec.fieldContext_User_name(ctx, field)
+			case "role":
+				return ec.fieldContext_User_role(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_User_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _DeviceAuthCode_code(ctx context.Context, field graphql.CollectedField, obj *DeviceAuthCode) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -17895,6 +18278,10 @@ func (ec *executionContext) fieldContext_DeviceAuthStatus_device(_ context.Conte
 				return ec.fieldContext_Device_name(ctx, field)
 			case "fingerprint":
 				return ec.fieldContext_Device_fingerprint(ctx, field)
+			case "status":
+				return ec.fieldContext_Device_status(ctx, field)
+			case "permissions":
+				return ec.fieldContext_Device_permissions(ctx, field)
 			case "isAuthorized":
 				return ec.fieldContext_Device_isAuthorized(ctx, field)
 			case "defaultUser":
@@ -17909,6 +18296,10 @@ func (ec *executionContext) fieldContext_DeviceAuthStatus_device(_ context.Conte
 				return ec.fieldContext_Device_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Device_updatedAt(ctx, field)
+			case "approvedAt":
+				return ec.fieldContext_Device_approvedAt(ctx, field)
+			case "approvedBy":
+				return ec.fieldContext_Device_approvedBy(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
@@ -17952,6 +18343,240 @@ func (ec *executionContext) fieldContext_DeviceAuthStatus_defaultUser(_ context.
 				return ec.fieldContext_User_createdAt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DeviceCheckResult_status(ctx context.Context, field graphql.CollectedField, obj *DeviceCheckResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DeviceCheckResult_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNDeviceStatus2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDeviceStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DeviceCheckResult_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DeviceCheckResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type DeviceStatus does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DeviceCheckResult_device(ctx context.Context, field graphql.CollectedField, obj *DeviceCheckResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DeviceCheckResult_device,
+		func(ctx context.Context) (any, error) {
+			return obj.Device, nil
+		},
+		nil,
+		ec.marshalODevice2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐDevice,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DeviceCheckResult_device(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DeviceCheckResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Device_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Device_name(ctx, field)
+			case "fingerprint":
+				return ec.fieldContext_Device_fingerprint(ctx, field)
+			case "status":
+				return ec.fieldContext_Device_status(ctx, field)
+			case "permissions":
+				return ec.fieldContext_Device_permissions(ctx, field)
+			case "isAuthorized":
+				return ec.fieldContext_Device_isAuthorized(ctx, field)
+			case "defaultUser":
+				return ec.fieldContext_Device_defaultUser(ctx, field)
+			case "defaultRole":
+				return ec.fieldContext_Device_defaultRole(ctx, field)
+			case "lastSeenAt":
+				return ec.fieldContext_Device_lastSeenAt(ctx, field)
+			case "lastIPAddress":
+				return ec.fieldContext_Device_lastIPAddress(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Device_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Device_updatedAt(ctx, field)
+			case "approvedAt":
+				return ec.fieldContext_Device_approvedAt(ctx, field)
+			case "approvedBy":
+				return ec.fieldContext_Device_approvedBy(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DeviceCheckResult_message(ctx context.Context, field graphql.CollectedField, obj *DeviceCheckResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DeviceCheckResult_message,
+		func(ctx context.Context) (any, error) {
+			return obj.Message, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DeviceCheckResult_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DeviceCheckResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DeviceRegistrationResult_success(ctx context.Context, field graphql.CollectedField, obj *DeviceRegistrationResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DeviceRegistrationResult_success,
+		func(ctx context.Context) (any, error) {
+			return obj.Success, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DeviceRegistrationResult_success(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DeviceRegistrationResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DeviceRegistrationResult_device(ctx context.Context, field graphql.CollectedField, obj *DeviceRegistrationResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DeviceRegistrationResult_device,
+		func(ctx context.Context) (any, error) {
+			return obj.Device, nil
+		},
+		nil,
+		ec.marshalODevice2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐDevice,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_DeviceRegistrationResult_device(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DeviceRegistrationResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Device_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Device_name(ctx, field)
+			case "fingerprint":
+				return ec.fieldContext_Device_fingerprint(ctx, field)
+			case "status":
+				return ec.fieldContext_Device_status(ctx, field)
+			case "permissions":
+				return ec.fieldContext_Device_permissions(ctx, field)
+			case "isAuthorized":
+				return ec.fieldContext_Device_isAuthorized(ctx, field)
+			case "defaultUser":
+				return ec.fieldContext_Device_defaultUser(ctx, field)
+			case "defaultRole":
+				return ec.fieldContext_Device_defaultRole(ctx, field)
+			case "lastSeenAt":
+				return ec.fieldContext_Device_lastSeenAt(ctx, field)
+			case "lastIPAddress":
+				return ec.fieldContext_Device_lastIPAddress(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Device_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Device_updatedAt(ctx, field)
+			case "approvedAt":
+				return ec.fieldContext_Device_approvedAt(ctx, field)
+			case "approvedBy":
+				return ec.fieldContext_Device_approvedBy(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DeviceRegistrationResult_message(ctx context.Context, field graphql.CollectedField, obj *DeviceRegistrationResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DeviceRegistrationResult_message,
+		func(ctx context.Context) (any, error) {
+			return obj.Message, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DeviceRegistrationResult_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DeviceRegistrationResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -25078,7 +25703,7 @@ func (ec *executionContext) _Mutation_registerDevice(ctx context.Context, field 
 			return ec.resolvers.Mutation().RegisterDevice(ctx, fc.Args["fingerprint"].(string), fc.Args["name"].(string))
 		},
 		nil,
-		ec.marshalNDevice2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐDevice,
+		ec.marshalNDeviceRegistrationResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDeviceRegistrationResult,
 		true,
 		true,
 	)
@@ -25092,28 +25717,14 @@ func (ec *executionContext) fieldContext_Mutation_registerDevice(ctx context.Con
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "id":
-				return ec.fieldContext_Device_id(ctx, field)
-			case "name":
-				return ec.fieldContext_Device_name(ctx, field)
-			case "fingerprint":
-				return ec.fieldContext_Device_fingerprint(ctx, field)
-			case "isAuthorized":
-				return ec.fieldContext_Device_isAuthorized(ctx, field)
-			case "defaultUser":
-				return ec.fieldContext_Device_defaultUser(ctx, field)
-			case "defaultRole":
-				return ec.fieldContext_Device_defaultRole(ctx, field)
-			case "lastSeenAt":
-				return ec.fieldContext_Device_lastSeenAt(ctx, field)
-			case "lastIPAddress":
-				return ec.fieldContext_Device_lastIPAddress(ctx, field)
-			case "createdAt":
-				return ec.fieldContext_Device_createdAt(ctx, field)
-			case "updatedAt":
-				return ec.fieldContext_Device_updatedAt(ctx, field)
+			case "success":
+				return ec.fieldContext_DeviceRegistrationResult_success(ctx, field)
+			case "device":
+				return ec.fieldContext_DeviceRegistrationResult_device(ctx, field)
+			case "message":
+				return ec.fieldContext_DeviceRegistrationResult_message(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type DeviceRegistrationResult", field.Name)
 		},
 	}
 	defer func() {
@@ -25614,6 +26225,77 @@ func (ec *executionContext) fieldContext_Mutation_createDeviceAuthCode(ctx conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_approveDevice(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_approveDevice,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().ApproveDevice(ctx, fc.Args["deviceId"].(string), fc.Args["permissions"].(DevicePermissions))
+		},
+		nil,
+		ec.marshalNDevice2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐDevice,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_approveDevice(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Device_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Device_name(ctx, field)
+			case "fingerprint":
+				return ec.fieldContext_Device_fingerprint(ctx, field)
+			case "status":
+				return ec.fieldContext_Device_status(ctx, field)
+			case "permissions":
+				return ec.fieldContext_Device_permissions(ctx, field)
+			case "isAuthorized":
+				return ec.fieldContext_Device_isAuthorized(ctx, field)
+			case "defaultUser":
+				return ec.fieldContext_Device_defaultUser(ctx, field)
+			case "defaultRole":
+				return ec.fieldContext_Device_defaultRole(ctx, field)
+			case "lastSeenAt":
+				return ec.fieldContext_Device_lastSeenAt(ctx, field)
+			case "lastIPAddress":
+				return ec.fieldContext_Device_lastIPAddress(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Device_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Device_updatedAt(ctx, field)
+			case "approvedAt":
+				return ec.fieldContext_Device_approvedAt(ctx, field)
+			case "approvedBy":
+				return ec.fieldContext_Device_approvedBy(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_approveDevice_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_updateDevice(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -25645,6 +26327,10 @@ func (ec *executionContext) fieldContext_Mutation_updateDevice(ctx context.Conte
 				return ec.fieldContext_Device_name(ctx, field)
 			case "fingerprint":
 				return ec.fieldContext_Device_fingerprint(ctx, field)
+			case "status":
+				return ec.fieldContext_Device_status(ctx, field)
+			case "permissions":
+				return ec.fieldContext_Device_permissions(ctx, field)
 			case "isAuthorized":
 				return ec.fieldContext_Device_isAuthorized(ctx, field)
 			case "defaultUser":
@@ -25659,6 +26345,10 @@ func (ec *executionContext) fieldContext_Mutation_updateDevice(ctx context.Conte
 				return ec.fieldContext_Device_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Device_updatedAt(ctx, field)
+			case "approvedAt":
+				return ec.fieldContext_Device_approvedAt(ctx, field)
+			case "approvedBy":
+				return ec.fieldContext_Device_approvedBy(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
@@ -25677,6 +26367,77 @@ func (ec *executionContext) fieldContext_Mutation_updateDevice(ctx context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_updateDevicePermissions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateDevicePermissions,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UpdateDevicePermissions(ctx, fc.Args["deviceId"].(string), fc.Args["permissions"].(DevicePermissions))
+		},
+		nil,
+		ec.marshalNDevice2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐDevice,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateDevicePermissions(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Device_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Device_name(ctx, field)
+			case "fingerprint":
+				return ec.fieldContext_Device_fingerprint(ctx, field)
+			case "status":
+				return ec.fieldContext_Device_status(ctx, field)
+			case "permissions":
+				return ec.fieldContext_Device_permissions(ctx, field)
+			case "isAuthorized":
+				return ec.fieldContext_Device_isAuthorized(ctx, field)
+			case "defaultUser":
+				return ec.fieldContext_Device_defaultUser(ctx, field)
+			case "defaultRole":
+				return ec.fieldContext_Device_defaultRole(ctx, field)
+			case "lastSeenAt":
+				return ec.fieldContext_Device_lastSeenAt(ctx, field)
+			case "lastIPAddress":
+				return ec.fieldContext_Device_lastIPAddress(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Device_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Device_updatedAt(ctx, field)
+			case "approvedAt":
+				return ec.fieldContext_Device_approvedAt(ctx, field)
+			case "approvedBy":
+				return ec.fieldContext_Device_approvedBy(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateDevicePermissions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_revokeDevice(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -25688,7 +26449,7 @@ func (ec *executionContext) _Mutation_revokeDevice(ctx context.Context, field gr
 			return ec.resolvers.Mutation().RevokeDevice(ctx, fc.Args["id"].(string))
 		},
 		nil,
-		ec.marshalNBoolean2bool,
+		ec.marshalNDevice2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐDevice,
 		true,
 		true,
 	)
@@ -25701,7 +26462,37 @@ func (ec *executionContext) fieldContext_Mutation_revokeDevice(ctx context.Conte
 		IsMethod:   true,
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Device_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Device_name(ctx, field)
+			case "fingerprint":
+				return ec.fieldContext_Device_fingerprint(ctx, field)
+			case "status":
+				return ec.fieldContext_Device_status(ctx, field)
+			case "permissions":
+				return ec.fieldContext_Device_permissions(ctx, field)
+			case "isAuthorized":
+				return ec.fieldContext_Device_isAuthorized(ctx, field)
+			case "defaultUser":
+				return ec.fieldContext_Device_defaultUser(ctx, field)
+			case "defaultRole":
+				return ec.fieldContext_Device_defaultRole(ctx, field)
+			case "lastSeenAt":
+				return ec.fieldContext_Device_lastSeenAt(ctx, field)
+			case "lastIPAddress":
+				return ec.fieldContext_Device_lastIPAddress(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Device_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Device_updatedAt(ctx, field)
+			case "approvedAt":
+				return ec.fieldContext_Device_approvedAt(ctx, field)
+			case "approvedBy":
+				return ec.fieldContext_Device_approvedBy(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
 	}
 	defer func() {
@@ -36107,6 +36898,55 @@ func (ec *executionContext) fieldContext_Query_checkDeviceAuthorization(ctx cont
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_checkDevice(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_checkDevice,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().CheckDevice(ctx, fc.Args["fingerprint"].(string))
+		},
+		nil,
+		ec.marshalNDeviceCheckResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDeviceCheckResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_checkDevice(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "status":
+				return ec.fieldContext_DeviceCheckResult_status(ctx, field)
+			case "device":
+				return ec.fieldContext_DeviceCheckResult_device(ctx, field)
+			case "message":
+				return ec.fieldContext_DeviceCheckResult_message(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type DeviceCheckResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_checkDevice_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_mySessions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -36371,7 +37211,8 @@ func (ec *executionContext) _Query_devices(ctx context.Context, field graphql.Co
 		field,
 		ec.fieldContext_Query_devices,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Query().Devices(ctx)
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().Devices(ctx, fc.Args["status"].(*DeviceStatus))
 		},
 		nil,
 		ec.marshalNDevice2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐDeviceᚄ,
@@ -36380,7 +37221,7 @@ func (ec *executionContext) _Query_devices(ctx context.Context, field graphql.Co
 	)
 }
 
-func (ec *executionContext) fieldContext_Query_devices(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Query_devices(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Query",
 		Field:      field,
@@ -36394,6 +37235,10 @@ func (ec *executionContext) fieldContext_Query_devices(_ context.Context, field 
 				return ec.fieldContext_Device_name(ctx, field)
 			case "fingerprint":
 				return ec.fieldContext_Device_fingerprint(ctx, field)
+			case "status":
+				return ec.fieldContext_Device_status(ctx, field)
+			case "permissions":
+				return ec.fieldContext_Device_permissions(ctx, field)
 			case "isAuthorized":
 				return ec.fieldContext_Device_isAuthorized(ctx, field)
 			case "defaultUser":
@@ -36408,6 +37253,80 @@ func (ec *executionContext) fieldContext_Query_devices(_ context.Context, field 
 				return ec.fieldContext_Device_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Device_updatedAt(ctx, field)
+			case "approvedAt":
+				return ec.fieldContext_Device_approvedAt(ctx, field)
+			case "approvedBy":
+				return ec.fieldContext_Device_approvedBy(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_devices_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_pendingDevices(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_pendingDevices,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().PendingDevices(ctx)
+		},
+		nil,
+		ec.marshalNDevice2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐDeviceᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_pendingDevices(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Device_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Device_name(ctx, field)
+			case "fingerprint":
+				return ec.fieldContext_Device_fingerprint(ctx, field)
+			case "status":
+				return ec.fieldContext_Device_status(ctx, field)
+			case "permissions":
+				return ec.fieldContext_Device_permissions(ctx, field)
+			case "isAuthorized":
+				return ec.fieldContext_Device_isAuthorized(ctx, field)
+			case "defaultUser":
+				return ec.fieldContext_Device_defaultUser(ctx, field)
+			case "defaultRole":
+				return ec.fieldContext_Device_defaultRole(ctx, field)
+			case "lastSeenAt":
+				return ec.fieldContext_Device_lastSeenAt(ctx, field)
+			case "lastIPAddress":
+				return ec.fieldContext_Device_lastIPAddress(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Device_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Device_updatedAt(ctx, field)
+			case "approvedAt":
+				return ec.fieldContext_Device_approvedAt(ctx, field)
+			case "approvedBy":
+				return ec.fieldContext_Device_approvedBy(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
@@ -36446,6 +37365,10 @@ func (ec *executionContext) fieldContext_Query_device(ctx context.Context, field
 				return ec.fieldContext_Device_name(ctx, field)
 			case "fingerprint":
 				return ec.fieldContext_Device_fingerprint(ctx, field)
+			case "status":
+				return ec.fieldContext_Device_status(ctx, field)
+			case "permissions":
+				return ec.fieldContext_Device_permissions(ctx, field)
 			case "isAuthorized":
 				return ec.fieldContext_Device_isAuthorized(ctx, field)
 			case "defaultUser":
@@ -36460,6 +37383,10 @@ func (ec *executionContext) fieldContext_Query_device(ctx context.Context, field
 				return ec.fieldContext_Device_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Device_updatedAt(ctx, field)
+			case "approvedAt":
+				return ec.fieldContext_Device_approvedAt(ctx, field)
+			case "approvedBy":
+				return ec.fieldContext_Device_approvedBy(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
@@ -40118,6 +41045,10 @@ func (ec *executionContext) fieldContext_Session_device(_ context.Context, field
 				return ec.fieldContext_Device_name(ctx, field)
 			case "fingerprint":
 				return ec.fieldContext_Device_fingerprint(ctx, field)
+			case "status":
+				return ec.fieldContext_Device_status(ctx, field)
+			case "permissions":
+				return ec.fieldContext_Device_permissions(ctx, field)
 			case "isAuthorized":
 				return ec.fieldContext_Device_isAuthorized(ctx, field)
 			case "defaultUser":
@@ -40132,6 +41063,10 @@ func (ec *executionContext) fieldContext_Session_device(_ context.Context, field
 				return ec.fieldContext_Device_createdAt(ctx, field)
 			case "updatedAt":
 				return ec.fieldContext_Device_updatedAt(ctx, field)
+			case "approvedAt":
+				return ec.fieldContext_Device_approvedAt(ctx, field)
+			case "approvedBy":
+				return ec.fieldContext_Device_approvedBy(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
@@ -47540,7 +48475,7 @@ func (ec *executionContext) unmarshalInputUpdateDeviceInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "defaultUserId", "defaultRole", "isAuthorized"}
+	fieldsInOrder := [...]string{"name", "defaultUserId", "defaultRole", "isAuthorized", "permissions"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -47575,6 +48510,13 @@ func (ec *executionContext) unmarshalInputUpdateDeviceInput(ctx context.Context,
 				return it, err
 			}
 			it.IsAuthorized = graphql.OmittableOf(data)
+		case "permissions":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("permissions"))
+			data, err := ec.unmarshalODevicePermissions2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDevicePermissions(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Permissions = graphql.OmittableOf(data)
 		}
 	}
 
@@ -50107,6 +51049,78 @@ func (ec *executionContext) _Device(ctx context.Context, sel ast.SelectionSet, o
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "status":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Device_status(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "permissions":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Device_permissions(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "isAuthorized":
 			out.Values[i] = ec._Device_isAuthorized(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -50257,6 +51271,72 @@ func (ec *executionContext) _Device(ctx context.Context, sel ast.SelectionSet, o
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "approvedAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Device_approvedAt(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "approvedBy":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Device_approvedBy(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -50354,6 +51434,95 @@ func (ec *executionContext) _DeviceAuthStatus(ctx context.Context, sel ast.Selec
 			out.Values[i] = ec._DeviceAuthStatus_device(ctx, field, obj)
 		case "defaultUser":
 			out.Values[i] = ec._DeviceAuthStatus_defaultUser(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var deviceCheckResultImplementors = []string{"DeviceCheckResult"}
+
+func (ec *executionContext) _DeviceCheckResult(ctx context.Context, sel ast.SelectionSet, obj *DeviceCheckResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, deviceCheckResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DeviceCheckResult")
+		case "status":
+			out.Values[i] = ec._DeviceCheckResult_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "device":
+			out.Values[i] = ec._DeviceCheckResult_device(ctx, field, obj)
+		case "message":
+			out.Values[i] = ec._DeviceCheckResult_message(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var deviceRegistrationResultImplementors = []string{"DeviceRegistrationResult"}
+
+func (ec *executionContext) _DeviceRegistrationResult(ctx context.Context, sel ast.SelectionSet, obj *DeviceRegistrationResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, deviceRegistrationResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DeviceRegistrationResult")
+		case "success":
+			out.Values[i] = ec._DeviceRegistrationResult_success(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "device":
+			out.Values[i] = ec._DeviceRegistrationResult_device(ctx, field, obj)
+		case "message":
+			out.Values[i] = ec._DeviceRegistrationResult_message(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -53778,9 +54947,23 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "approveDevice":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_approveDevice(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "updateDevice":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateDevice(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateDevicePermissions":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateDevicePermissions(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -56628,6 +57811,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "checkDevice":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_checkDevice(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "mySessions":
 			field := field
 
@@ -56742,6 +57947,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_devices(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "pendingDevices":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_pendingDevices(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -61089,6 +62316,44 @@ func (ec *executionContext) marshalNDeviceAuthStatus2ᚖgithubᚗcomᚋbbernstei
 	return ec._DeviceAuthStatus(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNDeviceCheckResult2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDeviceCheckResult(ctx context.Context, sel ast.SelectionSet, v DeviceCheckResult) graphql.Marshaler {
+	return ec._DeviceCheckResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNDeviceCheckResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDeviceCheckResult(ctx context.Context, sel ast.SelectionSet, v *DeviceCheckResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._DeviceCheckResult(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNDevicePermissions2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDevicePermissions(ctx context.Context, v any) (DevicePermissions, error) {
+	var res DevicePermissions
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNDevicePermissions2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDevicePermissions(ctx context.Context, sel ast.SelectionSet, v DevicePermissions) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNDeviceRegistrationResult2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDeviceRegistrationResult(ctx context.Context, sel ast.SelectionSet, v DeviceRegistrationResult) graphql.Marshaler {
+	return ec._DeviceRegistrationResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNDeviceRegistrationResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDeviceRegistrationResult(ctx context.Context, sel ast.SelectionSet, v *DeviceRegistrationResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._DeviceRegistrationResult(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNDeviceRole2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDeviceRole(ctx context.Context, v any) (DeviceRole, error) {
 	var res DeviceRole
 	err := res.UnmarshalGQL(v)
@@ -61096,6 +62361,16 @@ func (ec *executionContext) unmarshalNDeviceRole2githubᚗcomᚋbbernsteinᚋlac
 }
 
 func (ec *executionContext) marshalNDeviceRole2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDeviceRole(ctx context.Context, sel ast.SelectionSet, v DeviceRole) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNDeviceStatus2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDeviceStatus(ctx context.Context, v any) (DeviceStatus, error) {
+	var res DeviceStatus
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNDeviceStatus2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDeviceStatus(ctx context.Context, sel ast.SelectionSet, v DeviceStatus) graphql.Marshaler {
 	return v
 }
 
@@ -64653,6 +65928,22 @@ func (ec *executionContext) marshalODevice2ᚖgithubᚗcomᚋbbernsteinᚋlacyli
 	return ec._Device(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalODevicePermissions2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDevicePermissions(ctx context.Context, v any) (*DevicePermissions, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(DevicePermissions)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalODevicePermissions2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDevicePermissions(ctx context.Context, sel ast.SelectionSet, v *DevicePermissions) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
 func (ec *executionContext) unmarshalODeviceRole2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDeviceRole(ctx context.Context, v any) (*DeviceRole, error) {
 	if v == nil {
 		return nil, nil
@@ -64663,6 +65954,22 @@ func (ec *executionContext) unmarshalODeviceRole2ᚖgithubᚗcomᚋbbernsteinᚋ
 }
 
 func (ec *executionContext) marshalODeviceRole2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDeviceRole(ctx context.Context, sel ast.SelectionSet, v *DeviceRole) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalODeviceStatus2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDeviceStatus(ctx context.Context, v any) (*DeviceStatus, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(DeviceStatus)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalODeviceStatus2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDeviceStatus(ctx context.Context, sel ast.SelectionSet, v *DeviceStatus) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}

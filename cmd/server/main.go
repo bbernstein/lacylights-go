@@ -315,8 +315,8 @@ func main() {
 			log.Fatalf("Failed to ensure default admin: %v", err)
 		}
 
-		// Add auth middleware
-		authMiddleware := authmiddleware.NewAuthMiddleware(authService)
+		// Add auth middleware with DB access for device authentication
+		authMiddleware := authmiddleware.NewAuthMiddlewareWithDB(authService, db)
 		router.Use(authMiddleware.Authenticate)
 	} else {
 		log.Println("Auth service disabled")
