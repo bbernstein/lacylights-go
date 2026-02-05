@@ -240,14 +240,20 @@ func (r *Resolver) getUsers(ctx context.Context, page, perPage *int) ([]*models.
 		return nil, err
 	}
 
-	// Default pagination
+	// Default pagination with validation
 	pageNum := 1
 	pageSize := 50
-	if page != nil {
+	if page != nil && *page > 0 {
 		pageNum = *page
 	}
 	if perPage != nil {
-		pageSize = *perPage
+		if *perPage < 1 {
+			pageSize = 1
+		} else if *perPage > 100 {
+			pageSize = 100
+		} else {
+			pageSize = *perPage
+		}
 	}
 
 	var users []models.User
