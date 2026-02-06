@@ -1386,7 +1386,7 @@ func TestUpdateDeviceLastSeen_DatabaseError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get underlying DB: %v", err)
 	}
-	sqlDB.Close()
+	_ = sqlDB.Close() // Intentionally ignore error as we want the DB closed
 
 	// Call updateDeviceLastSeen - should log error but not panic
 	middleware.updateDeviceLastSeen("nonexistent-device", "192.168.1.100")
