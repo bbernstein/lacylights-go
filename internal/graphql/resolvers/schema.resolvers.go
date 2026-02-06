@@ -119,6 +119,34 @@ func (r *cueListResolver) UpdatedAt(ctx context.Context, obj *models.CueList) (s
 	return obj.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
+// Status is the resolver for the status field.
+func (r *deviceResolver) Status(ctx context.Context, obj *models.Device) (generated.DeviceStatus, error) {
+	switch obj.Status {
+	case models.DeviceStatusApproved:
+		return generated.DeviceStatusApproved, nil
+	case models.DeviceStatusRevoked:
+		return generated.DeviceStatusRevoked, nil
+	case models.DeviceStatusPending:
+		return generated.DeviceStatusPending, nil
+	default:
+		return generated.DeviceStatusPending, nil
+	}
+}
+
+// Permissions is the resolver for the permissions field.
+func (r *deviceResolver) Permissions(ctx context.Context, obj *models.Device) (generated.DevicePermissions, error) {
+	switch obj.Permissions {
+	case models.DevicePermissionsAdmin:
+		return generated.DevicePermissionsAdmin, nil
+	case models.DevicePermissionsOperator:
+		return generated.DevicePermissionsOperator, nil
+	case models.DevicePermissionsReadOnly:
+		return generated.DevicePermissionsReadOnly, nil
+	default:
+		return generated.DevicePermissionsReadOnly, nil
+	}
+}
+
 // DefaultRole is the resolver for the defaultRole field.
 func (r *deviceResolver) DefaultRole(ctx context.Context, obj *models.Device) (generated.DeviceRole, error) {
 	switch obj.DefaultRole {
@@ -150,6 +178,15 @@ func (r *deviceResolver) CreatedAt(ctx context.Context, obj *models.Device) (str
 // UpdatedAt is the resolver for the updatedAt field.
 func (r *deviceResolver) UpdatedAt(ctx context.Context, obj *models.Device) (string, error) {
 	return obj.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
+}
+
+// ApprovedAt is the resolver for the approvedAt field.
+func (r *deviceResolver) ApprovedAt(ctx context.Context, obj *models.Device) (*string, error) {
+	if obj.ApprovedAt == nil {
+		return nil, nil
+	}
+	formatted := obj.ApprovedAt.UTC().Format("2006-01-02T15:04:05.000Z")
+	return &formatted, nil
 }
 
 // EffectType is the resolver for the effectType field.
@@ -499,9 +536,8 @@ func (r *mutationResolver) AppleSignIn(ctx context.Context, identityToken string
 }
 
 // RegisterDevice is the resolver for the registerDevice field.
-func (r *mutationResolver) RegisterDevice(ctx context.Context, fingerprint string, name string) (*models.Device, error) {
-	// TODO: Implement device registration
-	return nil, ErrFeatureNotEnabled
+func (r *mutationResolver) RegisterDevice(ctx context.Context, fingerprint string, name string) (*generated.DeviceRegistrationResult, error) {
+	return r.registerDevice(ctx, fingerprint, name)
 }
 
 // AuthorizeDevice is the resolver for the authorizeDevice field.
@@ -556,16 +592,25 @@ func (r *mutationResolver) CreateDeviceAuthCode(ctx context.Context, deviceID st
 	return nil, ErrFeatureNotEnabled
 }
 
+// ApproveDevice is the resolver for the approveDevice field.
+func (r *mutationResolver) ApproveDevice(ctx context.Context, deviceID string, permissions generated.DevicePermissions) (*models.Device, error) {
+	return r.approveDevice(ctx, deviceID, permissions)
+}
+
 // UpdateDevice is the resolver for the updateDevice field.
 func (r *mutationResolver) UpdateDevice(ctx context.Context, id string, input generated.UpdateDeviceInput) (*models.Device, error) {
 	// TODO: Implement device update
 	return nil, ErrFeatureNotEnabled
 }
 
+// UpdateDevicePermissions is the resolver for the updateDevicePermissions field.
+func (r *mutationResolver) UpdateDevicePermissions(ctx context.Context, deviceID string, permissions generated.DevicePermissions) (*models.Device, error) {
+	return r.updateDevicePermissions(ctx, deviceID, permissions)
+}
+
 // RevokeDevice is the resolver for the revokeDevice field.
-func (r *mutationResolver) RevokeDevice(ctx context.Context, id string) (bool, error) {
-	// TODO: Implement device revocation
-	return false, ErrFeatureNotEnabled
+func (r *mutationResolver) RevokeDevice(ctx context.Context, id string) (*models.Device, error) {
+	return r.revokeDeviceAuth(ctx, id)
 }
 
 // RevokeSession is the resolver for the revokeSession field.
@@ -5096,6 +5141,11 @@ func (r *queryResolver) CheckDeviceAuthorization(ctx context.Context, fingerprin
 	return r.checkDeviceAuth(ctx, fingerprint)
 }
 
+// CheckDevice is the resolver for the checkDevice field.
+func (r *queryResolver) CheckDevice(ctx context.Context, fingerprint string) (*generated.DeviceCheckResult, error) {
+	return r.checkDevice(ctx, fingerprint)
+}
+
 // MySessions is the resolver for the mySessions field.
 func (r *queryResolver) MySessions(ctx context.Context) ([]*models.Session, error) {
 	return r.getUserSessions(ctx)
@@ -5122,8 +5172,13 @@ func (r *queryResolver) UserGroup(ctx context.Context, id string) (*models.UserG
 }
 
 // Devices is the resolver for the devices field.
-func (r *queryResolver) Devices(ctx context.Context) ([]*models.Device, error) {
-	return r.getDevices(ctx)
+func (r *queryResolver) Devices(ctx context.Context, status *generated.DeviceStatus) ([]*models.Device, error) {
+	return r.getDevicesByStatus(ctx, status)
+}
+
+// PendingDevices is the resolver for the pendingDevices field.
+func (r *queryResolver) PendingDevices(ctx context.Context) ([]*models.Device, error) {
+	return r.getPendingDevices(ctx)
 }
 
 // Device is the resolver for the device field.
@@ -7548,3 +7603,22 @@ type settingResolver struct{ *Resolver }
 type subscriptionResolver struct{ *Resolver }
 type userResolver struct{ *Resolver }
 type userGroupResolver struct{ *Resolver }
+
+// !!! WARNING !!!
+// The code below was going to be deleted when updating resolvers. It has been copied here so you have
+// one last chance to move it out of harms way if you want. There are two reasons this happens:
+//  - When renaming or deleting a resolver the old code will be put in here. You can safely delete
+//    it when you're done.
+//  - You have helper methods in this file. Move them out to keep these resolver files clean.
+/*
+	func (r *deviceResolver) ApprovedBy(ctx context.Context, obj *models.Device) (*models.User, error) {
+	if obj.ApprovedByID == nil {
+		return nil, nil
+	}
+	var user models.User
+	if err := r.db.WithContext(ctx).First(&user, "id = ?", *obj.ApprovedByID).Error; err != nil {
+		return nil, nil // Return nil if user not found, don't error
+	}
+	return &user, nil
+}
+*/

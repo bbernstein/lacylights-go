@@ -48,6 +48,10 @@ func testSetup(t *testing.T) (*client.Client, *Resolver, func()) {
 		&models.LookBoard{},
 		&models.LookBoardButton{},
 		&models.Setting{},
+		&models.User{},
+		&models.Device{},
+		&models.UserCredential{},
+		&models.Session{},
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)

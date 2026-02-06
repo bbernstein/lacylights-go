@@ -275,6 +275,30 @@ enum DeviceRole {
   DESIGNER
 }
 
+"""
+Status of a device in the authentication system.
+"""
+enum DeviceStatus {
+  "Device is registered but not yet approved"
+  PENDING
+  "Device is approved and can access the system"
+  APPROVED
+  "Device access has been revoked"
+  REVOKED
+}
+
+"""
+Permission level for device-based authentication.
+"""
+enum DevicePermissions {
+  "Can only view data, no modifications"
+  READ_ONLY
+  "Can control lights and make operational changes"
+  OPERATOR
+  "Full access including device management"
+  ADMIN
+}
+
 # =============================================================================
 # AUTHENTICATION TYPES
 # =============================================================================
@@ -353,7 +377,11 @@ type Device {
   name: String!
   "Unique device fingerprint"
   fingerprint: String!
-  "Whether this device is authorized"
+  "Current status of the device"
+  status: DeviceStatus!
+  "Permission level for this device"
+  permissions: DevicePermissions!
+  "Whether this device is authorized (convenience field, equivalent to status == APPROVED)"
   isAuthorized: Boolean!
   "Default user to authenticate as when device connects"
   defaultUser: User
@@ -363,6 +391,10 @@ type Device {
   lastIPAddress: String
   createdAt: String!
   updatedAt: String!
+  "When the device was approved"
+  approvedAt: String
+  "User who approved this device"
+  approvedBy: User
 }
 
 """
@@ -377,6 +409,31 @@ type DeviceAuthStatus {
   device: Device
   "Default user for auto-login (if authorized)"
   defaultUser: User
+}
+
+"""
+Result of checking a device's status by fingerprint.
+Used by clients to determine if they need to register.
+"""
+type DeviceCheckResult {
+  "Current status of the device (PENDING, APPROVED, or REVOKED). Unregistered devices return PENDING status."
+  status: DeviceStatus!
+  "The device record if it exists"
+  device: Device
+  "Human-readable message about the device status"
+  message: String
+}
+
+"""
+Result of registering a new device.
+"""
+type DeviceRegistrationResult {
+  "Whether the registration was successful"
+  success: Boolean!
+  "The registered device (null if registration failed)"
+  device: Device
+  "Human-readable message about the result"
+  message: String!
 }
 
 """
@@ -1443,6 +1500,7 @@ input UpdateDeviceInput {
   defaultUserId: ID
   defaultRole: DeviceRole
   isAuthorized: Boolean
+  permissions: DevicePermissions
 }
 
 input UpdateAuthSettingsInput {
@@ -1997,6 +2055,8 @@ type Query {
   authSettings: AuthSettings!
   "Check if a device is authorized by fingerprint"
   checkDeviceAuthorization(fingerprint: String!): DeviceAuthStatus!
+  "Check device status by fingerprint (unauthenticated, for registration flow)"
+  checkDevice(fingerprint: String!): DeviceCheckResult!
   "Get the current user's active sessions"
   mySessions: [Session!]!
 
@@ -2009,8 +2069,10 @@ type Query {
   userGroups: [UserGroup!]!
   "Get a user group by ID (admin only)"
   userGroup(id: ID!): UserGroup
-  "List all devices (admin only)"
-  devices: [Device!]!
+  "List all devices, optionally filtered by status (admin only)"
+  devices(status: DeviceStatus): [Device!]!
+  "Get devices pending approval (admin only)"
+  pendingDevices: [Device!]!
   "Get a device by ID (admin only)"
   device(id: ID!): Device
 
@@ -2199,8 +2261,8 @@ type Mutation {
   appleSignIn(identityToken: String!, authorizationCode: String!): AuthPayload!
 
   # Device Authentication
-  "Register a device for device-based auth"
-  registerDevice(fingerprint: String!, name: String!): Device!
+  "Register a device for device-based auth (unauthenticated)"
+  registerDevice(fingerprint: String!, name: String!): DeviceRegistrationResult!
   "Authorize a device using an authorization code"
   authorizeDevice(fingerprint: String!, authorizationCode: String!): AuthPayload!
 
@@ -2225,10 +2287,14 @@ type Mutation {
   # Device Management (admin only)
   "Create a device authorization code (admin only)"
   createDeviceAuthCode(deviceId: ID!): DeviceAuthCode!
+  "Approve a pending device (admin only)"
+  approveDevice(deviceId: ID!, permissions: DevicePermissions!): Device!
   "Update a device (admin only)"
   updateDevice(id: ID!, input: UpdateDeviceInput!): Device!
+  "Update device permissions (admin only)"
+  updateDevicePermissions(deviceId: ID!, permissions: DevicePermissions!): Device!
   "Revoke a device's authorization (admin only)"
-  revokeDevice(id: ID!): Boolean!
+  revokeDevice(id: ID!): Device!
 
   # Session Management (admin only)
   "Revoke a specific session (admin only)"

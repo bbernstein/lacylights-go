@@ -3,11 +3,15 @@ package middleware
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/bbernstein/lacylights-go/internal/auth"
 	"github.com/bbernstein/lacylights-go/internal/auth/session"
+	"github.com/bbernstein/lacylights-go/internal/database/models"
+	"gorm.io/gorm"
 )
 
 // ContextKey is a type for context keys used by auth middleware.
@@ -23,11 +27,16 @@ const (
 	ContextKeyUserEmail ContextKey = "lacylights:auth:userEmail"
 	// ContextKeyUserRole is the context key for the authenticated user's role.
 	ContextKeyUserRole ContextKey = "lacylights:auth:userRole"
+	// ContextKeyDevice is the context key for the authenticated device.
+	ContextKeyDevice ContextKey = "lacylights:auth:device"
+	// ContextKeyDevicePermissions is the context key for the device's permissions.
+	ContextKeyDevicePermissions ContextKey = "lacylights:auth:devicePermissions"
 )
 
 // AuthMiddleware provides authentication middleware.
 type AuthMiddleware struct {
 	authService *auth.Service
+	db          *gorm.DB
 }
 
 // NewAuthMiddleware creates a new auth middleware instance.
@@ -37,17 +46,57 @@ func NewAuthMiddleware(authService *auth.Service) *AuthMiddleware {
 	}
 }
 
-// Authenticate is middleware that extracts and validates the JWT token.
+// NewAuthMiddlewareWithDB creates a new auth middleware instance with database access.
+func NewAuthMiddlewareWithDB(authService *auth.Service, db *gorm.DB) *AuthMiddleware {
+	return &AuthMiddleware{
+		authService: authService,
+		db:          db,
+	}
+}
+
+// Authenticate is middleware that extracts and validates authentication.
 // If auth is disabled, it passes through without checking.
-// If auth is enabled and token is valid, it adds user info to context.
-// If auth is enabled and token is invalid/missing, it still passes through
-// but without user context (resolvers can check for auth requirement).
+// If auth is enabled:
+//   - First checks for device fingerprint (X-Device-Fingerprint header)
+//   - If device is approved, adds device info to context
+//   - Falls back to Bearer token authentication
+//   - If no valid auth, passes through without context (resolvers check)
 func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// If auth is disabled, pass through without auth context
 		if !m.authService.IsEnabled() {
 			next.ServeHTTP(w, r)
 			return
+		}
+
+		// Try device fingerprint authentication first if device auth is enabled
+		if m.authService.IsDeviceAuthEnabled() && m.db != nil {
+			fingerprint := r.Header.Get("X-Device-Fingerprint")
+			if fingerprint != "" {
+				device, err := m.getDeviceByFingerprint(r.Context(), fingerprint)
+				if err == nil && device != nil && device.Status == models.DeviceStatusApproved {
+					// Device is approved - add device info to context
+					ctx := r.Context()
+					ctx = context.WithValue(ctx, ContextKeyDevice, device)
+					ctx = context.WithValue(ctx, ContextKeyDevicePermissions, device.Permissions)
+
+					// Map device permissions to a role for authorization checks
+					role := mapDevicePermissionsToRole(device.Permissions)
+					ctx = context.WithValue(ctx, ContextKeyUserRole, role)
+
+					// If device has a default user, also set user context
+					if device.DefaultUserID != nil {
+						ctx = context.WithValue(ctx, ContextKeyUserID, *device.DefaultUserID)
+					}
+
+					// Update last seen timestamp asynchronously
+					go m.updateDeviceLastSeen(device.ID, r.RemoteAddr)
+
+					// Continue with enriched context
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+			}
 		}
 
 		// Try to extract token from Authorization header first
@@ -100,6 +149,54 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		// Continue with enriched context
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// getDeviceByFingerprint retrieves a device by its fingerprint.
+func (m *AuthMiddleware) getDeviceByFingerprint(ctx context.Context, fingerprint string) (*models.Device, error) {
+	var device models.Device
+	err := m.db.WithContext(ctx).Where("fingerprint = ?", fingerprint).First(&device).Error
+	if err != nil {
+		return nil, err
+	}
+	return &device, nil
+}
+
+// updateDeviceLastSeen updates the device's last seen timestamp.
+// This method is called asynchronously to avoid blocking requests.
+// Errors are logged but not propagated since this is a non-critical operation.
+func (m *AuthMiddleware) updateDeviceLastSeen(deviceID string, ipAddress string) {
+	if m.db == nil {
+		return
+	}
+	now := time.Now()
+	result := m.db.Model(&models.Device{}).Where("id = ?", deviceID).Updates(map[string]interface{}{
+		"last_seen_at":    now,
+		"last_ip_address": ipAddress,
+	})
+	if result.Error != nil {
+		log.Printf("Warning: failed to update device last seen for device %s: %v", deviceID, result.Error)
+	}
+}
+
+// mapDevicePermissionsToRole maps device permissions to a user role for authorization.
+// This mapping allows device-authenticated requests to use the same role-based
+// authorization checks as user-authenticated requests.
+//
+// Mapping:
+//   - DevicePermissionsAdmin ("ADMIN") -> "ADMIN" role
+//   - DevicePermissionsOperator ("OPERATOR") -> "OPERATOR" role
+//   - DevicePermissionsReadOnly ("READ_ONLY") -> "USER" role (default)
+//
+// Unknown permission values default to "USER" for security (least privilege).
+func mapDevicePermissionsToRole(permissions string) string {
+	switch permissions {
+	case models.DevicePermissionsAdmin:
+		return "ADMIN"
+	case models.DevicePermissionsOperator:
+		return "OPERATOR"
+	default:
+		return "USER"
+	}
 }
 
 // RequireAuth is middleware that requires a valid authentication.
@@ -211,12 +308,35 @@ func GetUserRoleFromContext(ctx context.Context) string {
 	return role
 }
 
-// IsAuthenticated checks if the request is authenticated.
+// IsAuthenticated checks if the request is authenticated (either by session or device).
 func IsAuthenticated(ctx context.Context) bool {
-	return GetSessionFromContext(ctx) != nil
+	return GetSessionFromContext(ctx) != nil || GetDeviceFromContext(ctx) != nil
 }
 
-// IsAdmin checks if the authenticated user is an admin.
+// IsAdmin checks if the authenticated user/device is an admin.
 func IsAdmin(ctx context.Context) bool {
 	return GetUserRoleFromContext(ctx) == "ADMIN"
+}
+
+// GetDeviceFromContext retrieves the device from the request context.
+func GetDeviceFromContext(ctx context.Context) *models.Device {
+	device, ok := ctx.Value(ContextKeyDevice).(*models.Device)
+	if !ok {
+		return nil
+	}
+	return device
+}
+
+// GetDevicePermissionsFromContext retrieves the device permissions from the request context.
+func GetDevicePermissionsFromContext(ctx context.Context) string {
+	permissions, ok := ctx.Value(ContextKeyDevicePermissions).(string)
+	if !ok {
+		return ""
+	}
+	return permissions
+}
+
+// IsDeviceAuthenticated checks if the request is authenticated by a device.
+func IsDeviceAuthenticated(ctx context.Context) bool {
+	return GetDeviceFromContext(ctx) != nil
 }
