@@ -1226,7 +1226,6 @@ type DeviceResolver interface {
 	CreatedAt(ctx context.Context, obj *models.Device) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.Device) (string, error)
 	ApprovedAt(ctx context.Context, obj *models.Device) (*string, error)
-	ApprovedBy(ctx context.Context, obj *models.Device) (*models.User, error)
 }
 type EffectResolver interface {
 	EffectType(ctx context.Context, obj *models.Effect) (EffectType, error)
@@ -8225,7 +8224,7 @@ Result of checking a device's status by fingerprint.
 Used by clients to determine if they need to register.
 """
 type DeviceCheckResult {
-  "Current status of the device (PENDING, APPROVED, REVOKED, or UNKNOWN if not registered)"
+  "Current status of the device (PENDING, APPROVED, or REVOKED). Unregistered devices return PENDING status."
   status: DeviceStatus!
   "The device record if it exists"
   device: Device
@@ -18069,7 +18068,7 @@ func (ec *executionContext) _Device_approvedBy(ctx context.Context, field graphq
 		field,
 		ec.fieldContext_Device_approvedBy,
 		func(ctx context.Context) (any, error) {
-			return ec.resolvers.Device().ApprovedBy(ctx, obj)
+			return obj.ApprovedBy, nil
 		},
 		nil,
 		ec.marshalOUser2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐUser,
@@ -18082,8 +18081,8 @@ func (ec *executionContext) fieldContext_Device_approvedBy(_ context.Context, fi
 	fc = &graphql.FieldContext{
 		Object:     "Device",
 		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
+		IsMethod:   false,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -51305,38 +51304,7 @@ func (ec *executionContext) _Device(ctx context.Context, sel ast.SelectionSet, o
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "approvedBy":
-			field := field
-
-			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Device_approvedBy(ctx, field, obj)
-				return res
-			}
-
-			if field.Deferrable != nil {
-				dfs, ok := deferred[field.Deferrable.Label]
-				di := 0
-				if ok {
-					dfs.AddField(field)
-					di = len(dfs.Values) - 1
-				} else {
-					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
-					deferred[field.Deferrable.Label] = dfs
-				}
-				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
-					return innerFunc(ctx, dfs)
-				})
-
-				// don't run the out.Concurrently() call below
-				out.Values[i] = graphql.Null
-				continue
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			out.Values[i] = ec._Device_approvedBy(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

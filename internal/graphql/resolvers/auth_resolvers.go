@@ -656,21 +656,30 @@ func (r *Resolver) checkDeviceAuth(ctx context.Context, fingerprint string) (*ge
 }
 
 // checkDevice checks a device's status by fingerprint (unauthenticated, for registration flow).
+// This is used by clients (MCP server, frontend) to determine if device registration is needed.
 func (r *Resolver) checkDevice(ctx context.Context, fingerprint string) (*generated.DeviceCheckResult, error) {
-	// If auth or device auth is not enabled, return a status indicating no registration needed
+	// If auth is not enabled at all, device checks are bypassed.
+	// NOTE: We return APPROVED status here to indicate that no device registration
+	// or approval is required because authentication is globally disabled. This does NOT
+	// mean that a specific device record has been approved; in this case, Device is nil
+	// and callers should interpret this as "device checks not applicable".
 	if r.AuthService == nil || !r.AuthService.IsEnabled() {
 		return &generated.DeviceCheckResult{
 			Status:  generated.DeviceStatusApproved,
 			Device:  nil,
-			Message: stringPtr("Authentication is disabled - all devices have access"),
+			Message: stringPtr("Authentication is disabled - device checks are bypassed and all devices have access"),
 		}, nil
 	}
 
+	// If device authentication is disabled, we also bypass per-device checks.
+	// NOTE: We return APPROVED status to indicate that no device registration
+	// flow is required and access should be controlled via standard authentication
+	// only. Device will be nil to indicate that no device-specific record was checked.
 	if !r.AuthService.IsDeviceAuthEnabled() {
 		return &generated.DeviceCheckResult{
 			Status:  generated.DeviceStatusApproved,
 			Device:  nil,
-			Message: stringPtr("Device authentication is disabled - use standard authentication"),
+			Message: stringPtr("Device authentication is disabled - device checks are bypassed; use standard authentication"),
 		}, nil
 	}
 

@@ -3,6 +3,7 @@ package middleware
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -161,18 +162,32 @@ func (m *AuthMiddleware) getDeviceByFingerprint(ctx context.Context, fingerprint
 }
 
 // updateDeviceLastSeen updates the device's last seen timestamp.
+// This method is called asynchronously to avoid blocking requests.
+// Errors are logged but not propagated since this is a non-critical operation.
 func (m *AuthMiddleware) updateDeviceLastSeen(deviceID string, ipAddress string) {
 	if m.db == nil {
 		return
 	}
 	now := time.Now()
-	m.db.Model(&models.Device{}).Where("id = ?", deviceID).Updates(map[string]interface{}{
+	result := m.db.Model(&models.Device{}).Where("id = ?", deviceID).Updates(map[string]interface{}{
 		"last_seen_at":    now,
 		"last_ip_address": ipAddress,
 	})
+	if result.Error != nil {
+		log.Printf("Warning: failed to update device last seen for device %s: %v", deviceID, result.Error)
+	}
 }
 
 // mapDevicePermissionsToRole maps device permissions to a user role for authorization.
+// This mapping allows device-authenticated requests to use the same role-based
+// authorization checks as user-authenticated requests.
+//
+// Mapping:
+//   - DevicePermissionsAdmin ("ADMIN") -> "ADMIN" role
+//   - DevicePermissionsOperator ("OPERATOR") -> "OPERATOR" role
+//   - DevicePermissionsReadOnly ("READ_ONLY") -> "USER" role (default)
+//
+// Unknown permission values default to "USER" for security (least privilege).
 func mapDevicePermissionsToRole(permissions string) string {
 	switch permissions {
 	case models.DevicePermissionsAdmin:

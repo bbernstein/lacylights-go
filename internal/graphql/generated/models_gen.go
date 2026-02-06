@@ -500,7 +500,7 @@ type DeviceAuthStatus struct {
 // Result of checking a device's status by fingerprint.
 // Used by clients to determine if they need to register.
 type DeviceCheckResult struct {
-	// Current status of the device (PENDING, APPROVED, REVOKED, or UNKNOWN if not registered)
+	// Current status of the device (PENDING, APPROVED, or REVOKED). Unregistered devices return PENDING status.
 	Status DeviceStatus `json:"status"`
 	// The device record if it exists
 	Device *models.Device `json:"device,omitempty"`

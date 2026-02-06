@@ -189,18 +189,6 @@ func (r *deviceResolver) ApprovedAt(ctx context.Context, obj *models.Device) (*s
 	return &formatted, nil
 }
 
-// ApprovedBy is the resolver for the approvedBy field.
-func (r *deviceResolver) ApprovedBy(ctx context.Context, obj *models.Device) (*models.User, error) {
-	if obj.ApprovedByID == nil {
-		return nil, nil
-	}
-	var user models.User
-	if err := r.db.WithContext(ctx).First(&user, "id = ?", *obj.ApprovedByID).Error; err != nil {
-		return nil, nil // Return nil if user not found, don't error
-	}
-	return &user, nil
-}
-
 // EffectType is the resolver for the effectType field.
 func (r *effectResolver) EffectType(ctx context.Context, obj *models.Effect) (generated.EffectType, error) {
 	return ResolveEffectType(obj)
@@ -7615,3 +7603,22 @@ type settingResolver struct{ *Resolver }
 type subscriptionResolver struct{ *Resolver }
 type userResolver struct{ *Resolver }
 type userGroupResolver struct{ *Resolver }
+
+// !!! WARNING !!!
+// The code below was going to be deleted when updating resolvers. It has been copied here so you have
+// one last chance to move it out of harms way if you want. There are two reasons this happens:
+//  - When renaming or deleting a resolver the old code will be put in here. You can safely delete
+//    it when you're done.
+//  - You have helper methods in this file. Move them out to keep these resolver files clean.
+/*
+	func (r *deviceResolver) ApprovedBy(ctx context.Context, obj *models.Device) (*models.User, error) {
+	if obj.ApprovedByID == nil {
+		return nil, nil
+	}
+	var user models.User
+	if err := r.db.WithContext(ctx).First(&user, "id = ?", *obj.ApprovedByID).Error; err != nil {
+		return nil, nil // Return nil if user not found, don't error
+	}
+	return &user, nil
+}
+*/

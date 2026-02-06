@@ -416,7 +416,7 @@ Result of checking a device's status by fingerprint.
 Used by clients to determine if they need to register.
 """
 type DeviceCheckResult {
-  "Current status of the device (PENDING, APPROVED, REVOKED, or UNKNOWN if not registered)"
+  "Current status of the device (PENDING, APPROVED, or REVOKED). Unregistered devices return PENDING status."
   status: DeviceStatus!
   "The device record if it exists"
   device: Device

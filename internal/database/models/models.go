@@ -103,7 +103,7 @@ type Device struct {
 	FingerprintComponents      *string    `gorm:"column:fingerprint_components"` // JSON
 	Status                     string     `gorm:"column:status;default:PENDING;index"` // PENDING, APPROVED, REVOKED
 	Permissions                string     `gorm:"column:permissions;default:READ_ONLY"` // READ_ONLY, OPERATOR, ADMIN
-	IsAuthorized               bool       `gorm:"column:is_authorized;default:false"` // Computed from Status == APPROVED
+	IsAuthorized               bool       `gorm:"column:is_authorized;default:false"` // Legacy field - kept for backward compatibility. Use Status field for authoritative state.
 	AuthorizationCode          *string    `gorm:"column:authorization_code"`
 	AuthorizationCodeExpiresAt *time.Time `gorm:"column:authorization_code_expires_at"`
 	DefaultUserID              *string    `gorm:"column:default_user_id;index"`
