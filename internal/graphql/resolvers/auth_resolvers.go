@@ -453,6 +453,20 @@ func (r *Resolver) createUserGroup(ctx context.Context, input generated.CreateUs
 		return nil, err
 	}
 
+	// Add the creating user as a GROUP_ADMIN member
+	userID := middleware.GetUserIDFromContext(ctx)
+	if userID != "" {
+		member := models.UserGroupMember{
+			ID:      cuid.New(),
+			UserID:  userID,
+			GroupID: group.ID,
+			Role:    models.GroupRoleGroupAdmin,
+		}
+		if err := r.db.WithContext(ctx).Create(&member).Error; err != nil {
+			return nil, fmt.Errorf("failed to add creator as group member: %w", err)
+		}
+	}
+
 	return group, nil
 }
 
