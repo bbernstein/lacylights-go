@@ -131,7 +131,7 @@ func main() {
 		{"verification_tokens", &models.VerificationToken{}, []string{"id", "token_hash"}},
 		{"user_group_members", &models.UserGroupMember{}, []string{"id", "user_id", "group_id", "role"}},
 		{"device_group_members", &models.DeviceGroupMember{}, []string{"id", "device_id", "group_id"}},
-		{"group_invitations", &models.GroupInvitation{}, []string{"id", "group_id", "email"}},
+		{"group_invitations", &models.GroupInvitation{}, []string{"id", "group_id", "email", "role"}},
 	}
 
 	for _, t := range tablesWithFK {
