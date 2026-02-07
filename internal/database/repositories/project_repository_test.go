@@ -39,16 +39,13 @@ func TestFindAllByGroupIDs(t *testing.T) {
 		}
 	})
 
-	t.Run("empty groupIDs returns only unowned projects", func(t *testing.T) {
+	t.Run("empty groupIDs returns no projects", func(t *testing.T) {
 		projects, err := repo.FindAllByGroupIDs(ctx, []string{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(projects) != 1 {
-			t.Errorf("expected 1 project, got %d", len(projects))
-		}
-		if len(projects) > 0 && projects[0].Name != "Legacy Project" {
-			t.Errorf("expected 'Legacy Project', got %q", projects[0].Name)
+		if len(projects) != 0 {
+			t.Errorf("expected 0 projects, got %d", len(projects))
 		}
 	})
 

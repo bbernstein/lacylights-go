@@ -138,7 +138,7 @@ func (r *ProjectRepository) CountCueLists(ctx context.Context, projectID string)
 
 // FindAllByGroupIDs returns non-deleted projects that belong to any of the given groups.
 // If groupIDs is nil, returns all non-deleted projects (no filtering).
-// If groupIDs is empty, returns projects with no group (legacy auth-off projects).
+// If groupIDs is empty, returns no projects (user has no group memberships).
 func (r *ProjectRepository) FindAllByGroupIDs(ctx context.Context, groupIDs []string) ([]models.Project, error) {
 	var projects []models.Project
 	query := r.db.WithContext(ctx).Where("deleted_at IS NULL")
@@ -147,8 +147,8 @@ func (r *ProjectRepository) FindAllByGroupIDs(ctx context.Context, groupIDs []st
 		// nil means no filtering (admin or auth-off)
 		query = query.Order("created_at DESC")
 	} else if len(groupIDs) == 0 {
-		// Empty slice means user has no groups - show only unowned projects
-		query = query.Where("group_id IS NULL").Order("created_at DESC")
+		// Empty slice means user has no groups - no projects accessible
+		return projects, nil
 	} else {
 		// Filter by group IDs only - legacy (NULL group_id) projects are only accessible via nil groupIDs (admin/auth-off)
 		query = query.Where("group_id IN ?", groupIDs).Order("created_at DESC")
