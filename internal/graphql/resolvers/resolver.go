@@ -41,6 +41,8 @@ type Resolver struct {
 	LookBoardRepo  *repositories.LookBoardRepository
 	EffectRepo     *repositories.EffectRepository
 	OperationRepo  *repositories.OperationRepository
+	GroupRepo      *repositories.GroupRepository
+	InvitationRepo *repositories.InvitationRepository
 
 	// Services
 	DMXService      *dmx.Service
@@ -100,6 +102,8 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *modulator.Eng
 		LookBoardRepo:   lookBoardRepo,
 		EffectRepo:      effectRepo,
 		OperationRepo:   operationRepo,
+		GroupRepo:        repositories.NewGroupRepository(db),
+		InvitationRepo:   repositories.NewInvitationRepository(db),
 		DMXService:      dmxService,
 		FadeEngine:      fadeEngine,
 		PlaybackService: playbackService,

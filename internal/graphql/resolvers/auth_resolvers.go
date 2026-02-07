@@ -511,25 +511,6 @@ func (r *Resolver) deleteUserGroup(ctx context.Context, id string) (bool, error)
 	return result.RowsAffected > 0, nil
 }
 
-// addUserToGroup adds a user to a group (admin only).
-func (r *Resolver) addUserToGroup(ctx context.Context, userID, groupID string) (bool, error) {
-	if err := r.requireAdmin(ctx); err != nil {
-		return false, err
-	}
-
-	member := &models.UserGroupMember{
-		ID:      cuid.New(),
-		UserID:  userID,
-		GroupID: groupID,
-	}
-
-	if err := r.db.WithContext(ctx).Create(member).Error; err != nil {
-		return false, err
-	}
-
-	return true, nil
-}
-
 // removeUserFromGroup removes a user from a group (admin only).
 func (r *Resolver) removeUserFromGroup(ctx context.Context, userID, groupID string) (bool, error) {
 	if err := r.requireAdmin(ctx); err != nil {

@@ -653,7 +653,7 @@ func (r *mutationResolver) DeleteUserGroup(ctx context.Context, id string) (bool
 
 // AddUserToGroup is the resolver for the addUserToGroup field.
 func (r *mutationResolver) AddUserToGroup(ctx context.Context, userID string, groupID string, role *generated.GroupMemberRole) (bool, error) {
-	return r.addUserToGroup(ctx, userID, groupID)
+	return r.addUserToGroupWithRole(ctx, userID, groupID, role)
 }
 
 // RemoveUserFromGroup is the resolver for the removeUserFromGroup field.
@@ -662,45 +662,38 @@ func (r *mutationResolver) RemoveUserFromGroup(ctx context.Context, userID strin
 }
 
 // UpdateGroupMemberRole is the resolver for the updateGroupMemberRole field.
-// TODO: Implement in Phase 5 (PR 4)
-func (r *mutationResolver) UpdateGroupMemberRole(_ context.Context, _ string, _ string, _ generated.GroupMemberRole) (bool, error) {
-	return false, fmt.Errorf("updateGroupMemberRole not yet implemented")
+func (r *mutationResolver) UpdateGroupMemberRole(ctx context.Context, groupID string, userID string, role generated.GroupMemberRole) (bool, error) {
+	return r.updateGroupMemberRole(ctx, groupID, userID, role)
 }
 
 // InviteToGroup is the resolver for the inviteToGroup field.
-// TODO: Implement in Phase 5 (PR 4)
-func (r *mutationResolver) InviteToGroup(_ context.Context, _ string, _ string, _ *generated.GroupMemberRole) (*models.GroupInvitation, error) {
-	return nil, fmt.Errorf("inviteToGroup not yet implemented")
+func (r *mutationResolver) InviteToGroup(ctx context.Context, groupID string, email string, role *generated.GroupMemberRole) (*models.GroupInvitation, error) {
+	return r.inviteToGroup(ctx, groupID, email, role)
 }
 
 // AcceptInvitation is the resolver for the acceptInvitation field.
-// TODO: Implement in Phase 5 (PR 4)
-func (r *mutationResolver) AcceptInvitation(_ context.Context, _ string) (bool, error) {
-	return false, fmt.Errorf("acceptInvitation not yet implemented")
+func (r *mutationResolver) AcceptInvitation(ctx context.Context, invitationID string) (bool, error) {
+	return r.acceptInvitation(ctx, invitationID)
 }
 
 // DeclineInvitation is the resolver for the declineInvitation field.
-// TODO: Implement in Phase 5 (PR 4)
-func (r *mutationResolver) DeclineInvitation(_ context.Context, _ string) (bool, error) {
-	return false, fmt.Errorf("declineInvitation not yet implemented")
+func (r *mutationResolver) DeclineInvitation(ctx context.Context, invitationID string) (bool, error) {
+	return r.declineInvitation(ctx, invitationID)
 }
 
 // CancelInvitation is the resolver for the cancelInvitation field.
-// TODO: Implement in Phase 5 (PR 4)
-func (r *mutationResolver) CancelInvitation(_ context.Context, _ string) (bool, error) {
-	return false, fmt.Errorf("cancelInvitation not yet implemented")
+func (r *mutationResolver) CancelInvitation(ctx context.Context, invitationID string) (bool, error) {
+	return r.cancelInvitation(ctx, invitationID)
 }
 
 // AddDeviceToGroup is the resolver for the addDeviceToGroup field.
-// TODO: Implement in Phase 6 (PR 4)
-func (r *mutationResolver) AddDeviceToGroup(_ context.Context, _ string, _ string) (bool, error) {
-	return false, fmt.Errorf("addDeviceToGroup not yet implemented")
+func (r *mutationResolver) AddDeviceToGroup(ctx context.Context, deviceID string, groupID string) (bool, error) {
+	return r.addDeviceToGroup(ctx, deviceID, groupID)
 }
 
 // RemoveDeviceFromGroup is the resolver for the removeDeviceFromGroup field.
-// TODO: Implement in Phase 6 (PR 4)
-func (r *mutationResolver) RemoveDeviceFromGroup(_ context.Context, _ string, _ string) (bool, error) {
-	return false, fmt.Errorf("removeDeviceFromGroup not yet implemented")
+func (r *mutationResolver) RemoveDeviceFromGroup(ctx context.Context, deviceID string, groupID string) (bool, error) {
+	return r.removeDeviceFromGroup(ctx, deviceID, groupID)
 }
 
 // CreateDeviceAuthCode is the resolver for the createDeviceAuthCode field.
@@ -711,7 +704,7 @@ func (r *mutationResolver) CreateDeviceAuthCode(ctx context.Context, deviceID st
 
 // ApproveDevice is the resolver for the approveDevice field.
 func (r *mutationResolver) ApproveDevice(ctx context.Context, deviceID string, permissions generated.DevicePermissions, groupID *string) (*models.Device, error) {
-	return r.approveDevice(ctx, deviceID, permissions)
+	return r.approveDeviceWithGroup(ctx, deviceID, permissions, groupID)
 }
 
 // UpdateDevice is the resolver for the updateDevice field.
