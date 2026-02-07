@@ -47,6 +47,7 @@ type ImportOptions struct {
 	Mode                    ImportMode
 	TargetProjectID         *string
 	ProjectName             *string
+	GroupID                 *string
 	FixtureConflictStrategy FixtureConflictStrategy
 	ImportBuiltInFixtures   bool
 }
@@ -242,6 +243,7 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 		project := &models.Project{
 			Name:        projectName,
 			Description: exported.GetProjectDescription(),
+			GroupID:     options.GroupID,
 		}
 		if err := s.projectRepo.Create(ctx, project); err != nil {
 			return "", nil, nil, err
