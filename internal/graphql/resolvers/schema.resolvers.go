@@ -659,7 +659,7 @@ func (r *mutationResolver) RemoveUserFromGroup(ctx context.Context, userID strin
 }
 
 // UpdateGroupMemberRole is the resolver for the updateGroupMemberRole field.
-func (r *mutationResolver) UpdateGroupMemberRole(ctx context.Context, groupID string, userID string, role generated.GroupMemberRole) (bool, error) {
+func (r *mutationResolver) UpdateGroupMemberRole(ctx context.Context, userID string, groupID string, role generated.GroupMemberRole) (bool, error) {
 	return r.updateGroupMemberRole(ctx, groupID, userID, role)
 }
 

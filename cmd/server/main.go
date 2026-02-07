@@ -177,10 +177,8 @@ func main() {
 		log.Printf("Warning: effect channel min/max migration failed: %v", err)
 	}
 
-	// Migrate group ownership fields (add is_personal, owner_id to user_groups; role to user_group_members; group_id to projects)
-	if err := migrateGroupOwnership(db, cfg.AuthEnabled); err != nil {
-		log.Printf("Warning: group ownership migration failed: %v", err)
-	}
+	// Note: group ownership migration runs after auth setup (EnsureDefaultAdmin)
+	// so the admin user exists when assigning orphaned projects.
 
 	// Load Open Fixture Library if enabled and database is empty
 	if cfg.OFLImportEnabled {
@@ -329,6 +327,11 @@ func main() {
 		router.Use(authMiddleware.Authenticate)
 	} else {
 		log.Println("Auth service disabled")
+	}
+
+	// Migrate group ownership fields after auth setup so admin user exists for orphaned project assignment
+	if err := migrateGroupOwnership(db, cfg.AuthEnabled); err != nil {
+		log.Printf("Warning: group ownership migration failed: %v", err)
 	}
 
 	// Create resolver with dependencies

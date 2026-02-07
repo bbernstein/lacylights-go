@@ -147,31 +147,35 @@ func (r *Resolver) acceptInvitation(ctx context.Context, invitationID string) (b
 	// Auth-disabled mode: allow acceptance without email verification
 	authDisabled := r.AuthService == nil || !r.AuthService.IsEnabled()
 
-	invitation, err := r.InvitationRepo.FindByID(ctx, invitationID)
-	if err != nil {
-		return false, err
-	}
-	if invitation == nil {
-		return false, ErrInvitationNotFound
-	}
+	// Use a transaction to atomically validate, accept the invitation, and add the member.
+	// This prevents race conditions where concurrent accepts could both pass validation.
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Load invitation inside the transaction for consistency
+		invitation, err := r.InvitationRepo.FindByIDForUpdate(tx, invitationID)
+		if err != nil {
+			return err
+		}
+		if invitation == nil {
+			return ErrInvitationNotFound
+		}
 
-	if invitation.Status != models.InvitationStatusPending {
-		return false, ErrInvitationNotPending
-	}
+		if invitation.Status != models.InvitationStatusPending {
+			return ErrInvitationNotPending
+		}
 
-	if invitation.ExpiresAt.Before(time.Now()) {
-		// Mark as expired
-		_ = r.InvitationRepo.UpdateStatus(ctx, invitationID, models.InvitationStatusExpired, nil)
-		return false, ErrInvitationExpired
-	}
+		if invitation.ExpiresAt.Before(time.Now()) {
+			// Mark as expired
+			_ = tx.Model(&models.GroupInvitation{}).
+				Where("id = ?", invitationID).
+				Update("status", models.InvitationStatusExpired)
+			return ErrInvitationExpired
+		}
 
-	// Verify email match (skip if auth is disabled)
-	if !authDisabled && email != invitation.Email {
-		return false, ErrEmailMismatch
-	}
+		// Verify email match (skip if auth is disabled)
+		if !authDisabled && email != invitation.Email {
+			return ErrEmailMismatch
+		}
 
-	// Use a transaction to atomically accept the invitation and add the member
-	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Mark invitation as accepted
 		now := time.Now()
 		if err := tx.Model(&models.GroupInvitation{}).

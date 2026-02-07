@@ -511,9 +511,9 @@ func (r *Resolver) deleteUserGroup(ctx context.Context, id string) (bool, error)
 	return result.RowsAffected > 0, nil
 }
 
-// removeUserFromGroup removes a user from a group (admin only).
+// removeUserFromGroup removes a user from a group (group admin or system admin).
 func (r *Resolver) removeUserFromGroup(ctx context.Context, userID, groupID string) (bool, error) {
-	if err := r.requireAdmin(ctx); err != nil {
+	if err := r.requireGroupAdmin(ctx, groupID); err != nil {
 		return false, err
 	}
 
@@ -984,9 +984,10 @@ func (r *Resolver) ensureProjectAccess(ctx context.Context, projectID string) er
 		return fmt.Errorf("project not found")
 	}
 
-	// Projects without a group (auth-off legacy) are accessible to all authenticated users
+	// Projects without a group are only accessible to system admins when auth is enabled.
+	// This prevents orphaned projects from leaking across tenants.
 	if project.GroupID == nil {
-		return nil
+		return ErrNotAuthorized
 	}
 
 	if !middleware.IsGroupMember(ctx, *project.GroupID) {
