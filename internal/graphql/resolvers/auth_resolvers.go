@@ -406,9 +406,9 @@ func (r *Resolver) getUserGroups(ctx context.Context) ([]*models.UserGroup, erro
 	return result, nil
 }
 
-// getUserGroup returns a group by ID (admin only).
+// getUserGroup returns a group by ID (admin or group member).
 func (r *Resolver) getUserGroup(ctx context.Context, id string) (*models.UserGroup, error) {
-	if err := r.requireAdmin(ctx); err != nil {
+	if err := r.requireGroupAccess(ctx, id); err != nil {
 		return nil, err
 	}
 
@@ -470,9 +470,9 @@ func (r *Resolver) createUserGroup(ctx context.Context, input generated.CreateUs
 	return group, nil
 }
 
-// updateUserGroup updates a group (admin only).
+// updateUserGroup updates a group (group admin or system admin).
 func (r *Resolver) updateUserGroup(ctx context.Context, id string, input generated.UpdateUserGroupInput) (*models.UserGroup, error) {
-	if err := r.requireAdmin(ctx); err != nil {
+	if err := r.requireGroupAdmin(ctx, id); err != nil {
 		return nil, err
 	}
 
