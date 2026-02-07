@@ -192,6 +192,50 @@ func TestInvitationRepository_ExpireOverdueInvitations(t *testing.T) {
 	assert.Len(t, pending, 1)
 }
 
+func TestInvitationRepository_FindByIDForUpdate(t *testing.T) {
+	db := setupInvitationTestDB(t)
+	repo := NewInvitationRepository(db)
+
+	group := &models.UserGroup{ID: cuid.New(), Name: "Test Group"}
+	require.NoError(t, db.Create(group).Error)
+	user := &models.User{ID: cuid.New(), Email: "inviter@test.com", Role: "USER", IsActive: true}
+	require.NoError(t, db.Create(user).Error)
+
+	invitation, err := repo.Create(context.Background(), group.ID, "invitee@test.com", user.ID, models.GroupRoleMember, time.Now().Add(7*24*time.Hour))
+	require.NoError(t, err)
+
+	t.Run("found", func(t *testing.T) {
+		result, err := repo.FindByIDForUpdate(db, invitation.ID)
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Equal(t, invitation.ID, result.ID)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		result, err := repo.FindByIDForUpdate(db, "non-existent")
+		require.NoError(t, err)
+		assert.Nil(t, result)
+	})
+}
+
+func TestInvitationRepository_DB(t *testing.T) {
+	db := setupInvitationTestDB(t)
+	repo := NewInvitationRepository(db)
+
+	result := repo.DB()
+	assert.NotNil(t, result)
+	assert.Equal(t, db, result)
+}
+
+func TestNewInvitationID(t *testing.T) {
+	id1 := NewInvitationID()
+	id2 := NewInvitationID()
+
+	assert.NotEmpty(t, id1)
+	assert.NotEmpty(t, id2)
+	assert.NotEqual(t, id1, id2, "each call should generate a unique ID")
+}
+
 func TestInvitationRepository_CreateWithDefaults(t *testing.T) {
 	db := setupInvitationTestDB(t)
 	repo := NewInvitationRepository(db)

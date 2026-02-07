@@ -53,6 +53,33 @@ func TestGroupRepository_FindGroupByID(t *testing.T) {
 	})
 }
 
+func TestGroupRepository_FindGroupByID_DBError(t *testing.T) {
+	db := setupGroupTestDB(t)
+	repo := NewGroupRepository(db)
+
+	// Close the database to trigger a DB error
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	_ = sqlDB.Close()
+
+	result, err := repo.FindGroupByID(context.Background(), "any-id")
+	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestGroupRepository_FindMember_DBError(t *testing.T) {
+	db := setupGroupTestDB(t)
+	repo := NewGroupRepository(db)
+
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	_ = sqlDB.Close()
+
+	result, err := repo.FindMember(context.Background(), "user-id", "group-id")
+	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
 func TestGroupRepository_FindMember(t *testing.T) {
 	db := setupGroupTestDB(t)
 	repo := NewGroupRepository(db)
