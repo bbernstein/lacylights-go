@@ -892,3 +892,149 @@ func invitationInput(groupID, email, invitedByID, role string) repositories.Grou
 		Role:        role,
 	}
 }
+
+// --- ensureProjectAccess tests ---
+
+func TestEnsureProjectAccess_AuthDisabled(t *testing.T) {
+	resolver, cleanup := setupGroupAdminTestResolver(t, false)
+	defer cleanup()
+
+	// Create a project
+	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
+	require.NoError(t, resolver.ProjectRepo.Create(context.Background(), project))
+
+	// With auth disabled, any context should work
+	err := resolver.ensureProjectAccess(context.Background(), project.ID)
+	assert.NoError(t, err)
+}
+
+func TestEnsureProjectAccess_AdminHasAccess(t *testing.T) {
+	resolver, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+
+	groupID := cuid.New()
+	project := &models.Project{ID: cuid.New(), Name: "Test Project", GroupID: &groupID}
+	require.NoError(t, resolver.ProjectRepo.Create(context.Background(), project))
+
+	ctx := createAdminContext()
+	err := resolver.ensureProjectAccess(ctx, project.ID)
+	assert.NoError(t, err)
+}
+
+func TestEnsureProjectAccess_GroupMemberHasAccess(t *testing.T) {
+	resolver, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+
+	groupID := cuid.New()
+	project := &models.Project{ID: cuid.New(), Name: "Test Project", GroupID: &groupID}
+	require.NoError(t, resolver.ProjectRepo.Create(context.Background(), project))
+
+	ctx := createMemberContext("user-1", "user@test.com", groupID)
+	err := resolver.ensureProjectAccess(ctx, project.ID)
+	assert.NoError(t, err)
+}
+
+func TestEnsureProjectAccess_NonMemberDenied(t *testing.T) {
+	resolver, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+
+	groupID := cuid.New()
+	otherGroupID := cuid.New()
+	project := &models.Project{ID: cuid.New(), Name: "Test Project", GroupID: &groupID}
+	require.NoError(t, resolver.ProjectRepo.Create(context.Background(), project))
+
+	// User is member of a different group
+	ctx := createMemberContext("user-1", "user@test.com", otherGroupID)
+	err := resolver.ensureProjectAccess(ctx, project.ID)
+	assert.ErrorIs(t, err, ErrNotAuthorized)
+}
+
+func TestEnsureProjectAccess_UnauthenticatedDenied(t *testing.T) {
+	resolver, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+
+	groupID := cuid.New()
+	project := &models.Project{ID: cuid.New(), Name: "Test Project", GroupID: &groupID}
+	require.NoError(t, resolver.ProjectRepo.Create(context.Background(), project))
+
+	// No auth context
+	err := resolver.ensureProjectAccess(context.Background(), project.ID)
+	assert.ErrorIs(t, err, ErrNotAuthenticated)
+}
+
+func TestEnsureProjectAccess_OrphanedProjectDeniedForRegularUser(t *testing.T) {
+	resolver, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+
+	// Project without a group (orphaned/legacy)
+	project := &models.Project{ID: cuid.New(), Name: "Orphaned Project"}
+	require.NoError(t, resolver.ProjectRepo.Create(context.Background(), project))
+
+	groupID := cuid.New()
+	ctx := createMemberContext("user-1", "user@test.com", groupID)
+	err := resolver.ensureProjectAccess(ctx, project.ID)
+	assert.ErrorIs(t, err, ErrNotAuthorized)
+}
+
+func TestEnsureProjectAccess_OrphanedProjectAllowedForAdmin(t *testing.T) {
+	resolver, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+
+	// Project without a group (orphaned/legacy)
+	project := &models.Project{ID: cuid.New(), Name: "Orphaned Project"}
+	require.NoError(t, resolver.ProjectRepo.Create(context.Background(), project))
+
+	ctx := createAdminContext()
+	err := resolver.ensureProjectAccess(ctx, project.ID)
+	assert.NoError(t, err)
+}
+
+func TestEnsureProjectAccess_NonexistentProject(t *testing.T) {
+	resolver, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+
+	ctx := createMemberContext("user-1", "user@test.com", cuid.New())
+	err := resolver.ensureProjectAccess(ctx, "nonexistent-project-id")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "project not found")
+}
+
+// --- getAccessibleGroupIDs tests ---
+
+func TestGetAccessibleGroupIDs_AuthDisabled(t *testing.T) {
+	resolver, cleanup := setupGroupAdminTestResolver(t, false)
+	defer cleanup()
+
+	ids, err := resolver.getAccessibleGroupIDs(context.Background())
+	assert.NoError(t, err)
+	assert.Nil(t, ids, "nil means no filtering when auth disabled")
+}
+
+func TestGetAccessibleGroupIDs_AdminGetsNil(t *testing.T) {
+	resolver, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+
+	ctx := createAdminContext()
+	ids, err := resolver.getAccessibleGroupIDs(ctx)
+	assert.NoError(t, err)
+	assert.Nil(t, ids, "nil means no filtering for admin")
+}
+
+func TestGetAccessibleGroupIDs_RegularUserGetsGroupIDs(t *testing.T) {
+	resolver, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+
+	groupID := cuid.New()
+	ctx := createMemberContext("user-1", "user@test.com", groupID)
+	ids, err := resolver.getAccessibleGroupIDs(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{groupID}, ids)
+}
+
+func TestGetAccessibleGroupIDs_UnauthenticatedReturnsError(t *testing.T) {
+	resolver, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+
+	_, err := resolver.getAccessibleGroupIDs(context.Background())
+	assert.ErrorIs(t, err, ErrNotAuthenticated)
+}

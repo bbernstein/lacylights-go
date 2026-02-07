@@ -179,13 +179,18 @@ func (m *AuthMiddleware) getDeviceByFingerprint(ctx context.Context, fingerprint
 
 // updateDeviceLastSeen updates the device's last seen timestamp.
 // This method is called asynchronously to avoid blocking requests.
+// Uses a detached context with timeout to prevent writes after the request is cancelled
+// and to avoid connection leaks from long-running database operations.
 // Errors are logged but not propagated since this is a non-critical operation.
 func (m *AuthMiddleware) updateDeviceLastSeen(deviceID string, ipAddress string) {
 	if m.db == nil {
 		return
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	now := time.Now()
-	result := m.db.Model(&models.Device{}).Where("id = ?", deviceID).Updates(map[string]interface{}{
+	result := m.db.WithContext(ctx).Model(&models.Device{}).Where("id = ?", deviceID).Updates(map[string]any{
 		"last_seen_at":    now,
 		"last_ip_address": ipAddress,
 	})
@@ -403,7 +408,7 @@ func (m *AuthMiddleware) loadUserGroupMemberships(ctx context.Context, userID st
 	}
 
 	var members []models.UserGroupMember
-	if err := m.db.WithContext(ctx).Where("user_id = ?", userID).Find(&members).Error; err != nil {
+	if err := m.db.WithContext(ctx).Select("group_id", "role").Where("user_id = ?", userID).Find(&members).Error; err != nil {
 		log.Printf("Warning: failed to load group memberships for user %s: %v", userID, err)
 		return nil
 	}
@@ -425,7 +430,7 @@ func (m *AuthMiddleware) loadDeviceGroupMemberships(ctx context.Context, deviceI
 	}
 
 	var members []models.DeviceGroupMember
-	if err := m.db.WithContext(ctx).Where("device_id = ?", deviceID).Find(&members).Error; err != nil {
+	if err := m.db.WithContext(ctx).Select("group_id").Where("device_id = ?", deviceID).Find(&members).Error; err != nil {
 		log.Printf("Warning: failed to load group memberships for device %s: %v", deviceID, err)
 		return nil
 	}
