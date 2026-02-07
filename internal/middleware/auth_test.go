@@ -1645,6 +1645,24 @@ func TestLoadUserGroupMemberships(t *testing.T) {
 	})
 }
 
+func TestLoadUserGroupMemberships_DatabaseError(t *testing.T) {
+	db := createTestDBWithDevice(t)
+	authSvc, _ := createTestAuthServiceWithDeviceAuth(t, true, true)
+	mw := NewAuthMiddlewareWithDB(authSvc, db)
+
+	// Close the database to cause a query error
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("failed to get underlying DB: %v", err)
+	}
+	_ = sqlDB.Close()
+
+	result := mw.loadUserGroupMemberships(context.Background(), "user-1")
+	if result != nil {
+		t.Errorf("expected nil on database error, got %v", result)
+	}
+}
+
 func TestLoadDeviceGroupMemberships(t *testing.T) {
 	t.Run("loads memberships", func(t *testing.T) {
 		db := createTestDBWithDevice(t)
@@ -1706,6 +1724,24 @@ func TestLoadDeviceGroupMemberships(t *testing.T) {
 			t.Errorf("expected nil for empty deviceID, got %v", result)
 		}
 	})
+}
+
+func TestLoadDeviceGroupMemberships_DatabaseError(t *testing.T) {
+	db := createTestDBWithDevice(t)
+	authSvc, _ := createTestAuthServiceWithDeviceAuth(t, true, true)
+	mw := NewAuthMiddlewareWithDB(authSvc, db)
+
+	// Close the database to cause a query error
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("failed to get underlying DB: %v", err)
+	}
+	_ = sqlDB.Close()
+
+	result := mw.loadDeviceGroupMemberships(context.Background(), "device-1")
+	if result != nil {
+		t.Errorf("expected nil on database error, got %v", result)
+	}
 }
 
 func TestAuthenticate_DeviceWithGroupMemberships(t *testing.T) {
