@@ -8,6 +8,7 @@ package resolvers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -5182,7 +5183,7 @@ func (r *projectResolver) Group(ctx context.Context, obj *models.Project) (*mode
 	}
 	var group models.UserGroup
 	if err := r.db.WithContext(ctx).First(&group, "id = ?", *obj.GroupID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err

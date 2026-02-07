@@ -176,15 +176,19 @@ func (r *Resolver) acceptInvitation(ctx context.Context, invitationID string) (b
 			return ErrEmailMismatch
 		}
 
-		// Mark invitation as accepted
+		// Mark invitation as accepted using conditional update to guard against races
 		now := time.Now()
-		if err := tx.Model(&models.GroupInvitation{}).
-			Where("id = ?", invitationID).
-			Updates(map[string]interface{}{
+		result := tx.Model(&models.GroupInvitation{}).
+			Where("id = ? AND status = ?", invitationID, models.InvitationStatusPending).
+			Updates(map[string]any{
 				"status":      models.InvitationStatusAccepted,
 				"accepted_at": &now,
-			}).Error; err != nil {
-			return err
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return ErrInvitationNotPending
 		}
 
 		// Determine the user ID for the new member
@@ -375,7 +379,19 @@ func (r *Resolver) addUserToGroupWithRole(ctx context.Context, userID, groupID s
 }
 
 // approveDeviceWithGroup approves a device and optionally assigns it to a group.
+// Group existence is validated before approving the device to avoid partial state.
 func (r *Resolver) approveDeviceWithGroup(ctx context.Context, deviceID string, permissions generated.DevicePermissions, groupID *string) (*models.Device, error) {
+	// Validate group existence BEFORE approving the device to avoid partial state
+	if groupID != nil && *groupID != "" {
+		group, err := r.GroupRepo.FindGroupByID(ctx, *groupID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to verify group: %w", err)
+		}
+		if group == nil {
+			return nil, fmt.Errorf("group not found: %s", *groupID)
+		}
+	}
+
 	device, err := r.approveDevice(ctx, deviceID, permissions)
 	if err != nil {
 		return nil, err
@@ -383,15 +399,6 @@ func (r *Resolver) approveDeviceWithGroup(ctx context.Context, deviceID string, 
 
 	// If a group ID is provided, add the device to that group
 	if groupID != nil && *groupID != "" {
-		// Verify the group exists
-		group, err := r.GroupRepo.FindGroupByID(ctx, *groupID)
-		if err != nil {
-			return device, fmt.Errorf("device approved but failed to add to group: %w", err)
-		}
-		if group == nil {
-			return device, fmt.Errorf("device approved but group not found: %s", *groupID)
-		}
-
 		// Check if already in the group
 		existing, err := r.GroupRepo.FindDeviceGroupMember(ctx, deviceID, *groupID)
 		if err != nil {

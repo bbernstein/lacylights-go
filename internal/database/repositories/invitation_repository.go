@@ -121,6 +121,10 @@ func (r *InvitationRepository) ExpireOverdueInvitations(ctx context.Context) (in
 
 // FindByIDForUpdate returns an invitation by ID for use inside a transaction.
 // Caller is responsible for wrapping in a transaction.
+// Note: SQLite does not support SELECT FOR UPDATE row-level locking. Concurrency safety
+// is provided by SQLite's database-level write lock acquired when the transaction performs
+// a write operation. The caller should perform a conditional update (checking status hasn't
+// changed) to handle any TOCTOU races.
 func (r *InvitationRepository) FindByIDForUpdate(tx *gorm.DB, id string) (*models.GroupInvitation, error) {
 	var invitation models.GroupInvitation
 	if err := tx.First(&invitation, "id = ?", id).Error; err != nil {

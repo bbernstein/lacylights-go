@@ -980,11 +980,10 @@ func doMigrateSceneToLook(db *gorm.DB) error {
 // migrateGroupOwnership handles the migration to add group ownership fields.
 // This is idempotent and runs on every startup.
 // It handles:
-// 1. Adding is_personal, owner_id columns to user_groups (via AutoMigrate)
-// 2. Adding role column to user_group_members (via AutoMigrate)
-// 3. Adding group_id column to projects (via AutoMigrate)
-// 4. Backfilling: setting role=MEMBER for existing user_group_members without a role
-// 5. When auth enabled: assigning orphaned projects to the admin user's personal group
+// 1. Backfilling: setting role=MEMBER for existing user_group_members without a role
+// 2. When auth enabled: assigning orphaned projects (group_id IS NULL) to a target group
+//    - By default, assigns to the admin user's personal group
+//    - Override with MIGRATION_TARGET_GROUP_ID env var
 //
 // Environment variables:
 //   - MIGRATION_TARGET_GROUP_ID: Override the target group for orphaned projects

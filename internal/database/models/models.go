@@ -178,8 +178,8 @@ func (UserGroup) TableName() string { return "user_groups" }
 // Table: user_group_members
 type UserGroupMember struct {
 	ID        string    `gorm:"column:id;primaryKey"`
-	UserID    string    `gorm:"column:user_id;index"`
-	GroupID   string    `gorm:"column:group_id;index"`
+	UserID    string    `gorm:"column:user_id;uniqueIndex:idx_user_group_member"`
+	GroupID   string    `gorm:"column:group_id;uniqueIndex:idx_user_group_member"`
 	Role      string    `gorm:"column:role;default:MEMBER"` // MEMBER, GROUP_ADMIN
 	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime"`
 
@@ -195,8 +195,8 @@ func (UserGroupMember) TableName() string { return "user_group_members" }
 // Table: device_group_members
 type DeviceGroupMember struct {
 	ID        string    `gorm:"column:id;primaryKey"`
-	DeviceID  string    `gorm:"column:device_id;index"`
-	GroupID   string    `gorm:"column:group_id;index"`
+	DeviceID  string    `gorm:"column:device_id;uniqueIndex:idx_device_group_member"`
+	GroupID   string    `gorm:"column:group_id;uniqueIndex:idx_device_group_member"`
 	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime"`
 
 	// Relations

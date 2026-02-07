@@ -414,10 +414,10 @@ func (m *AuthMiddleware) loadUserGroupMemberships(ctx context.Context, userID st
 	}
 
 	result := make([]UserGroupMembership, len(members))
-	for i, m := range members {
+	for i, member := range members {
 		result[i] = UserGroupMembership{
-			GroupID: m.GroupID,
-			Role:    m.Role,
+			GroupID: member.GroupID,
+			Role:    member.Role,
 		}
 	}
 	return result
@@ -436,9 +436,9 @@ func (m *AuthMiddleware) loadDeviceGroupMemberships(ctx context.Context, deviceI
 	}
 
 	result := make([]UserGroupMembership, len(members))
-	for i, m := range members {
+	for i, member := range members {
 		result[i] = UserGroupMembership{
-			GroupID: m.GroupID,
+			GroupID: member.GroupID,
 			Role:    "MEMBER", // Devices are always MEMBER role within a group
 		}
 	}

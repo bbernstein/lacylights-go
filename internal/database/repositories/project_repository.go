@@ -3,6 +3,7 @@ package repositories
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"time"
 
@@ -48,7 +49,7 @@ func (r *ProjectRepository) FindByID(ctx context.Context, id string) (*models.Pr
 		Where("deleted_at IS NULL").
 		First(&project, "id = ?", id)
 	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, result.Error
@@ -61,7 +62,7 @@ func (r *ProjectRepository) FindByIDIncludingDeleted(ctx context.Context, id str
 	var project models.Project
 	result := r.db.WithContext(ctx).First(&project, "id = ?", id)
 	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, result.Error
@@ -149,8 +150,8 @@ func (r *ProjectRepository) FindAllByGroupIDs(ctx context.Context, groupIDs []st
 		// Empty slice means user has no groups - show only unowned projects
 		query = query.Where("group_id IS NULL").Order("created_at DESC")
 	} else {
-		// Filter by group IDs, also include unowned (legacy) projects
-		query = query.Where("(group_id IN ? OR group_id IS NULL)", groupIDs).Order("created_at DESC")
+		// Filter by group IDs only - legacy (NULL group_id) projects are only accessible via nil groupIDs (admin/auth-off)
+		query = query.Where("group_id IN ?", groupIDs).Order("created_at DESC")
 	}
 
 	result := query.Find(&projects)
@@ -166,7 +167,7 @@ func (r *ProjectRepository) FindByIDWithGroupCheck(ctx context.Context, id strin
 
 	result := query.First(&project, "id = ?", id)
 	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, result.Error
@@ -177,9 +178,9 @@ func (r *ProjectRepository) FindByIDWithGroupCheck(ctx context.Context, id strin
 		return &project, nil
 	}
 
-	// Projects without a group (legacy) are accessible to all authenticated users
+	// Projects without a group (legacy) require admin access (nil groupIDs) - deny to regular users
 	if project.GroupID == nil {
-		return &project, nil
+		return nil, nil
 	}
 
 	// Check if the project's group is in the user's groups

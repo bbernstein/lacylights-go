@@ -52,40 +52,36 @@ func TestFindAllByGroupIDs(t *testing.T) {
 		}
 	})
 
-	t.Run("single group returns group projects and unowned", func(t *testing.T) {
+	t.Run("single group returns only that group's projects", func(t *testing.T) {
 		projects, err := repo.FindAllByGroupIDs(ctx, []string{groupA})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(projects) != 1 {
+			t.Errorf("expected 1 project, got %d", len(projects))
+		}
+		if len(projects) > 0 && projects[0].Name != "Project A" {
+			t.Errorf("expected 'Project A', got %q", projects[0].Name)
+		}
+	})
+
+	t.Run("multiple groups returns all matching but not legacy", func(t *testing.T) {
+		projects, err := repo.FindAllByGroupIDs(ctx, []string{groupA, groupB})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(projects) != 2 {
 			t.Errorf("expected 2 projects, got %d", len(projects))
 		}
-		names := map[string]bool{}
-		for _, p := range projects {
-			names[p.Name] = true
-		}
-		if !names["Project A"] || !names["Legacy Project"] {
-			t.Errorf("expected 'Project A' and 'Legacy Project', got %v", names)
-		}
 	})
 
-	t.Run("multiple groups returns all matching and unowned", func(t *testing.T) {
-		projects, err := repo.FindAllByGroupIDs(ctx, []string{groupA, groupB})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(projects) != 3 {
-			t.Errorf("expected 3 projects, got %d", len(projects))
-		}
-	})
-
-	t.Run("non-matching group returns only unowned", func(t *testing.T) {
+	t.Run("non-matching group returns nothing", func(t *testing.T) {
 		projects, err := repo.FindAllByGroupIDs(ctx, []string{"nonexistent"})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(projects) != 1 {
-			t.Errorf("expected 1 project (unowned), got %d", len(projects))
+		if len(projects) != 0 {
+			t.Errorf("expected 0 projects, got %d", len(projects))
 		}
 	})
 
@@ -97,9 +93,8 @@ func TestFindAllByGroupIDs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		// Only the legacy project should remain
-		if len(projects) != 1 {
-			t.Errorf("expected 1 project, got %d", len(projects))
+		if len(projects) != 0 {
+			t.Errorf("expected 0 projects (deleted), got %d", len(projects))
 		}
 		// Restore for other tests
 		if err := repo.Restore(ctx, projectA.ID); err != nil {
@@ -160,13 +155,23 @@ func TestFindByIDWithGroupCheck(t *testing.T) {
 		}
 	})
 
-	t.Run("legacy project accessible to all groups", func(t *testing.T) {
+	t.Run("legacy project not accessible to regular users", func(t *testing.T) {
 		project, err := repo.FindByIDWithGroupCheck(ctx, projectNoGroup.ID, []string{groupB})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
+		if project != nil {
+			t.Error("expected nil for legacy project accessed by regular user")
+		}
+	})
+
+	t.Run("legacy project accessible with nil groupIDs (admin/auth-off)", func(t *testing.T) {
+		project, err := repo.FindByIDWithGroupCheck(ctx, projectNoGroup.ID, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if project == nil {
-			t.Fatal("expected legacy project to be accessible")
+			t.Fatal("expected legacy project to be accessible to admin")
 		}
 	})
 

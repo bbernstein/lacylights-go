@@ -845,10 +845,15 @@ func TestApproveDeviceWithGroup_GroupNotFound(t *testing.T) {
 	ctx := createAdminContext()
 	badGroupID := "non-existent-group"
 	result, err := resolver.approveDeviceWithGroup(ctx, device.ID, generated.DevicePermissionsOperator, &badGroupID)
-	// Device should still be approved, but group assignment fails with a warning
+	// Group validation happens before approval - device should NOT be approved
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "group not found")
-	assert.Equal(t, models.DeviceStatusApproved, result.Status)
+	assert.Nil(t, result, "device should not be returned when group validation fails")
+
+	// Verify device is still pending in the database
+	var dbDevice models.Device
+	require.NoError(t, resolver.db.First(&dbDevice, "id = ?", device.ID).Error)
+	assert.Equal(t, models.DeviceStatusPending, dbDevice.Status)
 }
 
 // ============================================================
