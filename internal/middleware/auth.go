@@ -31,7 +31,15 @@ const (
 	ContextKeyDevice ContextKey = "lacylights:auth:device"
 	// ContextKeyDevicePermissions is the context key for the device's permissions.
 	ContextKeyDevicePermissions ContextKey = "lacylights:auth:devicePermissions"
+	// ContextKeyUserGroups is the context key for the user's group memberships.
+	ContextKeyUserGroups ContextKey = "lacylights:auth:userGroups"
 )
+
+// UserGroupMembership represents a user's or device's membership in a group.
+type UserGroupMembership struct {
+	GroupID string
+	Role    string
+}
 
 // AuthMiddleware provides authentication middleware.
 type AuthMiddleware struct {
@@ -88,6 +96,10 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 					if device.DefaultUserID != nil {
 						ctx = context.WithValue(ctx, ContextKeyUserID, *device.DefaultUserID)
 					}
+
+					// Load device group memberships
+					deviceGroups := m.loadDeviceGroupMemberships(r.Context(), device.ID)
+					ctx = context.WithValue(ctx, ContextKeyUserGroups, deviceGroups)
 
 					// Update last seen timestamp asynchronously
 					go m.updateDeviceLastSeen(device.ID, r.RemoteAddr)
@@ -146,6 +158,10 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, ContextKeyUserEmail, claims.Email)
 		ctx = context.WithValue(ctx, ContextKeyUserRole, claims.Role)
 
+		// Load user group memberships
+		userGroups := m.loadUserGroupMemberships(r.Context(), claims.UserID)
+		ctx = context.WithValue(ctx, ContextKeyUserGroups, userGroups)
+
 		// Continue with enriched context
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -163,13 +179,18 @@ func (m *AuthMiddleware) getDeviceByFingerprint(ctx context.Context, fingerprint
 
 // updateDeviceLastSeen updates the device's last seen timestamp.
 // This method is called asynchronously to avoid blocking requests.
+// Uses a detached context with timeout to prevent writes after the request is cancelled
+// and to avoid connection leaks from long-running database operations.
 // Errors are logged but not propagated since this is a non-critical operation.
 func (m *AuthMiddleware) updateDeviceLastSeen(deviceID string, ipAddress string) {
 	if m.db == nil {
 		return
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	now := time.Now()
-	result := m.db.Model(&models.Device{}).Where("id = ?", deviceID).Updates(map[string]interface{}{
+	result := m.db.WithContext(ctx).Model(&models.Device{}).Where("id = ?", deviceID).Updates(map[string]any{
 		"last_seen_at":    now,
 		"last_ip_address": ipAddress,
 	})
@@ -339,4 +360,87 @@ func GetDevicePermissionsFromContext(ctx context.Context) string {
 // IsDeviceAuthenticated checks if the request is authenticated by a device.
 func IsDeviceAuthenticated(ctx context.Context) bool {
 	return GetDeviceFromContext(ctx) != nil
+}
+
+// GetUserGroupsFromContext retrieves the user's group memberships from the context.
+func GetUserGroupsFromContext(ctx context.Context) []UserGroupMembership {
+	groups, ok := ctx.Value(ContextKeyUserGroups).([]UserGroupMembership)
+	if !ok {
+		return nil
+	}
+	return groups
+}
+
+// GetUserGroupIDs returns the group IDs the user belongs to.
+func GetUserGroupIDs(ctx context.Context) []string {
+	groups := GetUserGroupsFromContext(ctx)
+	ids := make([]string, len(groups))
+	for i, g := range groups {
+		ids[i] = g.GroupID
+	}
+	return ids
+}
+
+// IsGroupMember checks if the user is a member of the given group.
+func IsGroupMember(ctx context.Context, groupID string) bool {
+	for _, g := range GetUserGroupsFromContext(ctx) {
+		if g.GroupID == groupID {
+			return true
+		}
+	}
+	return false
+}
+
+// IsGroupAdmin checks if the user is a GROUP_ADMIN of the given group.
+func IsGroupAdmin(ctx context.Context, groupID string) bool {
+	for _, g := range GetUserGroupsFromContext(ctx) {
+		if g.GroupID == groupID && g.Role == "GROUP_ADMIN" {
+			return true
+		}
+	}
+	return false
+}
+
+// loadUserGroupMemberships queries the database for a user's group memberships.
+func (m *AuthMiddleware) loadUserGroupMemberships(ctx context.Context, userID string) []UserGroupMembership {
+	if m.db == nil || userID == "" {
+		return nil
+	}
+
+	var members []models.UserGroupMember
+	if err := m.db.WithContext(ctx).Select("group_id", "role").Where("user_id = ?", userID).Find(&members).Error; err != nil {
+		log.Printf("Warning: failed to load group memberships for user %s: %v", userID, err)
+		return nil
+	}
+
+	result := make([]UserGroupMembership, len(members))
+	for i, member := range members {
+		result[i] = UserGroupMembership{
+			GroupID: member.GroupID,
+			Role:    member.Role,
+		}
+	}
+	return result
+}
+
+// loadDeviceGroupMemberships queries the database for a device's group memberships.
+func (m *AuthMiddleware) loadDeviceGroupMemberships(ctx context.Context, deviceID string) []UserGroupMembership {
+	if m.db == nil || deviceID == "" {
+		return nil
+	}
+
+	var members []models.DeviceGroupMember
+	if err := m.db.WithContext(ctx).Select("group_id").Where("device_id = ?", deviceID).Find(&members).Error; err != nil {
+		log.Printf("Warning: failed to load group memberships for device %s: %v", deviceID, err)
+		return nil
+	}
+
+	result := make([]UserGroupMembership, len(members))
+	for i, member := range members {
+		result[i] = UserGroupMembership{
+			GroupID: member.GroupID,
+			Role:    "MEMBER", // Devices are always MEMBER role within a group
+		}
+	}
+	return result
 }

@@ -794,6 +794,7 @@ func TestContextKeys(t *testing.T) {
 		ContextKeyUserRole,
 		ContextKeyDevice,
 		ContextKeyDevicePermissions,
+		ContextKeyUserGroups,
 	}
 
 	seen := make(map[ContextKey]bool)
@@ -817,8 +818,11 @@ func createTestDBWithDevice(t *testing.T) *gorm.DB {
 		t.Fatalf("failed to create test database: %v", err)
 	}
 
-	// Run migrations for all required tables
-	err = db.AutoMigrate(&models.Session{}, &models.User{}, &models.Device{})
+	// Run migrations for all required tables including group membership tables
+	err = db.AutoMigrate(
+		&models.Session{}, &models.User{}, &models.Device{},
+		&models.UserGroup{}, &models.UserGroupMember{}, &models.DeviceGroupMember{},
+	)
 	if err != nil {
 		t.Fatalf("failed to migrate database: %v", err)
 	}
@@ -1429,5 +1433,441 @@ func TestAuthenticate_InvalidAuthHeaderFormat(t *testing.T) {
 				t.Error("expected handler to be called")
 			}
 		})
+	}
+}
+
+// --- Phase 2: Group context helper tests ---
+
+func TestGetUserGroupsFromContext(t *testing.T) {
+	t.Run("groups exist", func(t *testing.T) {
+		groups := []UserGroupMembership{
+			{GroupID: "group-1", Role: "MEMBER"},
+			{GroupID: "group-2", Role: "GROUP_ADMIN"},
+		}
+		ctx := context.WithValue(context.Background(), ContextKeyUserGroups, groups)
+
+		result := GetUserGroupsFromContext(ctx)
+		if len(result) != 2 {
+			t.Fatalf("expected 2 groups, got %d", len(result))
+		}
+		if result[0].GroupID != "group-1" {
+			t.Errorf("expected group-1, got %s", result[0].GroupID)
+		}
+		if result[1].Role != "GROUP_ADMIN" {
+			t.Errorf("expected GROUP_ADMIN, got %s", result[1].Role)
+		}
+	})
+
+	t.Run("no groups", func(t *testing.T) {
+		ctx := context.Background()
+		result := GetUserGroupsFromContext(ctx)
+		if result != nil {
+			t.Errorf("expected nil, got %v", result)
+		}
+	})
+
+	t.Run("wrong type in context", func(t *testing.T) {
+		ctx := context.WithValue(context.Background(), ContextKeyUserGroups, "not groups")
+		result := GetUserGroupsFromContext(ctx)
+		if result != nil {
+			t.Errorf("expected nil for wrong type, got %v", result)
+		}
+	})
+
+	t.Run("empty slice", func(t *testing.T) {
+		groups := []UserGroupMembership{}
+		ctx := context.WithValue(context.Background(), ContextKeyUserGroups, groups)
+		result := GetUserGroupsFromContext(ctx)
+		if len(result) != 0 {
+			t.Errorf("expected empty slice, got %d items", len(result))
+		}
+	})
+}
+
+func TestGetUserGroupIDs(t *testing.T) {
+	t.Run("has groups", func(t *testing.T) {
+		groups := []UserGroupMembership{
+			{GroupID: "group-1", Role: "MEMBER"},
+			{GroupID: "group-2", Role: "GROUP_ADMIN"},
+			{GroupID: "group-3", Role: "MEMBER"},
+		}
+		ctx := context.WithValue(context.Background(), ContextKeyUserGroups, groups)
+
+		ids := GetUserGroupIDs(ctx)
+		if len(ids) != 3 {
+			t.Fatalf("expected 3 IDs, got %d", len(ids))
+		}
+		if ids[0] != "group-1" || ids[1] != "group-2" || ids[2] != "group-3" {
+			t.Errorf("unexpected IDs: %v", ids)
+		}
+	})
+
+	t.Run("no groups", func(t *testing.T) {
+		ctx := context.Background()
+		ids := GetUserGroupIDs(ctx)
+		if len(ids) != 0 {
+			t.Errorf("expected empty slice, got %v", ids)
+		}
+	})
+}
+
+func TestIsGroupMember(t *testing.T) {
+	groups := []UserGroupMembership{
+		{GroupID: "group-1", Role: "MEMBER"},
+		{GroupID: "group-2", Role: "GROUP_ADMIN"},
+	}
+	ctx := context.WithValue(context.Background(), ContextKeyUserGroups, groups)
+
+	t.Run("is member", func(t *testing.T) {
+		if !IsGroupMember(ctx, "group-1") {
+			t.Error("expected true for group-1 membership")
+		}
+	})
+
+	t.Run("is member as admin", func(t *testing.T) {
+		if !IsGroupMember(ctx, "group-2") {
+			t.Error("expected true for group-2 membership (GROUP_ADMIN is also a member)")
+		}
+	})
+
+	t.Run("not member", func(t *testing.T) {
+		if IsGroupMember(ctx, "group-999") {
+			t.Error("expected false for non-member group")
+		}
+	})
+
+	t.Run("no groups in context", func(t *testing.T) {
+		emptyCtx := context.Background()
+		if IsGroupMember(emptyCtx, "group-1") {
+			t.Error("expected false when no groups in context")
+		}
+	})
+}
+
+func TestIsGroupAdmin(t *testing.T) {
+	groups := []UserGroupMembership{
+		{GroupID: "group-1", Role: "MEMBER"},
+		{GroupID: "group-2", Role: "GROUP_ADMIN"},
+	}
+	ctx := context.WithValue(context.Background(), ContextKeyUserGroups, groups)
+
+	t.Run("is group admin", func(t *testing.T) {
+		if !IsGroupAdmin(ctx, "group-2") {
+			t.Error("expected true for group-2 admin")
+		}
+	})
+
+	t.Run("not group admin (is member)", func(t *testing.T) {
+		if IsGroupAdmin(ctx, "group-1") {
+			t.Error("expected false for group-1 (MEMBER, not GROUP_ADMIN)")
+		}
+	})
+
+	t.Run("not member at all", func(t *testing.T) {
+		if IsGroupAdmin(ctx, "group-999") {
+			t.Error("expected false for non-member group")
+		}
+	})
+
+	t.Run("no groups in context", func(t *testing.T) {
+		emptyCtx := context.Background()
+		if IsGroupAdmin(emptyCtx, "group-2") {
+			t.Error("expected false when no groups in context")
+		}
+	})
+}
+
+func TestLoadUserGroupMemberships(t *testing.T) {
+	t.Run("loads memberships", func(t *testing.T) {
+		db := createTestDBWithDevice(t)
+		authSvc, _ := createTestAuthServiceWithDeviceAuth(t, true, true)
+		mw := NewAuthMiddlewareWithDB(authSvc, db)
+
+		// Create group memberships
+		members := []models.UserGroupMember{
+			{ID: "m1", UserID: "user-1", GroupID: "group-1", Role: "MEMBER"},
+			{ID: "m2", UserID: "user-1", GroupID: "group-2", Role: "GROUP_ADMIN"},
+		}
+		for _, m := range members {
+			if err := db.Create(&m).Error; err != nil {
+				t.Fatalf("failed to create member: %v", err)
+			}
+		}
+
+		result := mw.loadUserGroupMemberships(context.Background(), "user-1")
+		if len(result) != 2 {
+			t.Fatalf("expected 2 memberships, got %d", len(result))
+		}
+
+		// Verify contents (order may vary)
+		found := map[string]string{}
+		for _, r := range result {
+			found[r.GroupID] = r.Role
+		}
+		if found["group-1"] != "MEMBER" {
+			t.Errorf("expected group-1 role MEMBER, got %s", found["group-1"])
+		}
+		if found["group-2"] != "GROUP_ADMIN" {
+			t.Errorf("expected group-2 role GROUP_ADMIN, got %s", found["group-2"])
+		}
+	})
+
+	t.Run("no memberships", func(t *testing.T) {
+		db := createTestDBWithDevice(t)
+		authSvc, _ := createTestAuthServiceWithDeviceAuth(t, true, true)
+		mw := NewAuthMiddlewareWithDB(authSvc, db)
+
+		result := mw.loadUserGroupMemberships(context.Background(), "user-nonexistent")
+		if len(result) != 0 {
+			t.Errorf("expected 0 memberships, got %d", len(result))
+		}
+	})
+
+	t.Run("nil db", func(t *testing.T) {
+		authSvc := createTestAuthService(t, true)
+		mw := NewAuthMiddleware(authSvc)
+
+		result := mw.loadUserGroupMemberships(context.Background(), "user-1")
+		if result != nil {
+			t.Errorf("expected nil with nil db, got %v", result)
+		}
+	})
+
+	t.Run("empty userID", func(t *testing.T) {
+		db := createTestDBWithDevice(t)
+		authSvc, _ := createTestAuthServiceWithDeviceAuth(t, true, true)
+		mw := NewAuthMiddlewareWithDB(authSvc, db)
+
+		result := mw.loadUserGroupMemberships(context.Background(), "")
+		if result != nil {
+			t.Errorf("expected nil for empty userID, got %v", result)
+		}
+	})
+}
+
+func TestLoadUserGroupMemberships_DatabaseError(t *testing.T) {
+	db := createTestDBWithDevice(t)
+	authSvc, _ := createTestAuthServiceWithDeviceAuth(t, true, true)
+	mw := NewAuthMiddlewareWithDB(authSvc, db)
+
+	// Close the database to cause a query error
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("failed to get underlying DB: %v", err)
+	}
+	_ = sqlDB.Close()
+
+	result := mw.loadUserGroupMemberships(context.Background(), "user-1")
+	if result != nil {
+		t.Errorf("expected nil on database error, got %v", result)
+	}
+}
+
+func TestLoadDeviceGroupMemberships(t *testing.T) {
+	t.Run("loads memberships", func(t *testing.T) {
+		db := createTestDBWithDevice(t)
+		authSvc, _ := createTestAuthServiceWithDeviceAuth(t, true, true)
+		mw := NewAuthMiddlewareWithDB(authSvc, db)
+
+		// Create device group memberships
+		members := []models.DeviceGroupMember{
+			{ID: "dgm1", DeviceID: "device-1", GroupID: "group-1"},
+			{ID: "dgm2", DeviceID: "device-1", GroupID: "group-2"},
+		}
+		for _, m := range members {
+			if err := db.Create(&m).Error; err != nil {
+				t.Fatalf("failed to create device group member: %v", err)
+			}
+		}
+
+		result := mw.loadDeviceGroupMemberships(context.Background(), "device-1")
+		if len(result) != 2 {
+			t.Fatalf("expected 2 memberships, got %d", len(result))
+		}
+
+		// All device memberships should have MEMBER role
+		for _, r := range result {
+			if r.Role != "MEMBER" {
+				t.Errorf("expected MEMBER role for device group membership, got %s", r.Role)
+			}
+		}
+	})
+
+	t.Run("no memberships", func(t *testing.T) {
+		db := createTestDBWithDevice(t)
+		authSvc, _ := createTestAuthServiceWithDeviceAuth(t, true, true)
+		mw := NewAuthMiddlewareWithDB(authSvc, db)
+
+		result := mw.loadDeviceGroupMemberships(context.Background(), "device-nonexistent")
+		if len(result) != 0 {
+			t.Errorf("expected 0 memberships, got %d", len(result))
+		}
+	})
+
+	t.Run("nil db", func(t *testing.T) {
+		authSvc := createTestAuthService(t, true)
+		mw := NewAuthMiddleware(authSvc)
+
+		result := mw.loadDeviceGroupMemberships(context.Background(), "device-1")
+		if result != nil {
+			t.Errorf("expected nil with nil db, got %v", result)
+		}
+	})
+
+	t.Run("empty deviceID", func(t *testing.T) {
+		db := createTestDBWithDevice(t)
+		authSvc, _ := createTestAuthServiceWithDeviceAuth(t, true, true)
+		mw := NewAuthMiddlewareWithDB(authSvc, db)
+
+		result := mw.loadDeviceGroupMemberships(context.Background(), "")
+		if result != nil {
+			t.Errorf("expected nil for empty deviceID, got %v", result)
+		}
+	})
+}
+
+func TestLoadDeviceGroupMemberships_DatabaseError(t *testing.T) {
+	db := createTestDBWithDevice(t)
+	authSvc, _ := createTestAuthServiceWithDeviceAuth(t, true, true)
+	mw := NewAuthMiddlewareWithDB(authSvc, db)
+
+	// Close the database to cause a query error
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("failed to get underlying DB: %v", err)
+	}
+	_ = sqlDB.Close()
+
+	result := mw.loadDeviceGroupMemberships(context.Background(), "device-1")
+	if result != nil {
+		t.Errorf("expected nil on database error, got %v", result)
+	}
+}
+
+func TestAuthenticate_DeviceWithGroupMemberships(t *testing.T) {
+	authSvc, db := createTestAuthServiceWithDeviceAuth(t, true, true)
+	mw := NewAuthMiddlewareWithDB(authSvc, db)
+
+	// Create an approved device
+	createTestDevice(t, db, "device-grp", "fp-groups", models.DeviceStatusApproved, models.DevicePermissionsOperator)
+
+	// Create device group memberships
+	for _, dgm := range []models.DeviceGroupMember{
+		{ID: "dgm-1", DeviceID: "device-grp", GroupID: "group-a"},
+		{ID: "dgm-2", DeviceID: "device-grp", GroupID: "group-b"},
+	} {
+		if err := db.Create(&dgm).Error; err != nil {
+			t.Fatalf("failed to create device group member: %v", err)
+		}
+	}
+
+	handlerCalled := false
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled = true
+
+		// Verify group memberships are in context
+		groups := GetUserGroupsFromContext(r.Context())
+		if len(groups) != 2 {
+			t.Errorf("expected 2 group memberships, got %d", len(groups))
+		}
+
+		// Verify IsGroupMember works
+		if !IsGroupMember(r.Context(), "group-a") {
+			t.Error("expected device to be member of group-a")
+		}
+		if !IsGroupMember(r.Context(), "group-b") {
+			t.Error("expected device to be member of group-b")
+		}
+		if IsGroupMember(r.Context(), "group-c") {
+			t.Error("expected device NOT to be member of group-c")
+		}
+
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("X-Device-Fingerprint", "fp-groups")
+	rr := httptest.NewRecorder()
+
+	mw.Authenticate(handler).ServeHTTP(rr, req)
+
+	if !handlerCalled {
+		t.Error("expected handler to be called")
+	}
+}
+
+func TestAuthenticate_UserWithGroupMemberships(t *testing.T) {
+	authSvc, db := createTestAuthServiceWithDB(t, true)
+
+	// Also migrate group tables
+	if err := db.AutoMigrate(&models.UserGroup{}, &models.UserGroupMember{}); err != nil {
+		t.Fatalf("failed to migrate group tables: %v", err)
+	}
+
+	mw := NewAuthMiddlewareWithDB(authSvc, db)
+
+	// Create a session in the database
+	createTestSession(t, db, "sess-grp", "user-grp")
+
+	// Create user group memberships
+	for _, ugm := range []models.UserGroupMember{
+		{ID: "ugm-1", UserID: "user-grp", GroupID: "group-x", Role: "MEMBER"},
+		{ID: "ugm-2", UserID: "user-grp", GroupID: "group-y", Role: "GROUP_ADMIN"},
+	} {
+		if err := db.Create(&ugm).Error; err != nil {
+			t.Fatalf("failed to create user group member: %v", err)
+		}
+	}
+
+	// Generate a valid token
+	jwtSvc := authSvc.JWTService()
+	pair, err := jwtSvc.GenerateTokenPair("user-grp", "grp@example.com", "USER", "sess-grp")
+	if err != nil {
+		t.Fatalf("failed to generate token pair: %v", err)
+	}
+
+	handlerCalled := false
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled = true
+
+		// Verify group memberships are in context
+		groups := GetUserGroupsFromContext(r.Context())
+		if len(groups) != 2 {
+			t.Errorf("expected 2 group memberships, got %d", len(groups))
+		}
+
+		// Verify IsGroupMember works
+		if !IsGroupMember(r.Context(), "group-x") {
+			t.Error("expected user to be member of group-x")
+		}
+		if !IsGroupMember(r.Context(), "group-y") {
+			t.Error("expected user to be member of group-y")
+		}
+
+		// Verify IsGroupAdmin works
+		if IsGroupAdmin(r.Context(), "group-x") {
+			t.Error("expected user NOT to be admin of group-x")
+		}
+		if !IsGroupAdmin(r.Context(), "group-y") {
+			t.Error("expected user to be admin of group-y")
+		}
+
+		// Verify GetUserGroupIDs
+		ids := GetUserGroupIDs(r.Context())
+		if len(ids) != 2 {
+			t.Errorf("expected 2 group IDs, got %d", len(ids))
+		}
+
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	rr := httptest.NewRecorder()
+
+	mw.Authenticate(handler).ServeHTTP(rr, req)
+
+	if !handlerCalled {
+		t.Error("expected handler to be called")
 	}
 }

@@ -25,6 +25,8 @@ import (
 	"github.com/rs/cors"
 	"github.com/vektah/gqlparser/v2/ast"
 
+	"github.com/lucsky/cuid"
+
 	"github.com/bbernstein/lacylights-go/internal/auth"
 	"github.com/bbernstein/lacylights-go/internal/config"
 	"github.com/bbernstein/lacylights-go/internal/database"
@@ -128,6 +130,8 @@ func main() {
 		{"sessions", &models.Session{}, []string{"id", "user_id", "token_hash"}},
 		{"verification_tokens", &models.VerificationToken{}, []string{"id", "token_hash"}},
 		{"user_group_members", &models.UserGroupMember{}, []string{"id", "user_id", "group_id"}},
+		{"device_group_members", &models.DeviceGroupMember{}, []string{"id", "device_id", "group_id"}},
+		{"group_invitations", &models.GroupInvitation{}, []string{"id", "group_id", "email"}},
 	}
 
 	for _, t := range tablesWithFK {
@@ -172,6 +176,9 @@ func main() {
 	if err := migrateEffectChannelMinMax(db); err != nil {
 		log.Printf("Warning: effect channel min/max migration failed: %v", err)
 	}
+
+	// Note: group ownership migration runs after auth setup (EnsureDefaultAdmin)
+	// so the admin user exists when assigning orphaned projects.
 
 	// Load Open Fixture Library if enabled and database is empty
 	if cfg.OFLImportEnabled {
@@ -320,6 +327,11 @@ func main() {
 		router.Use(authMiddleware.Authenticate)
 	} else {
 		log.Println("Auth service disabled")
+	}
+
+	// Migrate group ownership fields after auth setup so admin user exists for orphaned project assignment
+	if err := migrateGroupOwnership(db, cfg.AuthEnabled); err != nil {
+		log.Printf("Warning: group ownership migration failed: %v", err)
 	}
 
 	// Create resolver with dependencies
@@ -962,6 +974,136 @@ func doMigrateSceneToLook(db *gorm.DB) error {
 	}
 
 	log.Println("✅ Scene to look migration complete")
+	return nil
+}
+
+// migrateGroupOwnership handles the migration to add group ownership fields.
+// This is idempotent and runs on every startup.
+// It handles:
+// 1. Backfilling: setting role=MEMBER for existing user_group_members without a role
+// 2. When auth enabled: assigning orphaned projects (group_id IS NULL) to a target group
+//    - By default, assigns to the admin user's personal group
+//    - Override with MIGRATION_TARGET_GROUP_ID env var
+//
+// Environment variables:
+//   - MIGRATION_TARGET_GROUP_ID: Override the target group for orphaned projects
+//   - MIGRATION_DRY_RUN: Set to "true" to log what would happen without making changes
+func migrateGroupOwnership(db *gorm.DB, authEnabled bool) error {
+	dryRun := os.Getenv("MIGRATION_DRY_RUN") == "true"
+
+	// Step 1: Backfill role for existing user_group_members that don't have one
+	if db.Migrator().HasColumn("user_group_members", "role") {
+		if dryRun {
+			var count int64
+			db.Model(&models.UserGroupMember{}).Where("role IS NULL OR role = ''").Count(&count)
+			if count > 0 {
+				log.Printf("[DRY RUN] Would backfill role for %d user_group_members", count)
+			}
+		} else {
+			result := db.Exec(`UPDATE user_group_members SET role = 'MEMBER' WHERE role IS NULL OR role = ''`)
+			if result.Error != nil {
+				return fmt.Errorf("failed to backfill user_group_member roles: %w", result.Error)
+			}
+			if result.RowsAffected > 0 {
+				log.Printf("Backfilled role for %d user_group_members", result.RowsAffected)
+			}
+		}
+	}
+
+	// Step 2: If auth is disabled, nothing more to do (group_id stays NULL)
+	if !authEnabled {
+		return nil
+	}
+
+	// Step 3: Find orphaned projects (auth enabled, projects without group_id)
+	var orphanedProjects []models.Project
+	if err := db.Where("group_id IS NULL AND deleted_at IS NULL").
+		Find(&orphanedProjects).Error; err != nil {
+		return fmt.Errorf("failed to find orphaned projects: %w", err)
+	}
+
+	if len(orphanedProjects) == 0 {
+		return nil // Nothing to migrate
+	}
+
+	log.Printf("Found %d orphaned projects to migrate to group ownership", len(orphanedProjects))
+	for _, p := range orphanedProjects {
+		log.Printf("  Orphaned project: id=%s name=%q", p.ID, p.Name)
+	}
+
+	// Check for target group override via environment variable
+	targetGroupID := os.Getenv("MIGRATION_TARGET_GROUP_ID")
+	if targetGroupID != "" {
+		var targetGroup models.UserGroup
+		if err := db.First(&targetGroup, "id = ?", targetGroupID).Error; err != nil {
+			return fmt.Errorf("MIGRATION_TARGET_GROUP_ID=%s not found: %w", targetGroupID, err)
+		}
+		log.Printf("Using target group from MIGRATION_TARGET_GROUP_ID: %s (%s)", targetGroup.ID, targetGroup.Name)
+		return assignOrphanedProjects(db, orphanedProjects, targetGroup.ID, dryRun)
+	}
+
+	// Find admin user (first ADMIN user)
+	var adminUser models.User
+	if err := db.Where("role = 'ADMIN'").First(&adminUser).Error; err != nil {
+		log.Printf("  No admin user found, skipping project group assignment")
+		return nil
+	}
+
+	// Find or create admin's personal group
+	var personalGroup models.UserGroup
+	err := db.Where("owner_id = ? AND is_personal = ?", adminUser.ID, true).First(&personalGroup).Error
+	if err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return fmt.Errorf("failed to find personal group: %w", err)
+		}
+		if dryRun {
+			log.Printf("[DRY RUN] Would create personal group for admin: %s", adminUser.Email)
+			log.Printf("[DRY RUN] Would assign %d orphaned projects to new group", len(orphanedProjects))
+			return nil
+		}
+		// Create personal group for admin
+		personalGroup = models.UserGroup{
+			ID:         cuid.New(),
+			Name:       fmt.Sprintf("%s's Projects", adminUser.Email),
+			IsPersonal: true,
+			OwnerID:    &adminUser.ID,
+		}
+		if err := db.Create(&personalGroup).Error; err != nil {
+			return fmt.Errorf("failed to create admin personal group: %w", err)
+		}
+		// Add admin as GROUP_ADMIN member
+		member := models.UserGroupMember{
+			ID:      cuid.New(),
+			UserID:  adminUser.ID,
+			GroupID: personalGroup.ID,
+			Role:    models.GroupRoleGroupAdmin,
+		}
+		if err := db.Create(&member).Error; err != nil {
+			return fmt.Errorf("failed to add admin to personal group: %w", err)
+		}
+		log.Printf("  Created personal group for admin: %s", personalGroup.Name)
+	}
+
+	return assignOrphanedProjects(db, orphanedProjects, personalGroup.ID, dryRun)
+}
+
+// assignOrphanedProjects assigns orphaned projects to the given group, logging each one.
+func assignOrphanedProjects(db *gorm.DB, projects []models.Project, groupID string, dryRun bool) error {
+	for _, p := range projects {
+		if dryRun {
+			log.Printf("[DRY RUN] Would assign project id=%s name=%q to group %s", p.ID, p.Name, groupID)
+			continue
+		}
+		if err := db.Model(&models.Project{}).
+			Where("id = ?", p.ID).
+			Update("group_id", groupID).Error; err != nil {
+			return fmt.Errorf("failed to assign project %s to group: %w", p.ID, err)
+		}
+		log.Printf("  Assigned project id=%s name=%q to group %s", p.ID, p.Name, groupID)
+	}
+	if !dryRun {
+		log.Printf("Assigned %d orphaned projects to group %s", len(projects), groupID)
+	}
 	return nil
 }
 

@@ -154,7 +154,7 @@ func (s *Service) Register(ctx context.Context, input RegisterInput, ipAddress, 
 		return nil, err
 	}
 
-	// Create user and credentials in a transaction
+	// Create user, credentials, and personal group in a transaction
 	var user models.User
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Create user
@@ -177,6 +177,11 @@ func (s *Service) Register(ctx context.Context, input RegisterInput, ipAddress, 
 			PasswordUpdatedAt: time.Now(),
 		}
 		if err := tx.Create(&creds).Error; err != nil {
+			return err
+		}
+
+		// Auto-create personal group
+		if err := createPersonalGroup(tx, user.ID, user.Email); err != nil {
 			return err
 		}
 
@@ -499,7 +504,7 @@ func (s *Service) EnsureDefaultAdmin(ctx context.Context, email, password string
 		return err
 	}
 
-	// Create admin user and credentials in a transaction
+	// Create admin user, credentials, and personal group in a transaction
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Create user with ADMIN role
 		user := models.User{
@@ -523,6 +528,34 @@ func (s *Service) EnsureDefaultAdmin(ctx context.Context, email, password string
 			return err
 		}
 
+		// Auto-create personal group for admin
+		if err := createPersonalGroup(tx, user.ID, user.Email); err != nil {
+			return err
+		}
+
 		return nil
 	})
+}
+
+// createPersonalGroup creates a personal group for a user and adds them as GROUP_ADMIN.
+// This is called within a transaction during user registration or admin creation.
+func createPersonalGroup(tx *gorm.DB, userID, email string) error {
+	groupName := email + "'s Group"
+	group := models.UserGroup{
+		ID:         cuid.New(),
+		Name:       groupName,
+		IsPersonal: true,
+		OwnerID:    &userID,
+	}
+	if err := tx.Create(&group).Error; err != nil {
+		return err
+	}
+
+	member := models.UserGroupMember{
+		ID:      cuid.New(),
+		UserID:  userID,
+		GroupID: group.ID,
+		Role:    models.GroupRoleGroupAdmin,
+	}
+	return tx.Create(&member).Error
 }

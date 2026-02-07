@@ -3,6 +3,8 @@ package repositories
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"time"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
@@ -47,7 +49,7 @@ func (r *ProjectRepository) FindByID(ctx context.Context, id string) (*models.Pr
 		Where("deleted_at IS NULL").
 		First(&project, "id = ?", id)
 	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, result.Error
@@ -60,7 +62,7 @@ func (r *ProjectRepository) FindByIDIncludingDeleted(ctx context.Context, id str
 	var project models.Project
 	result := r.db.WithContext(ctx).First(&project, "id = ?", id)
 	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, result.Error
@@ -132,4 +134,59 @@ func (r *ProjectRepository) CountCueLists(ctx context.Context, projectID string)
 		Where("project_id = ?", projectID).
 		Count(&count)
 	return count, result.Error
+}
+
+// FindAllByGroupIDs returns non-deleted projects that belong to any of the given groups.
+// If groupIDs is nil, returns all non-deleted projects (no filtering).
+// If groupIDs is empty, returns no projects (user has no group memberships).
+func (r *ProjectRepository) FindAllByGroupIDs(ctx context.Context, groupIDs []string) ([]models.Project, error) {
+	var projects []models.Project
+	query := r.db.WithContext(ctx).Where("deleted_at IS NULL")
+
+	if groupIDs == nil {
+		// nil means no filtering (admin or auth-off)
+		query = query.Order("created_at DESC")
+	} else if len(groupIDs) == 0 {
+		// Empty slice means user has no groups - no projects accessible
+		return projects, nil
+	} else {
+		// Filter by group IDs only - legacy (NULL group_id) projects are only accessible via nil groupIDs (admin/auth-off)
+		query = query.Where("group_id IN ?", groupIDs).Order("created_at DESC")
+	}
+
+	result := query.Find(&projects)
+	return projects, result.Error
+}
+
+// FindByIDWithGroupCheck returns a non-deleted project by ID, verifying group access.
+// If groupIDs is nil, no group check is performed (admin or auth-off).
+// Returns nil if the project exists but the user doesn't have group access.
+func (r *ProjectRepository) FindByIDWithGroupCheck(ctx context.Context, id string, groupIDs []string) (*models.Project, error) {
+	var project models.Project
+	query := r.db.WithContext(ctx).Where("deleted_at IS NULL")
+
+	result := query.First(&project, "id = ?", id)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+
+	// No filtering needed
+	if groupIDs == nil {
+		return &project, nil
+	}
+
+	// Projects without a group (legacy) require admin access (nil groupIDs) - deny to regular users
+	if project.GroupID == nil {
+		return nil, nil
+	}
+
+	// Check if the project's group is in the user's groups
+	if slices.Contains(groupIDs, *project.GroupID) {
+		return &project, nil
+	}
+
+	return nil, nil // Not accessible
 }

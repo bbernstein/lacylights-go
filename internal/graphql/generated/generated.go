@@ -48,6 +48,8 @@ type ResolverRoot interface {
 	FixtureInstance() FixtureInstanceResolver
 	FixtureMode() FixtureModeResolver
 	FixtureValue() FixtureValueResolver
+	GroupInvitation() GroupInvitationResolver
+	GroupMember() GroupMemberResolver
 	InstanceChannel() InstanceChannelResolver
 	Look() LookResolver
 	LookBoard() LookBoardResolver
@@ -299,6 +301,7 @@ type ComplexityRoot struct {
 		DefaultRole   func(childComplexity int) int
 		DefaultUser   func(childComplexity int) int
 		Fingerprint   func(childComplexity int) int
+		Groups        func(childComplexity int) int
 		ID            func(childComplexity int) int
 		IsAuthorized  func(childComplexity int) int
 		LastIPAddress func(childComplexity int) int
@@ -497,6 +500,24 @@ type ComplexityRoot struct {
 		LastUpdated     func(childComplexity int) int
 	}
 
+	GroupInvitation struct {
+		CreatedAt func(childComplexity int) int
+		Email     func(childComplexity int) int
+		ExpiresAt func(childComplexity int) int
+		Group     func(childComplexity int) int
+		ID        func(childComplexity int) int
+		InvitedBy func(childComplexity int) int
+		Role      func(childComplexity int) int
+		Status    func(childComplexity int) int
+	}
+
+	GroupMember struct {
+		ID       func(childComplexity int) int
+		JoinedAt func(childComplexity int) int
+		Role     func(childComplexity int) int
+		User     func(childComplexity int) int
+	}
+
 	ImportResult struct {
 		ProjectID func(childComplexity int) int
 		Stats     func(childComplexity int) int
@@ -643,17 +664,19 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
+		AcceptInvitation                       func(childComplexity int, invitationID string) int
 		ActivateBlackout                       func(childComplexity int, fadeTime *float64) int
 		ActivateEffect                         func(childComplexity int, effectID string, fadeTime *float64) int
 		ActivateLookFromBoard                  func(childComplexity int, lookBoardID string, lookID string, fadeTimeOverride *float64) int
 		AddChannelToEffectFixture              func(childComplexity int, effectFixtureID string, input EffectChannelInput) int
+		AddDeviceToGroup                       func(childComplexity int, deviceID string, groupID string) int
 		AddEffectToCue                         func(childComplexity int, input AddEffectToCueInput) int
 		AddFixtureToEffect                     func(childComplexity int, input AddFixtureToEffectInput) int
 		AddFixturesToLook                      func(childComplexity int, lookID string, fixtureValues []*FixtureValueInput, overwriteExisting *bool) int
 		AddLookToBoard                         func(childComplexity int, input CreateLookBoardButtonInput) int
-		AddUserToGroup                         func(childComplexity int, userID string, groupID string) int
+		AddUserToGroup                         func(childComplexity int, userID string, groupID string, role *GroupMemberRole) int
 		AppleSignIn                            func(childComplexity int, identityToken string, authorizationCode string) int
-		ApproveDevice                          func(childComplexity int, deviceID string, permissions DevicePermissions) int
+		ApproveDevice                          func(childComplexity int, deviceID string, permissions DevicePermissions, groupID *string) int
 		AuthorizeDevice                        func(childComplexity int, fingerprint string, authorizationCode string) int
 		BulkCreateCueLists                     func(childComplexity int, input BulkCueListCreateInput) int
 		BulkCreateCues                         func(childComplexity int, input BulkCueCreateInput) int
@@ -681,6 +704,7 @@ type ComplexityRoot struct {
 		BulkUpdateLooks                        func(childComplexity int, input BulkLookUpdateInput) int
 		BulkUpdateLooksPartial                 func(childComplexity int, input BulkLookPartialUpdateInput) int
 		BulkUpdateProjects                     func(childComplexity int, input BulkProjectUpdateInput) int
+		CancelInvitation                       func(childComplexity int, invitationID string) int
 		CancelOFLImport                        func(childComplexity int) int
 		CancelPreviewSession                   func(childComplexity int, sessionID string) int
 		ChangePassword                         func(childComplexity int, oldPassword string, newPassword string) int
@@ -700,6 +724,7 @@ type ComplexityRoot struct {
 		CreateProject                          func(childComplexity int, input CreateProjectInput) int
 		CreateUser                             func(childComplexity int, input CreateUserInput) int
 		CreateUserGroup                        func(childComplexity int, input CreateUserGroupInput) int
+		DeclineInvitation                      func(childComplexity int, invitationID string) int
 		DeleteCue                              func(childComplexity int, id string) int
 		DeleteCueList                          func(childComplexity int, id string) int
 		DeleteEffect                           func(childComplexity int, id string) int
@@ -721,6 +746,7 @@ type ComplexityRoot struct {
 		ImportProject                          func(childComplexity int, jsonContent string, options ImportOptionsInput) int
 		ImportProjectFromQlc                   func(childComplexity int, xmlContent string, originalFileName string) int
 		InitializePreviewWithLook              func(childComplexity int, sessionID string, lookID string) int
+		InviteToGroup                          func(childComplexity int, groupID string, email string, role *GroupMemberRole) int
 		JumpToOperation                        func(childComplexity int, projectID string, operationID string) int
 		Login                                  func(childComplexity int, email string, password string) int
 		Logout                                 func(childComplexity int) int
@@ -735,6 +761,7 @@ type ComplexityRoot struct {
 		RegisterDevice                         func(childComplexity int, fingerprint string, name string) int
 		ReleaseBlackout                        func(childComplexity int, fadeTime *float64) int
 		RemoveChannelFromEffectFixture         func(childComplexity int, id string) int
+		RemoveDeviceFromGroup                  func(childComplexity int, deviceID string, groupID string) int
 		RemoveEffectFromCue                    func(childComplexity int, cueID string, effectID string) int
 		RemoveFixtureFromEffect                func(childComplexity int, effectID string, fixtureID string) int
 		RemoveFixturesFromLook                 func(childComplexity int, lookID string, fixtureIds []string) int
@@ -779,6 +806,7 @@ type ComplexityRoot struct {
 		UpdateFixtureDefinition                func(childComplexity int, id string, input CreateFixtureDefinitionInput) int
 		UpdateFixtureInstance                  func(childComplexity int, id string, input UpdateFixtureInstanceInput) int
 		UpdateFixturePositions                 func(childComplexity int, positions []*FixturePositionInput) int
+		UpdateGroupMemberRole                  func(childComplexity int, userID string, groupID string, role GroupMemberRole) int
 		UpdateInstanceChannelFadeBehavior      func(childComplexity int, channelID string, fadeBehavior FadeBehavior) int
 		UpdateLook                             func(childComplexity int, id string, input UpdateLookInput) int
 		UpdateLookBoard                        func(childComplexity int, id string, input UpdateLookBoardInput) int
@@ -911,6 +939,8 @@ type ComplexityRoot struct {
 		Description        func(childComplexity int) int
 		FixtureCount       func(childComplexity int) int
 		Fixtures           func(childComplexity int) int
+		Group              func(childComplexity int) int
+		GroupID            func(childComplexity int) int
 		ID                 func(childComplexity int) int
 		LayoutCanvasHeight func(childComplexity int) int
 		LayoutCanvasWidth  func(childComplexity int) int
@@ -1003,6 +1033,7 @@ type ComplexityRoot struct {
 		FixturesByIds                   func(childComplexity int, ids []string) int
 		GetQLCFixtureMappingSuggestions func(childComplexity int, projectID string) int
 		GlobalPlaybackStatus            func(childComplexity int) int
+		GroupInvitations                func(childComplexity int, groupID string) int
 		Look                            func(childComplexity int, id string, includeFixtureValues *bool) int
 		LookBoard                       func(childComplexity int, id string) int
 		LookBoardButton                 func(childComplexity int, id string) int
@@ -1014,6 +1045,8 @@ type ComplexityRoot struct {
 		LooksByIds                      func(childComplexity int, ids []string) int
 		Me                              func(childComplexity int) int
 		ModulatorStatus                 func(childComplexity int) int
+		MyGroups                        func(childComplexity int) int
+		MyInvitations                   func(childComplexity int) int
 		MySessions                      func(childComplexity int) int
 		NetworkInterfaceOptions         func(childComplexity int) int
 		OflImportStatus                 func(childComplexity int) int
@@ -1149,10 +1182,14 @@ type ComplexityRoot struct {
 	UserGroup struct {
 		CreatedAt   func(childComplexity int) int
 		Description func(childComplexity int) int
+		Devices     func(childComplexity int) int
 		ID          func(childComplexity int) int
+		IsPersonal  func(childComplexity int) int
 		MemberCount func(childComplexity int) int
+		Members     func(childComplexity int) int
 		Name        func(childComplexity int) int
 		Permissions func(childComplexity int) int
+		Projects    func(childComplexity int) int
 		UpdatedAt   func(childComplexity int) int
 	}
 
@@ -1226,6 +1263,8 @@ type DeviceResolver interface {
 	CreatedAt(ctx context.Context, obj *models.Device) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.Device) (string, error)
 	ApprovedAt(ctx context.Context, obj *models.Device) (*string, error)
+
+	Groups(ctx context.Context, obj *models.Device) ([]*models.UserGroup, error)
 }
 type EffectResolver interface {
 	EffectType(ctx context.Context, obj *models.Effect) (EffectType, error)
@@ -1265,6 +1304,18 @@ type FixtureModeResolver interface {
 type FixtureValueResolver interface {
 	Fixture(ctx context.Context, obj *models.FixtureValue) (*models.FixtureInstance, error)
 	Channels(ctx context.Context, obj *models.FixtureValue) ([]*models.ChannelValue, error)
+}
+type GroupInvitationResolver interface {
+	Group(ctx context.Context, obj *models.GroupInvitation) (*models.UserGroup, error)
+
+	InvitedBy(ctx context.Context, obj *models.GroupInvitation) (*models.User, error)
+	Role(ctx context.Context, obj *models.GroupInvitation) (GroupMemberRole, error)
+	Status(ctx context.Context, obj *models.GroupInvitation) (InvitationStatus, error)
+	ExpiresAt(ctx context.Context, obj *models.GroupInvitation) (string, error)
+	CreatedAt(ctx context.Context, obj *models.GroupInvitation) (string, error)
+}
+type GroupMemberResolver interface {
+	User(ctx context.Context, obj *GroupMember) (*models.User, error)
 }
 type InstanceChannelResolver interface {
 	Type(ctx context.Context, obj *models.InstanceChannel) (ChannelType, error)
@@ -1314,10 +1365,17 @@ type MutationResolver interface {
 	CreateUserGroup(ctx context.Context, input CreateUserGroupInput) (*models.UserGroup, error)
 	UpdateUserGroup(ctx context.Context, id string, input UpdateUserGroupInput) (*models.UserGroup, error)
 	DeleteUserGroup(ctx context.Context, id string) (bool, error)
-	AddUserToGroup(ctx context.Context, userID string, groupID string) (bool, error)
+	AddUserToGroup(ctx context.Context, userID string, groupID string, role *GroupMemberRole) (bool, error)
 	RemoveUserFromGroup(ctx context.Context, userID string, groupID string) (bool, error)
+	UpdateGroupMemberRole(ctx context.Context, userID string, groupID string, role GroupMemberRole) (bool, error)
+	InviteToGroup(ctx context.Context, groupID string, email string, role *GroupMemberRole) (*models.GroupInvitation, error)
+	AcceptInvitation(ctx context.Context, invitationID string) (bool, error)
+	DeclineInvitation(ctx context.Context, invitationID string) (bool, error)
+	CancelInvitation(ctx context.Context, invitationID string) (bool, error)
+	AddDeviceToGroup(ctx context.Context, deviceID string, groupID string) (bool, error)
+	RemoveDeviceFromGroup(ctx context.Context, deviceID string, groupID string) (bool, error)
 	CreateDeviceAuthCode(ctx context.Context, deviceID string) (*DeviceAuthCode, error)
-	ApproveDevice(ctx context.Context, deviceID string, permissions DevicePermissions) (*models.Device, error)
+	ApproveDevice(ctx context.Context, deviceID string, permissions DevicePermissions, groupID *string) (*models.Device, error)
 	UpdateDevice(ctx context.Context, id string, input UpdateDeviceInput) (*models.Device, error)
 	UpdateDevicePermissions(ctx context.Context, deviceID string, permissions DevicePermissions) (*models.Device, error)
 	RevokeDevice(ctx context.Context, id string) (*models.Device, error)
@@ -1463,6 +1521,8 @@ type ProjectResolver interface {
 	FixtureCount(ctx context.Context, obj *models.Project) (int, error)
 	LookCount(ctx context.Context, obj *models.Project) (int, error)
 	CueListCount(ctx context.Context, obj *models.Project) (int, error)
+	Group(ctx context.Context, obj *models.Project) (*models.UserGroup, error)
+
 	CreatedAt(ctx context.Context, obj *models.Project) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.Project) (string, error)
 	DeletedAt(ctx context.Context, obj *models.Project) (*string, error)
@@ -1492,6 +1552,9 @@ type QueryResolver interface {
 	Devices(ctx context.Context, status *DeviceStatus) ([]*models.Device, error)
 	PendingDevices(ctx context.Context) ([]*models.Device, error)
 	Device(ctx context.Context, id string) (*models.Device, error)
+	MyGroups(ctx context.Context) ([]*models.UserGroup, error)
+	MyInvitations(ctx context.Context) ([]*models.GroupInvitation, error)
+	GroupInvitations(ctx context.Context, groupID string) ([]*models.GroupInvitation, error)
 	Projects(ctx context.Context) ([]*models.Project, error)
 	Project(ctx context.Context, id string) (*models.Project, error)
 	DeletedProjects(ctx context.Context) ([]*models.Project, error)
@@ -1586,6 +1649,10 @@ type UserResolver interface {
 type UserGroupResolver interface {
 	Permissions(ctx context.Context, obj *models.UserGroup) ([]string, error)
 	MemberCount(ctx context.Context, obj *models.UserGroup) (int, error)
+
+	Members(ctx context.Context, obj *models.UserGroup) ([]*GroupMember, error)
+	Projects(ctx context.Context, obj *models.UserGroup) ([]*models.Project, error)
+	Devices(ctx context.Context, obj *models.UserGroup) ([]*models.Device, error)
 	CreatedAt(ctx context.Context, obj *models.UserGroup) (string, error)
 	UpdatedAt(ctx context.Context, obj *models.UserGroup) (string, error)
 }
@@ -2535,6 +2602,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Device.Fingerprint(childComplexity), true
+	case "Device.groups":
+		if e.complexity.Device.Groups == nil {
+			break
+		}
+
+		return e.complexity.Device.Groups(childComplexity), true
 	case "Device.id":
 		if e.complexity.Device.ID == nil {
 			break
@@ -3372,6 +3445,80 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.GlobalPlaybackStatus.LastUpdated(childComplexity), true
 
+	case "GroupInvitation.createdAt":
+		if e.complexity.GroupInvitation.CreatedAt == nil {
+			break
+		}
+
+		return e.complexity.GroupInvitation.CreatedAt(childComplexity), true
+	case "GroupInvitation.email":
+		if e.complexity.GroupInvitation.Email == nil {
+			break
+		}
+
+		return e.complexity.GroupInvitation.Email(childComplexity), true
+	case "GroupInvitation.expiresAt":
+		if e.complexity.GroupInvitation.ExpiresAt == nil {
+			break
+		}
+
+		return e.complexity.GroupInvitation.ExpiresAt(childComplexity), true
+	case "GroupInvitation.group":
+		if e.complexity.GroupInvitation.Group == nil {
+			break
+		}
+
+		return e.complexity.GroupInvitation.Group(childComplexity), true
+	case "GroupInvitation.id":
+		if e.complexity.GroupInvitation.ID == nil {
+			break
+		}
+
+		return e.complexity.GroupInvitation.ID(childComplexity), true
+	case "GroupInvitation.invitedBy":
+		if e.complexity.GroupInvitation.InvitedBy == nil {
+			break
+		}
+
+		return e.complexity.GroupInvitation.InvitedBy(childComplexity), true
+	case "GroupInvitation.role":
+		if e.complexity.GroupInvitation.Role == nil {
+			break
+		}
+
+		return e.complexity.GroupInvitation.Role(childComplexity), true
+	case "GroupInvitation.status":
+		if e.complexity.GroupInvitation.Status == nil {
+			break
+		}
+
+		return e.complexity.GroupInvitation.Status(childComplexity), true
+
+	case "GroupMember.id":
+		if e.complexity.GroupMember.ID == nil {
+			break
+		}
+
+		return e.complexity.GroupMember.ID(childComplexity), true
+	case "GroupMember.joinedAt":
+		if e.complexity.GroupMember.JoinedAt == nil {
+			break
+		}
+
+		return e.complexity.GroupMember.JoinedAt(childComplexity), true
+	case "GroupMember.role":
+		if e.complexity.GroupMember.Role == nil {
+			break
+		}
+
+		return e.complexity.GroupMember.Role(childComplexity), true
+	case "GroupMember.user":
+		if e.complexity.GroupMember.User == nil {
+			break
+		}
+
+		return e.complexity.GroupMember.User(childComplexity), true
+
 	case "ImportResult.projectId":
 		if e.complexity.ImportResult.ProjectID == nil {
 			break
@@ -3953,6 +4100,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.ModulatorStatus.UpdateRateHz(childComplexity), true
 
+	case "Mutation.acceptInvitation":
+		if e.complexity.Mutation.AcceptInvitation == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_acceptInvitation_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.AcceptInvitation(childComplexity, args["invitationId"].(string)), true
 	case "Mutation.activateBlackout":
 		if e.complexity.Mutation.ActivateBlackout == nil {
 			break
@@ -3997,6 +4155,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.AddChannelToEffectFixture(childComplexity, args["effectFixtureId"].(string), args["input"].(EffectChannelInput)), true
+	case "Mutation.addDeviceToGroup":
+		if e.complexity.Mutation.AddDeviceToGroup == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_addDeviceToGroup_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.AddDeviceToGroup(childComplexity, args["deviceId"].(string), args["groupId"].(string)), true
 	case "Mutation.addEffectToCue":
 		if e.complexity.Mutation.AddEffectToCue == nil {
 			break
@@ -4051,7 +4220,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.AddUserToGroup(childComplexity, args["userId"].(string), args["groupId"].(string)), true
+		return e.complexity.Mutation.AddUserToGroup(childComplexity, args["userId"].(string), args["groupId"].(string), args["role"].(*GroupMemberRole)), true
 	case "Mutation.appleSignIn":
 		if e.complexity.Mutation.AppleSignIn == nil {
 			break
@@ -4073,7 +4242,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.ApproveDevice(childComplexity, args["deviceId"].(string), args["permissions"].(DevicePermissions)), true
+		return e.complexity.Mutation.ApproveDevice(childComplexity, args["deviceId"].(string), args["permissions"].(DevicePermissions), args["groupId"].(*string)), true
 	case "Mutation.authorizeDevice":
 		if e.complexity.Mutation.AuthorizeDevice == nil {
 			break
@@ -4371,6 +4540,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.BulkUpdateProjects(childComplexity, args["input"].(BulkProjectUpdateInput)), true
+	case "Mutation.cancelInvitation":
+		if e.complexity.Mutation.CancelInvitation == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_cancelInvitation_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.CancelInvitation(childComplexity, args["invitationId"].(string)), true
 	case "Mutation.cancelOFLImport":
 		if e.complexity.Mutation.CancelOFLImport == nil {
 			break
@@ -4575,6 +4755,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.CreateUserGroup(childComplexity, args["input"].(CreateUserGroupInput)), true
+	case "Mutation.declineInvitation":
+		if e.complexity.Mutation.DeclineInvitation == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_declineInvitation_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.DeclineInvitation(childComplexity, args["invitationId"].(string)), true
 	case "Mutation.deleteCue":
 		if e.complexity.Mutation.DeleteCue == nil {
 			break
@@ -4801,6 +4992,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.InitializePreviewWithLook(childComplexity, args["sessionId"].(string), args["lookId"].(string)), true
+	case "Mutation.inviteToGroup":
+		if e.complexity.Mutation.InviteToGroup == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_inviteToGroup_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.InviteToGroup(childComplexity, args["groupId"].(string), args["email"].(string), args["role"].(*GroupMemberRole)), true
 	case "Mutation.jumpToOperation":
 		if e.complexity.Mutation.JumpToOperation == nil {
 			break
@@ -4945,6 +5147,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.RemoveChannelFromEffectFixture(childComplexity, args["id"].(string)), true
+	case "Mutation.removeDeviceFromGroup":
+		if e.complexity.Mutation.RemoveDeviceFromGroup == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_removeDeviceFromGroup_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.RemoveDeviceFromGroup(childComplexity, args["deviceId"].(string), args["groupId"].(string)), true
 	case "Mutation.removeEffectFromCue":
 		if e.complexity.Mutation.RemoveEffectFromCue == nil {
 			break
@@ -5409,6 +5622,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.UpdateFixturePositions(childComplexity, args["positions"].([]*FixturePositionInput)), true
+	case "Mutation.updateGroupMemberRole":
+		if e.complexity.Mutation.UpdateGroupMemberRole == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateGroupMemberRole_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UpdateGroupMemberRole(childComplexity, args["userId"].(string), args["groupId"].(string), args["role"].(GroupMemberRole)), true
 	case "Mutation.updateInstanceChannelFadeBehavior":
 		if e.complexity.Mutation.UpdateInstanceChannelFadeBehavior == nil {
 			break
@@ -6062,6 +6286,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Project.Fixtures(childComplexity), true
+	case "Project.group":
+		if e.complexity.Project.Group == nil {
+			break
+		}
+
+		return e.complexity.Project.Group(childComplexity), true
+	case "Project.groupId":
+		if e.complexity.Project.GroupID == nil {
+			break
+		}
+
+		return e.complexity.Project.GroupID(childComplexity), true
 	case "Project.id":
 		if e.complexity.Project.ID == nil {
 			break
@@ -6620,6 +6856,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.GlobalPlaybackStatus(childComplexity), true
+	case "Query.groupInvitations":
+		if e.complexity.Query.GroupInvitations == nil {
+			break
+		}
+
+		args, err := ec.field_Query_groupInvitations_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.GroupInvitations(childComplexity, args["groupId"].(string)), true
 	case "Query.look":
 		if e.complexity.Query.Look == nil {
 			break
@@ -6731,6 +6978,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.ModulatorStatus(childComplexity), true
+	case "Query.myGroups":
+		if e.complexity.Query.MyGroups == nil {
+			break
+		}
+
+		return e.complexity.Query.MyGroups(childComplexity), true
+	case "Query.myInvitations":
+		if e.complexity.Query.MyInvitations == nil {
+			break
+		}
+
+		return e.complexity.Query.MyInvitations(childComplexity), true
 	case "Query.mySessions":
 		if e.complexity.Query.MySessions == nil {
 			break
@@ -7440,18 +7699,36 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.UserGroup.Description(childComplexity), true
+	case "UserGroup.devices":
+		if e.complexity.UserGroup.Devices == nil {
+			break
+		}
+
+		return e.complexity.UserGroup.Devices(childComplexity), true
 	case "UserGroup.id":
 		if e.complexity.UserGroup.ID == nil {
 			break
 		}
 
 		return e.complexity.UserGroup.ID(childComplexity), true
+	case "UserGroup.isPersonal":
+		if e.complexity.UserGroup.IsPersonal == nil {
+			break
+		}
+
+		return e.complexity.UserGroup.IsPersonal(childComplexity), true
 	case "UserGroup.memberCount":
 		if e.complexity.UserGroup.MemberCount == nil {
 			break
 		}
 
 		return e.complexity.UserGroup.MemberCount(childComplexity), true
+	case "UserGroup.members":
+		if e.complexity.UserGroup.Members == nil {
+			break
+		}
+
+		return e.complexity.UserGroup.Members(childComplexity), true
 	case "UserGroup.name":
 		if e.complexity.UserGroup.Name == nil {
 			break
@@ -7464,6 +7741,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.UserGroup.Permissions(childComplexity), true
+	case "UserGroup.projects":
+		if e.complexity.UserGroup.Projects == nil {
+			break
+		}
+
+		return e.complexity.UserGroup.Projects(childComplexity), true
 	case "UserGroup.updatedAt":
 		if e.complexity.UserGroup.UpdatedAt == nil {
 			break
@@ -8107,6 +8390,18 @@ enum DevicePermissions {
   ADMIN
 }
 
+enum GroupMemberRole {
+  MEMBER
+  GROUP_ADMIN
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
 # =============================================================================
 # AUTHENTICATION TYPES
 # =============================================================================
@@ -8147,7 +8442,7 @@ type AuthUser {
 }
 
 """
-User group for permission management.
+User group for permission management and multi-tenant project ownership.
 """
 type UserGroup {
   id: ID!
@@ -8157,8 +8452,40 @@ type UserGroup {
   permissions: [String!]!
   "Number of members in this group"
   memberCount: Int!
+  "Whether this is a personal group auto-created for a user"
+  isPersonal: Boolean!
+  "Members of this group"
+  members: [GroupMember!]!
+  "Projects owned by this group"
+  projects: [Project!]!
+  "Devices assigned to this group"
+  devices: [Device!]!
   createdAt: String!
   updatedAt: String!
+}
+
+"""
+A member of a group with their role.
+"""
+type GroupMember {
+  id: ID!
+  user: User!
+  role: GroupMemberRole!
+  joinedAt: String!
+}
+
+"""
+An invitation to join a group.
+"""
+type GroupInvitation {
+  id: ID!
+  group: UserGroup!
+  email: String!
+  invitedBy: User!
+  role: GroupMemberRole!
+  status: InvitationStatus!
+  expiresAt: String!
+  createdAt: String!
 }
 
 """
@@ -8203,6 +8530,8 @@ type Device {
   approvedAt: String
   "User who approved this device"
   approvedBy: User
+  "Groups this device belongs to"
+  groups: [UserGroup!]!
 }
 
 """
@@ -8331,6 +8660,10 @@ type Project {
   fixtureCount: Int!
   lookCount: Int!
   cueListCount: Int!
+  "The group that owns this project (null for auth-off legacy projects)"
+  group: UserGroup
+  "The group ID that owns this project"
+  groupId: ID
   createdAt: String!
   updatedAt: String!
   deletedAt: String  # Soft delete timestamp - null means not deleted
@@ -9323,6 +9656,8 @@ input UpdateAuthSettingsInput {
 input CreateProjectInput {
   name: String!
   description: String
+  "Group to own this project (defaults to user's only group if they have exactly one)"
+  groupId: ID
   layoutCanvasWidth: Int = 2000
   layoutCanvasHeight: Int = 2000
 }
@@ -9884,6 +10219,14 @@ type Query {
   "Get a device by ID (admin only)"
   device(id: ID!): Device
 
+  # Groups
+  "Get groups the current user belongs to"
+  myGroups: [UserGroup!]!
+  "Get pending invitations for the current user"
+  myInvitations: [GroupInvitation!]!
+  "Get invitations for a group (group admin or system admin)"
+  groupInvitations(groupId: ID!): [GroupInvitation!]!
+
   # Projects
   projects: [Project!]!
   project(id: ID!): Project
@@ -10087,16 +10430,30 @@ type Mutation {
   updateUserGroup(id: ID!, input: UpdateUserGroupInput!): UserGroup!
   "Delete a user group (admin only)"
   deleteUserGroup(id: ID!): Boolean!
-  "Add a user to a group (admin only)"
-  addUserToGroup(userId: ID!, groupId: ID!): Boolean!
-  "Remove a user from a group (admin only)"
+  "Add a user to a group (group admin or system admin)"
+  addUserToGroup(userId: ID!, groupId: ID!, role: GroupMemberRole = MEMBER): Boolean!
+  "Remove a user from a group (group admin or system admin)"
   removeUserFromGroup(userId: ID!, groupId: ID!): Boolean!
+  "Update a group member's role (group admin or system admin)"
+  updateGroupMemberRole(userId: ID!, groupId: ID!, role: GroupMemberRole!): Boolean!
+  "Invite a user by email to join a group"
+  inviteToGroup(groupId: ID!, email: String!, role: GroupMemberRole = MEMBER): GroupInvitation!
+  "Accept a group invitation"
+  acceptInvitation(invitationId: ID!): Boolean!
+  "Decline a group invitation"
+  declineInvitation(invitationId: ID!): Boolean!
+  "Cancel a pending group invitation (group admin or system admin)"
+  cancelInvitation(invitationId: ID!): Boolean!
+  "Add a device to a group (group admin or system admin)"
+  addDeviceToGroup(deviceId: ID!, groupId: ID!): Boolean!
+  "Remove a device from a group (group admin or system admin)"
+  removeDeviceFromGroup(deviceId: ID!, groupId: ID!): Boolean!
 
   # Device Management (admin only)
   "Create a device authorization code (admin only)"
   createDeviceAuthCode(deviceId: ID!): DeviceAuthCode!
-  "Approve a pending device (admin only)"
-  approveDevice(deviceId: ID!, permissions: DevicePermissions!): Device!
+  "Approve a pending device (admin only). Optionally assign to a group."
+  approveDevice(deviceId: ID!, permissions: DevicePermissions!, groupId: ID): Device!
   "Update a device (admin only)"
   updateDevice(id: ID!, input: UpdateDeviceInput!): Device!
   "Update device permissions (admin only)"
@@ -10407,6 +10764,17 @@ var parsedSchema = gqlparser.MustLoadSchema(sources...)
 
 // region    ***************************** args.gotpl *****************************
 
+func (ec *executionContext) field_Mutation_acceptInvitation_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "invitationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["invitationId"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_activateBlackout_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -10468,6 +10836,22 @@ func (ec *executionContext) field_Mutation_addChannelToEffectFixture_args(ctx co
 		return nil, err
 	}
 	args["input"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_addDeviceToGroup_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "deviceId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["deviceId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "groupId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["groupId"] = arg1
 	return args, nil
 }
 
@@ -10538,6 +10922,11 @@ func (ec *executionContext) field_Mutation_addUserToGroup_args(ctx context.Conte
 		return nil, err
 	}
 	args["groupId"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "role", ec.unmarshalOGroupMemberRole2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGroupMemberRole)
+	if err != nil {
+		return nil, err
+	}
+	args["role"] = arg2
 	return args, nil
 }
 
@@ -10570,6 +10959,11 @@ func (ec *executionContext) field_Mutation_approveDevice_args(ctx context.Contex
 		return nil, err
 	}
 	args["permissions"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "groupId", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["groupId"] = arg2
 	return args, nil
 }
 
@@ -10875,6 +11269,17 @@ func (ec *executionContext) field_Mutation_bulkUpdateProjects_args(ctx context.C
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_cancelInvitation_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "invitationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["invitationId"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_cancelPreviewSession_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -11090,6 +11495,17 @@ func (ec *executionContext) field_Mutation_createUser_args(ctx context.Context, 
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_declineInvitation_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "invitationId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["invitationId"] = arg0
 	return args, nil
 }
 
@@ -11348,6 +11764,27 @@ func (ec *executionContext) field_Mutation_initializePreviewWithLook_args(ctx co
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_inviteToGroup_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "groupId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["groupId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "email", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["email"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "role", ec.unmarshalOGroupMemberRole2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGroupMemberRole)
+	if err != nil {
+		return nil, err
+	}
+	args["role"] = arg2
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_jumpToOperation_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -11507,6 +11944,22 @@ func (ec *executionContext) field_Mutation_removeChannelFromEffectFixture_args(c
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_removeDeviceFromGroup_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "deviceId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["deviceId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "groupId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["groupId"] = arg1
 	return args, nil
 }
 
@@ -12065,6 +12518,27 @@ func (ec *executionContext) field_Mutation_updateFixturePositions_args(ctx conte
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_updateGroupMemberRole_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "userId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["userId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "groupId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["groupId"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "role", ec.unmarshalNGroupMemberRole2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGroupMemberRole)
+	if err != nil {
+		return nil, err
+	}
+	args["role"] = arg2
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_updateInstanceChannelFadeBehavior_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -12606,6 +13080,17 @@ func (ec *executionContext) field_Query_getQLCFixtureMappingSuggestions_args(ctx
 		return nil, err
 	}
 	args["projectId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_groupInvitations_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "groupId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["groupId"] = arg0
 	return args, nil
 }
 
@@ -14330,6 +14815,14 @@ func (ec *executionContext) fieldContext_AuthUser_groups(_ context.Context, fiel
 				return ec.fieldContext_UserGroup_permissions(ctx, field)
 			case "memberCount":
 				return ec.fieldContext_UserGroup_memberCount(ctx, field)
+			case "isPersonal":
+				return ec.fieldContext_UserGroup_isPersonal(ctx, field)
+			case "members":
+				return ec.fieldContext_UserGroup_members(ctx, field)
+			case "projects":
+				return ec.fieldContext_UserGroup_projects(ctx, field)
+			case "devices":
+				return ec.fieldContext_UserGroup_devices(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_UserGroup_createdAt(ctx, field)
 			case "updatedAt":
@@ -16228,6 +16721,10 @@ func (ec *executionContext) fieldContext_CueList_project(_ context.Context, fiel
 				return ec.fieldContext_Project_lookCount(ctx, field)
 			case "cueListCount":
 				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
@@ -18102,6 +18599,59 @@ func (ec *executionContext) fieldContext_Device_approvedBy(_ context.Context, fi
 	return fc, nil
 }
 
+func (ec *executionContext) _Device_groups(ctx context.Context, field graphql.CollectedField, obj *models.Device) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Device_groups,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Device().Groups(ctx, obj)
+		},
+		nil,
+		ec.marshalNUserGroup2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐUserGroupᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Device_groups(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Device",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_UserGroup_id(ctx, field)
+			case "name":
+				return ec.fieldContext_UserGroup_name(ctx, field)
+			case "description":
+				return ec.fieldContext_UserGroup_description(ctx, field)
+			case "permissions":
+				return ec.fieldContext_UserGroup_permissions(ctx, field)
+			case "memberCount":
+				return ec.fieldContext_UserGroup_memberCount(ctx, field)
+			case "isPersonal":
+				return ec.fieldContext_UserGroup_isPersonal(ctx, field)
+			case "members":
+				return ec.fieldContext_UserGroup_members(ctx, field)
+			case "projects":
+				return ec.fieldContext_UserGroup_projects(ctx, field)
+			case "devices":
+				return ec.fieldContext_UserGroup_devices(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_UserGroup_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_UserGroup_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UserGroup", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _DeviceAuthCode_code(ctx context.Context, field graphql.CollectedField, obj *DeviceAuthCode) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -18299,6 +18849,8 @@ func (ec *executionContext) fieldContext_DeviceAuthStatus_device(_ context.Conte
 				return ec.fieldContext_Device_approvedAt(ctx, field)
 			case "approvedBy":
 				return ec.fieldContext_Device_approvedBy(ctx, field)
+			case "groups":
+				return ec.fieldContext_Device_groups(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
@@ -18428,6 +18980,8 @@ func (ec *executionContext) fieldContext_DeviceCheckResult_device(_ context.Cont
 				return ec.fieldContext_Device_approvedAt(ctx, field)
 			case "approvedBy":
 				return ec.fieldContext_Device_approvedBy(ctx, field)
+			case "groups":
+				return ec.fieldContext_Device_groups(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
@@ -18545,6 +19099,8 @@ func (ec *executionContext) fieldContext_DeviceRegistrationResult_device(_ conte
 				return ec.fieldContext_Device_approvedAt(ctx, field)
 			case "approvedBy":
 				return ec.fieldContext_Device_approvedBy(ctx, field)
+			case "groups":
+				return ec.fieldContext_Device_groups(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
@@ -20934,6 +21490,10 @@ func (ec *executionContext) fieldContext_FixtureInstance_project(_ context.Conte
 				return ec.fieldContext_Project_lookCount(ctx, field)
 			case "cueListCount":
 				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
@@ -22240,6 +22800,402 @@ func (ec *executionContext) fieldContext_GlobalPlaybackStatus_lastUpdated(_ cont
 	return fc, nil
 }
 
+func (ec *executionContext) _GroupInvitation_id(ctx context.Context, field graphql.CollectedField, obj *models.GroupInvitation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GroupInvitation_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GroupInvitation_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GroupInvitation",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GroupInvitation_group(ctx context.Context, field graphql.CollectedField, obj *models.GroupInvitation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GroupInvitation_group,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.GroupInvitation().Group(ctx, obj)
+		},
+		nil,
+		ec.marshalNUserGroup2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐUserGroup,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GroupInvitation_group(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GroupInvitation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_UserGroup_id(ctx, field)
+			case "name":
+				return ec.fieldContext_UserGroup_name(ctx, field)
+			case "description":
+				return ec.fieldContext_UserGroup_description(ctx, field)
+			case "permissions":
+				return ec.fieldContext_UserGroup_permissions(ctx, field)
+			case "memberCount":
+				return ec.fieldContext_UserGroup_memberCount(ctx, field)
+			case "isPersonal":
+				return ec.fieldContext_UserGroup_isPersonal(ctx, field)
+			case "members":
+				return ec.fieldContext_UserGroup_members(ctx, field)
+			case "projects":
+				return ec.fieldContext_UserGroup_projects(ctx, field)
+			case "devices":
+				return ec.fieldContext_UserGroup_devices(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_UserGroup_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_UserGroup_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UserGroup", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GroupInvitation_email(ctx context.Context, field graphql.CollectedField, obj *models.GroupInvitation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GroupInvitation_email,
+		func(ctx context.Context) (any, error) {
+			return obj.Email, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GroupInvitation_email(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GroupInvitation",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GroupInvitation_invitedBy(ctx context.Context, field graphql.CollectedField, obj *models.GroupInvitation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GroupInvitation_invitedBy,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.GroupInvitation().InvitedBy(ctx, obj)
+		},
+		nil,
+		ec.marshalNUser2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐUser,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GroupInvitation_invitedBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GroupInvitation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_User_id(ctx, field)
+			case "email":
+				return ec.fieldContext_User_email(ctx, field)
+			case "name":
+				return ec.fieldContext_User_name(ctx, field)
+			case "role":
+				return ec.fieldContext_User_role(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_User_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GroupInvitation_role(ctx context.Context, field graphql.CollectedField, obj *models.GroupInvitation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GroupInvitation_role,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.GroupInvitation().Role(ctx, obj)
+		},
+		nil,
+		ec.marshalNGroupMemberRole2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGroupMemberRole,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GroupInvitation_role(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GroupInvitation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type GroupMemberRole does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GroupInvitation_status(ctx context.Context, field graphql.CollectedField, obj *models.GroupInvitation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GroupInvitation_status,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.GroupInvitation().Status(ctx, obj)
+		},
+		nil,
+		ec.marshalNInvitationStatus2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐInvitationStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GroupInvitation_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GroupInvitation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type InvitationStatus does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GroupInvitation_expiresAt(ctx context.Context, field graphql.CollectedField, obj *models.GroupInvitation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GroupInvitation_expiresAt,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.GroupInvitation().ExpiresAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GroupInvitation_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GroupInvitation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GroupInvitation_createdAt(ctx context.Context, field graphql.CollectedField, obj *models.GroupInvitation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GroupInvitation_createdAt,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.GroupInvitation().CreatedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GroupInvitation_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GroupInvitation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GroupMember_id(ctx context.Context, field graphql.CollectedField, obj *GroupMember) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GroupMember_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GroupMember_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GroupMember",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GroupMember_user(ctx context.Context, field graphql.CollectedField, obj *GroupMember) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GroupMember_user,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.GroupMember().User(ctx, obj)
+		},
+		nil,
+		ec.marshalNUser2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐUser,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GroupMember_user(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GroupMember",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_User_id(ctx, field)
+			case "email":
+				return ec.fieldContext_User_email(ctx, field)
+			case "name":
+				return ec.fieldContext_User_name(ctx, field)
+			case "role":
+				return ec.fieldContext_User_role(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_User_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GroupMember_role(ctx context.Context, field graphql.CollectedField, obj *GroupMember) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GroupMember_role,
+		func(ctx context.Context) (any, error) {
+			return obj.Role, nil
+		},
+		nil,
+		ec.marshalNGroupMemberRole2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGroupMemberRole,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GroupMember_role(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GroupMember",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type GroupMemberRole does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GroupMember_joinedAt(ctx context.Context, field graphql.CollectedField, obj *GroupMember) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GroupMember_joinedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.JoinedAt, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GroupMember_joinedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GroupMember",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ImportResult_projectId(ctx context.Context, field graphql.CollectedField, obj *ImportResult) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -22957,6 +23913,10 @@ func (ec *executionContext) fieldContext_Look_project(_ context.Context, field g
 				return ec.fieldContext_Project_lookCount(ctx, field)
 			case "cueListCount":
 				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
@@ -23204,6 +24164,10 @@ func (ec *executionContext) fieldContext_LookBoard_project(_ context.Context, fi
 				return ec.fieldContext_Project_lookCount(ctx, field)
 			case "cueListCount":
 				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
@@ -25973,6 +26937,14 @@ func (ec *executionContext) fieldContext_Mutation_createUserGroup(ctx context.Co
 				return ec.fieldContext_UserGroup_permissions(ctx, field)
 			case "memberCount":
 				return ec.fieldContext_UserGroup_memberCount(ctx, field)
+			case "isPersonal":
+				return ec.fieldContext_UserGroup_isPersonal(ctx, field)
+			case "members":
+				return ec.fieldContext_UserGroup_members(ctx, field)
+			case "projects":
+				return ec.fieldContext_UserGroup_projects(ctx, field)
+			case "devices":
+				return ec.fieldContext_UserGroup_devices(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_UserGroup_createdAt(ctx, field)
 			case "updatedAt":
@@ -26030,6 +27002,14 @@ func (ec *executionContext) fieldContext_Mutation_updateUserGroup(ctx context.Co
 				return ec.fieldContext_UserGroup_permissions(ctx, field)
 			case "memberCount":
 				return ec.fieldContext_UserGroup_memberCount(ctx, field)
+			case "isPersonal":
+				return ec.fieldContext_UserGroup_isPersonal(ctx, field)
+			case "members":
+				return ec.fieldContext_UserGroup_members(ctx, field)
+			case "projects":
+				return ec.fieldContext_UserGroup_projects(ctx, field)
+			case "devices":
+				return ec.fieldContext_UserGroup_devices(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_UserGroup_createdAt(ctx, field)
 			case "updatedAt":
@@ -26101,7 +27081,7 @@ func (ec *executionContext) _Mutation_addUserToGroup(ctx context.Context, field 
 		ec.fieldContext_Mutation_addUserToGroup,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().AddUserToGroup(ctx, fc.Args["userId"].(string), fc.Args["groupId"].(string))
+			return ec.resolvers.Mutation().AddUserToGroup(ctx, fc.Args["userId"].(string), fc.Args["groupId"].(string), fc.Args["role"].(*GroupMemberRole))
 		},
 		nil,
 		ec.marshalNBoolean2bool,
@@ -26175,6 +27155,311 @@ func (ec *executionContext) fieldContext_Mutation_removeUserFromGroup(ctx contex
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_updateGroupMemberRole(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateGroupMemberRole,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UpdateGroupMemberRole(ctx, fc.Args["userId"].(string), fc.Args["groupId"].(string), fc.Args["role"].(GroupMemberRole))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateGroupMemberRole(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateGroupMemberRole_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_inviteToGroup(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_inviteToGroup,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().InviteToGroup(ctx, fc.Args["groupId"].(string), fc.Args["email"].(string), fc.Args["role"].(*GroupMemberRole))
+		},
+		nil,
+		ec.marshalNGroupInvitation2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐGroupInvitation,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_inviteToGroup(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_GroupInvitation_id(ctx, field)
+			case "group":
+				return ec.fieldContext_GroupInvitation_group(ctx, field)
+			case "email":
+				return ec.fieldContext_GroupInvitation_email(ctx, field)
+			case "invitedBy":
+				return ec.fieldContext_GroupInvitation_invitedBy(ctx, field)
+			case "role":
+				return ec.fieldContext_GroupInvitation_role(ctx, field)
+			case "status":
+				return ec.fieldContext_GroupInvitation_status(ctx, field)
+			case "expiresAt":
+				return ec.fieldContext_GroupInvitation_expiresAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_GroupInvitation_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type GroupInvitation", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_inviteToGroup_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_acceptInvitation(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_acceptInvitation,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().AcceptInvitation(ctx, fc.Args["invitationId"].(string))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_acceptInvitation(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_acceptInvitation_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_declineInvitation(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_declineInvitation,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().DeclineInvitation(ctx, fc.Args["invitationId"].(string))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_declineInvitation(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_declineInvitation_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_cancelInvitation(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_cancelInvitation,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().CancelInvitation(ctx, fc.Args["invitationId"].(string))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_cancelInvitation(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_cancelInvitation_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_addDeviceToGroup(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_addDeviceToGroup,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().AddDeviceToGroup(ctx, fc.Args["deviceId"].(string), fc.Args["groupId"].(string))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_addDeviceToGroup(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_addDeviceToGroup_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_removeDeviceFromGroup(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_removeDeviceFromGroup,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().RemoveDeviceFromGroup(ctx, fc.Args["deviceId"].(string), fc.Args["groupId"].(string))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_removeDeviceFromGroup(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_removeDeviceFromGroup_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_createDeviceAuthCode(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -26232,7 +27517,7 @@ func (ec *executionContext) _Mutation_approveDevice(ctx context.Context, field g
 		ec.fieldContext_Mutation_approveDevice,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().ApproveDevice(ctx, fc.Args["deviceId"].(string), fc.Args["permissions"].(DevicePermissions))
+			return ec.resolvers.Mutation().ApproveDevice(ctx, fc.Args["deviceId"].(string), fc.Args["permissions"].(DevicePermissions), fc.Args["groupId"].(*string))
 		},
 		nil,
 		ec.marshalNDevice2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐDevice,
@@ -26277,6 +27562,8 @@ func (ec *executionContext) fieldContext_Mutation_approveDevice(ctx context.Cont
 				return ec.fieldContext_Device_approvedAt(ctx, field)
 			case "approvedBy":
 				return ec.fieldContext_Device_approvedBy(ctx, field)
+			case "groups":
+				return ec.fieldContext_Device_groups(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
@@ -26348,6 +27635,8 @@ func (ec *executionContext) fieldContext_Mutation_updateDevice(ctx context.Conte
 				return ec.fieldContext_Device_approvedAt(ctx, field)
 			case "approvedBy":
 				return ec.fieldContext_Device_approvedBy(ctx, field)
+			case "groups":
+				return ec.fieldContext_Device_groups(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
@@ -26419,6 +27708,8 @@ func (ec *executionContext) fieldContext_Mutation_updateDevicePermissions(ctx co
 				return ec.fieldContext_Device_approvedAt(ctx, field)
 			case "approvedBy":
 				return ec.fieldContext_Device_approvedBy(ctx, field)
+			case "groups":
+				return ec.fieldContext_Device_groups(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
@@ -26490,6 +27781,8 @@ func (ec *executionContext) fieldContext_Mutation_revokeDevice(ctx context.Conte
 				return ec.fieldContext_Device_approvedAt(ctx, field)
 			case "approvedBy":
 				return ec.fieldContext_Device_approvedBy(ctx, field)
+			case "groups":
+				return ec.fieldContext_Device_groups(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
@@ -26682,6 +27975,10 @@ func (ec *executionContext) fieldContext_Mutation_createProject(ctx context.Cont
 				return ec.fieldContext_Project_lookCount(ctx, field)
 			case "cueListCount":
 				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
@@ -26757,6 +28054,10 @@ func (ec *executionContext) fieldContext_Mutation_updateProject(ctx context.Cont
 				return ec.fieldContext_Project_lookCount(ctx, field)
 			case "cueListCount":
 				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
@@ -26873,6 +28174,10 @@ func (ec *executionContext) fieldContext_Mutation_restoreProject(ctx context.Con
 				return ec.fieldContext_Project_lookCount(ctx, field)
 			case "cueListCount":
 				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
@@ -26989,6 +28294,10 @@ func (ec *executionContext) fieldContext_Mutation_bulkCreateProjects(ctx context
 				return ec.fieldContext_Project_lookCount(ctx, field)
 			case "cueListCount":
 				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
@@ -27064,6 +28373,10 @@ func (ec *executionContext) fieldContext_Mutation_bulkUpdateProjects(ctx context
 				return ec.fieldContext_Project_lookCount(ctx, field)
 			case "cueListCount":
 				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
@@ -35116,6 +36429,10 @@ func (ec *executionContext) fieldContext_PreviewSession_project(_ context.Contex
 				return ec.fieldContext_Project_lookCount(ctx, field)
 			case "cueListCount":
 				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
@@ -35446,6 +36763,88 @@ func (ec *executionContext) fieldContext_Project_cueListCount(_ context.Context,
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Project_group(ctx context.Context, field graphql.CollectedField, obj *models.Project) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Project_group,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Project().Group(ctx, obj)
+		},
+		nil,
+		ec.marshalOUserGroup2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐUserGroup,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Project_group(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Project",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_UserGroup_id(ctx, field)
+			case "name":
+				return ec.fieldContext_UserGroup_name(ctx, field)
+			case "description":
+				return ec.fieldContext_UserGroup_description(ctx, field)
+			case "permissions":
+				return ec.fieldContext_UserGroup_permissions(ctx, field)
+			case "memberCount":
+				return ec.fieldContext_UserGroup_memberCount(ctx, field)
+			case "isPersonal":
+				return ec.fieldContext_UserGroup_isPersonal(ctx, field)
+			case "members":
+				return ec.fieldContext_UserGroup_members(ctx, field)
+			case "projects":
+				return ec.fieldContext_UserGroup_projects(ctx, field)
+			case "devices":
+				return ec.fieldContext_UserGroup_devices(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_UserGroup_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_UserGroup_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UserGroup", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Project_groupId(ctx context.Context, field graphql.CollectedField, obj *models.Project) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Project_groupId,
+		func(ctx context.Context) (any, error) {
+			return obj.GroupID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Project_groupId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Project",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
 		},
 	}
 	return fc, nil
@@ -35961,6 +37360,10 @@ func (ec *executionContext) fieldContext_ProjectUser_project(_ context.Context, 
 				return ec.fieldContext_Project_lookCount(ctx, field)
 			case "cueListCount":
 				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
@@ -36545,6 +37948,10 @@ func (ec *executionContext) fieldContext_QLCImportResult_project(_ context.Conte
 				return ec.fieldContext_Project_lookCount(ctx, field)
 			case "cueListCount":
 				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
@@ -37135,6 +38542,14 @@ func (ec *executionContext) fieldContext_Query_userGroups(_ context.Context, fie
 				return ec.fieldContext_UserGroup_permissions(ctx, field)
 			case "memberCount":
 				return ec.fieldContext_UserGroup_memberCount(ctx, field)
+			case "isPersonal":
+				return ec.fieldContext_UserGroup_isPersonal(ctx, field)
+			case "members":
+				return ec.fieldContext_UserGroup_members(ctx, field)
+			case "projects":
+				return ec.fieldContext_UserGroup_projects(ctx, field)
+			case "devices":
+				return ec.fieldContext_UserGroup_devices(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_UserGroup_createdAt(ctx, field)
 			case "updatedAt":
@@ -37181,6 +38596,14 @@ func (ec *executionContext) fieldContext_Query_userGroup(ctx context.Context, fi
 				return ec.fieldContext_UserGroup_permissions(ctx, field)
 			case "memberCount":
 				return ec.fieldContext_UserGroup_memberCount(ctx, field)
+			case "isPersonal":
+				return ec.fieldContext_UserGroup_isPersonal(ctx, field)
+			case "members":
+				return ec.fieldContext_UserGroup_members(ctx, field)
+			case "projects":
+				return ec.fieldContext_UserGroup_projects(ctx, field)
+			case "devices":
+				return ec.fieldContext_UserGroup_devices(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_UserGroup_createdAt(ctx, field)
 			case "updatedAt":
@@ -37256,6 +38679,8 @@ func (ec *executionContext) fieldContext_Query_devices(ctx context.Context, fiel
 				return ec.fieldContext_Device_approvedAt(ctx, field)
 			case "approvedBy":
 				return ec.fieldContext_Device_approvedBy(ctx, field)
+			case "groups":
+				return ec.fieldContext_Device_groups(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
@@ -37326,6 +38751,8 @@ func (ec *executionContext) fieldContext_Query_pendingDevices(_ context.Context,
 				return ec.fieldContext_Device_approvedAt(ctx, field)
 			case "approvedBy":
 				return ec.fieldContext_Device_approvedBy(ctx, field)
+			case "groups":
+				return ec.fieldContext_Device_groups(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
@@ -37386,6 +38813,8 @@ func (ec *executionContext) fieldContext_Query_device(ctx context.Context, field
 				return ec.fieldContext_Device_approvedAt(ctx, field)
 			case "approvedBy":
 				return ec.fieldContext_Device_approvedBy(ctx, field)
+			case "groups":
+				return ec.fieldContext_Device_groups(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
@@ -37398,6 +38827,165 @@ func (ec *executionContext) fieldContext_Query_device(ctx context.Context, field
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_device_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_myGroups(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_myGroups,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().MyGroups(ctx)
+		},
+		nil,
+		ec.marshalNUserGroup2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐUserGroupᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_myGroups(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_UserGroup_id(ctx, field)
+			case "name":
+				return ec.fieldContext_UserGroup_name(ctx, field)
+			case "description":
+				return ec.fieldContext_UserGroup_description(ctx, field)
+			case "permissions":
+				return ec.fieldContext_UserGroup_permissions(ctx, field)
+			case "memberCount":
+				return ec.fieldContext_UserGroup_memberCount(ctx, field)
+			case "isPersonal":
+				return ec.fieldContext_UserGroup_isPersonal(ctx, field)
+			case "members":
+				return ec.fieldContext_UserGroup_members(ctx, field)
+			case "projects":
+				return ec.fieldContext_UserGroup_projects(ctx, field)
+			case "devices":
+				return ec.fieldContext_UserGroup_devices(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_UserGroup_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_UserGroup_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UserGroup", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_myInvitations(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_myInvitations,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().MyInvitations(ctx)
+		},
+		nil,
+		ec.marshalNGroupInvitation2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐGroupInvitationᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_myInvitations(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_GroupInvitation_id(ctx, field)
+			case "group":
+				return ec.fieldContext_GroupInvitation_group(ctx, field)
+			case "email":
+				return ec.fieldContext_GroupInvitation_email(ctx, field)
+			case "invitedBy":
+				return ec.fieldContext_GroupInvitation_invitedBy(ctx, field)
+			case "role":
+				return ec.fieldContext_GroupInvitation_role(ctx, field)
+			case "status":
+				return ec.fieldContext_GroupInvitation_status(ctx, field)
+			case "expiresAt":
+				return ec.fieldContext_GroupInvitation_expiresAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_GroupInvitation_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type GroupInvitation", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_groupInvitations(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_groupInvitations,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().GroupInvitations(ctx, fc.Args["groupId"].(string))
+		},
+		nil,
+		ec.marshalNGroupInvitation2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐGroupInvitationᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_groupInvitations(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_GroupInvitation_id(ctx, field)
+			case "group":
+				return ec.fieldContext_GroupInvitation_group(ctx, field)
+			case "email":
+				return ec.fieldContext_GroupInvitation_email(ctx, field)
+			case "invitedBy":
+				return ec.fieldContext_GroupInvitation_invitedBy(ctx, field)
+			case "role":
+				return ec.fieldContext_GroupInvitation_role(ctx, field)
+			case "status":
+				return ec.fieldContext_GroupInvitation_status(ctx, field)
+			case "expiresAt":
+				return ec.fieldContext_GroupInvitation_expiresAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_GroupInvitation_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type GroupInvitation", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_groupInvitations_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -37440,6 +39028,10 @@ func (ec *executionContext) fieldContext_Query_projects(_ context.Context, field
 				return ec.fieldContext_Project_lookCount(ctx, field)
 			case "cueListCount":
 				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
@@ -37504,6 +39096,10 @@ func (ec *executionContext) fieldContext_Query_project(ctx context.Context, fiel
 				return ec.fieldContext_Project_lookCount(ctx, field)
 			case "cueListCount":
 				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
@@ -37578,6 +39174,10 @@ func (ec *executionContext) fieldContext_Query_deletedProjects(_ context.Context
 				return ec.fieldContext_Project_lookCount(ctx, field)
 			case "cueListCount":
 				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
@@ -40498,6 +42098,10 @@ func (ec *executionContext) fieldContext_Query_projectsByIds(ctx context.Context
 				return ec.fieldContext_Project_lookCount(ctx, field)
 			case "cueListCount":
 				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
@@ -41066,6 +42670,8 @@ func (ec *executionContext) fieldContext_Session_device(_ context.Context, field
 				return ec.fieldContext_Device_approvedAt(ctx, field)
 			case "approvedBy":
 				return ec.fieldContext_Device_approvedBy(ctx, field)
+			case "groups":
+				return ec.fieldContext_Device_groups(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
@@ -41447,6 +43053,10 @@ func (ec *executionContext) fieldContext_Subscription_projectUpdated(ctx context
 				return ec.fieldContext_Project_lookCount(ctx, field)
 			case "cueListCount":
 				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_Project_createdAt(ctx, field)
 			case "updatedAt":
@@ -43308,6 +44918,202 @@ func (ec *executionContext) fieldContext_UserGroup_memberCount(_ context.Context
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UserGroup_isPersonal(ctx context.Context, field graphql.CollectedField, obj *models.UserGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UserGroup_isPersonal,
+		func(ctx context.Context) (any, error) {
+			return obj.IsPersonal, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UserGroup_isPersonal(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UserGroup",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UserGroup_members(ctx context.Context, field graphql.CollectedField, obj *models.UserGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UserGroup_members,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.UserGroup().Members(ctx, obj)
+		},
+		nil,
+		ec.marshalNGroupMember2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGroupMemberᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UserGroup_members(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UserGroup",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_GroupMember_id(ctx, field)
+			case "user":
+				return ec.fieldContext_GroupMember_user(ctx, field)
+			case "role":
+				return ec.fieldContext_GroupMember_role(ctx, field)
+			case "joinedAt":
+				return ec.fieldContext_GroupMember_joinedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type GroupMember", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UserGroup_projects(ctx context.Context, field graphql.CollectedField, obj *models.UserGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UserGroup_projects,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.UserGroup().Projects(ctx, obj)
+		},
+		nil,
+		ec.marshalNProject2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐProjectᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UserGroup_projects(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UserGroup",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Project_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Project_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Project_description(ctx, field)
+			case "fixtureCount":
+				return ec.fieldContext_Project_fixtureCount(ctx, field)
+			case "lookCount":
+				return ec.fieldContext_Project_lookCount(ctx, field)
+			case "cueListCount":
+				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Project_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
+			case "fixtures":
+				return ec.fieldContext_Project_fixtures(ctx, field)
+			case "looks":
+				return ec.fieldContext_Project_looks(ctx, field)
+			case "cueLists":
+				return ec.fieldContext_Project_cueLists(ctx, field)
+			case "lookBoards":
+				return ec.fieldContext_Project_lookBoards(ctx, field)
+			case "users":
+				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UserGroup_devices(ctx context.Context, field graphql.CollectedField, obj *models.UserGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UserGroup_devices,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.UserGroup().Devices(ctx, obj)
+		},
+		nil,
+		ec.marshalNDevice2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐDeviceᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UserGroup_devices(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UserGroup",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Device_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Device_name(ctx, field)
+			case "fingerprint":
+				return ec.fieldContext_Device_fingerprint(ctx, field)
+			case "status":
+				return ec.fieldContext_Device_status(ctx, field)
+			case "permissions":
+				return ec.fieldContext_Device_permissions(ctx, field)
+			case "isAuthorized":
+				return ec.fieldContext_Device_isAuthorized(ctx, field)
+			case "defaultUser":
+				return ec.fieldContext_Device_defaultUser(ctx, field)
+			case "defaultRole":
+				return ec.fieldContext_Device_defaultRole(ctx, field)
+			case "lastSeenAt":
+				return ec.fieldContext_Device_lastSeenAt(ctx, field)
+			case "lastIPAddress":
+				return ec.fieldContext_Device_lastIPAddress(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Device_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Device_updatedAt(ctx, field)
+			case "approvedAt":
+				return ec.fieldContext_Device_approvedAt(ctx, field)
+			case "approvedBy":
+				return ec.fieldContext_Device_approvedBy(ctx, field)
+			case "groups":
+				return ec.fieldContext_Device_groups(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Device", field.Name)
 		},
 	}
 	return fc, nil
@@ -47049,7 +48855,7 @@ func (ec *executionContext) unmarshalInputCreateProjectInput(ctx context.Context
 		asMap["layoutCanvasHeight"] = 2000
 	}
 
-	fieldsInOrder := [...]string{"name", "description", "layoutCanvasWidth", "layoutCanvasHeight"}
+	fieldsInOrder := [...]string{"name", "description", "groupId", "layoutCanvasWidth", "layoutCanvasHeight"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -47070,6 +48876,13 @@ func (ec *executionContext) unmarshalInputCreateProjectInput(ctx context.Context
 				return it, err
 			}
 			it.Description = graphql.OmittableOf(data)
+		case "groupId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("groupId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.GroupID = graphql.OmittableOf(data)
 		case "layoutCanvasWidth":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("layoutCanvasWidth"))
 			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
@@ -51305,6 +53118,42 @@ func (ec *executionContext) _Device(ctx context.Context, sel ast.SelectionSet, o
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "approvedBy":
 			out.Values[i] = ec._Device_approvedBy(ctx, field, obj)
+		case "groups":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Device_groups(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -53262,6 +55111,351 @@ func (ec *executionContext) _GlobalPlaybackStatus(ctx context.Context, sel ast.S
 	return out
 }
 
+var groupInvitationImplementors = []string{"GroupInvitation"}
+
+func (ec *executionContext) _GroupInvitation(ctx context.Context, sel ast.SelectionSet, obj *models.GroupInvitation) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, groupInvitationImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("GroupInvitation")
+		case "id":
+			out.Values[i] = ec._GroupInvitation_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "group":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._GroupInvitation_group(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "email":
+			out.Values[i] = ec._GroupInvitation_email(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "invitedBy":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._GroupInvitation_invitedBy(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "role":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._GroupInvitation_role(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "status":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._GroupInvitation_status(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "expiresAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._GroupInvitation_expiresAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "createdAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._GroupInvitation_createdAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var groupMemberImplementors = []string{"GroupMember"}
+
+func (ec *executionContext) _GroupMember(ctx context.Context, sel ast.SelectionSet, obj *GroupMember) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, groupMemberImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("GroupMember")
+		case "id":
+			out.Values[i] = ec._GroupMember_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "user":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._GroupMember_user(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "role":
+			out.Values[i] = ec._GroupMember_role(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "joinedAt":
+			out.Values[i] = ec._GroupMember_joinedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var importResultImplementors = []string{"ImportResult"}
 
 func (ec *executionContext) _ImportResult(ctx context.Context, sel ast.SelectionSet, obj *ImportResult) graphql.Marshaler {
@@ -54904,6 +57098,55 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "removeUserFromGroup":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_removeUserFromGroup(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateGroupMemberRole":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateGroupMemberRole(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "inviteToGroup":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_inviteToGroup(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "acceptInvitation":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_acceptInvitation(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "declineInvitation":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_declineInvitation(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cancelInvitation":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_cancelInvitation(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "addDeviceToGroup":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_addDeviceToGroup(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "removeDeviceFromGroup":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_removeDeviceFromGroup(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -56930,6 +59173,41 @@ func (ec *executionContext) _Project(ctx context.Context, sel ast.SelectionSet, 
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "group":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Project_group(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "groupId":
+			out.Values[i] = ec._Project_groupId(ctx, field, obj)
 		case "createdAt":
 			field := field
 
@@ -57959,6 +60237,72 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_device(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "myGroups":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_myGroups(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "myInvitations":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_myInvitations(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "groupInvitations":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_groupInvitations(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
 				return res
 			}
 
@@ -60231,6 +62575,119 @@ func (ec *executionContext) _UserGroup(ctx context.Context, sel ast.SelectionSet
 					}
 				}()
 				res = ec._UserGroup_memberCount(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "isPersonal":
+			out.Values[i] = ec._UserGroup_isPersonal(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "members":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._UserGroup_members(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "projects":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._UserGroup_projects(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "devices":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._UserGroup_devices(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -63202,6 +65659,128 @@ func (ec *executionContext) marshalNGlobalPlaybackStatus2ᚖgithubᚗcomᚋbbern
 	return ec._GlobalPlaybackStatus(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNGroupInvitation2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐGroupInvitation(ctx context.Context, sel ast.SelectionSet, v models.GroupInvitation) graphql.Marshaler {
+	return ec._GroupInvitation(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNGroupInvitation2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐGroupInvitationᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.GroupInvitation) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNGroupInvitation2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐGroupInvitation(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNGroupInvitation2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐGroupInvitation(ctx context.Context, sel ast.SelectionSet, v *models.GroupInvitation) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._GroupInvitation(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNGroupMember2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGroupMemberᚄ(ctx context.Context, sel ast.SelectionSet, v []*GroupMember) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNGroupMember2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGroupMember(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNGroupMember2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGroupMember(ctx context.Context, sel ast.SelectionSet, v *GroupMember) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._GroupMember(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNGroupMemberRole2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGroupMemberRole(ctx context.Context, v any) (GroupMemberRole, error) {
+	var res GroupMemberRole
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNGroupMemberRole2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGroupMemberRole(ctx context.Context, sel ast.SelectionSet, v GroupMemberRole) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) unmarshalNID2string(ctx context.Context, v any) (string, error) {
 	res, err := graphql.UnmarshalID(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -63388,6 +65967,16 @@ func (ec *executionContext) marshalNInt2ᚕintᚄ(ctx context.Context, sel ast.S
 	}
 
 	return ret
+}
+
+func (ec *executionContext) unmarshalNInvitationStatus2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐInvitationStatus(ctx context.Context, v any) (InvitationStatus, error) {
+	var res InvitationStatus
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNInvitationStatus2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐInvitationStatus(ctx context.Context, sel ast.SelectionSet, v InvitationStatus) graphql.Marshaler {
+	return v
 }
 
 func (ec *executionContext) marshalNLacyLightsFixture2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐLacyLightsFixture(ctx context.Context, sel ast.SelectionSet, v LacyLightsFixture) graphql.Marshaler {
@@ -66121,6 +68710,22 @@ func (ec *executionContext) marshalOFloat2ᚖfloat64(ctx context.Context, sel as
 	_ = ctx
 	res := graphql.MarshalFloat(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOGroupMemberRole2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGroupMemberRole(ctx context.Context, v any) (*GroupMemberRole, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(GroupMemberRole)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOGroupMemberRole2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGroupMemberRole(ctx context.Context, sel ast.SelectionSet, v *GroupMemberRole) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) unmarshalOID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {

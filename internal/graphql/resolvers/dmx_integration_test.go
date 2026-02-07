@@ -52,6 +52,10 @@ func testSetup(t *testing.T) (*client.Client, *Resolver, func()) {
 		&models.Device{},
 		&models.UserCredential{},
 		&models.Session{},
+		&models.UserGroup{},
+		&models.UserGroupMember{},
+		&models.DeviceGroupMember{},
+		&models.GroupInvitation{},
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)

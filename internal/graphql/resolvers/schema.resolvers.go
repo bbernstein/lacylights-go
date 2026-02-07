@@ -8,6 +8,7 @@ package resolvers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
+	"github.com/bbernstein/lacylights-go/internal/middleware"
 	importservice "github.com/bbernstein/lacylights-go/internal/services/import"
 	"github.com/bbernstein/lacylights-go/internal/services/modulator"
 	"github.com/bbernstein/lacylights-go/internal/services/network"
@@ -187,6 +189,33 @@ func (r *deviceResolver) ApprovedAt(ctx context.Context, obj *models.Device) (*s
 	}
 	formatted := obj.ApprovedAt.UTC().Format("2006-01-02T15:04:05.000Z")
 	return &formatted, nil
+}
+
+// Groups is the resolver for the groups field.
+func (r *deviceResolver) Groups(ctx context.Context, obj *models.Device) ([]*models.UserGroup, error) {
+	if r.db == nil {
+		return []*models.UserGroup{}, nil
+	}
+	var dgms []models.DeviceGroupMember
+	if err := r.db.WithContext(ctx).Where("device_id = ?", obj.ID).Find(&dgms).Error; err != nil {
+		return nil, err
+	}
+	if len(dgms) == 0 {
+		return []*models.UserGroup{}, nil
+	}
+	groupIDs := make([]string, len(dgms))
+	for i, dgm := range dgms {
+		groupIDs[i] = dgm.GroupID
+	}
+	var groups []models.UserGroup
+	if err := r.db.WithContext(ctx).Where("id IN ?", groupIDs).Find(&groups).Error; err != nil {
+		return nil, err
+	}
+	result := make([]*models.UserGroup, len(groups))
+	for i := range groups {
+		result[i] = &groups[i]
+	}
+	return result, nil
 }
 
 // EffectType is the resolver for the effectType field.
@@ -373,6 +402,50 @@ func (r *fixtureValueResolver) Channels(ctx context.Context, obj *models.Fixture
 	}
 
 	return result, nil
+}
+
+// Group is the resolver for the group field.
+func (r *groupInvitationResolver) Group(ctx context.Context, obj *models.GroupInvitation) (*models.UserGroup, error) {
+	var group models.UserGroup
+	if err := r.db.WithContext(ctx).First(&group, "id = ?", obj.GroupID).Error; err != nil {
+		return nil, err
+	}
+	return &group, nil
+}
+
+// InvitedBy is the resolver for the invitedBy field.
+func (r *groupInvitationResolver) InvitedBy(ctx context.Context, obj *models.GroupInvitation) (*models.User, error) {
+	var user models.User
+	if err := r.db.WithContext(ctx).First(&user, "id = ?", obj.InvitedByID).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// Role is the resolver for the role field.
+func (r *groupInvitationResolver) Role(_ context.Context, obj *models.GroupInvitation) (generated.GroupMemberRole, error) {
+	return generated.GroupMemberRole(obj.Role), nil
+}
+
+// Status is the resolver for the status field.
+func (r *groupInvitationResolver) Status(_ context.Context, obj *models.GroupInvitation) (generated.InvitationStatus, error) {
+	return generated.InvitationStatus(obj.Status), nil
+}
+
+// ExpiresAt is the resolver for the expiresAt field.
+func (r *groupInvitationResolver) ExpiresAt(_ context.Context, obj *models.GroupInvitation) (string, error) {
+	return obj.ExpiresAt.Format(time.RFC3339), nil
+}
+
+// CreatedAt is the resolver for the createdAt field.
+func (r *groupInvitationResolver) CreatedAt(_ context.Context, obj *models.GroupInvitation) (string, error) {
+	return obj.CreatedAt.Format(time.RFC3339), nil
+}
+
+// User is the resolver for the user field.
+func (r *groupMemberResolver) User(_ context.Context, obj *generated.GroupMember) (*models.User, error) {
+	// The user is already loaded in the parent Members resolver, so return it directly
+	return &obj.User, nil
 }
 
 // Type is the resolver for the type field.
@@ -577,13 +650,48 @@ func (r *mutationResolver) DeleteUserGroup(ctx context.Context, id string) (bool
 }
 
 // AddUserToGroup is the resolver for the addUserToGroup field.
-func (r *mutationResolver) AddUserToGroup(ctx context.Context, userID string, groupID string) (bool, error) {
-	return r.addUserToGroup(ctx, userID, groupID)
+func (r *mutationResolver) AddUserToGroup(ctx context.Context, userID string, groupID string, role *generated.GroupMemberRole) (bool, error) {
+	return r.addUserToGroupWithRole(ctx, userID, groupID, role)
 }
 
 // RemoveUserFromGroup is the resolver for the removeUserFromGroup field.
 func (r *mutationResolver) RemoveUserFromGroup(ctx context.Context, userID string, groupID string) (bool, error) {
 	return r.removeUserFromGroup(ctx, userID, groupID)
+}
+
+// UpdateGroupMemberRole is the resolver for the updateGroupMemberRole field.
+func (r *mutationResolver) UpdateGroupMemberRole(ctx context.Context, userID string, groupID string, role generated.GroupMemberRole) (bool, error) {
+	return r.updateGroupMemberRole(ctx, groupID, userID, role)
+}
+
+// InviteToGroup is the resolver for the inviteToGroup field.
+func (r *mutationResolver) InviteToGroup(ctx context.Context, groupID string, email string, role *generated.GroupMemberRole) (*models.GroupInvitation, error) {
+	return r.inviteToGroup(ctx, groupID, email, role)
+}
+
+// AcceptInvitation is the resolver for the acceptInvitation field.
+func (r *mutationResolver) AcceptInvitation(ctx context.Context, invitationID string) (bool, error) {
+	return r.acceptInvitation(ctx, invitationID)
+}
+
+// DeclineInvitation is the resolver for the declineInvitation field.
+func (r *mutationResolver) DeclineInvitation(ctx context.Context, invitationID string) (bool, error) {
+	return r.declineInvitation(ctx, invitationID)
+}
+
+// CancelInvitation is the resolver for the cancelInvitation field.
+func (r *mutationResolver) CancelInvitation(ctx context.Context, invitationID string) (bool, error) {
+	return r.cancelInvitation(ctx, invitationID)
+}
+
+// AddDeviceToGroup is the resolver for the addDeviceToGroup field.
+func (r *mutationResolver) AddDeviceToGroup(ctx context.Context, deviceID string, groupID string) (bool, error) {
+	return r.addDeviceToGroup(ctx, deviceID, groupID)
+}
+
+// RemoveDeviceFromGroup is the resolver for the removeDeviceFromGroup field.
+func (r *mutationResolver) RemoveDeviceFromGroup(ctx context.Context, deviceID string, groupID string) (bool, error) {
+	return r.removeDeviceFromGroup(ctx, deviceID, groupID)
 }
 
 // CreateDeviceAuthCode is the resolver for the createDeviceAuthCode field.
@@ -593,8 +701,8 @@ func (r *mutationResolver) CreateDeviceAuthCode(ctx context.Context, deviceID st
 }
 
 // ApproveDevice is the resolver for the approveDevice field.
-func (r *mutationResolver) ApproveDevice(ctx context.Context, deviceID string, permissions generated.DevicePermissions) (*models.Device, error) {
-	return r.approveDevice(ctx, deviceID, permissions)
+func (r *mutationResolver) ApproveDevice(ctx context.Context, deviceID string, permissions generated.DevicePermissions, groupID *string) (*models.Device, error) {
+	return r.approveDeviceWithGroup(ctx, deviceID, permissions, groupID)
 }
 
 // UpdateDevice is the resolver for the updateDevice field.
@@ -639,6 +747,29 @@ func (r *mutationResolver) CreateProject(ctx context.Context, input generated.Cr
 	if input.Description.IsSet() {
 		project.Description = input.Description.Value()
 	}
+
+	// Set group ID when auth is enabled
+	if r.AuthService != nil && r.AuthService.IsEnabled() {
+		if input.GroupID.IsSet() && input.GroupID.Value() != nil {
+			// Use the provided group ID, verify access
+			groupID := *input.GroupID.Value()
+			if err := r.requireGroupAccess(ctx, groupID); err != nil {
+				return nil, err
+			}
+			project.GroupID = &groupID
+		} else {
+			// Default to user's only group if they have exactly one
+			groupIDs := middleware.GetUserGroupIDs(ctx)
+			if len(groupIDs) == 1 {
+				project.GroupID = &groupIDs[0]
+			} else if len(groupIDs) > 1 {
+				return nil, fmt.Errorf("groupId is required when user belongs to multiple groups")
+			} else {
+				return nil, fmt.Errorf("cannot create project: user does not belong to any groups")
+			}
+		}
+	}
+
 	if input.LayoutCanvasWidth.IsSet() && input.LayoutCanvasWidth.Value() != nil {
 		if err := validateCanvasDimension(*input.LayoutCanvasWidth.Value(), "layoutCanvasWidth"); err != nil {
 			return nil, err
@@ -1728,6 +1859,9 @@ func (r *mutationResolver) BulkUpdateInstanceChannelsFadeBehavior(ctx context.Co
 
 // ReorderProjectFixtures is the resolver for the reorderProjectFixtures field.
 func (r *mutationResolver) ReorderProjectFixtures(ctx context.Context, projectID string, fixtureOrders []*generated.FixtureOrderInput) (bool, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return false, err
+	}
 	// Verify project exists
 	project, err := r.ProjectRepo.FindByID(ctx, projectID)
 	if err != nil {
@@ -3920,6 +4054,9 @@ func (r *mutationResolver) ToggleCueSkip(ctx context.Context, cueID string) (*mo
 
 // StartPreviewSession is the resolver for the startPreviewSession field.
 func (r *mutationResolver) StartPreviewSession(ctx context.Context, projectID string) (*models.PreviewSession, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
 	// Auto-pause any playing cue lists since a preview session is being started.
 	// This ensures the user can edit looks without the cue list continuing to play
 	// in the background, and allows them to resume when returning to the cue list.
@@ -4298,6 +4435,9 @@ func (r *mutationResolver) ResumeCueList(ctx context.Context, cueListID string) 
 
 // ExportProject is the resolver for the exportProject field.
 func (r *mutationResolver) ExportProject(ctx context.Context, projectID string, options *generated.ExportOptionsInput) (*generated.ExportResult, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
 	// Get project first to get name
 	project, err := r.ProjectRepo.FindByID(ctx, projectID)
 	if err != nil {
@@ -4408,6 +4548,9 @@ func (r *mutationResolver) ImportProjectFromQlc(ctx context.Context, xmlContent 
 // ExportProjectToQlc is the resolver for the exportProjectToQLC field.
 // Returns error - QLC+ export not available on this platform
 func (r *mutationResolver) ExportProjectToQlc(ctx context.Context, projectID string, fixtureMappings []*generated.FixtureMappingInput) (*generated.QLCExportResult, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
 	return nil, fmt.Errorf("QLC+ export not available on this platform")
 }
 
@@ -4778,6 +4921,9 @@ func (r *mutationResolver) SetGrandMaster(ctx context.Context, value float64) (b
 
 // Undo is the resolver for the undo field.
 func (r *mutationResolver) Undo(ctx context.Context, projectID string) (*generated.UndoRedoResult, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
 	result, err := r.UndoService.Undo(ctx, projectID)
 	if err != nil {
 		errMsg := err.Error()
@@ -4813,6 +4959,9 @@ func (r *mutationResolver) Undo(ctx context.Context, projectID string) (*generat
 
 // Redo is the resolver for the redo field.
 func (r *mutationResolver) Redo(ctx context.Context, projectID string) (*generated.UndoRedoResult, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
 	result, err := r.UndoService.Redo(ctx, projectID)
 	if err != nil {
 		errMsg := err.Error()
@@ -4848,6 +4997,9 @@ func (r *mutationResolver) Redo(ctx context.Context, projectID string) (*generat
 
 // JumpToOperation is the resolver for the jumpToOperation field.
 func (r *mutationResolver) JumpToOperation(ctx context.Context, projectID string, operationID string) (*generated.UndoRedoResult, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
 	result, err := r.UndoService.JumpToOperation(ctx, projectID, operationID)
 	if err != nil {
 		errMsg := err.Error()
@@ -4885,6 +5037,9 @@ func (r *mutationResolver) JumpToOperation(ctx context.Context, projectID string
 
 // ClearOperationHistory is the resolver for the clearOperationHistory field.
 func (r *mutationResolver) ClearOperationHistory(ctx context.Context, projectID string, confirmClear bool) (bool, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return false, err
+	}
 	if !confirmClear {
 		return false, fmt.Errorf("confirmClear must be true to clear operation history")
 	}
@@ -5019,6 +5174,21 @@ func (r *projectResolver) LookCount(ctx context.Context, obj *models.Project) (i
 func (r *projectResolver) CueListCount(ctx context.Context, obj *models.Project) (int, error) {
 	count, err := r.ProjectRepo.CountCueLists(ctx, obj.ID)
 	return int(count), err
+}
+
+// Group is the resolver for the group field.
+func (r *projectResolver) Group(ctx context.Context, obj *models.Project) (*models.UserGroup, error) {
+	if obj.GroupID == nil {
+		return nil, nil
+	}
+	var group models.UserGroup
+	if err := r.db.WithContext(ctx).First(&group, "id = ?", *obj.GroupID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &group, nil
 }
 
 // CreatedAt is the resolver for the createdAt field.
@@ -5186,9 +5356,97 @@ func (r *queryResolver) Device(ctx context.Context, id string) (*models.Device, 
 	return r.getDevice(ctx, id)
 }
 
+// MyGroups is the resolver for the myGroups field.
+func (r *queryResolver) MyGroups(ctx context.Context) ([]*models.UserGroup, error) {
+	// If auth is disabled, return empty
+	if r.AuthService == nil || !r.AuthService.IsEnabled() {
+		return []*models.UserGroup{}, nil
+	}
+
+	userID := middleware.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, ErrNotAuthenticated
+	}
+
+	// Get group IDs from context
+	groupIDs := middleware.GetUserGroupIDs(ctx)
+	if len(groupIDs) == 0 {
+		return []*models.UserGroup{}, nil
+	}
+
+	var groups []models.UserGroup
+	if err := r.db.WithContext(ctx).Where("id IN ?", groupIDs).Find(&groups).Error; err != nil {
+		return nil, err
+	}
+
+	result := make([]*models.UserGroup, len(groups))
+	for i := range groups {
+		result[i] = &groups[i]
+	}
+	return result, nil
+}
+
+// MyInvitations is the resolver for the myInvitations field.
+func (r *queryResolver) MyInvitations(ctx context.Context) ([]*models.GroupInvitation, error) {
+	if r.AuthService == nil || !r.AuthService.IsEnabled() {
+		return []*models.GroupInvitation{}, nil
+	}
+
+	email := middleware.GetUserEmailFromContext(ctx)
+	if email == "" {
+		return nil, ErrNotAuthenticated
+	}
+
+	var invitations []models.GroupInvitation
+	if err := r.db.WithContext(ctx).
+		Where("email = ? AND status = ?", email, models.InvitationStatusPending).
+		Order("created_at DESC").
+		Find(&invitations).Error; err != nil {
+		return nil, err
+	}
+
+	result := make([]*models.GroupInvitation, len(invitations))
+	for i := range invitations {
+		result[i] = &invitations[i]
+	}
+	return result, nil
+}
+
+// GroupInvitations is the resolver for the groupInvitations field.
+func (r *queryResolver) GroupInvitations(ctx context.Context, groupID string) ([]*models.GroupInvitation, error) {
+	if r.AuthService == nil || !r.AuthService.IsEnabled() {
+		return []*models.GroupInvitation{}, nil
+	}
+
+	// Require group admin or system admin
+	if err := r.requireGroupAdmin(ctx, groupID); err != nil {
+		return nil, err
+	}
+
+	var invitations []models.GroupInvitation
+	if err := r.db.WithContext(ctx).
+		Where("group_id = ?", groupID).
+		Order("created_at DESC").
+		Find(&invitations).Error; err != nil {
+		return nil, err
+	}
+
+	result := make([]*models.GroupInvitation, len(invitations))
+	for i := range invitations {
+		result[i] = &invitations[i]
+	}
+	return result, nil
+}
+
 // Projects is the resolver for the projects field.
 func (r *queryResolver) Projects(ctx context.Context) ([]*models.Project, error) {
-	projects, err := r.ProjectRepo.FindAll(ctx)
+	// Get accessible group IDs (nil = no filtering for admin/auth-off)
+	groupIDs, err := r.getAccessibleGroupIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	projects, err := r.ProjectRepo.FindAllByGroupIDs(ctx, groupIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -5202,7 +5460,13 @@ func (r *queryResolver) Projects(ctx context.Context) ([]*models.Project, error)
 
 // Project is the resolver for the project field.
 func (r *queryResolver) Project(ctx context.Context, id string) (*models.Project, error) {
-	return r.ProjectRepo.FindByID(ctx, id)
+	// Get accessible group IDs (nil = no filtering for admin/auth-off)
+	groupIDs, err := r.getAccessibleGroupIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return r.ProjectRepo.FindByIDWithGroupCheck(ctx, id, groupIDs)
 }
 
 // DeletedProjects is the resolver for the deletedProjects field.
@@ -5279,6 +5543,9 @@ func (r *queryResolver) FixtureDefinition(ctx context.Context, id string) (*mode
 
 // FixtureInstances is the resolver for the fixtureInstances field.
 func (r *queryResolver) FixtureInstances(ctx context.Context, projectID string, page *int, perPage *int, filter *generated.FixtureFilterInput) (*generated.FixtureInstancePage, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
 	fixtures, err := r.FixtureRepo.FindByProjectID(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -5360,6 +5627,9 @@ func (r *queryResolver) FixtureInstance(ctx context.Context, id string) (*models
 
 // SearchFixtures is the resolver for the searchFixtures field.
 func (r *queryResolver) SearchFixtures(ctx context.Context, projectID string, query string, filter *generated.FixtureFilterInput, page *int, perPage *int) (*generated.FixtureInstancePage, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
 	fixtures, err := r.FixtureRepo.FindByProjectID(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -5436,6 +5706,9 @@ func (r *queryResolver) SearchFixtures(ctx context.Context, projectID string, qu
 
 // ChannelMap is the resolver for the channelMap field.
 func (r *queryResolver) ChannelMap(ctx context.Context, projectID string, universe *int) (*generated.ChannelMapResult, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
 	fixtures, err := r.FixtureRepo.FindByProjectID(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -5599,6 +5872,9 @@ func (r *queryResolver) SuggestChannelAssignment(ctx context.Context, input gene
 
 // Looks is the resolver for the looks field.
 func (r *queryResolver) Looks(ctx context.Context, projectID string, page *int, perPage *int, filter *generated.LookFilterInput, sortBy *generated.LookSortField) (*generated.LookPage, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
 	// Get all looks in project
 	looks, err := r.LookRepo.FindByProjectID(ctx, projectID)
 	if err != nil {
@@ -5714,6 +5990,9 @@ func (r *queryResolver) LookFixtures(ctx context.Context, lookID string) ([]*gen
 
 // SearchLooks is the resolver for the searchLooks field.
 func (r *queryResolver) SearchLooks(ctx context.Context, projectID string, query string, filter *generated.LookFilterInput, page *int, perPage *int) (*generated.LookPage, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
 	// Get all looks in project
 	looks, err := r.LookRepo.FindByProjectID(ctx, projectID)
 	if err != nil {
@@ -5780,6 +6059,9 @@ func (r *queryResolver) SearchLooks(ctx context.Context, projectID string, query
 
 // LookBoards is the resolver for the lookBoards field.
 func (r *queryResolver) LookBoards(ctx context.Context, projectID string) ([]*models.LookBoard, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
 	boards, err := r.LookBoardRepo.FindByProjectID(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -6031,6 +6313,9 @@ func (r *queryResolver) CompareLooks(ctx context.Context, lookID1 string, lookID
 
 // CueLists is the resolver for the cueLists field.
 func (r *queryResolver) CueLists(ctx context.Context, projectID string) ([]*generated.CueListSummary, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
 	cueLists, err := r.CueListRepo.FindByProjectID(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -6451,6 +6736,9 @@ func (r *queryResolver) ApClients(ctx context.Context) ([]*generated.APClient, e
 // GetQLCFixtureMappingSuggestions is the resolver for the getQLCFixtureMappingSuggestions field.
 // Returns empty result - QLC+ integration not available
 func (r *queryResolver) GetQLCFixtureMappingSuggestions(ctx context.Context, projectID string) (*generated.QLCFixtureMappingResult, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
 	return &generated.QLCFixtureMappingResult{
 		ProjectID:          projectID,
 		LacyLightsFixtures: []*generated.LacyLightsFixture{},
@@ -6594,6 +6882,9 @@ func (r *queryResolver) Effect(ctx context.Context, id string) (*models.Effect, 
 
 // Effects is the resolver for the effects field.
 func (r *queryResolver) Effects(ctx context.Context, projectID string) ([]*models.Effect, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
 	return r.ResolveEffects(ctx, projectID)
 }
 
@@ -6740,6 +7031,9 @@ func (r *queryResolver) ProjectsByIds(ctx context.Context, ids []string) ([]*mod
 
 // UndoRedoStatus is the resolver for the undoRedoStatus field.
 func (r *queryResolver) UndoRedoStatus(ctx context.Context, projectID string) (*generated.UndoRedoStatus, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
 	status, err := r.OperationRepo.GetUndoRedoStatus(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get undo/redo status: %w", err)
@@ -6765,6 +7059,9 @@ func (r *queryResolver) UndoRedoStatus(ctx context.Context, projectID string) (*
 
 // OperationHistory is the resolver for the operationHistory field.
 func (r *queryResolver) OperationHistory(ctx context.Context, projectID string, page *int, perPage *int) (*generated.OperationHistoryPage, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
 	pageNum := 1
 	if page != nil {
 		pageNum = *page
@@ -7477,6 +7774,87 @@ func (r *userGroupResolver) MemberCount(ctx context.Context, obj *models.UserGro
 	return int(count), nil
 }
 
+// Members is the resolver for the members field.
+func (r *userGroupResolver) Members(ctx context.Context, obj *models.UserGroup) ([]*generated.GroupMember, error) {
+	var members []models.UserGroupMember
+	if err := r.db.WithContext(ctx).Where("group_id = ?", obj.ID).Find(&members).Error; err != nil {
+		return nil, err
+	}
+
+	if len(members) == 0 {
+		return []*generated.GroupMember{}, nil
+	}
+
+	// Batch-load all users in a single query to avoid N+1
+	userIDs := make([]string, len(members))
+	for i, m := range members {
+		userIDs[i] = m.UserID
+	}
+	var users []models.User
+	if err := r.db.WithContext(ctx).Where("id IN ?", userIDs).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	userMap := make(map[string]models.User, len(users))
+	for _, u := range users {
+		userMap[u.ID] = u
+	}
+
+	result := make([]*generated.GroupMember, len(members))
+	for i, m := range members {
+		user, ok := userMap[m.UserID]
+		if !ok {
+			return nil, fmt.Errorf("user %s not found for group member %s", m.UserID, m.ID)
+		}
+		result[i] = &generated.GroupMember{
+			ID:       m.ID,
+			User:     user,
+			Role:     generated.GroupMemberRole(m.Role),
+			JoinedAt: m.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
+		}
+	}
+	return result, nil
+}
+
+// Projects is the resolver for the projects field.
+func (r *userGroupResolver) Projects(ctx context.Context, obj *models.UserGroup) ([]*models.Project, error) {
+	var projects []models.Project
+	if err := r.db.WithContext(ctx).
+		Where("group_id = ? AND deleted_at IS NULL", obj.ID).
+		Order("created_at DESC").
+		Find(&projects).Error; err != nil {
+		return nil, err
+	}
+	result := make([]*models.Project, len(projects))
+	for i := range projects {
+		result[i] = &projects[i]
+	}
+	return result, nil
+}
+
+// Devices is the resolver for the devices field.
+func (r *userGroupResolver) Devices(ctx context.Context, obj *models.UserGroup) ([]*models.Device, error) {
+	var deviceMembers []models.DeviceGroupMember
+	if err := r.db.WithContext(ctx).Where("group_id = ?", obj.ID).Find(&deviceMembers).Error; err != nil {
+		return nil, err
+	}
+	if len(deviceMembers) == 0 {
+		return []*models.Device{}, nil
+	}
+	deviceIDs := make([]string, len(deviceMembers))
+	for i, dm := range deviceMembers {
+		deviceIDs[i] = dm.DeviceID
+	}
+	var devices []models.Device
+	if err := r.db.WithContext(ctx).Where("id IN ?", deviceIDs).Find(&devices).Error; err != nil {
+		return nil, err
+	}
+	result := make([]*models.Device, len(devices))
+	for i := range devices {
+		result[i] = &devices[i]
+	}
+	return result, nil
+}
+
 // CreatedAt is the resolver for the createdAt field.
 func (r *userGroupResolver) CreatedAt(ctx context.Context, obj *models.UserGroup) (string, error) {
 	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
@@ -7522,6 +7900,14 @@ func (r *Resolver) FixtureMode() generated.FixtureModeResolver { return &fixture
 
 // FixtureValue returns generated.FixtureValueResolver implementation.
 func (r *Resolver) FixtureValue() generated.FixtureValueResolver { return &fixtureValueResolver{r} }
+
+// GroupInvitation returns generated.GroupInvitationResolver implementation.
+func (r *Resolver) GroupInvitation() generated.GroupInvitationResolver {
+	return &groupInvitationResolver{r}
+}
+
+// GroupMember returns generated.GroupMemberResolver implementation.
+func (r *Resolver) GroupMember() generated.GroupMemberResolver { return &groupMemberResolver{r} }
 
 // InstanceChannel returns generated.InstanceChannelResolver implementation.
 func (r *Resolver) InstanceChannel() generated.InstanceChannelResolver {
@@ -7587,6 +7973,8 @@ type fixtureDefinitionResolver struct{ *Resolver }
 type fixtureInstanceResolver struct{ *Resolver }
 type fixtureModeResolver struct{ *Resolver }
 type fixtureValueResolver struct{ *Resolver }
+type groupInvitationResolver struct{ *Resolver }
+type groupMemberResolver struct{ *Resolver }
 type instanceChannelResolver struct{ *Resolver }
 type lookResolver struct{ *Resolver }
 type lookBoardResolver struct{ *Resolver }
@@ -7603,22 +7991,3 @@ type settingResolver struct{ *Resolver }
 type subscriptionResolver struct{ *Resolver }
 type userResolver struct{ *Resolver }
 type userGroupResolver struct{ *Resolver }
-
-// !!! WARNING !!!
-// The code below was going to be deleted when updating resolvers. It has been copied here so you have
-// one last chance to move it out of harms way if you want. There are two reasons this happens:
-//  - When renaming or deleting a resolver the old code will be put in here. You can safely delete
-//    it when you're done.
-//  - You have helper methods in this file. Move them out to keep these resolver files clean.
-/*
-	func (r *deviceResolver) ApprovedBy(ctx context.Context, obj *models.Device) (*models.User, error) {
-	if obj.ApprovedByID == nil {
-		return nil, nil
-	}
-	var user models.User
-	if err := r.db.WithContext(ctx).First(&user, "id = ?", *obj.ApprovedByID).Error; err != nil {
-		return nil, nil // Return nil if user not found, don't error
-	}
-	return &user, nil
-}
-*/

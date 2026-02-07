@@ -1194,3 +1194,387 @@ func TestMigrateSceneToLook_AutoMigrate_ButtonsBothExist(t *testing.T) {
 		t.Errorf("Expected look_id 'scene-1', got '%s'", lookId)
 	}
 }
+
+// setupGroupOwnershipDB creates a test database with the group ownership schema
+func setupGroupOwnershipDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+
+	// AutoMigrate the relevant tables
+	if err := db.AutoMigrate(
+		&models.User{},
+		&models.Project{},
+		&models.UserGroup{},
+	); err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	// Create user_group_members table with role column
+	if err := db.AutoMigrate(&models.UserGroupMember{}); err != nil {
+		t.Fatalf("Failed to migrate user_group_members: %v", err)
+	}
+
+	return db
+}
+
+func TestMigrateGroupOwnership_AuthDisabled(t *testing.T) {
+	db := setupGroupOwnershipDB(t)
+
+	// With auth disabled, should do nothing and succeed
+	err := migrateGroupOwnership(db, false)
+	if err != nil {
+		t.Errorf("Expected no error with auth disabled, got: %v", err)
+	}
+}
+
+func TestMigrateGroupOwnership_AuthEnabled_NoOrphanedProjects(t *testing.T) {
+	db := setupGroupOwnershipDB(t)
+
+	// No projects at all - nothing to migrate
+	err := migrateGroupOwnership(db, true)
+	if err != nil {
+		t.Errorf("Expected no error with no projects, got: %v", err)
+	}
+}
+
+func TestMigrateGroupOwnership_AuthEnabled_NoAdminUser(t *testing.T) {
+	db := setupGroupOwnershipDB(t)
+
+	// Create a project without group_id but no admin user exists
+	db.Exec(`INSERT INTO projects (id, name) VALUES ('proj-1', 'Test Project')`)
+
+	err := migrateGroupOwnership(db, true)
+	if err != nil {
+		t.Errorf("Expected no error (should skip gracefully), got: %v", err)
+	}
+
+	// Project should still have no group_id
+	var groupID *string
+	db.Raw("SELECT group_id FROM projects WHERE id = 'proj-1'").Scan(&groupID)
+	if groupID != nil {
+		t.Errorf("Expected group_id to remain nil, got: %v", groupID)
+	}
+}
+
+func TestMigrateGroupOwnership_AuthEnabled_AssignsOrphanedProjects(t *testing.T) {
+	db := setupGroupOwnershipDB(t)
+
+	// Create admin user
+	db.Create(&models.User{
+		ID:       "admin-1",
+		Email:    "admin@test.com",
+		Role:     "ADMIN",
+		IsActive: true,
+	})
+
+	// Create orphaned projects (no group_id)
+	db.Exec(`INSERT INTO projects (id, name) VALUES ('proj-1', 'Project 1')`)
+	db.Exec(`INSERT INTO projects (id, name) VALUES ('proj-2', 'Project 2')`)
+
+	err := migrateGroupOwnership(db, true)
+	if err != nil {
+		t.Fatalf("Migration failed: %v", err)
+	}
+
+	// Verify personal group was created
+	var personalGroup models.UserGroup
+	if err := db.Where("owner_id = ? AND is_personal = ?", "admin-1", true).First(&personalGroup).Error; err != nil {
+		t.Fatalf("Expected personal group to be created, got: %v", err)
+	}
+	if !personalGroup.IsPersonal {
+		t.Error("Expected group to be personal")
+	}
+
+	// Verify admin was added as GROUP_ADMIN
+	var member models.UserGroupMember
+	if err := db.Where("user_id = ? AND group_id = ?", "admin-1", personalGroup.ID).First(&member).Error; err != nil {
+		t.Fatalf("Expected admin to be a member: %v", err)
+	}
+	if member.Role != models.GroupRoleGroupAdmin {
+		t.Errorf("Expected role GROUP_ADMIN, got: %s", member.Role)
+	}
+
+	// Verify projects are assigned to the personal group
+	var proj1GroupID, proj2GroupID string
+	db.Raw("SELECT group_id FROM projects WHERE id = 'proj-1'").Scan(&proj1GroupID)
+	db.Raw("SELECT group_id FROM projects WHERE id = 'proj-2'").Scan(&proj2GroupID)
+	if proj1GroupID != personalGroup.ID {
+		t.Errorf("Expected proj-1 group_id %s, got: %s", personalGroup.ID, proj1GroupID)
+	}
+	if proj2GroupID != personalGroup.ID {
+		t.Errorf("Expected proj-2 group_id %s, got: %s", personalGroup.ID, proj2GroupID)
+	}
+}
+
+func TestMigrateGroupOwnership_AuthEnabled_ReusesExistingPersonalGroup(t *testing.T) {
+	db := setupGroupOwnershipDB(t)
+
+	// Create admin user
+	db.Create(&models.User{
+		ID:       "admin-1",
+		Email:    "admin@test.com",
+		Role:     "ADMIN",
+		IsActive: true,
+	})
+
+	// Pre-create personal group
+	adminID := "admin-1"
+	db.Create(&models.UserGroup{
+		ID:         "existing-group",
+		Name:       "admin@test.com's Projects",
+		IsPersonal: true,
+		OwnerID:    &adminID,
+	})
+
+	// Create orphaned project
+	db.Exec(`INSERT INTO projects (id, name) VALUES ('proj-1', 'Project 1')`)
+
+	err := migrateGroupOwnership(db, true)
+	if err != nil {
+		t.Fatalf("Migration failed: %v", err)
+	}
+
+	// Verify it used the existing group, not created a new one
+	var groupCount int64
+	db.Model(&models.UserGroup{}).Where("owner_id = ? AND is_personal = ?", "admin-1", true).Count(&groupCount)
+	if groupCount != 1 {
+		t.Errorf("Expected exactly 1 personal group, got: %d", groupCount)
+	}
+
+	// Verify project assigned to existing group
+	var projGroupID string
+	db.Raw("SELECT group_id FROM projects WHERE id = 'proj-1'").Scan(&projGroupID)
+	if projGroupID != "existing-group" {
+		t.Errorf("Expected group_id 'existing-group', got: %s", projGroupID)
+	}
+}
+
+func TestMigrateGroupOwnership_BackfillsRoles(t *testing.T) {
+	db := setupGroupOwnershipDB(t)
+
+	// Create a user group member without a role
+	db.Exec(`INSERT INTO user_group_members (id, user_id, group_id, role) VALUES ('mem-1', 'user-1', 'group-1', '')`)
+	db.Exec(`INSERT INTO user_group_members (id, user_id, group_id) VALUES ('mem-2', 'user-2', 'group-1')`)
+
+	err := migrateGroupOwnership(db, false)
+	if err != nil {
+		t.Fatalf("Migration failed: %v", err)
+	}
+
+	// Verify roles were backfilled
+	var role1, role2 string
+	db.Raw("SELECT role FROM user_group_members WHERE id = 'mem-1'").Scan(&role1)
+	db.Raw("SELECT role FROM user_group_members WHERE id = 'mem-2'").Scan(&role2)
+	if role1 != "MEMBER" {
+		t.Errorf("Expected role 'MEMBER' for mem-1, got: %s", role1)
+	}
+	if role2 != "MEMBER" {
+		t.Errorf("Expected role 'MEMBER' for mem-2, got: %s", role2)
+	}
+}
+
+func TestMigrateGroupOwnership_Idempotent(t *testing.T) {
+	db := setupGroupOwnershipDB(t)
+
+	// Create admin user and orphaned project
+	db.Create(&models.User{
+		ID:       "admin-1",
+		Email:    "admin@test.com",
+		Role:     "ADMIN",
+		IsActive: true,
+	})
+	db.Exec(`INSERT INTO projects (id, name) VALUES ('proj-1', 'Project 1')`)
+
+	// Run migration twice
+	err := migrateGroupOwnership(db, true)
+	if err != nil {
+		t.Fatalf("First migration failed: %v", err)
+	}
+
+	err = migrateGroupOwnership(db, true)
+	if err != nil {
+		t.Fatalf("Second migration failed: %v", err)
+	}
+
+	// Verify exactly 1 personal group exists
+	var groupCount int64
+	db.Model(&models.UserGroup{}).Where("owner_id = ? AND is_personal = ?", "admin-1", true).Count(&groupCount)
+	if groupCount != 1 {
+		t.Errorf("Expected exactly 1 personal group after idempotent run, got: %d", groupCount)
+	}
+}
+
+func TestMigrateGroupOwnership_SkipsSoftDeletedProjects(t *testing.T) {
+	db := setupGroupOwnershipDB(t)
+
+	// Create admin user
+	db.Create(&models.User{
+		ID:       "admin-1",
+		Email:    "admin@test.com",
+		Role:     "ADMIN",
+		IsActive: true,
+	})
+
+	// Create a soft-deleted project (deleted_at is not null)
+	db.Exec(`INSERT INTO projects (id, name, deleted_at) VALUES ('proj-deleted', 'Deleted Project', '2024-01-01 00:00:00')`)
+
+	// No orphaned non-deleted projects exist
+	err := migrateGroupOwnership(db, true)
+	if err != nil {
+		t.Fatalf("Migration failed: %v", err)
+	}
+
+	// Verify no personal group was created (nothing to assign)
+	var groupCount int64
+	db.Model(&models.UserGroup{}).Where("is_personal = ?", true).Count(&groupCount)
+	if groupCount != 0 {
+		t.Errorf("Expected no personal groups (only deleted project), got: %d", groupCount)
+	}
+}
+
+func TestMigrateGroupOwnership_DryRun(t *testing.T) {
+	db := setupGroupOwnershipDB(t)
+
+	// Create admin user
+	db.Create(&models.User{
+		ID:       "admin-1",
+		Email:    "admin@test.com",
+		Role:     "ADMIN",
+		IsActive: true,
+	})
+
+	// Create orphaned projects
+	db.Exec(`INSERT INTO projects (id, name) VALUES ('proj-1', 'Project 1')`)
+	db.Exec(`INSERT INTO projects (id, name) VALUES ('proj-2', 'Project 2')`)
+
+	// Enable dry-run mode
+	t.Setenv("MIGRATION_DRY_RUN", "true")
+
+	err := migrateGroupOwnership(db, true)
+	if err != nil {
+		t.Fatalf("Migration failed: %v", err)
+	}
+
+	// Verify NO personal group was created (dry-run)
+	var groupCount int64
+	db.Model(&models.UserGroup{}).Where("is_personal = ?", true).Count(&groupCount)
+	if groupCount != 0 {
+		t.Errorf("Expected no personal groups in dry-run mode, got: %d", groupCount)
+	}
+
+	// Verify projects still have no group_id
+	var orphanedCount int64
+	db.Model(&models.Project{}).Where("group_id IS NULL AND deleted_at IS NULL").Count(&orphanedCount)
+	if orphanedCount != 2 {
+		t.Errorf("Expected 2 orphaned projects in dry-run mode, got: %d", orphanedCount)
+	}
+}
+
+func TestMigrateGroupOwnership_DryRunWithExistingGroup(t *testing.T) {
+	db := setupGroupOwnershipDB(t)
+
+	// Create admin user with existing personal group
+	adminID := "admin-1"
+	db.Create(&models.User{
+		ID:       adminID,
+		Email:    "admin@test.com",
+		Role:     "ADMIN",
+		IsActive: true,
+	})
+	db.Create(&models.UserGroup{
+		ID:         "existing-group",
+		Name:       "admin@test.com's Projects",
+		IsPersonal: true,
+		OwnerID:    &adminID,
+	})
+
+	// Create orphaned project
+	db.Exec(`INSERT INTO projects (id, name) VALUES ('proj-1', 'Project 1')`)
+
+	// Enable dry-run mode
+	t.Setenv("MIGRATION_DRY_RUN", "true")
+
+	err := migrateGroupOwnership(db, true)
+	if err != nil {
+		t.Fatalf("Migration failed: %v", err)
+	}
+
+	// Verify project still has no group_id (dry-run)
+	var groupID *string
+	db.Raw("SELECT group_id FROM projects WHERE id = 'proj-1'").Scan(&groupID)
+	if groupID != nil {
+		t.Errorf("Expected group_id to remain nil in dry-run mode, got: %v", groupID)
+	}
+}
+
+func TestMigrateGroupOwnership_TargetGroupIDOverride(t *testing.T) {
+	db := setupGroupOwnershipDB(t)
+
+	// Create admin user (needed for the fallback, but we'll override)
+	db.Create(&models.User{
+		ID:       "admin-1",
+		Email:    "admin@test.com",
+		Role:     "ADMIN",
+		IsActive: true,
+	})
+
+	// Create a target group to assign to
+	targetGroup := &models.UserGroup{
+		ID:   "target-group-id",
+		Name: "Target Group",
+	}
+	db.Create(targetGroup)
+
+	// Create orphaned projects
+	db.Exec(`INSERT INTO projects (id, name) VALUES ('proj-1', 'Project 1')`)
+	db.Exec(`INSERT INTO projects (id, name) VALUES ('proj-2', 'Project 2')`)
+
+	// Set target group override
+	t.Setenv("MIGRATION_TARGET_GROUP_ID", "target-group-id")
+
+	err := migrateGroupOwnership(db, true)
+	if err != nil {
+		t.Fatalf("Migration failed: %v", err)
+	}
+
+	// Verify projects were assigned to the target group (not admin's personal group)
+	var proj1GroupID, proj2GroupID string
+	db.Raw("SELECT group_id FROM projects WHERE id = 'proj-1'").Scan(&proj1GroupID)
+	db.Raw("SELECT group_id FROM projects WHERE id = 'proj-2'").Scan(&proj2GroupID)
+	if proj1GroupID != "target-group-id" {
+		t.Errorf("Expected proj-1 group_id 'target-group-id', got: %s", proj1GroupID)
+	}
+	if proj2GroupID != "target-group-id" {
+		t.Errorf("Expected proj-2 group_id 'target-group-id', got: %s", proj2GroupID)
+	}
+
+	// Verify NO personal group was created (used override instead)
+	var personalGroupCount int64
+	db.Model(&models.UserGroup{}).Where("is_personal = ?", true).Count(&personalGroupCount)
+	if personalGroupCount != 0 {
+		t.Errorf("Expected no personal groups with target override, got: %d", personalGroupCount)
+	}
+}
+
+func TestMigrateGroupOwnership_TargetGroupIDNotFound(t *testing.T) {
+	db := setupGroupOwnershipDB(t)
+
+	// Create orphaned project
+	db.Exec(`INSERT INTO projects (id, name) VALUES ('proj-1', 'Project 1')`)
+
+	// Set invalid target group override
+	t.Setenv("MIGRATION_TARGET_GROUP_ID", "nonexistent-group")
+
+	err := migrateGroupOwnership(db, true)
+	if err == nil {
+		t.Fatal("Expected error for nonexistent target group, got nil")
+	}
+	if !strings.Contains(err.Error(), "MIGRATION_TARGET_GROUP_ID") {
+		t.Errorf("Expected error to mention MIGRATION_TARGET_GROUP_ID, got: %v", err)
+	}
+}
