@@ -150,7 +150,7 @@ func (r *ProjectRepository) FindAllByGroupIDs(ctx context.Context, groupIDs []st
 		query = query.Where("group_id IS NULL").Order("created_at DESC")
 	} else {
 		// Filter by group IDs, also include unowned (legacy) projects
-		query = query.Where("group_id IN ? OR group_id IS NULL", groupIDs).Order("created_at DESC")
+		query = query.Where("(group_id IN ? OR group_id IS NULL)", groupIDs).Order("created_at DESC")
 	}
 
 	result := query.Find(&projects)

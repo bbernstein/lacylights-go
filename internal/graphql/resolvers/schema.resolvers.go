@@ -193,14 +193,14 @@ func (r *deviceResolver) ApprovedAt(ctx context.Context, obj *models.Device) (*s
 // Groups is the resolver for the groups field.
 func (r *deviceResolver) Groups(ctx context.Context, obj *models.Device) ([]*models.UserGroup, error) {
 	if r.db == nil {
-		return nil, nil
+		return []*models.UserGroup{}, nil
 	}
 	var dgms []models.DeviceGroupMember
 	if err := r.db.WithContext(ctx).Where("device_id = ?", obj.ID).Find(&dgms).Error; err != nil {
 		return nil, err
 	}
 	if len(dgms) == 0 {
-		return nil, nil
+		return []*models.UserGroup{}, nil
 	}
 	groupIDs := make([]string, len(dgms))
 	for i, dgm := range dgms {
@@ -442,12 +442,9 @@ func (r *groupInvitationResolver) CreatedAt(_ context.Context, obj *models.Group
 }
 
 // User is the resolver for the user field.
-func (r *groupMemberResolver) User(ctx context.Context, obj *generated.GroupMember) (*models.User, error) {
-	var user models.User
-	if err := r.db.WithContext(ctx).First(&user, "id = ?", obj.User.ID).Error; err != nil {
-		return nil, err
-	}
-	return &user, nil
+func (r *groupMemberResolver) User(_ context.Context, obj *generated.GroupMember) (*models.User, error) {
+	// The user is already loaded in the parent Members resolver, so return it directly
+	return &obj.User, nil
 }
 
 // Type is the resolver for the type field.
@@ -766,6 +763,8 @@ func (r *mutationResolver) CreateProject(ctx context.Context, input generated.Cr
 				project.GroupID = &groupIDs[0]
 			} else if len(groupIDs) > 1 {
 				return nil, fmt.Errorf("groupId is required when user belongs to multiple groups")
+			} else {
+				return nil, fmt.Errorf("cannot create project: user does not belong to any groups")
 			}
 		}
 	}
@@ -5360,7 +5359,7 @@ func (r *queryResolver) Device(ctx context.Context, id string) (*models.Device, 
 func (r *queryResolver) MyGroups(ctx context.Context) ([]*models.UserGroup, error) {
 	// If auth is disabled, return empty
 	if r.AuthService == nil || !r.AuthService.IsEnabled() {
-		return nil, nil
+		return []*models.UserGroup{}, nil
 	}
 
 	userID := middleware.GetUserIDFromContext(ctx)
@@ -5371,7 +5370,7 @@ func (r *queryResolver) MyGroups(ctx context.Context) ([]*models.UserGroup, erro
 	// Get group IDs from context
 	groupIDs := middleware.GetUserGroupIDs(ctx)
 	if len(groupIDs) == 0 {
-		return nil, nil
+		return []*models.UserGroup{}, nil
 	}
 
 	var groups []models.UserGroup
@@ -5389,7 +5388,7 @@ func (r *queryResolver) MyGroups(ctx context.Context) ([]*models.UserGroup, erro
 // MyInvitations is the resolver for the myInvitations field.
 func (r *queryResolver) MyInvitations(ctx context.Context) ([]*models.GroupInvitation, error) {
 	if r.AuthService == nil || !r.AuthService.IsEnabled() {
-		return nil, nil
+		return []*models.GroupInvitation{}, nil
 	}
 
 	email := middleware.GetUserEmailFromContext(ctx)
@@ -5415,7 +5414,7 @@ func (r *queryResolver) MyInvitations(ctx context.Context) ([]*models.GroupInvit
 // GroupInvitations is the resolver for the groupInvitations field.
 func (r *queryResolver) GroupInvitations(ctx context.Context, groupID string) ([]*models.GroupInvitation, error) {
 	if r.AuthService == nil || !r.AuthService.IsEnabled() {
-		return nil, nil
+		return []*models.GroupInvitation{}, nil
 	}
 
 	// Require group admin or system admin
@@ -7781,12 +7780,29 @@ func (r *userGroupResolver) Members(ctx context.Context, obj *models.UserGroup) 
 		return nil, err
 	}
 
+	if len(members) == 0 {
+		return []*generated.GroupMember{}, nil
+	}
+
+	// Batch-load all users in a single query to avoid N+1
+	userIDs := make([]string, len(members))
+	for i, m := range members {
+		userIDs[i] = m.UserID
+	}
+	var users []models.User
+	if err := r.db.WithContext(ctx).Where("id IN ?", userIDs).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	userMap := make(map[string]models.User, len(users))
+	for _, u := range users {
+		userMap[u.ID] = u
+	}
+
 	result := make([]*generated.GroupMember, len(members))
 	for i, m := range members {
-		// Load user for each member
-		var user models.User
-		if err := r.db.WithContext(ctx).First(&user, "id = ?", m.UserID).Error; err != nil {
-			return nil, err
+		user, ok := userMap[m.UserID]
+		if !ok {
+			return nil, fmt.Errorf("user %s not found for group member %s", m.UserID, m.ID)
 		}
 		result[i] = &generated.GroupMember{
 			ID:       m.ID,

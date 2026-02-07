@@ -982,7 +982,6 @@ func doMigrateSceneToLook(db *gorm.DB) error {
 // 3. Adding group_id column to projects (via AutoMigrate)
 // 4. Backfilling: setting role=MEMBER for existing user_group_members without a role
 // 5. When auth enabled: assigning orphaned projects to the admin user's personal group
-// 6. When auth enabled: creating device_group_members for approved devices without group memberships
 func migrateGroupOwnership(db *gorm.DB, authEnabled bool) error {
 	// Step 1: Backfill role for existing user_group_members that don't have one
 	if db.Migrator().HasColumn("user_group_members", "role") {
