@@ -141,6 +141,20 @@ type VerificationToken struct {
 
 func (VerificationToken) TableName() string { return "verification_tokens" }
 
+// Group member role constants.
+const (
+	GroupRoleMember     = "MEMBER"
+	GroupRoleGroupAdmin = "GROUP_ADMIN"
+)
+
+// Group invitation status constants.
+const (
+	InvitationStatusPending  = "PENDING"
+	InvitationStatusAccepted = "ACCEPTED"
+	InvitationStatusDeclined = "DECLINED"
+	InvitationStatusExpired  = "EXPIRED"
+)
+
 // UserGroup represents a permission group for users.
 // Table: user_groups
 type UserGroup struct {
@@ -148,11 +162,14 @@ type UserGroup struct {
 	Name        string    `gorm:"column:name;uniqueIndex"`
 	Description *string   `gorm:"column:description"`
 	Permissions *string   `gorm:"column:permissions"` // JSON array of permission strings
+	IsPersonal  bool      `gorm:"column:is_personal;default:false"`
+	OwnerID     *string   `gorm:"column:owner_id;index"`
 	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime"`
 
 	// Relations
 	Members []UserGroupMember `gorm:"foreignKey:GroupID"`
+	Owner   *User             `gorm:"foreignKey:OwnerID"`
 }
 
 func (UserGroup) TableName() string { return "user_groups" }
@@ -163,6 +180,7 @@ type UserGroupMember struct {
 	ID        string    `gorm:"column:id;primaryKey"`
 	UserID    string    `gorm:"column:user_id;index"`
 	GroupID   string    `gorm:"column:group_id;index"`
+	Role      string    `gorm:"column:role;default:MEMBER"` // MEMBER, GROUP_ADMIN
 	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime"`
 
 	// Relations
@@ -171,6 +189,42 @@ type UserGroupMember struct {
 }
 
 func (UserGroupMember) TableName() string { return "user_group_members" }
+
+// DeviceGroupMember represents a device's membership in a group (many-to-many).
+// A device can belong to multiple groups (e.g., a shared iPad used by multiple organizations).
+// Table: device_group_members
+type DeviceGroupMember struct {
+	ID        string    `gorm:"column:id;primaryKey"`
+	DeviceID  string    `gorm:"column:device_id;index"`
+	GroupID   string    `gorm:"column:group_id;index"`
+	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime"`
+
+	// Relations
+	Device *Device    `gorm:"foreignKey:DeviceID"`
+	Group  *UserGroup `gorm:"foreignKey:GroupID"`
+}
+
+func (DeviceGroupMember) TableName() string { return "device_group_members" }
+
+// GroupInvitation represents an invitation for a user to join a group.
+// Table: group_invitations
+type GroupInvitation struct {
+	ID          string     `gorm:"column:id;primaryKey"`
+	GroupID     string     `gorm:"column:group_id;index"`
+	Email       string     `gorm:"column:email;index"`
+	InvitedByID string     `gorm:"column:invited_by_id"`
+	Role        string     `gorm:"column:role;default:MEMBER"` // MEMBER, GROUP_ADMIN
+	Status      string     `gorm:"column:status;default:PENDING"` // PENDING, ACCEPTED, DECLINED, EXPIRED
+	ExpiresAt   time.Time  `gorm:"column:expires_at"`
+	AcceptedAt  *time.Time `gorm:"column:accepted_at"`
+	CreatedAt   time.Time  `gorm:"column:created_at;autoCreateTime"`
+
+	// Relations
+	Group     *UserGroup `gorm:"foreignKey:GroupID"`
+	InvitedBy *User      `gorm:"foreignKey:InvitedByID"`
+}
+
+func (GroupInvitation) TableName() string { return "group_invitations" }
 
 // AuthSetting stores global authentication configuration settings.
 // Table: auth_settings
@@ -190,6 +244,7 @@ type Project struct {
 	ID          string    `gorm:"column:id;primaryKey"`
 	Name        string    `gorm:"column:name"`
 	Description *string   `gorm:"column:description"`
+	GroupID     *string   `gorm:"column:group_id;index"` // nullable for auth-off compatibility
 	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime"`
 
@@ -201,6 +256,7 @@ type Project struct {
 	LayoutCanvasHeight int `gorm:"column:layout_canvas_height;default:2000"`
 
 	// Relations (loaded separately)
+	Group      *UserGroup        `gorm:"foreignKey:GroupID"`
 	Fixtures   []FixtureInstance `gorm:"foreignKey:ProjectID"`
 	Looks      []Look            `gorm:"foreignKey:ProjectID"`
 	CueLists   []CueList         `gorm:"foreignKey:ProjectID"`

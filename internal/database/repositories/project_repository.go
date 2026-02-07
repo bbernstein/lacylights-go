@@ -3,6 +3,7 @@ package repositories
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
@@ -132,4 +133,59 @@ func (r *ProjectRepository) CountCueLists(ctx context.Context, projectID string)
 		Where("project_id = ?", projectID).
 		Count(&count)
 	return count, result.Error
+}
+
+// FindAllByGroupIDs returns non-deleted projects that belong to any of the given groups.
+// If groupIDs is nil, returns all non-deleted projects (no filtering).
+// If groupIDs is empty, returns projects with no group (legacy auth-off projects).
+func (r *ProjectRepository) FindAllByGroupIDs(ctx context.Context, groupIDs []string) ([]models.Project, error) {
+	var projects []models.Project
+	query := r.db.WithContext(ctx).Where("deleted_at IS NULL")
+
+	if groupIDs == nil {
+		// nil means no filtering (admin or auth-off)
+		query = query.Order("created_at DESC")
+	} else if len(groupIDs) == 0 {
+		// Empty slice means user has no groups - show only unowned projects
+		query = query.Where("group_id IS NULL").Order("created_at DESC")
+	} else {
+		// Filter by group IDs, also include unowned (legacy) projects
+		query = query.Where("group_id IN ? OR group_id IS NULL", groupIDs).Order("created_at DESC")
+	}
+
+	result := query.Find(&projects)
+	return projects, result.Error
+}
+
+// FindByIDWithGroupCheck returns a non-deleted project by ID, verifying group access.
+// If groupIDs is nil, no group check is performed (admin or auth-off).
+// Returns nil if the project exists but the user doesn't have group access.
+func (r *ProjectRepository) FindByIDWithGroupCheck(ctx context.Context, id string, groupIDs []string) (*models.Project, error) {
+	var project models.Project
+	query := r.db.WithContext(ctx).Where("deleted_at IS NULL")
+
+	result := query.First(&project, "id = ?", id)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+
+	// No filtering needed
+	if groupIDs == nil {
+		return &project, nil
+	}
+
+	// Projects without a group (legacy) are accessible to all authenticated users
+	if project.GroupID == nil {
+		return &project, nil
+	}
+
+	// Check if the project's group is in the user's groups
+	if slices.Contains(groupIDs, *project.GroupID) {
+		return &project, nil
+	}
+
+	return nil, nil // Not accessible
 }

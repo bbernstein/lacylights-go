@@ -931,6 +931,110 @@ func (r *Resolver) requireAdmin(ctx context.Context) error {
 	return nil
 }
 
+// requireGroupAccess checks if the user has access to a group.
+// Returns nil if auth is disabled (all access allowed).
+func (r *Resolver) requireGroupAccess(ctx context.Context, groupID string) error {
+	if r.AuthService == nil || !r.AuthService.IsEnabled() {
+		return nil
+	}
+
+	if !middleware.IsAuthenticated(ctx) {
+		return ErrNotAuthenticated
+	}
+
+	// System admins have access to all groups
+	if middleware.IsAdmin(ctx) {
+		return nil
+	}
+
+	if !middleware.IsGroupMember(ctx, groupID) {
+		return ErrNotAuthorized
+	}
+
+	return nil
+}
+
+// requireGroupAdmin checks if the user is a group admin or system admin.
+// Returns nil if auth is disabled.
+func (r *Resolver) requireGroupAdmin(ctx context.Context, groupID string) error {
+	if r.AuthService == nil || !r.AuthService.IsEnabled() {
+		return nil
+	}
+
+	if !middleware.IsAuthenticated(ctx) {
+		return ErrNotAuthenticated
+	}
+
+	// System admins have admin access to all groups
+	if middleware.IsAdmin(ctx) {
+		return nil
+	}
+
+	if !middleware.IsGroupAdmin(ctx, groupID) {
+		return ErrNotAuthorized
+	}
+
+	return nil
+}
+
+// ensureProjectAccess checks if the user has access to a project by verifying
+// the project's group is in the user's accessible groups.
+// Returns nil if auth is disabled.
+func (r *Resolver) ensureProjectAccess(ctx context.Context, projectID string) error {
+	if r.AuthService == nil || !r.AuthService.IsEnabled() {
+		return nil
+	}
+
+	if !middleware.IsAuthenticated(ctx) {
+		return ErrNotAuthenticated
+	}
+
+	// System admins have access to all projects
+	if middleware.IsAdmin(ctx) {
+		return nil
+	}
+
+	// Load the project to check its group
+	project, err := r.ProjectRepo.FindByID(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if project == nil {
+		return fmt.Errorf("project not found")
+	}
+
+	// Projects without a group (auth-off legacy) are accessible to all authenticated users
+	if project.GroupID == nil {
+		return nil
+	}
+
+	if !middleware.IsGroupMember(ctx, *project.GroupID) {
+		return ErrNotAuthorized
+	}
+
+	return nil
+}
+
+// getAccessibleGroupIDs returns the group IDs the current user can access.
+// System admins get all groups. Regular users get their membership groups.
+// Returns nil (no filtering) if auth is disabled.
+func (r *Resolver) getAccessibleGroupIDs(ctx context.Context) ([]string, error) {
+	if r.AuthService == nil || !r.AuthService.IsEnabled() {
+		return nil, nil // nil means no filtering
+	}
+
+	if !middleware.IsAuthenticated(ctx) {
+		return nil, ErrNotAuthenticated
+	}
+
+	// System admins see all groups
+	if middleware.IsAdmin(ctx) {
+		return nil, nil // nil means no filtering
+	}
+
+	return middleware.GetUserGroupIDs(ctx), nil
+}
+
 // toAuthUser converts a User model to an AuthUser response.
 func (r *Resolver) toAuthUser(user *models.User) *generated.AuthUser {
 	if user == nil {

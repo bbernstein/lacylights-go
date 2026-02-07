@@ -372,8 +372,10 @@ type CreateModeInput struct {
 }
 
 type CreateProjectInput struct {
-	Name               string                     `json:"name"`
-	Description        graphql.Omittable[*string] `json:"description,omitempty"`
+	Name        string                     `json:"name"`
+	Description graphql.Omittable[*string] `json:"description,omitempty"`
+	// Group to own this project (defaults to user's only group if they have exactly one)
+	GroupID            graphql.Omittable[*string] `json:"groupId,omitempty"`
 	LayoutCanvasWidth  graphql.Omittable[*int]    `json:"layoutCanvasWidth,omitempty"`
 	LayoutCanvasHeight graphql.Omittable[*int]    `json:"layoutCanvasHeight,omitempty"`
 }
@@ -694,6 +696,14 @@ type GlobalPlaybackStatus struct {
 	// Fade progress percentage (0-100)
 	FadeProgress *float64 `json:"fadeProgress,omitempty"`
 	LastUpdated  string   `json:"lastUpdated"`
+}
+
+// A member of a group with their role.
+type GroupMember struct {
+	ID       string          `json:"id"`
+	User     models.User     `json:"user"`
+	Role     GroupMemberRole `json:"role"`
+	JoinedAt string          `json:"joinedAt"`
 }
 
 type ImportOFLFixtureInput struct {
@@ -2082,6 +2092,61 @@ func (e FixtureType) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+type GroupMemberRole string
+
+const (
+	GroupMemberRoleMember     GroupMemberRole = "MEMBER"
+	GroupMemberRoleGroupAdmin GroupMemberRole = "GROUP_ADMIN"
+)
+
+var AllGroupMemberRole = []GroupMemberRole{
+	GroupMemberRoleMember,
+	GroupMemberRoleGroupAdmin,
+}
+
+func (e GroupMemberRole) IsValid() bool {
+	switch e {
+	case GroupMemberRoleMember, GroupMemberRoleGroupAdmin:
+		return true
+	}
+	return false
+}
+
+func (e GroupMemberRole) String() string {
+	return string(e)
+}
+
+func (e *GroupMemberRole) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = GroupMemberRole(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid GroupMemberRole", str)
+	}
+	return nil
+}
+
+func (e GroupMemberRole) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *GroupMemberRole) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e GroupMemberRole) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 type ImportMode string
 
 const (
@@ -2132,6 +2197,65 @@ func (e *ImportMode) UnmarshalJSON(b []byte) error {
 }
 
 func (e ImportMode) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type InvitationStatus string
+
+const (
+	InvitationStatusPending  InvitationStatus = "PENDING"
+	InvitationStatusAccepted InvitationStatus = "ACCEPTED"
+	InvitationStatusDeclined InvitationStatus = "DECLINED"
+	InvitationStatusExpired  InvitationStatus = "EXPIRED"
+)
+
+var AllInvitationStatus = []InvitationStatus{
+	InvitationStatusPending,
+	InvitationStatusAccepted,
+	InvitationStatusDeclined,
+	InvitationStatusExpired,
+}
+
+func (e InvitationStatus) IsValid() bool {
+	switch e {
+	case InvitationStatusPending, InvitationStatusAccepted, InvitationStatusDeclined, InvitationStatusExpired:
+		return true
+	}
+	return false
+}
+
+func (e InvitationStatus) String() string {
+	return string(e)
+}
+
+func (e *InvitationStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = InvitationStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid InvitationStatus", str)
+	}
+	return nil
+}
+
+func (e InvitationStatus) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *InvitationStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e InvitationStatus) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

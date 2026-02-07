@@ -27,11 +27,35 @@ models:
   # Force field resolvers for relations that need lazy loading
   Project:
     fields:
+      group:
+        resolver: true
       fixtures:
         resolver: true
       looks:
         resolver: true
       cueLists:
+        resolver: true
+  UserGroup:
+    fields:
+      members:
+        resolver: true
+      projects:
+        resolver: true
+      devices:
+        resolver: true
+  GroupMember:
+    fields:
+      user:
+        resolver: true
+  GroupInvitation:
+    fields:
+      group:
+        resolver: true
+      invitedBy:
+        resolver: true
+  Device:
+    fields:
+      groups:
         resolver: true
   FixtureDefinition:
     fields:

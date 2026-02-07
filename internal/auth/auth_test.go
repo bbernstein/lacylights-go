@@ -21,8 +21,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("failed to connect to test database: %v", err)
 	}
 
-	// Migrate the schema - include Session for full auth tests
-	if err := db.AutoMigrate(&models.User{}, &models.UserCredential{}, &models.Session{}); err != nil {
+	// Migrate the schema - include Session for full auth tests, and group tables for personal group creation
+	if err := db.AutoMigrate(&models.User{}, &models.UserCredential{}, &models.Session{}, &models.UserGroup{}, &models.UserGroupMember{}); err != nil {
 		t.Fatalf("failed to migrate test database: %v", err)
 	}
 
@@ -75,6 +75,27 @@ func TestEnsureDefaultAdmin_CreatesAdminWhenNoUsers(t *testing.T) {
 	// Verify password can be verified
 	if err := VerifyPassword("password123", creds.PasswordHash); err != nil {
 		t.Error("password verification failed")
+	}
+
+	// Verify personal group was created
+	var group models.UserGroup
+	if err := db.First(&group, "owner_id = ?", user.ID).Error; err != nil {
+		t.Fatalf("personal group not found: %v", err)
+	}
+	if !group.IsPersonal {
+		t.Error("expected group to be personal")
+	}
+	if group.Name != "admin@test.local's Group" {
+		t.Errorf("expected group name %q, got %q", "admin@test.local's Group", group.Name)
+	}
+
+	// Verify user is GROUP_ADMIN of the personal group
+	var member models.UserGroupMember
+	if err := db.First(&member, "user_id = ? AND group_id = ?", user.ID, group.ID).Error; err != nil {
+		t.Fatalf("group membership not found: %v", err)
+	}
+	if member.Role != models.GroupRoleGroupAdmin {
+		t.Errorf("expected role %s, got %s", models.GroupRoleGroupAdmin, member.Role)
 	}
 }
 
@@ -372,6 +393,24 @@ func TestRegister(t *testing.T) {
 
 	if result.SessionID == "" {
 		t.Error("session ID should not be empty")
+	}
+
+	// Verify personal group was created
+	var group models.UserGroup
+	if err := db.First(&group, "owner_id = ?", result.User.ID).Error; err != nil {
+		t.Fatalf("personal group not found: %v", err)
+	}
+	if !group.IsPersonal {
+		t.Error("expected group to be personal")
+	}
+
+	// Verify user is GROUP_ADMIN of the personal group
+	var member models.UserGroupMember
+	if err := db.First(&member, "user_id = ? AND group_id = ?", result.User.ID, group.ID).Error; err != nil {
+		t.Fatalf("group membership not found: %v", err)
+	}
+	if member.Role != models.GroupRoleGroupAdmin {
+		t.Errorf("expected role %s, got %s", models.GroupRoleGroupAdmin, member.Role)
 	}
 }
 

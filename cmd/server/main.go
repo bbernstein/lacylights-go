@@ -25,6 +25,8 @@ import (
 	"github.com/rs/cors"
 	"github.com/vektah/gqlparser/v2/ast"
 
+	"github.com/lucsky/cuid"
+
 	"github.com/bbernstein/lacylights-go/internal/auth"
 	"github.com/bbernstein/lacylights-go/internal/config"
 	"github.com/bbernstein/lacylights-go/internal/database"
@@ -128,6 +130,8 @@ func main() {
 		{"sessions", &models.Session{}, []string{"id", "user_id", "token_hash"}},
 		{"verification_tokens", &models.VerificationToken{}, []string{"id", "token_hash"}},
 		{"user_group_members", &models.UserGroupMember{}, []string{"id", "user_id", "group_id"}},
+		{"device_group_members", &models.DeviceGroupMember{}, []string{"id", "device_id", "group_id"}},
+		{"group_invitations", &models.GroupInvitation{}, []string{"id", "group_id", "email"}},
 	}
 
 	for _, t := range tablesWithFK {
@@ -171,6 +175,11 @@ func main() {
 	// Add min_value and max_value columns to effect_channels table
 	if err := migrateEffectChannelMinMax(db); err != nil {
 		log.Printf("Warning: effect channel min/max migration failed: %v", err)
+	}
+
+	// Migrate group ownership fields (add is_personal, owner_id to user_groups; role to user_group_members; group_id to projects)
+	if err := migrateGroupOwnership(db, cfg.AuthEnabled); err != nil {
+		log.Printf("Warning: group ownership migration failed: %v", err)
 	}
 
 	// Load Open Fixture Library if enabled and database is empty
@@ -962,6 +971,95 @@ func doMigrateSceneToLook(db *gorm.DB) error {
 	}
 
 	log.Println("✅ Scene to look migration complete")
+	return nil
+}
+
+// migrateGroupOwnership handles the migration to add group ownership fields.
+// This is idempotent and runs on every startup.
+// It handles:
+// 1. Adding is_personal, owner_id columns to user_groups (via AutoMigrate)
+// 2. Adding role column to user_group_members (via AutoMigrate)
+// 3. Adding group_id column to projects (via AutoMigrate)
+// 4. Backfilling: setting role=MEMBER for existing user_group_members without a role
+// 5. When auth enabled: assigning orphaned projects to the admin user's personal group
+// 6. When auth enabled: creating device_group_members for approved devices without group memberships
+func migrateGroupOwnership(db *gorm.DB, authEnabled bool) error {
+	// Step 1: Backfill role for existing user_group_members that don't have one
+	if db.Migrator().HasColumn("user_group_members", "role") {
+		result := db.Exec(`UPDATE user_group_members SET role = 'MEMBER' WHERE role IS NULL OR role = ''`)
+		if result.Error != nil {
+			return fmt.Errorf("failed to backfill user_group_member roles: %w", result.Error)
+		}
+		if result.RowsAffected > 0 {
+			log.Printf("🔄 Backfilled role for %d user_group_members", result.RowsAffected)
+		}
+	}
+
+	// Step 2: If auth is disabled, nothing more to do (group_id stays NULL)
+	if !authEnabled {
+		return nil
+	}
+
+	// Step 3: Find orphaned projects (auth enabled, projects without group_id)
+	var orphanedCount int64
+	if err := db.Model(&models.Project{}).
+		Where("group_id IS NULL AND deleted_at IS NULL").
+		Count(&orphanedCount).Error; err != nil {
+		return fmt.Errorf("failed to count orphaned projects: %w", err)
+	}
+
+	if orphanedCount == 0 {
+		return nil // Nothing to migrate
+	}
+
+	log.Printf("🔄 Migrating %d orphaned projects to group ownership...", orphanedCount)
+
+	// Find admin user (first ADMIN user)
+	var adminUser models.User
+	if err := db.Where("role = 'ADMIN'").First(&adminUser).Error; err != nil {
+		log.Printf("  No admin user found, skipping project group assignment")
+		return nil
+	}
+
+	// Find or create admin's personal group
+	var personalGroup models.UserGroup
+	err := db.Where("owner_id = ? AND is_personal = ?", adminUser.ID, true).First(&personalGroup).Error
+	if err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return fmt.Errorf("failed to find personal group: %w", err)
+		}
+		// Create personal group for admin
+		personalGroup = models.UserGroup{
+			ID:         cuid.New(),
+			Name:       fmt.Sprintf("%s's Projects", adminUser.Email),
+			IsPersonal: true,
+			OwnerID:    &adminUser.ID,
+		}
+		if err := db.Create(&personalGroup).Error; err != nil {
+			return fmt.Errorf("failed to create admin personal group: %w", err)
+		}
+		// Add admin as GROUP_ADMIN member
+		member := models.UserGroupMember{
+			ID:      cuid.New(),
+			UserID:  adminUser.ID,
+			GroupID: personalGroup.ID,
+			Role:    models.GroupRoleGroupAdmin,
+		}
+		if err := db.Create(&member).Error; err != nil {
+			return fmt.Errorf("failed to add admin to personal group: %w", err)
+		}
+		log.Printf("  Created personal group for admin: %s", personalGroup.Name)
+	}
+
+	// Assign orphaned projects to admin's personal group
+	result := db.Model(&models.Project{}).
+		Where("group_id IS NULL AND deleted_at IS NULL").
+		Update("group_id", personalGroup.ID)
+	if result.Error != nil {
+		return fmt.Errorf("failed to assign projects to group: %w", result.Error)
+	}
+	log.Printf("✅ Assigned %d orphaned projects to admin's personal group", result.RowsAffected)
+
 	return nil
 }
 

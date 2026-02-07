@@ -42,6 +42,8 @@ func setupTestDB(t *testing.T) (*testDB, func()) {
 		&models.Setting{},
 		&models.LookBoard{},
 		&models.LookBoardButton{},
+		&models.UserGroup{},
+		&models.UserGroupMember{},
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)

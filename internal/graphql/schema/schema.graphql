@@ -299,6 +299,18 @@ enum DevicePermissions {
   ADMIN
 }
 
+enum GroupMemberRole {
+  MEMBER
+  GROUP_ADMIN
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
 # =============================================================================
 # AUTHENTICATION TYPES
 # =============================================================================
@@ -339,7 +351,7 @@ type AuthUser {
 }
 
 """
-User group for permission management.
+User group for permission management and multi-tenant project ownership.
 """
 type UserGroup {
   id: ID!
@@ -349,8 +361,40 @@ type UserGroup {
   permissions: [String!]!
   "Number of members in this group"
   memberCount: Int!
+  "Whether this is a personal group auto-created for a user"
+  isPersonal: Boolean!
+  "Members of this group"
+  members: [GroupMember!]!
+  "Projects owned by this group"
+  projects: [Project!]!
+  "Devices assigned to this group"
+  devices: [Device!]!
   createdAt: String!
   updatedAt: String!
+}
+
+"""
+A member of a group with their role.
+"""
+type GroupMember {
+  id: ID!
+  user: User!
+  role: GroupMemberRole!
+  joinedAt: String!
+}
+
+"""
+An invitation to join a group.
+"""
+type GroupInvitation {
+  id: ID!
+  group: UserGroup!
+  email: String!
+  invitedBy: User!
+  role: GroupMemberRole!
+  status: InvitationStatus!
+  expiresAt: String!
+  createdAt: String!
 }
 
 """
@@ -395,6 +439,8 @@ type Device {
   approvedAt: String
   "User who approved this device"
   approvedBy: User
+  "Groups this device belongs to"
+  groups: [UserGroup!]!
 }
 
 """
@@ -523,6 +569,10 @@ type Project {
   fixtureCount: Int!
   lookCount: Int!
   cueListCount: Int!
+  "The group that owns this project (null for auth-off legacy projects)"
+  group: UserGroup
+  "The group ID that owns this project"
+  groupId: ID
   createdAt: String!
   updatedAt: String!
   deletedAt: String  # Soft delete timestamp - null means not deleted
@@ -1515,6 +1565,8 @@ input UpdateAuthSettingsInput {
 input CreateProjectInput {
   name: String!
   description: String
+  "Group to own this project (defaults to user's only group if they have exactly one)"
+  groupId: ID
   layoutCanvasWidth: Int = 2000
   layoutCanvasHeight: Int = 2000
 }
@@ -2076,6 +2128,14 @@ type Query {
   "Get a device by ID (admin only)"
   device(id: ID!): Device
 
+  # Groups
+  "Get groups the current user belongs to"
+  myGroups: [UserGroup!]!
+  "Get pending invitations for the current user"
+  myInvitations: [GroupInvitation!]!
+  "Get invitations for a group (group admin or system admin)"
+  groupInvitations(groupId: ID!): [GroupInvitation!]!
+
   # Projects
   projects: [Project!]!
   project(id: ID!): Project
@@ -2279,16 +2339,30 @@ type Mutation {
   updateUserGroup(id: ID!, input: UpdateUserGroupInput!): UserGroup!
   "Delete a user group (admin only)"
   deleteUserGroup(id: ID!): Boolean!
-  "Add a user to a group (admin only)"
-  addUserToGroup(userId: ID!, groupId: ID!): Boolean!
-  "Remove a user from a group (admin only)"
+  "Add a user to a group (group admin or system admin)"
+  addUserToGroup(userId: ID!, groupId: ID!, role: GroupMemberRole = MEMBER): Boolean!
+  "Remove a user from a group (group admin or system admin)"
   removeUserFromGroup(userId: ID!, groupId: ID!): Boolean!
+  "Update a group member's role (group admin or system admin)"
+  updateGroupMemberRole(userId: ID!, groupId: ID!, role: GroupMemberRole!): Boolean!
+  "Invite a user by email to join a group"
+  inviteToGroup(groupId: ID!, email: String!, role: GroupMemberRole = MEMBER): GroupInvitation!
+  "Accept a group invitation"
+  acceptInvitation(invitationId: ID!): Boolean!
+  "Decline a group invitation"
+  declineInvitation(invitationId: ID!): Boolean!
+  "Cancel a pending group invitation (group admin or system admin)"
+  cancelInvitation(invitationId: ID!): Boolean!
+  "Add a device to a group (group admin or system admin)"
+  addDeviceToGroup(deviceId: ID!, groupId: ID!): Boolean!
+  "Remove a device from a group (group admin or system admin)"
+  removeDeviceFromGroup(deviceId: ID!, groupId: ID!): Boolean!
 
   # Device Management (admin only)
   "Create a device authorization code (admin only)"
   createDeviceAuthCode(deviceId: ID!): DeviceAuthCode!
-  "Approve a pending device (admin only)"
-  approveDevice(deviceId: ID!, permissions: DevicePermissions!): Device!
+  "Approve a pending device (admin only). Optionally assign to a group."
+  approveDevice(deviceId: ID!, permissions: DevicePermissions!, groupId: ID): Device!
   "Update a device (admin only)"
   updateDevice(id: ID!, input: UpdateDeviceInput!): Device!
   "Update device permissions (admin only)"

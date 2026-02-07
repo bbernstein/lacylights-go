@@ -1,0 +1,195 @@
+package repositories
+
+import (
+	"context"
+	"testing"
+
+	"github.com/bbernstein/lacylights-go/internal/database/models"
+	"github.com/lucsky/cuid"
+)
+
+func TestFindAllByGroupIDs(t *testing.T) {
+	tdb, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewProjectRepository(tdb.DB)
+	ctx := context.Background()
+
+	groupA := cuid.New()
+	groupB := cuid.New()
+
+	// Create projects: one in group A, one in group B, one with no group (legacy)
+	projectA := &models.Project{ID: cuid.New(), Name: "Project A", GroupID: &groupA}
+	projectB := &models.Project{ID: cuid.New(), Name: "Project B", GroupID: &groupB}
+	projectNoGroup := &models.Project{ID: cuid.New(), Name: "Legacy Project"}
+
+	for _, p := range []*models.Project{projectA, projectB, projectNoGroup} {
+		if err := repo.Create(ctx, p); err != nil {
+			t.Fatalf("failed to create project: %v", err)
+		}
+	}
+
+	t.Run("nil groupIDs returns all projects", func(t *testing.T) {
+		projects, err := repo.FindAllByGroupIDs(ctx, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(projects) != 3 {
+			t.Errorf("expected 3 projects, got %d", len(projects))
+		}
+	})
+
+	t.Run("empty groupIDs returns only unowned projects", func(t *testing.T) {
+		projects, err := repo.FindAllByGroupIDs(ctx, []string{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(projects) != 1 {
+			t.Errorf("expected 1 project, got %d", len(projects))
+		}
+		if len(projects) > 0 && projects[0].Name != "Legacy Project" {
+			t.Errorf("expected 'Legacy Project', got %q", projects[0].Name)
+		}
+	})
+
+	t.Run("single group returns group projects and unowned", func(t *testing.T) {
+		projects, err := repo.FindAllByGroupIDs(ctx, []string{groupA})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(projects) != 2 {
+			t.Errorf("expected 2 projects, got %d", len(projects))
+		}
+		names := map[string]bool{}
+		for _, p := range projects {
+			names[p.Name] = true
+		}
+		if !names["Project A"] || !names["Legacy Project"] {
+			t.Errorf("expected 'Project A' and 'Legacy Project', got %v", names)
+		}
+	})
+
+	t.Run("multiple groups returns all matching and unowned", func(t *testing.T) {
+		projects, err := repo.FindAllByGroupIDs(ctx, []string{groupA, groupB})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(projects) != 3 {
+			t.Errorf("expected 3 projects, got %d", len(projects))
+		}
+	})
+
+	t.Run("non-matching group returns only unowned", func(t *testing.T) {
+		projects, err := repo.FindAllByGroupIDs(ctx, []string{"nonexistent"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(projects) != 1 {
+			t.Errorf("expected 1 project (unowned), got %d", len(projects))
+		}
+	})
+
+	t.Run("excludes soft-deleted projects", func(t *testing.T) {
+		if err := repo.Delete(ctx, projectA.ID); err != nil {
+			t.Fatalf("failed to delete project: %v", err)
+		}
+		projects, err := repo.FindAllByGroupIDs(ctx, []string{groupA})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// Only the legacy project should remain
+		if len(projects) != 1 {
+			t.Errorf("expected 1 project, got %d", len(projects))
+		}
+		// Restore for other tests
+		if err := repo.Restore(ctx, projectA.ID); err != nil {
+			t.Fatalf("failed to restore project: %v", err)
+		}
+	})
+}
+
+func TestFindByIDWithGroupCheck(t *testing.T) {
+	tdb, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := NewProjectRepository(tdb.DB)
+	ctx := context.Background()
+
+	groupA := cuid.New()
+	groupB := cuid.New()
+
+	projectA := &models.Project{ID: cuid.New(), Name: "Project A", GroupID: &groupA}
+	projectNoGroup := &models.Project{ID: cuid.New(), Name: "Legacy Project"}
+
+	for _, p := range []*models.Project{projectA, projectNoGroup} {
+		if err := repo.Create(ctx, p); err != nil {
+			t.Fatalf("failed to create project: %v", err)
+		}
+	}
+
+	t.Run("nil groupIDs returns project without filtering", func(t *testing.T) {
+		project, err := repo.FindByIDWithGroupCheck(ctx, projectA.ID, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if project == nil {
+			t.Fatal("expected project, got nil")
+		}
+		if project.Name != "Project A" {
+			t.Errorf("expected 'Project A', got %q", project.Name)
+		}
+	})
+
+	t.Run("matching group returns project", func(t *testing.T) {
+		project, err := repo.FindByIDWithGroupCheck(ctx, projectA.ID, []string{groupA})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if project == nil {
+			t.Fatal("expected project, got nil")
+		}
+	})
+
+	t.Run("non-matching group returns nil", func(t *testing.T) {
+		project, err := repo.FindByIDWithGroupCheck(ctx, projectA.ID, []string{groupB})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if project != nil {
+			t.Error("expected nil for non-matching group, got project")
+		}
+	})
+
+	t.Run("legacy project accessible to all groups", func(t *testing.T) {
+		project, err := repo.FindByIDWithGroupCheck(ctx, projectNoGroup.ID, []string{groupB})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if project == nil {
+			t.Fatal("expected legacy project to be accessible")
+		}
+	})
+
+	t.Run("nonexistent project returns nil", func(t *testing.T) {
+		project, err := repo.FindByIDWithGroupCheck(ctx, "nonexistent", []string{groupA})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if project != nil {
+			t.Error("expected nil for nonexistent project")
+		}
+	})
+
+	t.Run("soft-deleted project returns nil", func(t *testing.T) {
+		if err := repo.Delete(ctx, projectA.ID); err != nil {
+			t.Fatalf("failed to delete project: %v", err)
+		}
+		project, err := repo.FindByIDWithGroupCheck(ctx, projectA.ID, []string{groupA})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if project != nil {
+			t.Error("expected nil for soft-deleted project")
+		}
+	})
+}
