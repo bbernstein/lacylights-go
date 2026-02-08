@@ -4519,13 +4519,12 @@ func (r *mutationResolver) ImportProject(ctx context.Context, jsonContent string
 		importOpts.ImportBuiltInFixtures = *options.ImportBuiltInFixtures.Value()
 	}
 
-	// Set group ID for the imported project when auth is enabled and creating a new project
+	// Set group ID for the imported project when auth is enabled and creating a new project.
+	// ImportOptionsInput doesn't expose a groupId field, so use the first available group.
 	if r.AuthService != nil && r.AuthService.IsEnabled() && importOpts.Mode == importservice.ImportModeCreate {
 		groupIDs := middleware.GetUserGroupIDs(ctx)
-		if len(groupIDs) == 1 {
+		if len(groupIDs) >= 1 {
 			importOpts.GroupID = &groupIDs[0]
-		} else if len(groupIDs) > 1 {
-			return nil, fmt.Errorf("groupId is required when user belongs to multiple groups")
 		} else if !middleware.IsAdmin(ctx) {
 			return nil, fmt.Errorf("cannot import project: user does not belong to any groups")
 		}

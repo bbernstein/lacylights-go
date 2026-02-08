@@ -1068,11 +1068,11 @@ func TestCreateUserGroup_AddsCreatorAsMember(t *testing.T) {
 	assert.Equal(t, models.GroupRoleGroupAdmin, member.Role)
 }
 
-func TestCreateUserGroup_FailsWithoutUserID(t *testing.T) {
+func TestCreateUserGroup_NoUserIDSkipsMembership(t *testing.T) {
 	resolver, cleanup := setupGroupAdminTestResolver(t, true)
 	defer cleanup()
 
-	// Create admin context without userID
+	// Create admin context without userID (simulates auth-disabled mode)
 	sess := &session.CachedSession{
 		UserID:    "",
 		Email:     "admin@test.com",
@@ -1085,16 +1085,16 @@ func TestCreateUserGroup_FailsWithoutUserID(t *testing.T) {
 	ctx = context.WithValue(ctx, middleware.ContextKeyUserRole, "ADMIN")
 
 	input := generated.CreateUserGroupInput{
-		Name: "Should Fail Group",
+		Name: "Auth Disabled Group",
 	}
 
-	_, err := resolver.createUserGroup(ctx, input)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no authenticated user")
+	group, err := resolver.createUserGroup(ctx, input)
+	require.NoError(t, err)
+	require.NotNil(t, group)
 
-	// Verify no group was created (transaction rollback)
+	// Group was created but no membership record exists
 	var count int64
-	resolver.db.Model(&models.UserGroup{}).Where("name = ?", "Should Fail Group").Count(&count)
+	resolver.db.Model(&models.UserGroupMember{}).Where("group_id = ?", group.ID).Count(&count)
 	assert.Equal(t, int64(0), count)
 }
 
