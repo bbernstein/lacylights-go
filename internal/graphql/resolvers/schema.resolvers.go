@@ -4522,18 +4522,14 @@ func (r *mutationResolver) ImportProject(ctx context.Context, jsonContent string
 	// Set group ID for the imported project when auth is enabled and creating a new project
 	if r.AuthService != nil && r.AuthService.IsEnabled() && importOpts.Mode == importservice.ImportModeCreate {
 		groupIDs := middleware.GetUserGroupIDs(ctx)
-		if middleware.IsAdmin(ctx) {
-			// Admin: use their personal group if they have one
-			var personalGroup models.UserGroup
-			userID := middleware.GetUserIDFromContext(ctx)
-			if err := r.db.WithContext(ctx).Where("owner_id = ? AND is_personal = ?", userID, true).First(&personalGroup).Error; err == nil {
-				importOpts.GroupID = &personalGroup.ID
-			}
-		} else if len(groupIDs) == 1 {
+		if len(groupIDs) == 1 {
 			importOpts.GroupID = &groupIDs[0]
 		} else if len(groupIDs) > 1 {
 			return nil, fmt.Errorf("groupId is required when user belongs to multiple groups")
+		} else if !middleware.IsAdmin(ctx) {
+			return nil, fmt.Errorf("cannot import project: user does not belong to any groups")
 		}
+		// Admins with 0 groups: project created with nil GroupID (admin-only access)
 	}
 
 	// Import project
@@ -5387,20 +5383,13 @@ func (r *queryResolver) MyGroups(ctx context.Context) ([]*models.UserGroup, erro
 
 	var groups []models.UserGroup
 
-	// System admins see all groups
-	if middleware.IsAdmin(ctx) {
-		if err := r.db.WithContext(ctx).Find(&groups).Error; err != nil {
-			return nil, err
-		}
-	} else {
-		// Regular users see only their membership groups
-		groupIDs := middleware.GetUserGroupIDs(ctx)
-		if len(groupIDs) == 0 {
-			return []*models.UserGroup{}, nil
-		}
-		if err := r.db.WithContext(ctx).Where("id IN ?", groupIDs).Find(&groups).Error; err != nil {
-			return nil, err
-		}
+	// Return only groups the current user belongs to (use userGroups for admin all-groups view)
+	groupIDs := middleware.GetUserGroupIDs(ctx)
+	if len(groupIDs) == 0 {
+		return []*models.UserGroup{}, nil
+	}
+	if err := r.db.WithContext(ctx).Where("id IN ?", groupIDs).Find(&groups).Error; err != nil {
+		return nil, err
 	}
 
 	result := make([]*models.UserGroup, len(groups))

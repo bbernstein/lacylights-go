@@ -449,22 +449,29 @@ func (r *Resolver) createUserGroup(ctx context.Context, input generated.CreateUs
 		}
 	}
 
-	if err := r.db.WithContext(ctx).Create(group).Error; err != nil {
-		return nil, err
+	// Add the creating user as a GROUP_ADMIN member atomically
+	userID := middleware.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil, fmt.Errorf("cannot create group: no authenticated user in context")
 	}
 
-	// Add the creating user as a GROUP_ADMIN member
-	userID := middleware.GetUserIDFromContext(ctx)
-	if userID != "" {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(group).Error; err != nil {
+			return err
+		}
 		member := models.UserGroupMember{
 			ID:      cuid.New(),
 			UserID:  userID,
 			GroupID: group.ID,
 			Role:    models.GroupRoleGroupAdmin,
 		}
-		if err := r.db.WithContext(ctx).Create(&member).Error; err != nil {
-			return nil, fmt.Errorf("failed to add creator as group member: %w", err)
+		if err := tx.Create(&member).Error; err != nil {
+			return fmt.Errorf("failed to add creator as group member: %w", err)
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return group, nil
