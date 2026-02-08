@@ -1043,3 +1043,111 @@ func TestGetAccessibleGroupIDs_UnauthenticatedReturnsError(t *testing.T) {
 	_, err := resolver.getAccessibleGroupIDs(context.Background())
 	assert.ErrorIs(t, err, ErrNotAuthenticated)
 }
+
+// ============================================================
+// CreateUserGroup membership + transaction tests
+// ============================================================
+
+func TestCreateUserGroup_AddsCreatorAsMember(t *testing.T) {
+	resolver, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+
+	ctx := createAdminContext()
+	input := generated.CreateUserGroupInput{
+		Name: "New Test Group",
+	}
+
+	group, err := resolver.createUserGroup(ctx, input)
+	require.NoError(t, err)
+	require.NotNil(t, group)
+
+	// Verify membership was created
+	member, err := resolver.GroupRepo.FindMember(context.Background(), "admin-user-id", group.ID)
+	require.NoError(t, err)
+	require.NotNil(t, member)
+	assert.Equal(t, models.GroupRoleGroupAdmin, member.Role)
+}
+
+func TestCreateUserGroup_NoUserIDSkipsMembership(t *testing.T) {
+	resolver, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+
+	// Create admin context with empty userID to verify membership is skipped.
+	// In production this occurs when auth is disabled (no user in context).
+	sess := &session.CachedSession{
+		UserID:    "",
+		Email:     "admin@test.com",
+		Role:      "ADMIN",
+		SessionID: "admin-session-id",
+	}
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, middleware.ContextKeySession, sess)
+	ctx = context.WithValue(ctx, middleware.ContextKeyUserID, "")
+	ctx = context.WithValue(ctx, middleware.ContextKeyUserRole, "ADMIN")
+
+	input := generated.CreateUserGroupInput{
+		Name: "Auth Disabled Group",
+	}
+
+	group, err := resolver.createUserGroup(ctx, input)
+	require.NoError(t, err)
+	require.NotNil(t, group)
+
+	// Group was created but no membership record exists
+	var count int64
+	resolver.db.Model(&models.UserGroupMember{}).Where("group_id = ?", group.ID).Count(&count)
+	assert.Equal(t, int64(0), count)
+}
+
+// ============================================================
+// MyGroups tests
+// ============================================================
+
+func TestMyGroups_AdminSeesOnlyMembershipGroups(t *testing.T) {
+	resolver, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+
+	// Create two groups
+	group1 := createTestGroup(t, resolver, "Admin's Group")
+	group2 := createTestGroup(t, resolver, "Other Group")
+	_ = group2 // exists but admin is not a member
+
+	// Create admin context with membership in only group1
+	sess := &session.CachedSession{
+		UserID:    "admin-user-id",
+		Email:     "admin@test.com",
+		Role:      "ADMIN",
+		SessionID: "admin-session-id",
+	}
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, middleware.ContextKeySession, sess)
+	ctx = context.WithValue(ctx, middleware.ContextKeyUserID, "admin-user-id")
+	ctx = context.WithValue(ctx, middleware.ContextKeyUserEmail, "admin@test.com")
+	ctx = context.WithValue(ctx, middleware.ContextKeyUserRole, "ADMIN")
+	ctx = context.WithValue(ctx, middleware.ContextKeyUserGroups, []middleware.UserGroupMembership{
+		{GroupID: group1.ID, Role: "GROUP_ADMIN"},
+	})
+
+	queryRes := resolver.Query()
+	groups, err := queryRes.MyGroups(ctx)
+	require.NoError(t, err)
+	assert.Len(t, groups, 1)
+	assert.Equal(t, group1.ID, groups[0].ID)
+}
+
+func TestMyGroups_RegularUserSeesOnlyMembershipGroups(t *testing.T) {
+	resolver, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+
+	group1 := createTestGroup(t, resolver, "User's Group")
+	group2 := createTestGroup(t, resolver, "Other Group")
+	_ = group2
+
+	ctx := createMemberContext("user-1", "user@test.com", group1.ID)
+
+	queryRes := resolver.Query()
+	groups, err := queryRes.MyGroups(ctx)
+	require.NoError(t, err)
+	assert.Len(t, groups, 1)
+	assert.Equal(t, group1.ID, groups[0].ID)
+}

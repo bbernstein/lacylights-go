@@ -423,27 +423,27 @@ func (r *groupInvitationResolver) InvitedBy(ctx context.Context, obj *models.Gro
 }
 
 // Role is the resolver for the role field.
-func (r *groupInvitationResolver) Role(_ context.Context, obj *models.GroupInvitation) (generated.GroupMemberRole, error) {
+func (r *groupInvitationResolver) Role(ctx context.Context, obj *models.GroupInvitation) (generated.GroupMemberRole, error) {
 	return generated.GroupMemberRole(obj.Role), nil
 }
 
 // Status is the resolver for the status field.
-func (r *groupInvitationResolver) Status(_ context.Context, obj *models.GroupInvitation) (generated.InvitationStatus, error) {
+func (r *groupInvitationResolver) Status(ctx context.Context, obj *models.GroupInvitation) (generated.InvitationStatus, error) {
 	return generated.InvitationStatus(obj.Status), nil
 }
 
 // ExpiresAt is the resolver for the expiresAt field.
-func (r *groupInvitationResolver) ExpiresAt(_ context.Context, obj *models.GroupInvitation) (string, error) {
+func (r *groupInvitationResolver) ExpiresAt(ctx context.Context, obj *models.GroupInvitation) (string, error) {
 	return obj.ExpiresAt.Format(time.RFC3339), nil
 }
 
 // CreatedAt is the resolver for the createdAt field.
-func (r *groupInvitationResolver) CreatedAt(_ context.Context, obj *models.GroupInvitation) (string, error) {
+func (r *groupInvitationResolver) CreatedAt(ctx context.Context, obj *models.GroupInvitation) (string, error) {
 	return obj.CreatedAt.Format(time.RFC3339), nil
 }
 
 // User is the resolver for the user field.
-func (r *groupMemberResolver) User(_ context.Context, obj *generated.GroupMember) (*models.User, error) {
+func (r *groupMemberResolver) User(ctx context.Context, obj *generated.GroupMember) (*models.User, error) {
 	// The user is already loaded in the parent Members resolver, so return it directly
 	return &obj.User, nil
 }
@@ -4519,6 +4519,18 @@ func (r *mutationResolver) ImportProject(ctx context.Context, jsonContent string
 		importOpts.ImportBuiltInFixtures = *options.ImportBuiltInFixtures.Value()
 	}
 
+	// Set group ID for the imported project when auth is enabled and creating a new project.
+	// ImportOptionsInput doesn't expose a groupId field, so use the first available group.
+	if r.AuthService != nil && r.AuthService.IsEnabled() && importOpts.Mode == importservice.ImportModeCreate {
+		groupIDs := middleware.GetUserGroupIDs(ctx)
+		if len(groupIDs) >= 1 {
+			importOpts.GroupID = &groupIDs[0]
+		} else if !middleware.IsAdmin(ctx) {
+			return nil, fmt.Errorf("cannot import project: user does not belong to any groups")
+		}
+		// Admins with 0 groups: project created with nil GroupID (admin-only access)
+	}
+
 	// Import project
 	projectID, stats, warnings, err := r.ImportService.ImportProject(ctx, jsonContent, importOpts)
 	if err != nil {
@@ -5368,13 +5380,13 @@ func (r *queryResolver) MyGroups(ctx context.Context) ([]*models.UserGroup, erro
 		return nil, ErrNotAuthenticated
 	}
 
-	// Get group IDs from context
+	var groups []models.UserGroup
+
+	// Return only groups the current user belongs to (use userGroups for admin all-groups view)
 	groupIDs := middleware.GetUserGroupIDs(ctx)
 	if len(groupIDs) == 0 {
 		return []*models.UserGroup{}, nil
 	}
-
-	var groups []models.UserGroup
 	if err := r.db.WithContext(ctx).Where("id IN ?", groupIDs).Find(&groups).Error; err != nil {
 		return nil, err
 	}

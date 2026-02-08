@@ -406,9 +406,9 @@ func (r *Resolver) getUserGroups(ctx context.Context) ([]*models.UserGroup, erro
 	return result, nil
 }
 
-// getUserGroup returns a group by ID (admin only).
+// getUserGroup returns a group by ID (admin or group member).
 func (r *Resolver) getUserGroup(ctx context.Context, id string) (*models.UserGroup, error) {
-	if err := r.requireAdmin(ctx); err != nil {
+	if err := r.requireGroupAccess(ctx, id); err != nil {
 		return nil, err
 	}
 
@@ -449,16 +449,38 @@ func (r *Resolver) createUserGroup(ctx context.Context, input generated.CreateUs
 		}
 	}
 
-	if err := r.db.WithContext(ctx).Create(group).Error; err != nil {
+	// Create group and optionally add creator as GROUP_ADMIN member atomically
+	userID := middleware.GetUserIDFromContext(ctx)
+
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(group).Error; err != nil {
+			return err
+		}
+		// When auth is enabled, add the creator as a member.
+		// When auth is disabled (no user in context), skip membership creation.
+		if userID != "" {
+			member := models.UserGroupMember{
+				ID:      cuid.New(),
+				UserID:  userID,
+				GroupID: group.ID,
+				Role:    models.GroupRoleGroupAdmin,
+			}
+			if err := tx.Create(&member).Error; err != nil {
+				return fmt.Errorf("failed to add creator as group member: %w", err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 
 	return group, nil
 }
 
-// updateUserGroup updates a group (admin only).
+// updateUserGroup updates a group (group admin or system admin).
 func (r *Resolver) updateUserGroup(ctx context.Context, id string, input generated.UpdateUserGroupInput) (*models.UserGroup, error) {
-	if err := r.requireAdmin(ctx); err != nil {
+	if err := r.requireGroupAdmin(ctx, id); err != nil {
 		return nil, err
 	}
 

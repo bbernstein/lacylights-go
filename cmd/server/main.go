@@ -129,9 +129,9 @@ func main() {
 		{"devices", &models.Device{}, []string{"id", "fingerprint"}},
 		{"sessions", &models.Session{}, []string{"id", "user_id", "token_hash"}},
 		{"verification_tokens", &models.VerificationToken{}, []string{"id", "token_hash"}},
-		{"user_group_members", &models.UserGroupMember{}, []string{"id", "user_id", "group_id"}},
+		{"user_group_members", &models.UserGroupMember{}, []string{"id", "user_id", "group_id", "role"}},
 		{"device_group_members", &models.DeviceGroupMember{}, []string{"id", "device_id", "group_id"}},
-		{"group_invitations", &models.GroupInvitation{}, []string{"id", "group_id", "email"}},
+		{"group_invitations", &models.GroupInvitation{}, []string{"id", "group_id", "email", "role"}},
 	}
 
 	for _, t := range tablesWithFK {
@@ -320,6 +320,11 @@ func main() {
 		// Ensure default admin user exists (creates one if no users exist)
 		if err := authService.EnsureDefaultAdmin(context.Background(), cfg.DefaultAdminEmail, cfg.DefaultAdminPassword); err != nil {
 			log.Fatalf("Failed to ensure default admin: %v", err)
+		}
+
+		// Repair orphaned personal groups: if a personal group's owner has no membership, add them
+		if err := repairOrphanedGroupMemberships(db); err != nil {
+			log.Printf("Warning: failed to repair orphaned group memberships: %v", err)
 		}
 
 		// Add auth middleware with DB access for device authentication
@@ -974,6 +979,52 @@ func doMigrateSceneToLook(db *gorm.DB) error {
 	}
 
 	log.Println("✅ Scene to look migration complete")
+	return nil
+}
+
+// repairOrphanedGroupMemberships finds personal groups whose owner has no membership
+// record and adds them as GROUP_ADMIN. This repairs data from before the createUserGroup
+// resolver was fixed to add creators as members.
+func repairOrphanedGroupMemberships(db *gorm.DB) error {
+	// Find all personal groups with an owner
+	var personalGroups []models.UserGroup
+	if err := db.Where("is_personal = ? AND owner_id IS NOT NULL", true).Find(&personalGroups).Error; err != nil {
+		return fmt.Errorf("failed to find personal groups: %w", err)
+	}
+
+	repaired := 0
+	for _, group := range personalGroups {
+		ownerID := *group.OwnerID
+
+		// Check if owner already has a membership
+		var count int64
+		if err := db.Model(&models.UserGroupMember{}).
+			Where("user_id = ? AND group_id = ?", ownerID, group.ID).
+			Count(&count).Error; err != nil {
+			log.Printf("  Warning: failed to check membership for group %s: %v", group.ID, err)
+			continue
+		}
+
+		if count == 0 {
+			// Owner is missing from their own personal group - repair it
+			member := models.UserGroupMember{
+				ID:      cuid.New(),
+				UserID:  ownerID,
+				GroupID: group.ID,
+				Role:    models.GroupRoleGroupAdmin,
+			}
+			if err := db.Create(&member).Error; err != nil {
+				log.Printf("  Warning: failed to repair membership for group %s: %v", group.ID, err)
+				continue
+			}
+			log.Printf("  Repaired: added owner %s to personal group %s (%s)", ownerID, group.ID, group.Name)
+			repaired++
+		}
+	}
+
+	if repaired > 0 {
+		log.Printf("Repaired %d orphaned group memberships", repaired)
+	}
 	return nil
 }
 

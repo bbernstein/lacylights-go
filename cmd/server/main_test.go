@@ -1561,6 +1561,86 @@ func TestMigrateGroupOwnership_TargetGroupIDOverride(t *testing.T) {
 	}
 }
 
+func TestRepairOrphanedGroupMemberships_RepairsOrphans(t *testing.T) {
+	db := setupGroupOwnershipDB(t)
+
+	ownerID := "owner-user-1"
+	groupID := "personal-group-1"
+
+	// Create a personal group with owner but no membership
+	db.Exec(`INSERT INTO users (id, email, role, is_active) VALUES (?, 'owner@test.com', 'USER', 1)`, ownerID)
+	db.Exec(`INSERT INTO user_groups (id, name, is_personal, owner_id) VALUES (?, 'owner@test.com', 1, ?)`, groupID, ownerID)
+
+	err := repairOrphanedGroupMemberships(db)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Verify membership was created
+	var count int64
+	db.Model(&models.UserGroupMember{}).Where("user_id = ? AND group_id = ?", ownerID, groupID).Count(&count)
+	if count != 1 {
+		t.Errorf("Expected 1 membership, got %d", count)
+	}
+
+	// Verify role is GROUP_ADMIN
+	var member models.UserGroupMember
+	db.Where("user_id = ? AND group_id = ?", ownerID, groupID).First(&member)
+	if member.Role != models.GroupRoleGroupAdmin {
+		t.Errorf("Expected GROUP_ADMIN role, got %s", member.Role)
+	}
+}
+
+func TestRepairOrphanedGroupMemberships_Idempotent(t *testing.T) {
+	db := setupGroupOwnershipDB(t)
+
+	ownerID := "owner-user-1"
+	groupID := "personal-group-1"
+
+	db.Exec(`INSERT INTO users (id, email, role, is_active) VALUES (?, 'owner@test.com', 'USER', 1)`, ownerID)
+	db.Exec(`INSERT INTO user_groups (id, name, is_personal, owner_id) VALUES (?, 'owner@test.com', 1, ?)`, groupID, ownerID)
+
+	// Run twice
+	err := repairOrphanedGroupMemberships(db)
+	if err != nil {
+		t.Fatalf("First run: expected no error, got: %v", err)
+	}
+	err = repairOrphanedGroupMemberships(db)
+	if err != nil {
+		t.Fatalf("Second run: expected no error, got: %v", err)
+	}
+
+	// Should still be exactly 1 membership
+	var count int64
+	db.Model(&models.UserGroupMember{}).Where("user_id = ? AND group_id = ?", ownerID, groupID).Count(&count)
+	if count != 1 {
+		t.Errorf("Expected exactly 1 membership after two runs, got %d", count)
+	}
+}
+
+func TestRepairOrphanedGroupMemberships_SkipsNonPersonalGroups(t *testing.T) {
+	db := setupGroupOwnershipDB(t)
+
+	ownerID := "owner-user-1"
+	groupID := "shared-group-1"
+
+	db.Exec(`INSERT INTO users (id, email, role, is_active) VALUES (?, 'owner@test.com', 'USER', 1)`, ownerID)
+	// Non-personal group with owner but no membership - should NOT be repaired
+	db.Exec(`INSERT INTO user_groups (id, name, is_personal, owner_id) VALUES (?, 'Shared Group', 0, ?)`, groupID, ownerID)
+
+	err := repairOrphanedGroupMemberships(db)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Should not create membership for non-personal group
+	var count int64
+	db.Model(&models.UserGroupMember{}).Where("user_id = ? AND group_id = ?", ownerID, groupID).Count(&count)
+	if count != 0 {
+		t.Errorf("Expected 0 memberships for non-personal group, got %d", count)
+	}
+}
+
 func TestMigrateGroupOwnership_TargetGroupIDNotFound(t *testing.T) {
 	db := setupGroupOwnershipDB(t)
 
