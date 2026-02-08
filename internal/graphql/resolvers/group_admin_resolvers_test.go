@@ -1072,7 +1072,8 @@ func TestCreateUserGroup_NoUserIDSkipsMembership(t *testing.T) {
 	resolver, cleanup := setupGroupAdminTestResolver(t, true)
 	defer cleanup()
 
-	// Create admin context without userID (simulates auth-disabled mode)
+	// Create admin context with empty userID to verify membership is skipped.
+	// In production this occurs when auth is disabled (no user in context).
 	sess := &session.CachedSession{
 		UserID:    "",
 		Email:     "admin@test.com",
