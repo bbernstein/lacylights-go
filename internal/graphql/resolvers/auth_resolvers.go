@@ -909,10 +909,16 @@ func (r *Resolver) updateDevice(ctx context.Context, id string, input generated.
 		updates["permissions"] = string(*input.Permissions.Value())
 	}
 
-	if len(updates) > 0 {
-		if err := r.db.WithContext(ctx).Model(&device).Updates(updates).Error; err != nil {
+	if len(updates) == 0 {
+		// No updates to apply, reload with relations and return current device
+		if err := r.db.WithContext(ctx).Preload("DefaultUser").First(&device, "id = ?", id).Error; err != nil {
 			return nil, err
 		}
+		return &device, nil
+	}
+
+	if err := r.db.WithContext(ctx).Model(&device).Updates(updates).Error; err != nil {
+		return nil, err
 	}
 
 	// Reload with relations to return complete data

@@ -788,3 +788,27 @@ func TestUpdateDevice_IsAuthorized_SyncsStatus(t *testing.T) {
 	assert.True(t, dbDevice2.IsAuthorized)
 	assert.Equal(t, models.DeviceStatusApproved, dbDevice2.Status)
 }
+
+func TestUpdateDevice_EmptyInput_NoOp(t *testing.T) {
+	resolver, cleanup := setupDeviceAuthTestResolver(t, true, true)
+	defer cleanup()
+
+	device := models.Device{
+		ID:          cuid.New(),
+		Name:        "Original Name",
+		Fingerprint: "test-fp-empty-input",
+		Status:      models.DeviceStatusApproved,
+		Permissions: models.DevicePermissionsOperator,
+		DefaultRole: "OPERATOR",
+	}
+	require.NoError(t, resolver.db.Create(&device).Error)
+
+	ctx := createAdminContext()
+	// Empty input should be a no-op: return the device unchanged without error
+	input := generated.UpdateDeviceInput{}
+	result, err := resolver.updateDevice(ctx, device.ID, input)
+	require.NoError(t, err)
+	assert.Equal(t, "Original Name", result.Name)
+	assert.Equal(t, models.DeviceStatusApproved, result.Status)
+	assert.Equal(t, string(generated.DevicePermissionsOperator), result.Permissions)
+}
