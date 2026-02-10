@@ -894,7 +894,15 @@ func (r *Resolver) updateDevice(ctx context.Context, id string, input generated.
 	}
 
 	if input.IsAuthorized.IsSet() && input.IsAuthorized.Value() != nil {
-		updates["is_authorized"] = *input.IsAuthorized.Value()
+		isAuthorized := *input.IsAuthorized.Value()
+		updates["is_authorized"] = isAuthorized
+		// Keep status in sync with is_authorized to preserve the invariant
+		// that is_authorized == (status == APPROVED).
+		if isAuthorized {
+			updates["status"] = models.DeviceStatusApproved
+		} else {
+			updates["status"] = models.DeviceStatusRevoked
+		}
 	}
 
 	if input.Permissions.IsSet() && input.Permissions.Value() != nil {

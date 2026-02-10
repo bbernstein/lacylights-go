@@ -737,3 +737,54 @@ func TestUpdateDevice_Permissions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, string(generated.DevicePermissionsAdmin), result.Permissions)
 }
+
+func TestUpdateDevice_IsAuthorized_SyncsStatus(t *testing.T) {
+	resolver, cleanup := setupDeviceAuthTestResolver(t, true, true)
+	defer cleanup()
+
+	// Create an approved device
+	device := models.Device{
+		ID:           cuid.New(),
+		Name:         "Test Device",
+		Fingerprint:  "test-fp-is-authorized",
+		Status:       models.DeviceStatusApproved,
+		IsAuthorized: true,
+		Permissions:  models.DevicePermissionsOperator,
+		DefaultRole:  "OPERATOR",
+	}
+	require.NoError(t, resolver.db.Create(&device).Error)
+
+	ctx := createAdminContext()
+
+	// Test: Setting isAuthorized=false should also set status=REVOKED
+	falseVal := false
+	input := generated.UpdateDeviceInput{
+		IsAuthorized: graphql.OmittableOf(&falseVal),
+	}
+	result, err := resolver.updateDevice(ctx, device.ID, input)
+	require.NoError(t, err)
+	assert.False(t, result.IsAuthorized)
+	assert.Equal(t, models.DeviceStatusRevoked, result.Status)
+
+	// Verify in database
+	var dbDevice models.Device
+	require.NoError(t, resolver.db.First(&dbDevice, "id = ?", device.ID).Error)
+	assert.False(t, dbDevice.IsAuthorized)
+	assert.Equal(t, models.DeviceStatusRevoked, dbDevice.Status)
+
+	// Test: Setting isAuthorized=true should also set status=APPROVED
+	trueVal := true
+	input2 := generated.UpdateDeviceInput{
+		IsAuthorized: graphql.OmittableOf(&trueVal),
+	}
+	result2, err := resolver.updateDevice(ctx, device.ID, input2)
+	require.NoError(t, err)
+	assert.True(t, result2.IsAuthorized)
+	assert.Equal(t, models.DeviceStatusApproved, result2.Status)
+
+	// Verify in database
+	var dbDevice2 models.Device
+	require.NoError(t, resolver.db.First(&dbDevice2, "id = ?", device.ID).Error)
+	assert.True(t, dbDevice2.IsAuthorized)
+	assert.Equal(t, models.DeviceStatusApproved, dbDevice2.Status)
+}
