@@ -14,6 +14,24 @@ func createTestModulatorEngine() (*Engine, *dmx.Service) {
 	return engine, dmxService
 }
 
+// waitForCondition polls until condition returns true or timeout is reached.
+// Uses 10ms polling interval to avoid flaky timing failures in CI.
+// onTimeout is called to produce the failure message (allowing current values to be included).
+func waitForCondition(t *testing.T, timeout time.Duration, condition func() bool, onTimeout func()) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		if condition() {
+			return
+		}
+		if time.Now().After(deadline) {
+			onTimeout()
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // TestFadeToLook_InstantFade tests that duration <= 0 applies changes immediately.
 func TestFadeToLook_InstantFade(t *testing.T) {
 	tests := []struct {
@@ -101,16 +119,16 @@ func TestFadeToLook_CreatesCrossfadeEffect(t *testing.T) {
 		t.Errorf("Expected 1 active fade, got %d", engine.ActiveFadeCount())
 	}
 
-	// Wait for fade to complete
-	time.Sleep(300 * time.Millisecond)
-
-	// Check final values
-	if dmxService.GetChannelValue(1, 1) != 200 {
-		t.Errorf("Channel 1:1 should be 200, got %d", dmxService.GetChannelValue(1, 1))
-	}
-	if dmxService.GetChannelValue(1, 2) != 50 {
-		t.Errorf("Channel 1:2 should be 50, got %d", dmxService.GetChannelValue(1, 2))
-	}
+	// Poll until fade completes (bounded to avoid flaky timing failures)
+	waitForCondition(t, 2*time.Second,
+		func() bool {
+			return dmxService.GetChannelValue(1, 1) == 200 && dmxService.GetChannelValue(1, 2) == 50
+		},
+		func() {
+			t.Fatalf("Crossfade did not reach target values within timeout: ch1:1=%d (want 200), ch1:2=%d (want 50)",
+				dmxService.GetChannelValue(1, 1), dmxService.GetChannelValue(1, 2))
+		},
+	)
 }
 
 // TestFadeToLook_ReplacesExistingCrossfade tests that a new crossfade replaces an existing one.
@@ -142,15 +160,11 @@ func TestFadeToLook_ReplacesExistingCrossfade(t *testing.T) {
 		t.Errorf("Expected 1 active fade after replacement, got %d", engine.ActiveFadeCount())
 	}
 
-	// Wait for second fade to complete
-	time.Sleep(300 * time.Millisecond)
-
-	// Final value should be 200 (from second fade), not 100
-	// Allow small tolerance due to timing variations in test execution
-	finalValue := dmxService.GetChannelValue(1, 1)
-	if finalValue < 198 || finalValue > 200 {
-		t.Errorf("Final value should be ~200 from replacement fade, got %d", finalValue)
-	}
+	// Poll until second fade completes (bounded to avoid flaky timing failures)
+	waitForCondition(t, 2*time.Second,
+		func() bool { return dmxService.GetChannelValue(1, 1) == 200 },
+		func() { t.Fatalf("Replacement fade did not reach target 200 within timeout, last value %d", dmxService.GetChannelValue(1, 1)) },
+	)
 }
 
 // TestFadeToLook_SnapBehavior tests that SNAP channels jump to target immediately.
@@ -198,13 +212,11 @@ func TestFadeToLook_DefaultEasing(t *testing.T) {
 	// Pass empty easing type
 	engine.FadeToLook(channels, 100*time.Millisecond, "", "")
 
-	// Wait for completion
-	time.Sleep(150 * time.Millisecond)
-
-	// Should complete successfully
-	if dmxService.GetChannelValue(1, 1) != 255 {
-		t.Errorf("Fade with default easing should complete, got %d", dmxService.GetChannelValue(1, 1))
-	}
+	// Poll until fade completes
+	waitForCondition(t, 2*time.Second,
+		func() bool { return dmxService.GetChannelValue(1, 1) == 255 },
+		func() { t.Fatalf("Fade with default easing should complete, got %d", dmxService.GetChannelValue(1, 1)) },
+	)
 }
 
 // TestFadeToLook_GeneratedFadeID tests that empty fadeID generates a unique ID.
@@ -246,19 +258,18 @@ func TestFadeToBlack_FadesAllChannelsToZero(t *testing.T) {
 		t.Errorf("FadeToBlack should return 'fade-to-black' ID, got %s", fadeID)
 	}
 
-	// Wait for completion
-	time.Sleep(200 * time.Millisecond)
-
-	// All channels should be 0
-	if dmxService.GetChannelValue(1, 1) != 0 {
-		t.Errorf("Channel 1:1 should be 0, got %d", dmxService.GetChannelValue(1, 1))
-	}
-	if dmxService.GetChannelValue(1, 100) != 0 {
-		t.Errorf("Channel 1:100 should be 0, got %d", dmxService.GetChannelValue(1, 100))
-	}
-	if dmxService.GetChannelValue(2, 50) != 0 {
-		t.Errorf("Channel 2:50 should be 0, got %d", dmxService.GetChannelValue(2, 50))
-	}
+	// Poll until all channels reach 0
+	waitForCondition(t, 2*time.Second,
+		func() bool {
+			return dmxService.GetChannelValue(1, 1) == 0 &&
+				dmxService.GetChannelValue(1, 100) == 0 &&
+				dmxService.GetChannelValue(2, 50) == 0
+		},
+		func() {
+			t.Fatalf("FadeToBlack did not reach 0 within timeout: ch1:1=%d, ch1:100=%d, ch2:50=%d",
+				dmxService.GetChannelValue(1, 1), dmxService.GetChannelValue(1, 100), dmxService.GetChannelValue(2, 50))
+		},
+	)
 }
 
 // TestFadeToBlack_Instant tests that FadeToBlack with duration <= 0 is immediate.
@@ -312,13 +323,11 @@ func TestFadeToBlack_DefaultEasing(t *testing.T) {
 	// Pass empty easing type
 	engine.FadeToBlack(100*time.Millisecond, "")
 
-	// Wait for completion
-	time.Sleep(150 * time.Millisecond)
-
-	// Should complete successfully
-	if dmxService.GetChannelValue(1, 1) != 0 {
-		t.Errorf("Fade with default easing should complete, got %d", dmxService.GetChannelValue(1, 1))
-	}
+	// Poll until fade completes
+	waitForCondition(t, 2*time.Second,
+		func() bool { return dmxService.GetChannelValue(1, 1) == 0 },
+		func() { t.Fatalf("FadeToBlack with default easing should complete, got %d", dmxService.GetChannelValue(1, 1)) },
+	)
 }
 
 // TestCancelFade_RemovesSpecificFade tests that CancelFade removes only the specified fade.
@@ -486,9 +495,6 @@ func TestFadeToLook_MultipleUniverses(t *testing.T) {
 
 	engine.FadeToLook(channels, 100*time.Millisecond, "multi-universe", EasingLinear)
 
-	// Wait for completion
-	time.Sleep(200 * time.Millisecond)
-
 	expectedValues := map[ChannelKey]byte{
 		{Universe: 1, Channel: 1}:  100,
 		{Universe: 1, Channel: 2}:  150,
@@ -496,12 +502,26 @@ func TestFadeToLook_MultipleUniverses(t *testing.T) {
 		{Universe: 2, Channel: 10}: 250,
 	}
 
-	for key, expected := range expectedValues {
-		actual := dmxService.GetChannelValue(key.Universe, key.Channel)
-		if actual != expected {
-			t.Errorf("Channel %d:%d = %d, want %d", key.Universe, key.Channel, actual, expected)
-		}
-	}
+	// Poll until all channels reach targets
+	waitForCondition(t, 2*time.Second,
+		func() bool {
+			for key, expected := range expectedValues {
+				if dmxService.GetChannelValue(key.Universe, key.Channel) != expected {
+					return false
+				}
+			}
+			return true
+		},
+		func() {
+			for key, expected := range expectedValues {
+				actual := dmxService.GetChannelValue(key.Universe, key.Channel)
+				if actual != expected {
+					t.Errorf("Channel %d:%d = %d, want %d", key.Universe, key.Channel, actual, expected)
+				}
+			}
+			t.FailNow()
+		},
+	)
 }
 
 // TestFadeToLook_MidFadeTransition tests starting a new fade while one is in progress.
@@ -530,14 +550,11 @@ func TestFadeToLook_MidFadeTransition(t *testing.T) {
 	channels2 := []LookChannel{{Universe: 1, Channel: 1, Value: 200}}
 	engine.FadeToLook(channels2, 200*time.Millisecond, "fade-2", EasingLinear)
 
-	// Wait for completion
-	time.Sleep(300 * time.Millisecond)
-
-	// Final value should be ~200 (allowing small tolerance due to timing)
-	finalValue := dmxService.GetChannelValue(1, 1)
-	if finalValue < 198 || finalValue > 200 {
-		t.Errorf("Final value should be ~200, got %d", finalValue)
-	}
+	// Poll until fade completes
+	waitForCondition(t, 2*time.Second,
+		func() bool { return dmxService.GetChannelValue(1, 1) == 200 },
+		func() { t.Fatalf("Final value should be 200, got %d", dmxService.GetChannelValue(1, 1)) },
+	)
 }
 
 // TestFadeToLook_SnapEnd tests that SNAP_END channels hold until fade completes.
@@ -562,13 +579,11 @@ func TestFadeToLook_SnapEnd(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	// For this test, we just verify the fade eventually reaches the target
-	time.Sleep(200 * time.Millisecond)
-
-	finalValue := dmxService.GetChannelValue(1, 1)
-	if finalValue != 200 {
-		t.Errorf("SNAP_END channel should reach target 200, got %d", finalValue)
-	}
+	// Verify the fade eventually reaches the target using bounded poll
+	waitForCondition(t, 1*time.Second,
+		func() bool { return dmxService.GetChannelValue(1, 1) == 200 },
+		func() { t.Fatalf("SNAP_END channel did not reach target 200 within timeout, last value %d", dmxService.GetChannelValue(1, 1)) },
+	)
 }
 
 // TestFadeToLook_EmptyChannels tests that FadeToLook handles empty channel list gracefully.

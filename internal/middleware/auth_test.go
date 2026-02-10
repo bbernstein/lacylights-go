@@ -1796,6 +1796,183 @@ func TestAuthenticate_DeviceWithGroupMemberships(t *testing.T) {
 	}
 }
 
+func TestAuthenticate_JWTPriorityOverDevice(t *testing.T) {
+	authSvc, db := createTestAuthServiceWithDeviceAuth(t, true, true)
+	middleware := NewAuthMiddlewareWithDB(authSvc, db)
+
+	// Create a default user for the device
+	defaultUserID := "device-default-user"
+	defaultUser := &models.User{
+		ID:    defaultUserID,
+		Email: "device-default@example.com",
+		Role:  "USER",
+	}
+	if err := db.Create(defaultUser).Error; err != nil {
+		t.Fatalf("failed to create default user: %v", err)
+	}
+
+	// Create an approved device with a default user
+	device := &models.Device{
+		ID:            "device-jwt-test",
+		Fingerprint:   "jwt-test-fp",
+		Name:          "JWT Test Device",
+		Status:        models.DeviceStatusApproved,
+		Permissions:   models.DevicePermissionsOperator,
+		DefaultUserID: &defaultUserID,
+	}
+	if err := db.Create(device).Error; err != nil {
+		t.Fatalf("failed to create device: %v", err)
+	}
+
+	// Create a session in the database for the JWT user
+	createTestSession(t, db, "jwt-session", "jwt-user-123")
+
+	// Generate a valid JWT token
+	jwtSvc := authSvc.JWTService()
+	pair, err := jwtSvc.GenerateTokenPair("jwt-user-123", "admin@example.com", "ADMIN", "jwt-session")
+	if err != nil {
+		t.Fatalf("failed to generate token pair: %v", err)
+	}
+
+	handlerCalled := false
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled = true
+
+		// JWT session should be set
+		sess := GetSessionFromContext(r.Context())
+		if sess == nil {
+			t.Fatal("expected JWT session in context")
+		}
+		if sess.UserID != "jwt-user-123" {
+			t.Errorf("expected JWT user ID jwt-user-123, got %s", sess.UserID)
+		}
+		if sess.Email != "admin@example.com" {
+			t.Errorf("expected JWT email admin@example.com, got %s", sess.Email)
+		}
+
+		// User identity should come from JWT, not device
+		userID := GetUserIDFromContext(r.Context())
+		if userID != "jwt-user-123" {
+			t.Errorf("expected user ID from JWT (jwt-user-123), got %s (device default user leaked)", userID)
+		}
+
+		// Role should come from JWT
+		role := GetUserRoleFromContext(r.Context())
+		if role != "ADMIN" {
+			t.Errorf("expected ADMIN role from JWT, got %s", role)
+		}
+
+		// Device should ALSO be in context (for device-aware features)
+		ctxDevice := GetDeviceFromContext(r.Context())
+		if ctxDevice == nil {
+			t.Error("expected device in context alongside JWT auth")
+		} else if ctxDevice.ID != "device-jwt-test" {
+			t.Errorf("expected device ID device-jwt-test, got %s", ctxDevice.ID)
+		}
+
+		// Device permissions should be set
+		permissions := GetDevicePermissionsFromContext(r.Context())
+		if permissions != models.DevicePermissionsOperator {
+			t.Errorf("expected device permissions %s, got %s", models.DevicePermissionsOperator, permissions)
+		}
+
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	req.Header.Set("X-Device-Fingerprint", "jwt-test-fp")
+	rr := httptest.NewRecorder()
+
+	middleware.Authenticate(handler).ServeHTTP(rr, req)
+
+	if !handlerCalled {
+		t.Error("expected handler to be called")
+	}
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+}
+
+func TestAuthenticate_JWTPriorityOverDevice_GroupMemberships(t *testing.T) {
+	authSvc, db := createTestAuthServiceWithDeviceAuth(t, true, true)
+	middleware := NewAuthMiddlewareWithDB(authSvc, db)
+
+	// Create an approved device
+	createTestDevice(t, db, "device-grp-jwt", "fp-grp-jwt", models.DeviceStatusApproved, models.DevicePermissionsOperator)
+
+	// Create device group memberships (different from user groups)
+	for _, dgm := range []models.DeviceGroupMember{
+		{ID: "dgm-jwt-1", DeviceID: "device-grp-jwt", GroupID: "device-group-a"},
+		{ID: "dgm-jwt-2", DeviceID: "device-grp-jwt", GroupID: "device-group-b"},
+	} {
+		if err := db.Create(&dgm).Error; err != nil {
+			t.Fatalf("failed to create device group member: %v", err)
+		}
+	}
+
+	// Create a session for the JWT user
+	createTestSession(t, db, "jwt-grp-session", "jwt-grp-user")
+
+	// Create user group memberships (different from device groups)
+	for _, ugm := range []models.UserGroupMember{
+		{ID: "ugm-jwt-1", UserID: "jwt-grp-user", GroupID: "user-group-x", Role: "MEMBER"},
+		{ID: "ugm-jwt-2", UserID: "jwt-grp-user", GroupID: "user-group-y", Role: "GROUP_ADMIN"},
+	} {
+		if err := db.Create(&ugm).Error; err != nil {
+			t.Fatalf("failed to create user group member: %v", err)
+		}
+	}
+
+	// Generate a valid JWT token
+	jwtSvc := authSvc.JWTService()
+	pair, err := jwtSvc.GenerateTokenPair("jwt-grp-user", "grpuser@example.com", "USER", "jwt-grp-session")
+	if err != nil {
+		t.Fatalf("failed to generate token pair: %v", err)
+	}
+
+	handlerCalled := false
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlerCalled = true
+
+		// Group memberships should come from the USER, not the device
+		groups := GetUserGroupsFromContext(r.Context())
+		if len(groups) != 2 {
+			t.Fatalf("expected 2 user group memberships, got %d", len(groups))
+		}
+
+		// Should have user groups, not device groups
+		if !IsGroupMember(r.Context(), "user-group-x") {
+			t.Error("expected user to be member of user-group-x")
+		}
+		if !IsGroupMember(r.Context(), "user-group-y") {
+			t.Error("expected user to be member of user-group-y")
+		}
+
+		// Should NOT have device groups
+		if IsGroupMember(r.Context(), "device-group-a") {
+			t.Error("expected device group-a NOT to leak into JWT user context")
+		}
+		if IsGroupMember(r.Context(), "device-group-b") {
+			t.Error("expected device group-b NOT to leak into JWT user context")
+		}
+
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	req.Header.Set("X-Device-Fingerprint", "fp-grp-jwt")
+	rr := httptest.NewRecorder()
+
+	middleware.Authenticate(handler).ServeHTTP(rr, req)
+
+	if !handlerCalled {
+		t.Error("expected handler to be called")
+	}
+}
+
 func TestAuthenticate_UserWithGroupMemberships(t *testing.T) {
 	authSvc, db := createTestAuthServiceWithDB(t, true)
 

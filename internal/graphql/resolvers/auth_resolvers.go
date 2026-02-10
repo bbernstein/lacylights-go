@@ -797,7 +797,9 @@ func (r *Resolver) registerDevice(ctx context.Context, fingerprint string, name 
 }
 
 // approveDevice approves a pending device (admin only).
-func (r *Resolver) approveDevice(ctx context.Context, deviceID string, permissions generated.DevicePermissions) (*models.Device, error) {
+// If defaultUserID is provided, it is set as the device's default user for device-only auth.
+// Uses column-level updates to avoid GORM nulling foreign keys when relation objects aren't loaded.
+func (r *Resolver) approveDevice(ctx context.Context, deviceID string, permissions generated.DevicePermissions, defaultUserID *string) (*models.Device, error) {
 	if err := r.requireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -810,20 +812,134 @@ func (r *Resolver) approveDevice(ctx context.Context, deviceID string, permissio
 		return nil, err
 	}
 
-	// Update device status and permissions
+	// Only allow approving devices that are in PENDING status
+	if device.Status != models.DeviceStatusPending {
+		return nil, fmt.Errorf("device must be in PENDING status to be approved (current status: %s)", device.Status)
+	}
+
+	// Build column-level updates
 	now := time.Now()
-	device.Status = models.DeviceStatusApproved
-	device.IsAuthorized = true
-	device.Permissions = string(permissions)
-	device.ApprovedAt = &now
+	updates := map[string]interface{}{
+		"status":        models.DeviceStatusApproved,
+		"is_authorized": true,
+		"permissions":   string(permissions),
+		"approved_at":   now,
+	}
 
 	// Get the approving user's ID from context if available
 	userID := middleware.GetUserIDFromContext(ctx)
 	if userID != "" {
-		device.ApprovedByID = &userID
+		updates["approved_by"] = userID
 	}
 
-	if err := r.db.WithContext(ctx).Save(&device).Error; err != nil {
+	// If a default user ID is provided, validate it exists
+	if defaultUserID != nil && *defaultUserID != "" {
+		var user models.User
+		if err := r.db.WithContext(ctx).First(&user, "id = ?", *defaultUserID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, fmt.Errorf("default user not found: %s", *defaultUserID)
+			}
+			return nil, fmt.Errorf("failed to verify default user: %w", err)
+		}
+		updates["default_user_id"] = *defaultUserID
+	}
+
+	if err := r.db.WithContext(ctx).Model(&device).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+
+	// Reload with relations to return complete data
+	if err := r.db.WithContext(ctx).
+		Preload("DefaultUser").
+		Preload("ApprovedBy").
+		First(&device, "id = ?", deviceID).Error; err != nil {
+		return nil, err
+	}
+
+	return &device, nil
+}
+
+// updateDevice updates a device's fields (admin only).
+// Uses column-level updates to avoid GORM nulling foreign keys when relation objects aren't loaded.
+func (r *Resolver) updateDevice(ctx context.Context, id string, input generated.UpdateDeviceInput) (*models.Device, error) {
+	if err := r.requireAdmin(ctx); err != nil {
+		return nil, err
+	}
+
+	var device models.Device
+	if err := r.db.WithContext(ctx).First(&device, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrDeviceNotFound
+		}
+		return nil, err
+	}
+
+	updates := map[string]interface{}{}
+
+	if input.Name.IsSet() && input.Name.Value() != nil {
+		updates["name"] = *input.Name.Value()
+	}
+
+	if input.DefaultUserID.IsSet() {
+		if input.DefaultUserID.Value() != nil && *input.DefaultUserID.Value() != "" {
+			// Validate that the user exists
+			var user models.User
+			if err := r.db.WithContext(ctx).First(&user, "id = ?", *input.DefaultUserID.Value()).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return nil, fmt.Errorf("default user not found: %s", *input.DefaultUserID.Value())
+				}
+				return nil, fmt.Errorf("failed to verify default user: %w", err)
+			}
+			updates["default_user_id"] = *input.DefaultUserID.Value()
+		} else {
+			// Explicitly set to null to clear the default user
+			updates["default_user_id"] = nil
+		}
+	}
+
+	if input.DefaultRole.IsSet() && input.DefaultRole.Value() != nil {
+		updates["default_role"] = string(*input.DefaultRole.Value())
+	}
+
+	if input.IsAuthorized.IsSet() && input.IsAuthorized.Value() != nil {
+		isAuthorized := *input.IsAuthorized.Value()
+		updates["is_authorized"] = isAuthorized
+		// Keep status in sync with is_authorized to preserve the invariant
+		// that is_authorized == (status == APPROVED).
+		if isAuthorized {
+			updates["status"] = models.DeviceStatusApproved
+			// Populate approval metadata when transitioning to authorized,
+			// consistent with approveDevice and maintaining an audit trail.
+			if !device.IsAuthorized {
+				updates["approved_at"] = time.Now()
+				userID := middleware.GetUserIDFromContext(ctx)
+				if userID != "" {
+					updates["approved_by"] = userID
+				}
+			}
+		} else {
+			updates["status"] = models.DeviceStatusRevoked
+		}
+	}
+
+	if input.Permissions.IsSet() && input.Permissions.Value() != nil {
+		updates["permissions"] = string(*input.Permissions.Value())
+	}
+
+	if len(updates) == 0 {
+		// No updates to apply, reload with relations and return current device
+		if err := r.db.WithContext(ctx).Preload("DefaultUser").Preload("ApprovedBy").First(&device, "id = ?", id).Error; err != nil {
+			return nil, err
+		}
+		return &device, nil
+	}
+
+	if err := r.db.WithContext(ctx).Model(&device).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+
+	// Reload with relations to return complete data
+	if err := r.db.WithContext(ctx).Preload("DefaultUser").Preload("ApprovedBy").First(&device, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
 
@@ -831,6 +947,7 @@ func (r *Resolver) approveDevice(ctx context.Context, deviceID string, permissio
 }
 
 // revokeDeviceAuth revokes a device's authorization (admin only).
+// Uses column-level updates to avoid GORM nulling foreign keys when relation objects aren't loaded.
 func (r *Resolver) revokeDeviceAuth(ctx context.Context, deviceID string) (*models.Device, error) {
 	if err := r.requireAdmin(ctx); err != nil {
 		return nil, err
@@ -844,11 +961,18 @@ func (r *Resolver) revokeDeviceAuth(ctx context.Context, deviceID string) (*mode
 		return nil, err
 	}
 
-	// Update device status
-	device.Status = models.DeviceStatusRevoked
-	device.IsAuthorized = false
+	// Use column-level updates to preserve foreign keys (e.g. default_user_id)
+	updates := map[string]interface{}{
+		"status":        models.DeviceStatusRevoked,
+		"is_authorized": false,
+	}
 
-	if err := r.db.WithContext(ctx).Save(&device).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&device).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+
+	// Reload with relations to return complete data
+	if err := r.db.WithContext(ctx).Preload("DefaultUser").Preload("ApprovedBy").First(&device, "id = ?", deviceID).Error; err != nil {
 		return nil, err
 	}
 
@@ -856,6 +980,7 @@ func (r *Resolver) revokeDeviceAuth(ctx context.Context, deviceID string) (*mode
 }
 
 // updateDevicePermissions updates a device's permissions (admin only).
+// Uses column-level updates to avoid GORM nulling foreign keys when relation objects aren't loaded.
 func (r *Resolver) updateDevicePermissions(ctx context.Context, deviceID string, permissions generated.DevicePermissions) (*models.Device, error) {
 	if err := r.requireAdmin(ctx); err != nil {
 		return nil, err
@@ -869,9 +994,16 @@ func (r *Resolver) updateDevicePermissions(ctx context.Context, deviceID string,
 		return nil, err
 	}
 
-	device.Permissions = string(permissions)
+	updates := map[string]interface{}{
+		"permissions": string(permissions),
+	}
 
-	if err := r.db.WithContext(ctx).Save(&device).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&device).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+
+	// Reload with relations to return complete data
+	if err := r.db.WithContext(ctx).Preload("DefaultUser").Preload("ApprovedBy").First(&device, "id = ?", deviceID).Error; err != nil {
 		return nil, err
 	}
 

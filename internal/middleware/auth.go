@@ -65,9 +65,10 @@ func NewAuthMiddlewareWithDB(authService *auth.Service, db *gorm.DB) *AuthMiddle
 // Authenticate is middleware that extracts and validates authentication.
 // If auth is disabled, it passes through without checking.
 // If auth is enabled:
-//   - First checks for device fingerprint (X-Device-Fingerprint header)
-//   - If device is approved, adds device info to context
-//   - Falls back to Bearer token authentication
+//   - First checks for Bearer token (JWT) authentication
+//   - Then checks for device fingerprint (X-Device-Fingerprint header)
+//   - When both are present, JWT provides user identity and device context is also set
+//   - If only device is approved, uses device identity as fallback
 //   - If no valid auth, passes through without context (resolvers check)
 func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -77,90 +78,74 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		// Try device fingerprint authentication first if device auth is enabled
-		if m.authService.IsDeviceAuthEnabled() && m.db != nil {
-			fingerprint := r.Header.Get("X-Device-Fingerprint")
-			if fingerprint != "" {
-				device, err := m.getDeviceByFingerprint(r.Context(), fingerprint)
-				if err == nil && device != nil && device.Status == models.DeviceStatusApproved {
-					// Device is approved - add device info to context
-					ctx := r.Context()
-					ctx = context.WithValue(ctx, ContextKeyDevice, device)
-					ctx = context.WithValue(ctx, ContextKeyDevicePermissions, device.Permissions)
+		ctx := r.Context()
+		jwtAuthenticated := false
 
-					// Map device permissions to a role for authorization checks
-					role := mapDevicePermissionsToRole(device.Permissions)
-					ctx = context.WithValue(ctx, ContextKeyUserRole, role)
-
-					// If device has a default user, also set user context
-					if device.DefaultUserID != nil {
-						ctx = context.WithValue(ctx, ContextKeyUserID, *device.DefaultUserID)
-					}
-
-					// Load device group memberships
-					deviceGroups := m.loadDeviceGroupMemberships(r.Context(), device.ID)
-					ctx = context.WithValue(ctx, ContextKeyUserGroups, deviceGroups)
-
-					// Update last seen timestamp asynchronously
-					go m.updateDeviceLastSeen(device.ID, r.RemoteAddr)
-
-					// Continue with enriched context
-					next.ServeHTTP(w, r.WithContext(ctx))
-					return
-				}
-			}
-		}
-
-		// Try to extract token from Authorization header first
+		// Try JWT Bearer token authentication first (highest priority)
 		token := extractBearerToken(r)
-
-		// Fall back to cookie if no header token
 		if token == "" {
 			token = extractCookieToken(r)
 		}
 
-		// If no token found, continue without auth context
-		if token == "" {
-			next.ServeHTTP(w, r)
-			return
+		if token != "" {
+			claims, err := m.authService.JWTService().ValidateAccessToken(token)
+			if err == nil {
+				// Verify the session still exists (not revoked)
+				dbSession, sessErr := m.authService.SessionManager().GetByID(ctx, claims.SessionID)
+				if sessErr == nil && dbSession != nil {
+					// Valid JWT session - set user context
+					sess := &session.CachedSession{
+						UserID:    claims.UserID,
+						Email:     claims.Email,
+						Role:      claims.Role,
+						SessionID: claims.SessionID,
+					}
+
+					ctx = context.WithValue(ctx, ContextKeySession, sess)
+					ctx = context.WithValue(ctx, ContextKeyUserID, claims.UserID)
+					ctx = context.WithValue(ctx, ContextKeyUserEmail, claims.Email)
+					ctx = context.WithValue(ctx, ContextKeyUserRole, claims.Role)
+
+					// Load user group memberships using accumulated ctx
+					// so previously attached context values are available.
+					userGroups := m.loadUserGroupMemberships(ctx, claims.UserID)
+					ctx = context.WithValue(ctx, ContextKeyUserGroups, userGroups)
+
+					jwtAuthenticated = true
+				}
+			}
 		}
 
-		// Validate the token
-		claims, err := m.authService.JWTService().ValidateAccessToken(token)
-		if err != nil {
-			// Invalid token - continue without auth context
-			// Resolvers will handle unauthorized access
-			next.ServeHTTP(w, r)
-			return
+		// Check device fingerprint (adds device context alongside JWT, or as fallback)
+		if m.authService.IsDeviceAuthEnabled() && m.db != nil {
+			fingerprint := r.Header.Get("X-Device-Fingerprint")
+			if fingerprint != "" {
+				device, err := m.getDeviceByFingerprint(ctx, fingerprint)
+				if err == nil && device != nil && device.Status == models.DeviceStatusApproved {
+					// Always add device info to context (useful for device-aware features)
+					ctx = context.WithValue(ctx, ContextKeyDevice, device)
+					ctx = context.WithValue(ctx, ContextKeyDevicePermissions, device.Permissions)
+
+					// Update last seen timestamp asynchronously
+					go m.updateDeviceLastSeen(device.ID, r.RemoteAddr)
+
+					// If no JWT user, fall back to device identity
+					if !jwtAuthenticated {
+						role := mapDevicePermissionsToRole(device.Permissions)
+						ctx = context.WithValue(ctx, ContextKeyUserRole, role)
+
+						if device.DefaultUserID != nil {
+							ctx = context.WithValue(ctx, ContextKeyUserID, *device.DefaultUserID)
+						}
+
+						// Load device group memberships using accumulated ctx
+						// so previously attached context values are available.
+						deviceGroups := m.loadDeviceGroupMemberships(ctx, device.ID)
+						ctx = context.WithValue(ctx, ContextKeyUserGroups, deviceGroups)
+					}
+				}
+			}
 		}
-
-		// Verify the session still exists (not revoked)
-		// This prevents use of valid JWTs after session logout/revocation
-		dbSession, err := m.authService.SessionManager().GetByID(r.Context(), claims.SessionID)
-		if err != nil || dbSession == nil {
-			// Session not found or revoked - continue without auth context
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		// Create cached session from claims
-		sess := &session.CachedSession{
-			UserID:    claims.UserID,
-			Email:     claims.Email,
-			Role:      claims.Role,
-			SessionID: claims.SessionID,
-		}
-
-		// Add session and user info to context
-		ctx := r.Context()
-		ctx = context.WithValue(ctx, ContextKeySession, sess)
-		ctx = context.WithValue(ctx, ContextKeyUserID, claims.UserID)
-		ctx = context.WithValue(ctx, ContextKeyUserEmail, claims.Email)
-		ctx = context.WithValue(ctx, ContextKeyUserRole, claims.Role)
-
-		// Load user group memberships
-		userGroups := m.loadUserGroupMemberships(r.Context(), claims.UserID)
-		ctx = context.WithValue(ctx, ContextKeyUserGroups, userGroups)
 
 		// Continue with enriched context
 		next.ServeHTTP(w, r.WithContext(ctx))

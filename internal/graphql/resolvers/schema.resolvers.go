@@ -701,14 +701,13 @@ func (r *mutationResolver) CreateDeviceAuthCode(ctx context.Context, deviceID st
 }
 
 // ApproveDevice is the resolver for the approveDevice field.
-func (r *mutationResolver) ApproveDevice(ctx context.Context, deviceID string, permissions generated.DevicePermissions, groupID *string) (*models.Device, error) {
-	return r.approveDeviceWithGroup(ctx, deviceID, permissions, groupID)
+func (r *mutationResolver) ApproveDevice(ctx context.Context, deviceID string, permissions generated.DevicePermissions, groupID *string, defaultUserID *string) (*models.Device, error) {
+	return r.approveDeviceWithGroup(ctx, deviceID, permissions, groupID, defaultUserID)
 }
 
 // UpdateDevice is the resolver for the updateDevice field.
 func (r *mutationResolver) UpdateDevice(ctx context.Context, id string, input generated.UpdateDeviceInput) (*models.Device, error) {
-	// TODO: Implement device update
-	return nil, ErrFeatureNotEnabled
+	return r.updateDevice(ctx, id, input)
 }
 
 // UpdateDevicePermissions is the resolver for the updateDevicePermissions field.

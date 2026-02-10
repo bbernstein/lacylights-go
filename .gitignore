@@ -17,6 +17,7 @@
 # Coverage
 coverage.out
 coverage.html
+cov.html
 
 # Database files
 *.db
