@@ -812,6 +812,11 @@ func (r *Resolver) approveDevice(ctx context.Context, deviceID string, permissio
 		return nil, err
 	}
 
+	// Only allow approving devices that are in PENDING status
+	if device.Status == models.DeviceStatusApproved {
+		return nil, fmt.Errorf("device is already approved")
+	}
+
 	// Build column-level updates
 	now := time.Now()
 	updates := map[string]interface{}{

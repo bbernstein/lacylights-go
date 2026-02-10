@@ -633,6 +633,27 @@ func TestApproveDevice_WithInvalidDefaultUser(t *testing.T) {
 	assert.Contains(t, err.Error(), "default user not found")
 }
 
+func TestApproveDevice_AlreadyApproved(t *testing.T) {
+	resolver, cleanup := setupDeviceAuthTestResolver(t, true, true)
+	defer cleanup()
+
+	device := models.Device{
+		ID:           cuid.New(),
+		Name:         "Already Approved Device",
+		Fingerprint:  "test-fp-already-approved",
+		Status:       models.DeviceStatusApproved,
+		IsAuthorized: true,
+		Permissions:  models.DevicePermissionsOperator,
+		DefaultRole:  "PLAYER",
+	}
+	require.NoError(t, resolver.db.Create(&device).Error)
+
+	ctx := createAdminContext()
+	_, err := resolver.approveDevice(ctx, device.ID, generated.DevicePermissionsOperator, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already approved")
+}
+
 // Tests for updateDevice
 
 func TestUpdateDevice_Name(t *testing.T) {
