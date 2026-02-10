@@ -923,7 +923,7 @@ func (r *Resolver) updateDevice(ctx context.Context, id string, input generated.
 
 	if len(updates) == 0 {
 		// No updates to apply, reload with relations and return current device
-		if err := r.db.WithContext(ctx).Preload("DefaultUser").First(&device, "id = ?", id).Error; err != nil {
+		if err := r.db.WithContext(ctx).Preload("DefaultUser").Preload("ApprovedBy").First(&device, "id = ?", id).Error; err != nil {
 			return nil, err
 		}
 		return &device, nil
@@ -934,7 +934,7 @@ func (r *Resolver) updateDevice(ctx context.Context, id string, input generated.
 	}
 
 	// Reload with relations to return complete data
-	if err := r.db.WithContext(ctx).Preload("DefaultUser").First(&device, "id = ?", id).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("DefaultUser").Preload("ApprovedBy").First(&device, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
 
@@ -967,7 +967,7 @@ func (r *Resolver) revokeDeviceAuth(ctx context.Context, deviceID string) (*mode
 	}
 
 	// Reload with relations to return complete data
-	if err := r.db.WithContext(ctx).Preload("DefaultUser").First(&device, "id = ?", deviceID).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("DefaultUser").Preload("ApprovedBy").First(&device, "id = ?", deviceID).Error; err != nil {
 		return nil, err
 	}
 
@@ -998,7 +998,7 @@ func (r *Resolver) updateDevicePermissions(ctx context.Context, deviceID string,
 	}
 
 	// Reload with relations to return complete data
-	if err := r.db.WithContext(ctx).Preload("DefaultUser").First(&device, "id = ?", deviceID).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("DefaultUser").Preload("ApprovedBy").First(&device, "id = ?", deviceID).Error; err != nil {
 		return nil, err
 	}
 
