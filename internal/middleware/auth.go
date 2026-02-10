@@ -106,8 +106,9 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 					ctx = context.WithValue(ctx, ContextKeyUserEmail, claims.Email)
 					ctx = context.WithValue(ctx, ContextKeyUserRole, claims.Role)
 
-					// Load user group memberships
-					userGroups := m.loadUserGroupMemberships(r.Context(), claims.UserID)
+					// Load user group memberships using accumulated ctx (not r.Context())
+					// so context deadlines and cancellation propagate correctly.
+					userGroups := m.loadUserGroupMemberships(ctx, claims.UserID)
 					ctx = context.WithValue(ctx, ContextKeyUserGroups, userGroups)
 
 					jwtAuthenticated = true
@@ -119,7 +120,7 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		if m.authService.IsDeviceAuthEnabled() && m.db != nil {
 			fingerprint := r.Header.Get("X-Device-Fingerprint")
 			if fingerprint != "" {
-				device, err := m.getDeviceByFingerprint(r.Context(), fingerprint)
+				device, err := m.getDeviceByFingerprint(ctx, fingerprint)
 				if err == nil && device != nil && device.Status == models.DeviceStatusApproved {
 					// Always add device info to context (useful for device-aware features)
 					ctx = context.WithValue(ctx, ContextKeyDevice, device)
@@ -137,8 +138,9 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 							ctx = context.WithValue(ctx, ContextKeyUserID, *device.DefaultUserID)
 						}
 
-						// Load device group memberships
-						deviceGroups := m.loadDeviceGroupMemberships(r.Context(), device.ID)
+						// Load device group memberships using accumulated ctx (not r.Context())
+						// so context deadlines and cancellation propagate correctly.
+						deviceGroups := m.loadDeviceGroupMemberships(ctx, device.ID)
 						ctx = context.WithValue(ctx, ContextKeyUserGroups, deviceGroups)
 					}
 				}

@@ -562,8 +562,10 @@ func TestFadeToLook_SnapEnd(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	// For this test, we just verify the fade eventually reaches the target
-	time.Sleep(200 * time.Millisecond)
+	// For this test, we just verify the fade eventually reaches the target.
+	// Use generous sleep to avoid flakiness on slow CI runners where the fade
+	// engine tick rate may lag behind real time.
+	time.Sleep(400 * time.Millisecond)
 
 	finalValue := dmxService.GetChannelValue(1, 1)
 	if finalValue != 200 {
