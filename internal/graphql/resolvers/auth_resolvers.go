@@ -930,6 +930,7 @@ func (r *Resolver) updateDevice(ctx context.Context, id string, input generated.
 }
 
 // revokeDeviceAuth revokes a device's authorization (admin only).
+// Uses column-level updates to avoid GORM nulling foreign keys when relation objects aren't loaded.
 func (r *Resolver) revokeDeviceAuth(ctx context.Context, deviceID string) (*models.Device, error) {
 	if err := r.requireAdmin(ctx); err != nil {
 		return nil, err
@@ -943,11 +944,18 @@ func (r *Resolver) revokeDeviceAuth(ctx context.Context, deviceID string) (*mode
 		return nil, err
 	}
 
-	// Update device status
-	device.Status = models.DeviceStatusRevoked
-	device.IsAuthorized = false
+	// Use column-level updates to preserve foreign keys (e.g. default_user_id)
+	updates := map[string]interface{}{
+		"status":        models.DeviceStatusRevoked,
+		"is_authorized": false,
+	}
 
-	if err := r.db.WithContext(ctx).Save(&device).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&device).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+
+	// Reload with relations to return complete data
+	if err := r.db.WithContext(ctx).Preload("DefaultUser").First(&device, "id = ?", deviceID).Error; err != nil {
 		return nil, err
 	}
 
@@ -955,6 +963,7 @@ func (r *Resolver) revokeDeviceAuth(ctx context.Context, deviceID string) (*mode
 }
 
 // updateDevicePermissions updates a device's permissions (admin only).
+// Uses column-level updates to avoid GORM nulling foreign keys when relation objects aren't loaded.
 func (r *Resolver) updateDevicePermissions(ctx context.Context, deviceID string, permissions generated.DevicePermissions) (*models.Device, error) {
 	if err := r.requireAdmin(ctx); err != nil {
 		return nil, err
@@ -968,9 +977,16 @@ func (r *Resolver) updateDevicePermissions(ctx context.Context, deviceID string,
 		return nil, err
 	}
 
-	device.Permissions = string(permissions)
+	updates := map[string]interface{}{
+		"permissions": string(permissions),
+	}
 
-	if err := r.db.WithContext(ctx).Save(&device).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&device).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+
+	// Reload with relations to return complete data
+	if err := r.db.WithContext(ctx).Preload("DefaultUser").First(&device, "id = ?", deviceID).Error; err != nil {
 		return nil, err
 	}
 

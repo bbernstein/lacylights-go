@@ -360,6 +360,48 @@ func TestRevokeDeviceAuth_Success(t *testing.T) {
 	assert.False(t, dbDevice.IsAuthorized)
 }
 
+func TestRevokeDeviceAuth_PreservesDefaultUser(t *testing.T) {
+	resolver, cleanup := setupDeviceAuthTestResolver(t, true, true)
+	defer cleanup()
+
+	// Create a user to be the default user
+	userName := "Default User"
+	user := models.User{
+		ID:    cuid.New(),
+		Email: "revoke-preserve@test.com",
+		Name:  &userName,
+		Role:  "USER",
+	}
+	require.NoError(t, resolver.db.Create(&user).Error)
+
+	// Create an approved device with a default user set
+	device := models.Device{
+		ID:            cuid.New(),
+		Name:          "Device With Default User",
+		Fingerprint:   "revoke-preserve-fp",
+		Status:        models.DeviceStatusApproved,
+		IsAuthorized:  true,
+		Permissions:   models.DevicePermissionsOperator,
+		DefaultRole:   "OPERATOR",
+		DefaultUserID: &user.ID,
+	}
+	require.NoError(t, resolver.db.Create(&device).Error)
+
+	ctx := createAdminContext()
+	result, err := resolver.revokeDeviceAuth(ctx, device.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.DeviceStatusRevoked, result.Status)
+	assert.False(t, result.IsAuthorized)
+
+	// Verify default_user_id is preserved in database
+	var dbDevice models.Device
+	require.NoError(t, resolver.db.First(&dbDevice, "id = ?", device.ID).Error)
+	assert.Equal(t, models.DeviceStatusRevoked, dbDevice.Status)
+	assert.False(t, dbDevice.IsAuthorized)
+	require.NotNil(t, dbDevice.DefaultUserID, "default_user_id should be preserved after revoke")
+	assert.Equal(t, user.ID, *dbDevice.DefaultUserID)
+}
+
 func TestRevokeDeviceAuth_NotFound(t *testing.T) {
 	resolver, cleanup := setupDeviceAuthTestResolver(t, true, true)
 	defer cleanup()
@@ -437,6 +479,46 @@ func TestUpdateDevicePermissions_Success(t *testing.T) {
 	var dbDevice models.Device
 	require.NoError(t, resolver.db.First(&dbDevice, "id = ?", device.ID).Error)
 	assert.Equal(t, string(generated.DevicePermissionsAdmin), dbDevice.Permissions)
+}
+
+func TestUpdateDevicePermissions_PreservesDefaultUser(t *testing.T) {
+	resolver, cleanup := setupDeviceAuthTestResolver(t, true, true)
+	defer cleanup()
+
+	// Create a user to be the default user
+	userName := "Default User"
+	user := models.User{
+		ID:    cuid.New(),
+		Email: "perms-preserve@test.com",
+		Name:  &userName,
+		Role:  "USER",
+	}
+	require.NoError(t, resolver.db.Create(&user).Error)
+
+	// Create an approved device with a default user set
+	device := models.Device{
+		ID:            cuid.New(),
+		Name:          "Device With Default User",
+		Fingerprint:   "perms-preserve-fp",
+		Status:        models.DeviceStatusApproved,
+		IsAuthorized:  true,
+		Permissions:   models.DevicePermissionsReadOnly,
+		DefaultRole:   "OPERATOR",
+		DefaultUserID: &user.ID,
+	}
+	require.NoError(t, resolver.db.Create(&device).Error)
+
+	ctx := createAdminContext()
+	result, err := resolver.updateDevicePermissions(ctx, device.ID, generated.DevicePermissionsAdmin)
+	require.NoError(t, err)
+	assert.Equal(t, string(generated.DevicePermissionsAdmin), result.Permissions)
+
+	// Verify default_user_id is preserved in database
+	var dbDevice models.Device
+	require.NoError(t, resolver.db.First(&dbDevice, "id = ?", device.ID).Error)
+	assert.Equal(t, string(generated.DevicePermissionsAdmin), dbDevice.Permissions)
+	require.NotNil(t, dbDevice.DefaultUserID, "default_user_id should be preserved after permissions update")
+	assert.Equal(t, user.ID, *dbDevice.DefaultUserID)
 }
 
 func TestUpdateDevicePermissions_NotFound(t *testing.T) {
