@@ -651,7 +651,27 @@ func TestApproveDevice_AlreadyApproved(t *testing.T) {
 	ctx := createAdminContext()
 	_, err := resolver.approveDevice(ctx, device.ID, generated.DevicePermissionsOperator, nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "already approved")
+	assert.Contains(t, err.Error(), "PENDING status")
+}
+
+func TestApproveDevice_Revoked(t *testing.T) {
+	resolver, cleanup := setupDeviceAuthTestResolver(t, true, true)
+	defer cleanup()
+
+	device := models.Device{
+		ID:          cuid.New(),
+		Name:        "Revoked Device",
+		Fingerprint: "test-fp-revoked",
+		Status:      models.DeviceStatusRevoked,
+		Permissions: models.DevicePermissionsOperator,
+		DefaultRole: "PLAYER",
+	}
+	require.NoError(t, resolver.db.Create(&device).Error)
+
+	ctx := createAdminContext()
+	_, err := resolver.approveDevice(ctx, device.ID, generated.DevicePermissionsOperator, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "PENDING status")
 }
 
 // Tests for updateDevice
