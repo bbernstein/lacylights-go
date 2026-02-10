@@ -1800,8 +1800,18 @@ func TestAuthenticate_JWTPriorityOverDevice(t *testing.T) {
 	authSvc, db := createTestAuthServiceWithDeviceAuth(t, true, true)
 	middleware := NewAuthMiddlewareWithDB(authSvc, db)
 
-	// Create an approved device with a default user
+	// Create a default user for the device
 	defaultUserID := "device-default-user"
+	defaultUser := &models.User{
+		ID:    defaultUserID,
+		Email: "device-default@example.com",
+		Role:  "USER",
+	}
+	if err := db.Create(defaultUser).Error; err != nil {
+		t.Fatalf("failed to create default user: %v", err)
+	}
+
+	// Create an approved device with a default user
 	device := &models.Device{
 		ID:            "device-jwt-test",
 		Fingerprint:   "jwt-test-fp",
