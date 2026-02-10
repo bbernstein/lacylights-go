@@ -676,7 +676,7 @@ type ComplexityRoot struct {
 		AddLookToBoard                         func(childComplexity int, input CreateLookBoardButtonInput) int
 		AddUserToGroup                         func(childComplexity int, userID string, groupID string, role *GroupMemberRole) int
 		AppleSignIn                            func(childComplexity int, identityToken string, authorizationCode string) int
-		ApproveDevice                          func(childComplexity int, deviceID string, permissions DevicePermissions, groupID *string) int
+		ApproveDevice                          func(childComplexity int, deviceID string, permissions DevicePermissions, groupID *string, defaultUserID *string) int
 		AuthorizeDevice                        func(childComplexity int, fingerprint string, authorizationCode string) int
 		BulkCreateCueLists                     func(childComplexity int, input BulkCueListCreateInput) int
 		BulkCreateCues                         func(childComplexity int, input BulkCueCreateInput) int
@@ -1375,7 +1375,7 @@ type MutationResolver interface {
 	AddDeviceToGroup(ctx context.Context, deviceID string, groupID string) (bool, error)
 	RemoveDeviceFromGroup(ctx context.Context, deviceID string, groupID string) (bool, error)
 	CreateDeviceAuthCode(ctx context.Context, deviceID string) (*DeviceAuthCode, error)
-	ApproveDevice(ctx context.Context, deviceID string, permissions DevicePermissions, groupID *string) (*models.Device, error)
+	ApproveDevice(ctx context.Context, deviceID string, permissions DevicePermissions, groupID *string, defaultUserID *string) (*models.Device, error)
 	UpdateDevice(ctx context.Context, id string, input UpdateDeviceInput) (*models.Device, error)
 	UpdateDevicePermissions(ctx context.Context, deviceID string, permissions DevicePermissions) (*models.Device, error)
 	RevokeDevice(ctx context.Context, id string) (*models.Device, error)
@@ -4242,7 +4242,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.ApproveDevice(childComplexity, args["deviceId"].(string), args["permissions"].(DevicePermissions), args["groupId"].(*string)), true
+		return e.complexity.Mutation.ApproveDevice(childComplexity, args["deviceId"].(string), args["permissions"].(DevicePermissions), args["groupId"].(*string), args["defaultUserId"].(*string)), true
 	case "Mutation.authorizeDevice":
 		if e.complexity.Mutation.AuthorizeDevice == nil {
 			break
@@ -10452,8 +10452,8 @@ type Mutation {
   # Device Management (admin only)
   "Create a device authorization code (admin only)"
   createDeviceAuthCode(deviceId: ID!): DeviceAuthCode!
-  "Approve a pending device (admin only). Optionally assign to a group."
-  approveDevice(deviceId: ID!, permissions: DevicePermissions!, groupId: ID): Device!
+  "Approve a pending device (admin only). Optionally assign to a group and/or set the default user."
+  approveDevice(deviceId: ID!, permissions: DevicePermissions!, groupId: ID, defaultUserId: ID): Device!
   "Update a device (admin only)"
   updateDevice(id: ID!, input: UpdateDeviceInput!): Device!
   "Update device permissions (admin only)"
@@ -10964,6 +10964,11 @@ func (ec *executionContext) field_Mutation_approveDevice_args(ctx context.Contex
 		return nil, err
 	}
 	args["groupId"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "defaultUserId", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["defaultUserId"] = arg3
 	return args, nil
 }
 
@@ -27517,7 +27522,7 @@ func (ec *executionContext) _Mutation_approveDevice(ctx context.Context, field g
 		ec.fieldContext_Mutation_approveDevice,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().ApproveDevice(ctx, fc.Args["deviceId"].(string), fc.Args["permissions"].(DevicePermissions), fc.Args["groupId"].(*string))
+			return ec.resolvers.Mutation().ApproveDevice(ctx, fc.Args["deviceId"].(string), fc.Args["permissions"].(DevicePermissions), fc.Args["groupId"].(*string), fc.Args["defaultUserId"].(*string))
 		},
 		nil,
 		ec.marshalNDevice2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐDevice,

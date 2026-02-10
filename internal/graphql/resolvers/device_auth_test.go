@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/99designs/gqlgen/graphql"
 	"github.com/lucsky/cuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -262,7 +263,7 @@ func TestApproveDevice_Success(t *testing.T) {
 
 	// Use admin context for admin-only operations
 	ctx := createAdminContext()
-	result, err := resolver.approveDevice(ctx, device.ID, generated.DevicePermissionsOperator)
+	result, err := resolver.approveDevice(ctx, device.ID, generated.DevicePermissionsOperator, nil)
 	require.NoError(t, err)
 	assert.Equal(t, models.DeviceStatusApproved, result.Status)
 	assert.True(t, result.IsAuthorized)
@@ -281,7 +282,7 @@ func TestApproveDevice_NotFound(t *testing.T) {
 	defer cleanup()
 	ctx := createAdminContext()
 
-	_, err := resolver.approveDevice(ctx, "non-existent-id", generated.DevicePermissionsReadOnly)
+	_, err := resolver.approveDevice(ctx, "non-existent-id", generated.DevicePermissionsReadOnly, nil)
 	require.Error(t, err)
 	assert.Equal(t, ErrDeviceNotFound, err)
 }
@@ -301,7 +302,7 @@ func TestApproveDevice_NotAuthenticated(t *testing.T) {
 	}
 	require.NoError(t, resolver.db.Create(&device).Error)
 
-	_, err := resolver.approveDevice(ctx, device.ID, generated.DevicePermissionsOperator)
+	_, err := resolver.approveDevice(ctx, device.ID, generated.DevicePermissionsOperator, nil)
 	require.Error(t, err)
 	assert.Equal(t, ErrNotAuthenticated, err)
 }
@@ -323,7 +324,7 @@ func TestApproveDevice_AuthDisabled(t *testing.T) {
 
 	ctx := context.Background()
 	// When auth is disabled, admin operations are allowed
-	result, err := resolver.approveDevice(ctx, device.ID, generated.DevicePermissionsAdmin)
+	result, err := resolver.approveDevice(ctx, device.ID, generated.DevicePermissionsAdmin, nil)
 	require.NoError(t, err)
 	assert.Equal(t, models.DeviceStatusApproved, result.Status)
 }
@@ -486,4 +487,253 @@ func TestUpdateDevicePermissions_AuthDisabled(t *testing.T) {
 	result, err := resolver.updateDevicePermissions(ctx, device.ID, generated.DevicePermissionsOperator)
 	require.NoError(t, err)
 	assert.Equal(t, string(generated.DevicePermissionsOperator), result.Permissions)
+}
+
+// Tests for approveDevice with defaultUserId
+
+func TestApproveDevice_WithDefaultUser(t *testing.T) {
+	resolver, cleanup := setupDeviceAuthTestResolver(t, true, true)
+	defer cleanup()
+
+	// Create a user to be the default user
+	defaultUserName := "Default User"
+	user := models.User{
+		ID:    cuid.New(),
+		Email: "default@test.com",
+		Name:  &defaultUserName,
+		Role:  "USER",
+	}
+	require.NoError(t, resolver.db.Create(&user).Error)
+
+	// Create a pending device
+	device := models.Device{
+		ID:          cuid.New(),
+		Name:        "Test Device",
+		Fingerprint: "test-fp-default-user",
+		Status:      models.DeviceStatusPending,
+		Permissions: models.DevicePermissionsReadOnly,
+		DefaultRole: "PLAYER",
+	}
+	require.NoError(t, resolver.db.Create(&device).Error)
+
+	ctx := createAdminContext()
+	result, err := resolver.approveDevice(ctx, device.ID, generated.DevicePermissionsOperator, &user.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.DeviceStatusApproved, result.Status)
+	assert.NotNil(t, result.DefaultUserID)
+	assert.Equal(t, user.ID, *result.DefaultUserID)
+
+	// Verify in database
+	var dbDevice models.Device
+	require.NoError(t, resolver.db.First(&dbDevice, "id = ?", device.ID).Error)
+	assert.NotNil(t, dbDevice.DefaultUserID)
+	assert.Equal(t, user.ID, *dbDevice.DefaultUserID)
+}
+
+func TestApproveDevice_WithInvalidDefaultUser(t *testing.T) {
+	resolver, cleanup := setupDeviceAuthTestResolver(t, true, true)
+	defer cleanup()
+
+	device := models.Device{
+		ID:          cuid.New(),
+		Name:        "Test Device",
+		Fingerprint: "test-fp-bad-user",
+		Status:      models.DeviceStatusPending,
+		Permissions: models.DevicePermissionsReadOnly,
+		DefaultRole: "PLAYER",
+	}
+	require.NoError(t, resolver.db.Create(&device).Error)
+
+	ctx := createAdminContext()
+	badUserID := "non-existent-user-id"
+	_, err := resolver.approveDevice(ctx, device.ID, generated.DevicePermissionsOperator, &badUserID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "default user not found")
+}
+
+// Tests for updateDevice
+
+func TestUpdateDevice_Name(t *testing.T) {
+	resolver, cleanup := setupDeviceAuthTestResolver(t, true, true)
+	defer cleanup()
+
+	device := models.Device{
+		ID:          cuid.New(),
+		Name:        "Original Name",
+		Fingerprint: "test-fp-update-name",
+		Status:      models.DeviceStatusApproved,
+		Permissions: models.DevicePermissionsReadOnly,
+		DefaultRole: "PLAYER",
+	}
+	require.NoError(t, resolver.db.Create(&device).Error)
+
+	ctx := createAdminContext()
+	newName := "Updated Name"
+	input := generated.UpdateDeviceInput{
+		Name: graphql.OmittableOf(&newName),
+	}
+	result, err := resolver.updateDevice(ctx, device.ID, input)
+	require.NoError(t, err)
+	assert.Equal(t, "Updated Name", result.Name)
+
+	// Verify in database
+	var dbDevice models.Device
+	require.NoError(t, resolver.db.First(&dbDevice, "id = ?", device.ID).Error)
+	assert.Equal(t, "Updated Name", dbDevice.Name)
+}
+
+func TestUpdateDevice_DefaultUserID(t *testing.T) {
+	resolver, cleanup := setupDeviceAuthTestResolver(t, true, true)
+	defer cleanup()
+
+	// Create a user
+	updateTestName := "Update Test User"
+	user := models.User{
+		ID:    cuid.New(),
+		Email: "update-test@test.com",
+		Name:  &updateTestName,
+		Role:  "USER",
+	}
+	require.NoError(t, resolver.db.Create(&user).Error)
+
+	device := models.Device{
+		ID:          cuid.New(),
+		Name:        "Test Device",
+		Fingerprint: "test-fp-update-user",
+		Status:      models.DeviceStatusApproved,
+		Permissions: models.DevicePermissionsOperator,
+		DefaultRole: "OPERATOR",
+	}
+	require.NoError(t, resolver.db.Create(&device).Error)
+
+	ctx := createAdminContext()
+	input := generated.UpdateDeviceInput{
+		DefaultUserID: graphql.OmittableOf(&user.ID),
+	}
+	result, err := resolver.updateDevice(ctx, device.ID, input)
+	require.NoError(t, err)
+	assert.NotNil(t, result.DefaultUserID)
+	assert.Equal(t, user.ID, *result.DefaultUserID)
+
+	// Verify in database
+	var dbDevice models.Device
+	require.NoError(t, resolver.db.First(&dbDevice, "id = ?", device.ID).Error)
+	assert.NotNil(t, dbDevice.DefaultUserID)
+	assert.Equal(t, user.ID, *dbDevice.DefaultUserID)
+}
+
+func TestUpdateDevice_ClearDefaultUserID(t *testing.T) {
+	resolver, cleanup := setupDeviceAuthTestResolver(t, true, true)
+	defer cleanup()
+
+	// Create a user and device with default user
+	clearTestName := "Clear Test User"
+	user := models.User{
+		ID:    cuid.New(),
+		Email: "clear-test@test.com",
+		Name:  &clearTestName,
+		Role:  "USER",
+	}
+	require.NoError(t, resolver.db.Create(&user).Error)
+
+	device := models.Device{
+		ID:            cuid.New(),
+		Name:          "Test Device",
+		Fingerprint:   "test-fp-clear-user",
+		Status:        models.DeviceStatusApproved,
+		Permissions:   models.DevicePermissionsOperator,
+		DefaultRole:   "OPERATOR",
+		DefaultUserID: &user.ID,
+	}
+	require.NoError(t, resolver.db.Create(&device).Error)
+
+	ctx := createAdminContext()
+	// Set to empty string to clear
+	emptyStr := ""
+	input := generated.UpdateDeviceInput{
+		DefaultUserID: graphql.OmittableOf(&emptyStr),
+	}
+	result, err := resolver.updateDevice(ctx, device.ID, input)
+	require.NoError(t, err)
+	assert.Nil(t, result.DefaultUserID)
+}
+
+func TestUpdateDevice_InvalidDefaultUserID(t *testing.T) {
+	resolver, cleanup := setupDeviceAuthTestResolver(t, true, true)
+	defer cleanup()
+
+	device := models.Device{
+		ID:          cuid.New(),
+		Name:        "Test Device",
+		Fingerprint: "test-fp-invalid-user",
+		Status:      models.DeviceStatusApproved,
+		Permissions: models.DevicePermissionsOperator,
+		DefaultRole: "OPERATOR",
+	}
+	require.NoError(t, resolver.db.Create(&device).Error)
+
+	ctx := createAdminContext()
+	badUserID := "non-existent-user"
+	input := generated.UpdateDeviceInput{
+		DefaultUserID: graphql.OmittableOf(&badUserID),
+	}
+	_, err := resolver.updateDevice(ctx, device.ID, input)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "default user not found")
+}
+
+func TestUpdateDevice_NotFound(t *testing.T) {
+	resolver, cleanup := setupDeviceAuthTestResolver(t, true, true)
+	defer cleanup()
+
+	ctx := createAdminContext()
+	input := generated.UpdateDeviceInput{}
+	_, err := resolver.updateDevice(ctx, "non-existent-id", input)
+	require.Error(t, err)
+	assert.Equal(t, ErrDeviceNotFound, err)
+}
+
+func TestUpdateDevice_NotAuthenticated(t *testing.T) {
+	resolver, cleanup := setupDeviceAuthTestResolver(t, true, true)
+	defer cleanup()
+
+	device := models.Device{
+		ID:          cuid.New(),
+		Name:        "Test Device",
+		Fingerprint: "test-fp-no-auth",
+		Status:      models.DeviceStatusApproved,
+		Permissions: models.DevicePermissionsReadOnly,
+		DefaultRole: "PLAYER",
+	}
+	require.NoError(t, resolver.db.Create(&device).Error)
+
+	ctx := context.Background()
+	input := generated.UpdateDeviceInput{}
+	_, err := resolver.updateDevice(ctx, device.ID, input)
+	require.Error(t, err)
+	assert.Equal(t, ErrNotAuthenticated, err)
+}
+
+func TestUpdateDevice_Permissions(t *testing.T) {
+	resolver, cleanup := setupDeviceAuthTestResolver(t, true, true)
+	defer cleanup()
+
+	device := models.Device{
+		ID:          cuid.New(),
+		Name:        "Test Device",
+		Fingerprint: "test-fp-update-perms",
+		Status:      models.DeviceStatusApproved,
+		Permissions: models.DevicePermissionsReadOnly,
+		DefaultRole: "PLAYER",
+	}
+	require.NoError(t, resolver.db.Create(&device).Error)
+
+	ctx := createAdminContext()
+	newPerms := generated.DevicePermissionsAdmin
+	input := generated.UpdateDeviceInput{
+		Permissions: graphql.OmittableOf(&newPerms),
+	}
+	result, err := resolver.updateDevice(ctx, device.ID, input)
+	require.NoError(t, err)
+	assert.Equal(t, string(generated.DevicePermissionsAdmin), result.Permissions)
 }

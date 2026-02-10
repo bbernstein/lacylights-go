@@ -2361,8 +2361,8 @@ type Mutation {
   # Device Management (admin only)
   "Create a device authorization code (admin only)"
   createDeviceAuthCode(deviceId: ID!): DeviceAuthCode!
-  "Approve a pending device (admin only). Optionally assign to a group."
-  approveDevice(deviceId: ID!, permissions: DevicePermissions!, groupId: ID): Device!
+  "Approve a pending device (admin only). Optionally assign to a group and/or set the default user."
+  approveDevice(deviceId: ID!, permissions: DevicePermissions!, groupId: ID, defaultUserId: ID): Device!
   "Update a device (admin only)"
   updateDevice(id: ID!, input: UpdateDeviceInput!): Device!
   "Update device permissions (admin only)"

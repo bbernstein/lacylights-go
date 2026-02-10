@@ -798,7 +798,7 @@ func TestApproveDeviceWithGroup_WithGroupID(t *testing.T) {
 
 	ctx := createAdminContext()
 	groupID := group.ID
-	result, err := resolver.approveDeviceWithGroup(ctx, device.ID, generated.DevicePermissionsOperator, &groupID)
+	result, err := resolver.approveDeviceWithGroup(ctx, device.ID, generated.DevicePermissionsOperator, &groupID, nil)
 	require.NoError(t, err)
 	assert.Equal(t, models.DeviceStatusApproved, result.Status)
 
@@ -823,7 +823,7 @@ func TestApproveDeviceWithGroup_NoGroupID(t *testing.T) {
 	require.NoError(t, resolver.db.Create(device).Error)
 
 	ctx := createAdminContext()
-	result, err := resolver.approveDeviceWithGroup(ctx, device.ID, generated.DevicePermissionsOperator, nil)
+	result, err := resolver.approveDeviceWithGroup(ctx, device.ID, generated.DevicePermissionsOperator, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, models.DeviceStatusApproved, result.Status)
 }
@@ -844,7 +844,7 @@ func TestApproveDeviceWithGroup_GroupNotFound(t *testing.T) {
 
 	ctx := createAdminContext()
 	badGroupID := "non-existent-group"
-	result, err := resolver.approveDeviceWithGroup(ctx, device.ID, generated.DevicePermissionsOperator, &badGroupID)
+	result, err := resolver.approveDeviceWithGroup(ctx, device.ID, generated.DevicePermissionsOperator, &badGroupID, nil)
 	// Group validation happens before approval - device should NOT be approved
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "group not found")

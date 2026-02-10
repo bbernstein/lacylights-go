@@ -378,9 +378,9 @@ func (r *Resolver) addUserToGroupWithRole(ctx context.Context, userID, groupID s
 	return true, nil
 }
 
-// approveDeviceWithGroup approves a device and optionally assigns it to a group.
+// approveDeviceWithGroup approves a device and optionally assigns it to a group and/or default user.
 // Group existence is validated before approving the device to avoid partial state.
-func (r *Resolver) approveDeviceWithGroup(ctx context.Context, deviceID string, permissions generated.DevicePermissions, groupID *string) (*models.Device, error) {
+func (r *Resolver) approveDeviceWithGroup(ctx context.Context, deviceID string, permissions generated.DevicePermissions, groupID *string, defaultUserID *string) (*models.Device, error) {
 	// Validate group existence BEFORE approving the device to avoid partial state
 	if groupID != nil && *groupID != "" {
 		group, err := r.GroupRepo.FindGroupByID(ctx, *groupID)
@@ -392,7 +392,7 @@ func (r *Resolver) approveDeviceWithGroup(ctx context.Context, deviceID string, 
 		}
 	}
 
-	device, err := r.approveDevice(ctx, deviceID, permissions)
+	device, err := r.approveDevice(ctx, deviceID, permissions, defaultUserID)
 	if err != nil {
 		return nil, err
 	}
