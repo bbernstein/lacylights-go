@@ -106,8 +106,8 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 					ctx = context.WithValue(ctx, ContextKeyUserEmail, claims.Email)
 					ctx = context.WithValue(ctx, ContextKeyUserRole, claims.Role)
 
-					// Load user group memberships using accumulated ctx (not r.Context())
-					// so context deadlines and cancellation propagate correctly.
+					// Load user group memberships using accumulated ctx
+					// so previously attached context values are available.
 					userGroups := m.loadUserGroupMemberships(ctx, claims.UserID)
 					ctx = context.WithValue(ctx, ContextKeyUserGroups, userGroups)
 
@@ -138,8 +138,8 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 							ctx = context.WithValue(ctx, ContextKeyUserID, *device.DefaultUserID)
 						}
 
-						// Load device group memberships using accumulated ctx (not r.Context())
-						// so context deadlines and cancellation propagate correctly.
+						// Load device group memberships using accumulated ctx
+						// so previously attached context values are available.
 						deviceGroups := m.loadDeviceGroupMemberships(ctx, device.ID)
 						ctx = context.WithValue(ctx, ContextKeyUserGroups, deviceGroups)
 					}
