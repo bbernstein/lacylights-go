@@ -854,7 +854,7 @@ func TestUpdateDevice_IsAuthorized_SyncsStatus(t *testing.T) {
 	assert.False(t, dbDevice.IsAuthorized)
 	assert.Equal(t, models.DeviceStatusRevoked, dbDevice.Status)
 
-	// Test: Setting isAuthorized=true should also set status=APPROVED
+	// Test: Setting isAuthorized=true should also set status=APPROVED and populate approval metadata
 	trueVal := true
 	input2 := generated.UpdateDeviceInput{
 		IsAuthorized: graphql.OmittableOf(&trueVal),
@@ -864,11 +864,14 @@ func TestUpdateDevice_IsAuthorized_SyncsStatus(t *testing.T) {
 	assert.True(t, result2.IsAuthorized)
 	assert.Equal(t, models.DeviceStatusApproved, result2.Status)
 
-	// Verify in database
+	// Verify in database, including approval metadata
 	var dbDevice2 models.Device
 	require.NoError(t, resolver.db.First(&dbDevice2, "id = ?", device.ID).Error)
 	assert.True(t, dbDevice2.IsAuthorized)
 	assert.Equal(t, models.DeviceStatusApproved, dbDevice2.Status)
+	assert.NotNil(t, dbDevice2.ApprovedAt, "approved_at should be set when transitioning to authorized")
+	assert.NotNil(t, dbDevice2.ApprovedByID, "approved_by should be set when admin transitions to authorized")
+	assert.Equal(t, "admin-user-id", *dbDevice2.ApprovedByID)
 }
 
 func TestUpdateDevice_EmptyInput_NoOp(t *testing.T) {

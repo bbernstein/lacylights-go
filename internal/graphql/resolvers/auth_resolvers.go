@@ -844,7 +844,10 @@ func (r *Resolver) approveDevice(ctx context.Context, deviceID string, permissio
 	}
 
 	// Reload with relations to return complete data
-	if err := r.db.WithContext(ctx).Preload("DefaultUser").First(&device, "id = ?", deviceID).Error; err != nil {
+	if err := r.db.WithContext(ctx).
+		Preload("DefaultUser").
+		Preload("ApprovedBy").
+		First(&device, "id = ?", deviceID).Error; err != nil {
 		return nil, err
 	}
 
@@ -900,6 +903,15 @@ func (r *Resolver) updateDevice(ctx context.Context, id string, input generated.
 		// that is_authorized == (status == APPROVED).
 		if isAuthorized {
 			updates["status"] = models.DeviceStatusApproved
+			// Populate approval metadata when transitioning to authorized,
+			// consistent with approveDevice and maintaining an audit trail.
+			if !device.IsAuthorized {
+				updates["approved_at"] = time.Now()
+				userID := middleware.GetUserIDFromContext(ctx)
+				if userID != "" {
+					updates["approved_by"] = userID
+				}
+			}
 		} else {
 			updates["status"] = models.DeviceStatusRevoked
 		}
