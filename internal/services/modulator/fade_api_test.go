@@ -101,15 +101,18 @@ func TestFadeToLook_CreatesCrossfadeEffect(t *testing.T) {
 		t.Errorf("Expected 1 active fade, got %d", engine.ActiveFadeCount())
 	}
 
-	// Wait for fade to complete
-	time.Sleep(300 * time.Millisecond)
-
-	// Check final values
-	if dmxService.GetChannelValue(1, 1) != 200 {
-		t.Errorf("Channel 1:1 should be 200, got %d", dmxService.GetChannelValue(1, 1))
-	}
-	if dmxService.GetChannelValue(1, 2) != 50 {
-		t.Errorf("Channel 1:2 should be 50, got %d", dmxService.GetChannelValue(1, 2))
+	// Poll until fade completes (bounded to avoid flaky timing failures)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		ch1 := dmxService.GetChannelValue(1, 1)
+		ch2 := dmxService.GetChannelValue(1, 2)
+		if ch1 == 200 && ch2 == 50 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Crossfade did not reach target values within timeout: ch1:1=%d (want 200), ch1:2=%d (want 50)", ch1, ch2)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -142,14 +145,17 @@ func TestFadeToLook_ReplacesExistingCrossfade(t *testing.T) {
 		t.Errorf("Expected 1 active fade after replacement, got %d", engine.ActiveFadeCount())
 	}
 
-	// Wait for second fade to complete
-	time.Sleep(300 * time.Millisecond)
-
-	// Final value should be 200 (from second fade), not 100
-	// Allow small tolerance due to timing variations in test execution
-	finalValue := dmxService.GetChannelValue(1, 1)
-	if finalValue < 198 || finalValue > 200 {
-		t.Errorf("Final value should be ~200 from replacement fade, got %d", finalValue)
+	// Poll until second fade completes (bounded to avoid flaky timing failures)
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		finalValue := dmxService.GetChannelValue(1, 1)
+		if finalValue == 200 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Replacement fade did not reach target 200 within timeout, last value %d", finalValue)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -198,12 +204,17 @@ func TestFadeToLook_DefaultEasing(t *testing.T) {
 	// Pass empty easing type
 	engine.FadeToLook(channels, 100*time.Millisecond, "", "")
 
-	// Wait for completion
-	time.Sleep(150 * time.Millisecond)
-
-	// Should complete successfully
-	if dmxService.GetChannelValue(1, 1) != 255 {
-		t.Errorf("Fade with default easing should complete, got %d", dmxService.GetChannelValue(1, 1))
+	// Poll until fade completes
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		val := dmxService.GetChannelValue(1, 1)
+		if val == 255 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Fade with default easing should complete, got %d", val)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -246,18 +257,19 @@ func TestFadeToBlack_FadesAllChannelsToZero(t *testing.T) {
 		t.Errorf("FadeToBlack should return 'fade-to-black' ID, got %s", fadeID)
 	}
 
-	// Wait for completion
-	time.Sleep(200 * time.Millisecond)
-
-	// All channels should be 0
-	if dmxService.GetChannelValue(1, 1) != 0 {
-		t.Errorf("Channel 1:1 should be 0, got %d", dmxService.GetChannelValue(1, 1))
-	}
-	if dmxService.GetChannelValue(1, 100) != 0 {
-		t.Errorf("Channel 1:100 should be 0, got %d", dmxService.GetChannelValue(1, 100))
-	}
-	if dmxService.GetChannelValue(2, 50) != 0 {
-		t.Errorf("Channel 2:50 should be 0, got %d", dmxService.GetChannelValue(2, 50))
+	// Poll until all channels reach 0
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		ch1 := dmxService.GetChannelValue(1, 1)
+		ch2 := dmxService.GetChannelValue(1, 100)
+		ch3 := dmxService.GetChannelValue(2, 50)
+		if ch1 == 0 && ch2 == 0 && ch3 == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("FadeToBlack did not reach 0 within timeout: ch1:1=%d, ch1:100=%d, ch2:50=%d", ch1, ch2, ch3)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -312,12 +324,17 @@ func TestFadeToBlack_DefaultEasing(t *testing.T) {
 	// Pass empty easing type
 	engine.FadeToBlack(100*time.Millisecond, "")
 
-	// Wait for completion
-	time.Sleep(150 * time.Millisecond)
-
-	// Should complete successfully
-	if dmxService.GetChannelValue(1, 1) != 0 {
-		t.Errorf("Fade with default easing should complete, got %d", dmxService.GetChannelValue(1, 1))
+	// Poll until fade completes
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		val := dmxService.GetChannelValue(1, 1)
+		if val == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("FadeToBlack with default easing should complete, got %d", val)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -486,9 +503,6 @@ func TestFadeToLook_MultipleUniverses(t *testing.T) {
 
 	engine.FadeToLook(channels, 100*time.Millisecond, "multi-universe", EasingLinear)
 
-	// Wait for completion
-	time.Sleep(200 * time.Millisecond)
-
 	expectedValues := map[ChannelKey]byte{
 		{Universe: 1, Channel: 1}:  100,
 		{Universe: 1, Channel: 2}:  150,
@@ -496,11 +510,29 @@ func TestFadeToLook_MultipleUniverses(t *testing.T) {
 		{Universe: 2, Channel: 10}: 250,
 	}
 
-	for key, expected := range expectedValues {
-		actual := dmxService.GetChannelValue(key.Universe, key.Channel)
-		if actual != expected {
-			t.Errorf("Channel %d:%d = %d, want %d", key.Universe, key.Channel, actual, expected)
+	// Poll until all channels reach targets
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		allMatch := true
+		for key, expected := range expectedValues {
+			if dmxService.GetChannelValue(key.Universe, key.Channel) != expected {
+				allMatch = false
+				break
+			}
 		}
+		if allMatch {
+			break
+		}
+		if time.Now().After(deadline) {
+			for key, expected := range expectedValues {
+				actual := dmxService.GetChannelValue(key.Universe, key.Channel)
+				if actual != expected {
+					t.Errorf("Channel %d:%d = %d, want %d", key.Universe, key.Channel, actual, expected)
+				}
+			}
+			t.FailNow()
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -530,13 +562,17 @@ func TestFadeToLook_MidFadeTransition(t *testing.T) {
 	channels2 := []LookChannel{{Universe: 1, Channel: 1, Value: 200}}
 	engine.FadeToLook(channels2, 200*time.Millisecond, "fade-2", EasingLinear)
 
-	// Wait for completion
-	time.Sleep(300 * time.Millisecond)
-
-	// Final value should be ~200 (allowing small tolerance due to timing)
-	finalValue := dmxService.GetChannelValue(1, 1)
-	if finalValue < 198 || finalValue > 200 {
-		t.Errorf("Final value should be ~200, got %d", finalValue)
+	// Poll until fade completes
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		finalValue := dmxService.GetChannelValue(1, 1)
+		if finalValue == 200 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Final value should be 200, got %d", finalValue)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
