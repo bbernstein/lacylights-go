@@ -95,3 +95,4 @@ jobs:
         with:
           name: lacylights-${{ matrix.goos }}-${{ matrix.goarch }}
           path: lacylights-${{ matrix.goos }}-${{ matrix.goarch }}
+
