@@ -174,16 +174,24 @@ func (s *Service) UpdateChannelValues(ctx context.Context, sessionID string, upd
 		return false, nil
 	}
 
-	// Process all updates
-	for _, update := range updates {
-		// Get fixture information to calculate universe and channel
+	// First, resolve all fixtures before applying any changes to ensure atomic updates
+	resolvedFixtures := make([]*models.FixtureInstance, len(updates))
+	for i, update := range updates {
 		fixture, err := s.fixtureRepo.FindByID(ctx, update.FixtureID)
 		if err != nil {
+			// Do not apply any updates if a lookup error occurs
 			return false, err
 		}
 		if fixture == nil {
-			continue // Skip invalid fixtures
+			// Return error for non-existent fixtures for consistent error handling
+			return false, fmt.Errorf("fixture not found for ID %s", update.FixtureID)
 		}
+		resolvedFixtures[i] = fixture
+	}
+
+	// Now process all updates - all fixtures have been validated
+	for i, update := range updates {
+		fixture := resolvedFixtures[i]
 
 		absoluteChannel := fixture.StartChannel + update.ChannelIndex
 		channelKey := fmt.Sprintf("%d:%d", fixture.Universe, absoluteChannel)

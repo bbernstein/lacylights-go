@@ -3,6 +3,7 @@ package preview
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -244,6 +245,35 @@ func TestUpdateChannelValues_SessionTimeout(t *testing.T) {
 	retrievedSession := service.GetSession(session.ID)
 	if !retrievedSession.CreatedAt.After(initialTime) {
 		t.Error("Session timestamp should be updated after bulk update")
+	}
+}
+
+// TestUpdateChannelValues_NonExistentFixture tests bulk update with non-existent fixture
+func TestUpdateChannelValues_NonExistentFixture(t *testing.T) {
+	testDB, service, cleanup := setupPreviewTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	project, _ := createTestProjectWithFixture(t, testDB)
+
+	session, err := service.StartSession(ctx, project.ID, nil)
+	if err != nil {
+		t.Fatalf("Failed to start session: %v", err)
+	}
+
+	updates := []ChannelUpdate{
+		{FixtureID: "non-existent-fixture-id", ChannelIndex: 0, Value: 255},
+	}
+
+	success, err := service.UpdateChannelValues(ctx, session.ID, updates)
+	if err == nil {
+		t.Error("UpdateChannelValues should return error for non-existent fixture")
+	}
+	if success {
+		t.Error("UpdateChannelValues should return false for non-existent fixture")
+	}
+	if err != nil && !strings.Contains(err.Error(), "fixture not found") {
+		t.Errorf("Expected 'fixture not found' error, got: %v", err)
 	}
 }
 
