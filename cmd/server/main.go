@@ -281,7 +281,7 @@ func main() {
 
 	corsOptions := cors.Options{
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-Device-Fingerprint"},
 		AllowCredentials: true,
 		Debug:            cfg.IsDevelopment(),
 	}
