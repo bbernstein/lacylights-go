@@ -1008,6 +1008,12 @@ type PaginationInfo struct {
 	HasMore    bool `json:"hasMore"`
 }
 
+type PreviewChannelUpdateInput struct {
+	FixtureID    string `json:"fixtureId"`
+	ChannelIndex int    `json:"channelIndex"`
+	Value        int    `json:"value"`
+}
+
 type ProjectUpdateItem struct {
 	ProjectID          string                     `json:"projectId"`
 	Name               graphql.Omittable[*string] `json:"name,omitempty"`

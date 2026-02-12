@@ -1601,6 +1601,12 @@ input ChannelFadeBehaviorInput {
   fadeBehavior: FadeBehavior!
 }
 
+input PreviewChannelUpdateInput {
+  fixtureId: ID!
+  channelIndex: Int!
+  value: Int!
+}
+
 input ImportOFLFixtureInput {
   manufacturer: String!
   oflFixtureJson: String!
@@ -2525,6 +2531,10 @@ type Mutation {
     fixtureId: ID!
     channelIndex: Int!
     value: Int!
+  ): Boolean!
+  updatePreviewChannels(
+    sessionId: ID!
+    updates: [PreviewChannelUpdateInput!]!
   ): Boolean!
   initializePreviewWithLook(sessionId: ID!, lookId: ID!): Boolean!
 

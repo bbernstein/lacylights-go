@@ -157,6 +157,78 @@ func (s *Service) UpdateChannelValue(ctx context.Context, sessionID string, fixt
 	return true, nil
 }
 
+// ChannelUpdate represents a single channel update.
+type ChannelUpdate struct {
+	FixtureID    string
+	ChannelIndex int
+	Value        int
+}
+
+// UpdateChannelValues updates multiple channel values in a preview session atomically.
+func (s *Service) UpdateChannelValues(ctx context.Context, sessionID string, updates []ChannelUpdate) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, exists := s.sessions[sessionID]
+	if !exists || !session.IsActive {
+		return false, nil
+	}
+
+	// First, resolve all fixtures before applying any changes to ensure atomic updates
+	resolvedFixtures := make([]*models.FixtureInstance, len(updates))
+	for i, update := range updates {
+		fixture, err := s.fixtureRepo.FindByID(ctx, update.FixtureID)
+		if err != nil {
+			// Do not apply any updates if a lookup error occurs
+			return false, err
+		}
+		if fixture == nil {
+			// Return error for non-existent fixtures for consistent error handling
+			return false, fmt.Errorf("fixture not found for ID %s", update.FixtureID)
+		}
+		resolvedFixtures[i] = fixture
+	}
+
+	// Now process all updates - all fixtures have been validated
+	for i, update := range updates {
+		fixture := resolvedFixtures[i]
+
+		absoluteChannel := fixture.StartChannel + update.ChannelIndex
+		channelKey := fmt.Sprintf("%d:%d", fixture.Universe, absoluteChannel)
+
+		// Clamp value to valid range
+		value := update.Value
+		if value < 0 {
+			value = 0
+		}
+		if value > 255 {
+			value = 255
+		}
+
+		// Update the channel override in session state
+		session.ChannelOverrides[channelKey] = value
+
+		// Apply to live DMX output immediately via channel override
+		if s.dmxService != nil {
+			s.dmxService.SetChannelOverride(fixture.Universe, absoluteChannel, byte(value))
+		}
+	}
+
+	// Reset session timeout
+	if timer, exists := s.sessionTimers[sessionID]; exists {
+		timer.Reset(s.sessionTimeout)
+	}
+	session.CreatedAt = time.Now()
+
+	// Notify subscribers once for all updates
+	if s.onSessionUpdate != nil {
+		dmxOutput := s.getCurrentDMXOutputLocked(sessionID)
+		go s.onSessionUpdate(session, dmxOutput)
+	}
+
+	return true, nil
+}
+
 // CommitSession commits a preview session (keeps changes, cleans up session).
 func (s *Service) CommitSession(ctx context.Context, sessionID string) (bool, error) {
 	// The preview changes are already live in DMX output
