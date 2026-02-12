@@ -21,6 +21,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/services/modulator"
 	"github.com/bbernstein/lacylights-go/internal/services/network"
 	"github.com/bbernstein/lacylights-go/internal/services/ofl"
+	"github.com/bbernstein/lacylights-go/internal/services/preview"
 	"github.com/bbernstein/lacylights-go/internal/services/pubsub"
 	"github.com/bbernstein/lacylights-go/internal/services/undo"
 	"github.com/bbernstein/lacylights-go/internal/services/version"
@@ -4115,6 +4116,21 @@ func (r *mutationResolver) CancelPreviewSession(ctx context.Context, sessionID s
 // UpdatePreviewChannel is the resolver for the updatePreviewChannel field.
 func (r *mutationResolver) UpdatePreviewChannel(ctx context.Context, sessionID string, fixtureID string, channelIndex int, value int) (bool, error) {
 	return r.PreviewService.UpdateChannelValue(ctx, sessionID, fixtureID, channelIndex, value)
+}
+
+// UpdatePreviewChannels is the resolver for the updatePreviewChannels field.
+func (r *mutationResolver) UpdatePreviewChannels(ctx context.Context, sessionID string, updates []*generated.PreviewChannelUpdateInput) (bool, error) {
+	// Convert GraphQL input to service types
+	serviceUpdates := make([]preview.ChannelUpdate, len(updates))
+	for i, update := range updates {
+		serviceUpdates[i] = preview.ChannelUpdate{
+			FixtureID:    update.FixtureID,
+			ChannelIndex: update.ChannelIndex,
+			Value:        update.Value,
+		}
+	}
+
+	return r.PreviewService.UpdateChannelValues(ctx, sessionID, serviceUpdates)
 }
 
 // InitializePreviewWithLook is the resolver for the initializePreviewWithLook field.

@@ -74,6 +74,179 @@ func createTestProjectWithFixture(t *testing.T, testDB *testutil.TestDB) (*model
 	return project, fixture
 }
 
+// TestUpdateChannelValues_BulkUpdate tests bulk channel updates
+func TestUpdateChannelValues_BulkUpdate(t *testing.T) {
+	testDB, service, cleanup := setupPreviewTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	project, fixture := createTestProjectWithFixture(t, testDB)
+
+	// Start a session
+	session, err := service.StartSession(ctx, project.ID, nil)
+	if err != nil {
+		t.Fatalf("Failed to start session: %v", err)
+	}
+
+	// Prepare bulk updates for RGB channels
+	updates := []ChannelUpdate{
+		{FixtureID: fixture.ID, ChannelIndex: 0, Value: 255}, // Red
+		{FixtureID: fixture.ID, ChannelIndex: 1, Value: 128}, // Green
+		{FixtureID: fixture.ID, ChannelIndex: 2, Value: 64},  // Blue
+	}
+
+	// Execute bulk update
+	success, err := service.UpdateChannelValues(ctx, session.ID, updates)
+	if err != nil {
+		t.Fatalf("UpdateChannelValues failed: %v", err)
+	}
+	if !success {
+		t.Error("UpdateChannelValues should return true")
+	}
+
+	// Verify all channels were updated
+	retrievedSession := service.GetSession(session.ID)
+	if retrievedSession == nil {
+		t.Fatal("Session not found after bulk update")
+	}
+
+	// Check each channel value
+	expectedChannels := map[string]int{
+		"1:1": 255, // Universe 1, Channel 1 (Red)
+		"1:2": 128, // Universe 1, Channel 2 (Green)
+		"1:3": 64,  // Universe 1, Channel 3 (Blue)
+	}
+
+	for key, expectedValue := range expectedChannels {
+		if actualValue, exists := retrievedSession.ChannelOverrides[key]; !exists {
+			t.Errorf("Channel %s not found in overrides", key)
+		} else if actualValue != expectedValue {
+			t.Errorf("Channel %s: expected %d, got %d", key, expectedValue, actualValue)
+		}
+	}
+}
+
+// TestUpdateChannelValues_ValueClamping tests value clamping in bulk updates
+func TestUpdateChannelValues_ValueClamping(t *testing.T) {
+	testDB, service, cleanup := setupPreviewTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	project, fixture := createTestProjectWithFixture(t, testDB)
+
+	session, err := service.StartSession(ctx, project.ID, nil)
+	if err != nil {
+		t.Fatalf("Failed to start session: %v", err)
+	}
+
+	// Test values outside valid range
+	updates := []ChannelUpdate{
+		{FixtureID: fixture.ID, ChannelIndex: 0, Value: -50},  // Should clamp to 0
+		{FixtureID: fixture.ID, ChannelIndex: 1, Value: 300},  // Should clamp to 255
+		{FixtureID: fixture.ID, ChannelIndex: 2, Value: 128},  // Valid value
+	}
+
+	success, err := service.UpdateChannelValues(ctx, session.ID, updates)
+	if err != nil {
+		t.Fatalf("UpdateChannelValues failed: %v", err)
+	}
+	if !success {
+		t.Error("UpdateChannelValues should return true")
+	}
+
+	// Verify clamping
+	retrievedSession := service.GetSession(session.ID)
+	if val, exists := retrievedSession.ChannelOverrides["1:1"]; !exists || val != 0 {
+		t.Errorf("Expected channel 1:1 to be clamped to 0, got %d", val)
+	}
+	if val, exists := retrievedSession.ChannelOverrides["1:2"]; !exists || val != 255 {
+		t.Errorf("Expected channel 1:2 to be clamped to 255, got %d", val)
+	}
+	if val, exists := retrievedSession.ChannelOverrides["1:3"]; !exists || val != 128 {
+		t.Errorf("Expected channel 1:3 to be 128, got %d", val)
+	}
+}
+
+// TestUpdateChannelValues_EmptyUpdates tests bulk update with empty slice
+func TestUpdateChannelValues_EmptyUpdates(t *testing.T) {
+	testDB, service, cleanup := setupPreviewTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	project, _ := createTestProjectWithFixture(t, testDB)
+
+	session, err := service.StartSession(ctx, project.ID, nil)
+	if err != nil {
+		t.Fatalf("Failed to start session: %v", err)
+	}
+
+	// Test with empty updates
+	updates := []ChannelUpdate{}
+	success, err := service.UpdateChannelValues(ctx, session.ID, updates)
+	if err != nil {
+		t.Fatalf("UpdateChannelValues failed: %v", err)
+	}
+	if !success {
+		t.Error("UpdateChannelValues should return true even with empty updates")
+	}
+}
+
+// TestUpdateChannelValues_NonExistentSession tests bulk update on non-existent session
+func TestUpdateChannelValues_NonExistentSession(t *testing.T) {
+	testDB, service, cleanup := setupPreviewTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	_, fixture := createTestProjectWithFixture(t, testDB)
+
+	updates := []ChannelUpdate{
+		{FixtureID: fixture.ID, ChannelIndex: 0, Value: 255},
+	}
+
+	success, err := service.UpdateChannelValues(ctx, "non-existent-session", updates)
+	if err != nil {
+		t.Fatalf("UpdateChannelValues failed: %v", err)
+	}
+	if success {
+		t.Error("UpdateChannelValues should return false for non-existent session")
+	}
+}
+
+// TestUpdateChannelValues_SessionTimeout tests that bulk update resets session timeout
+func TestUpdateChannelValues_SessionTimeout(t *testing.T) {
+	testDB, service, cleanup := setupPreviewTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	project, fixture := createTestProjectWithFixture(t, testDB)
+
+	session, err := service.StartSession(ctx, project.ID, nil)
+	if err != nil {
+		t.Fatalf("Failed to start session: %v", err)
+	}
+
+	initialTime := session.CreatedAt
+
+	// Wait a bit
+	time.Sleep(10 * time.Millisecond)
+
+	// Perform bulk update
+	updates := []ChannelUpdate{
+		{FixtureID: fixture.ID, ChannelIndex: 0, Value: 255},
+	}
+
+	_, err = service.UpdateChannelValues(ctx, session.ID, updates)
+	if err != nil {
+		t.Fatalf("UpdateChannelValues failed: %v", err)
+	}
+
+	// Verify session timestamp was updated
+	retrievedSession := service.GetSession(session.ID)
+	if !retrievedSession.CreatedAt.After(initialTime) {
+		t.Error("Session timestamp should be updated after bulk update")
+	}
+}
+
 // TestStartSession_Integration tests starting a preview session.
 func TestStartSession_Integration(t *testing.T) {
 	testDB, service, cleanup := setupPreviewTest(t)

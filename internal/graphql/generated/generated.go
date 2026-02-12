@@ -814,6 +814,7 @@ type ComplexityRoot struct {
 		UpdateLookBoardButtonPositions         func(childComplexity int, positions []*LookBoardButtonPositionInput) int
 		UpdateLookPartial                      func(childComplexity int, lookID string, name *string, description *string, fixtureValues []*FixtureValueInput, mergeFixtures *bool) int
 		UpdatePreviewChannel                   func(childComplexity int, sessionID string, fixtureID string, channelIndex int, value int) int
+		UpdatePreviewChannels                  func(childComplexity int, sessionID string, updates []*PreviewChannelUpdateInput) int
 		UpdateProject                          func(childComplexity int, id string, input CreateProjectInput) int
 		UpdateRepository                       func(childComplexity int, repository string, version *string) int
 		UpdateSetting                          func(childComplexity int, input UpdateSettingInput) int
@@ -1453,6 +1454,7 @@ type MutationResolver interface {
 	CommitPreviewSession(ctx context.Context, sessionID string) (bool, error)
 	CancelPreviewSession(ctx context.Context, sessionID string) (bool, error)
 	UpdatePreviewChannel(ctx context.Context, sessionID string, fixtureID string, channelIndex int, value int) (bool, error)
+	UpdatePreviewChannels(ctx context.Context, sessionID string, updates []*PreviewChannelUpdateInput) (bool, error)
 	InitializePreviewWithLook(ctx context.Context, sessionID string, lookID string) (bool, error)
 	SetChannelValue(ctx context.Context, universe int, channel int, value int) (bool, error)
 	SetLookLive(ctx context.Context, lookID string) (bool, error)
@@ -5710,6 +5712,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.UpdatePreviewChannel(childComplexity, args["sessionId"].(string), args["fixtureId"].(string), args["channelIndex"].(int), args["value"].(int)), true
+	case "Mutation.updatePreviewChannels":
+		if e.complexity.Mutation.UpdatePreviewChannels == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updatePreviewChannels_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UpdatePreviewChannels(childComplexity, args["sessionId"].(string), args["updates"].([]*PreviewChannelUpdateInput)), true
 	case "Mutation.updateProject":
 		if e.complexity.Mutation.UpdateProject == nil {
 			break
@@ -7962,6 +7975,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputLookPartialUpdateItem,
 		ec.unmarshalInputLookUpdateItem,
 		ec.unmarshalInputOFLImportOptionsInput,
+		ec.unmarshalInputPreviewChannelUpdateInput,
 		ec.unmarshalInputProjectUpdateItem,
 		ec.unmarshalInputRegisterInput,
 		ec.unmarshalInputUpdateAuthSettingsInput,
@@ -9692,6 +9706,12 @@ input ChannelFadeBehaviorInput {
   fadeBehavior: FadeBehavior!
 }
 
+input PreviewChannelUpdateInput {
+  fixtureId: ID!
+  channelIndex: Int!
+  value: Int!
+}
+
 input ImportOFLFixtureInput {
   manufacturer: String!
   oflFixtureJson: String!
@@ -10616,6 +10636,10 @@ type Mutation {
     fixtureId: ID!
     channelIndex: Int!
     value: Int!
+  ): Boolean!
+  updatePreviewChannels(
+    sessionId: ID!
+    updates: [PreviewChannelUpdateInput!]!
   ): Boolean!
   initializePreviewWithLook(sessionId: ID!, lookId: ID!): Boolean!
 
@@ -12673,6 +12697,22 @@ func (ec *executionContext) field_Mutation_updatePreviewChannel_args(ctx context
 		return nil, err
 	}
 	args["value"] = arg3
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updatePreviewChannels_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["sessionId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "updates", ec.unmarshalNPreviewChannelUpdateInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐPreviewChannelUpdateInputᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["updates"] = arg1
 	return args, nil
 }
 
@@ -31976,6 +32016,47 @@ func (ec *executionContext) fieldContext_Mutation_updatePreviewChannel(ctx conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_updatePreviewChannels(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updatePreviewChannels,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UpdatePreviewChannels(ctx, fc.Args["sessionId"].(string), fc.Args["updates"].([]*PreviewChannelUpdateInput))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updatePreviewChannels(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updatePreviewChannels_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_initializePreviewWithLook(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -50127,6 +50208,47 @@ func (ec *executionContext) unmarshalInputOFLImportOptionsInput(ctx context.Cont
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputPreviewChannelUpdateInput(ctx context.Context, obj any) (PreviewChannelUpdateInput, error) {
+	var it PreviewChannelUpdateInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"fixtureId", "channelIndex", "value"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "fixtureId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("fixtureId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FixtureID = data
+		case "channelIndex":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channelIndex"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ChannelIndex = data
+		case "value":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("value"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Value = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputProjectUpdateItem(ctx context.Context, obj any) (ProjectUpdateItem, error) {
 	var it ProjectUpdateItem
 	asMap := map[string]any{}
@@ -57705,6 +57827,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "updatePreviewChannel":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updatePreviewChannel(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updatePreviewChannels":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updatePreviewChannels(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -66918,6 +67047,26 @@ func (ec *executionContext) marshalNOperationType2githubᚗcomᚋbbernsteinᚋla
 
 func (ec *executionContext) marshalNPaginationInfo2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐPaginationInfo(ctx context.Context, sel ast.SelectionSet, v PaginationInfo) graphql.Marshaler {
 	return ec._PaginationInfo(ctx, sel, &v)
+}
+
+func (ec *executionContext) unmarshalNPreviewChannelUpdateInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐPreviewChannelUpdateInputᚄ(ctx context.Context, v any) ([]*PreviewChannelUpdateInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*PreviewChannelUpdateInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNPreviewChannelUpdateInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐPreviewChannelUpdateInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNPreviewChannelUpdateInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐPreviewChannelUpdateInput(ctx context.Context, v any) (*PreviewChannelUpdateInput, error) {
+	res, err := ec.unmarshalInputPreviewChannelUpdateInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNPreviewSession2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐPreviewSession(ctx context.Context, sel ast.SelectionSet, v models.PreviewSession) graphql.Marshaler {
