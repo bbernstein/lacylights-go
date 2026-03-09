@@ -36,6 +36,9 @@ func (e *Engine) FadeToLook(channels []LookChannel, duration time.Duration, fade
 
 	// Handle instant fades (duration <= 0) synchronously
 	if duration <= 0 {
+		// Remove any existing crossfades so they don't overwrite our instant values
+		e.removeEffectsByType(EffectTypeCrossfade)
+
 		for _, ch := range channels {
 			e.dmxService.SetChannelValue(ch.Universe, ch.Channel, byte(ch.Value))
 		}
@@ -112,6 +115,9 @@ func (e *Engine) FadeToBlack(duration time.Duration, easingType EasingType) stri
 
 	// Handle instant fade
 	if duration <= 0 {
+		// Remove any existing crossfades so they don't overwrite our instant values
+		e.removeEffectsByType(EffectTypeCrossfade)
+
 		for key := range fromValues {
 			e.dmxService.SetChannelValue(key.Universe, key.Channel, 0)
 		}
