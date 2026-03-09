@@ -124,7 +124,7 @@ func TestFadeToLook_InstantFadeCancelsExistingCrossfade(t *testing.T) {
 
 	// The old crossfade should be cancelled
 	if engine.ActiveFadeCount() != 0 {
-		t.Errorf("Instant fade should cancel existing crossfades, but %d still active", engine.ActiveFadeCount())
+		t.Fatalf("Instant fade should cancel existing crossfades, but %d still active", engine.ActiveFadeCount())
 	}
 
 	// Values should be the instant fade targets
@@ -135,15 +135,17 @@ func TestFadeToLook_InstantFadeCancelsExistingCrossfade(t *testing.T) {
 		t.Errorf("Channel 1:2 = %d, want 100", v)
 	}
 
-	// Wait for a few engine ticks to ensure the old crossfade doesn't overwrite values
-	time.Sleep(100 * time.Millisecond)
-
-	// Values should still be the instant fade targets (not reverted by old crossfade)
-	if v := dmxService.GetChannelValue(1, 1); v != 200 {
-		t.Errorf("After engine ticks, Channel 1:1 = %d, want 200 (old crossfade overwrote)", v)
-	}
-	if v := dmxService.GetChannelValue(1, 2); v != 100 {
-		t.Errorf("After engine ticks, Channel 1:2 = %d, want 100 (old crossfade overwrote)", v)
+	// For a bounded window, repeatedly assert that the old crossfade does not overwrite values.
+	// This avoids relying on a single fixed sleep, which can be flaky under slow CI schedulers.
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if v := dmxService.GetChannelValue(1, 1); v != 200 {
+			t.Fatalf("During polling window, Channel 1:1 = %d, want 200 (old crossfade overwrote)", v)
+		}
+		if v := dmxService.GetChannelValue(1, 2); v != 100 {
+			t.Fatalf("During polling window, Channel 1:2 = %d, want 100 (old crossfade overwrote)", v)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
