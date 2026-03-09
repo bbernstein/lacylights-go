@@ -93,6 +93,60 @@ func TestFadeToLook_InstantFade(t *testing.T) {
 	}
 }
 
+// TestFadeToLook_InstantFadeCancelsExistingCrossfade tests that an instant fade (duration=0)
+// cancels any in-progress crossfade so the old fade doesn't overwrite the instant values.
+// This is the "hurry button" scenario: GoToCue with fadeInTime=0 during an active fade.
+func TestFadeToLook_InstantFadeCancelsExistingCrossfade(t *testing.T) {
+	engine, dmxService := createTestModulatorEngine()
+	_ = engine.Start()
+	defer func() { _ = engine.Stop() }()
+
+	// Set initial channel values
+	dmxService.SetChannelValue(1, 1, 0)
+	dmxService.SetChannelValue(1, 2, 255)
+
+	// Start a long crossfade (10 seconds so it's definitely still in progress)
+	engine.FadeToLook([]LookChannel{
+		{Universe: 1, Channel: 1, Value: 255},
+		{Universe: 1, Channel: 2, Value: 0},
+	}, 10*time.Second, "slow-fade", EasingLinear)
+
+	// Verify crossfade is active
+	if engine.ActiveFadeCount() != 1 {
+		t.Fatalf("Expected 1 active crossfade, got %d", engine.ActiveFadeCount())
+	}
+
+	// Now do an instant fade (the "hurry" button) to different target values
+	engine.FadeToLook([]LookChannel{
+		{Universe: 1, Channel: 1, Value: 200},
+		{Universe: 1, Channel: 2, Value: 100},
+	}, 0, "hurry-fade", EasingLinear)
+
+	// The old crossfade should be cancelled
+	if engine.ActiveFadeCount() != 0 {
+		t.Errorf("Instant fade should cancel existing crossfades, but %d still active", engine.ActiveFadeCount())
+	}
+
+	// Values should be the instant fade targets
+	if v := dmxService.GetChannelValue(1, 1); v != 200 {
+		t.Errorf("Channel 1:1 = %d, want 200", v)
+	}
+	if v := dmxService.GetChannelValue(1, 2); v != 100 {
+		t.Errorf("Channel 1:2 = %d, want 100", v)
+	}
+
+	// Wait for a few engine ticks to ensure the old crossfade doesn't overwrite values
+	time.Sleep(100 * time.Millisecond)
+
+	// Values should still be the instant fade targets (not reverted by old crossfade)
+	if v := dmxService.GetChannelValue(1, 1); v != 200 {
+		t.Errorf("After engine ticks, Channel 1:1 = %d, want 200 (old crossfade overwrote)", v)
+	}
+	if v := dmxService.GetChannelValue(1, 2); v != 100 {
+		t.Errorf("After engine ticks, Channel 1:2 = %d, want 100 (old crossfade overwrote)", v)
+	}
+}
+
 // TestFadeToLook_CreatesCrossfadeEffect tests that a positive duration creates a crossfade effect.
 func TestFadeToLook_CreatesCrossfadeEffect(t *testing.T) {
 	engine, dmxService := createTestModulatorEngine()
