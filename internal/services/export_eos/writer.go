@@ -24,3 +24,8 @@ func newWriter(opts WriterOptions) *writer {
 func (w *writer) line(s string)  { w.buf.WriteString(s); w.buf.WriteByte('\n') }
 func (w *writer) blank()         { w.buf.WriteByte('\n') }
 func (w *writer) String() string { return w.buf.String() }
+
+func (w *writer) commentBanner(s string) {
+	w.line("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+	w.line("! " + s)
+}

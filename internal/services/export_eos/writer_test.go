@@ -69,6 +69,23 @@ func TestWriter_GroupAndUText(t *testing.T) {
 	}
 }
 
+func TestWriter_SidecarSection(t *testing.T) {
+	w := newWriter(WriterOptions{Title: "X"})
+	if err := w.writeSidecar(SidecarOut{
+		Version:    1,
+		LookBoards: nil,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got := w.String()
+	if !strings.Contains(got, "$$ LACYLIGHTS:version 1\n") {
+		t.Errorf("missing sidecar version line:\n%s", got)
+	}
+	if !strings.Contains(got, "! LacyLights round-trip metadata") {
+		t.Errorf("missing sidecar comment banner:\n%s", got)
+	}
+}
+
 func TestWriter_PatchAndPersonality(t *testing.T) {
 	w := newWriter(WriterOptions{Title: "T"})
 	w.writePersonality(PersonalityIn{
