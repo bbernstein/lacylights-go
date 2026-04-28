@@ -3,11 +3,13 @@ package importeos
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+
+	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 )
 
 // ErrNotImplemented is returned by methods that have not been implemented yet.
-// It will be replaced as later tasks add functionality.
 var ErrNotImplemented = errors.New("import_eos: not implemented")
 
 // Result is returned from a successful import.
@@ -32,16 +34,42 @@ type Options struct {
 
 // Service handles Eos ASCII import operations.
 type Service struct {
-	// Repos and dependencies will be injected in Task 12 when the mapper lands.
+	projectRepo   *repositories.ProjectRepository
+	fixtureRepo   *repositories.FixtureRepository
+	lookRepo      *repositories.LookRepository
+	cueListRepo   *repositories.CueListRepository
+	cueRepo       *repositories.CueRepository
+	lookBoardRepo *repositories.LookBoardRepository
 }
 
-// NewService constructs an empty Service. Wiring is added in Task 12.
+// NewService constructs an empty Service. Use NewServiceWithDeps in production.
 func NewService() *Service {
 	return &Service{}
 }
 
+// NewServiceWithDeps wires the service to repositories.
+func NewServiceWithDeps(
+	p *repositories.ProjectRepository,
+	f *repositories.FixtureRepository,
+	l *repositories.LookRepository,
+	cl *repositories.CueListRepository,
+	c *repositories.CueRepository,
+	lb *repositories.LookBoardRepository,
+) *Service {
+	return &Service{p, f, l, cl, c, lb}
+}
+
 // Import reads an Eos ASCII showfile from r and applies it to the database.
-// Stub: returns ErrNotImplemented until later tasks land the parser and mapper.
 func (s *Service) Import(ctx context.Context, r io.Reader, opts Options) (*Result, error) {
-	return nil, ErrNotImplemented
+	if s.projectRepo == nil {
+		return nil, fmt.Errorf("import_eos: service not wired with repositories")
+	}
+	show, parseWarn, err := Parse(r)
+	if err != nil {
+		return nil, err
+	}
+	collector := parseWarn
+	sidecar := ReadSidecar(show.SidecarLines, collector)
+	mapper := NewMapper(s.projectRepo, s.fixtureRepo, s.lookRepo, s.cueListRepo, s.cueRepo, s.lookBoardRepo)
+	return mapper.Apply(ctx, show, sidecar, opts, collector)
 }

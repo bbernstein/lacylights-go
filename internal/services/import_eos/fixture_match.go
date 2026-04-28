@@ -3,10 +3,12 @@ package importeos
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
+	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 )
 
@@ -149,4 +151,78 @@ func fingerprint(paramIDs []int) string {
 		parts[i] = strconv.Itoa(id)
 	}
 	return strings.Join(parts, ",")
+}
+
+// repoAdapter wraps a *repositories.FixtureRepository to satisfy MatcherRepo.
+type repoAdapter struct {
+	repo *repositories.FixtureRepository
+}
+
+func newRepoAdapter(repo *repositories.FixtureRepository) MatcherRepo {
+	return &repoAdapter{repo: repo}
+}
+
+func (a *repoAdapter) FindMatchingDefinition(ctx context.Context, mfg, model string, paramIDs []int) (*FakeDef, error) {
+	if a.repo == nil {
+		return nil, nil
+	}
+	def, err := a.repo.FindDefinitionByManufacturerModel(ctx, mfg, model)
+	if err != nil || def == nil {
+		return nil, err
+	}
+	channels, err := a.repo.GetDefinitionChannels(ctx, def.ID)
+	if err != nil {
+		return nil, err
+	}
+	ids := channelDefsToParamIDs(channels)
+	if !slices.Equal(ids, paramIDs) {
+		return nil, nil
+	}
+	return &FakeDef{
+		ID:              def.ID,
+		Manufacturer:    def.Manufacturer,
+		Model:           def.Model,
+		ChannelParamIDs: ids,
+	}, nil
+}
+
+// channelDefsToParamIDs derives a representative paramID slice from existing
+// channel definitions by mapping ChannelType strings back. Used for fingerprint
+// equality comparison only.
+func channelDefsToParamIDs(channels []models.ChannelDefinition) []int {
+	out := make([]int, len(channels))
+	for i, ch := range channels {
+		out[i] = paramIDForChannelType(ch.Type)
+	}
+	return out
+}
+
+func paramIDForChannelType(t string) int {
+	switch generated.ChannelType(t) {
+	case generated.ChannelTypeIntensity:
+		return 1
+	case generated.ChannelTypePan:
+		return 2
+	case generated.ChannelTypeTilt:
+		return 3
+	case generated.ChannelTypeRed:
+		return 12
+	case generated.ChannelTypeGreen:
+		return 13
+	case generated.ChannelTypeBlue:
+		return 14
+	case generated.ChannelTypeAmber:
+		return 48
+	case generated.ChannelTypeWhite:
+		return 51
+	case generated.ChannelTypeColdWhite:
+		return 52
+	case generated.ChannelTypeWarmWhite:
+		return 53
+	case generated.ChannelTypeZoom:
+		return 79
+	case generated.ChannelTypeStrobe:
+		return 204
+	}
+	return 0
 }
