@@ -110,6 +110,18 @@ func (p *parser) handleTopLevel(line *Line) error {
 		return p.parsePalette(&p.show.Presets)
 	case "$Group":
 		return p.parseGroup()
+	case "$Effect":
+		return p.skipBlockWithWarning(WarnEffectSkipped, "EOS effect not modeled")
+	case "$FaderDef", "$Sub":
+		return p.skipBlockWithWarning(WarnSubmasterSkipped, "EOS submaster/fader not modeled")
+	case "$Partition":
+		return p.skipBlockWithWarning(WarnPartitionSkipped, "EOS partition not modeled")
+	case "$MagicSheet":
+		return p.skipBlockWithWarning(WarnMagicSheetSkipped, "EOS magic sheet not modeled")
+	case "$Action":
+		return p.skipBlockWithWarning(WarnActionSkipped, "EOS action trigger not modeled")
+	case "$Curve":
+		return p.skipBlockWithWarning(WarnCurveSkipped, "EOS curve not modeled")
 	default:
 		// All other top-level directives become "skipped" until later tasks teach
 		// the parser to handle them. We emit UNKNOWN_DIRECTIVE only for $-prefixed
@@ -521,4 +533,15 @@ func NormalizeAddress(raw string) (universe int, address int, err error) {
 	universe = (flat-1)/512 + 1
 	address = (flat-1)%512 + 1
 	return universe, address, nil
+}
+
+func (p *parser) skipBlockWithWarning(code WarningCode, msg string) error {
+	line := p.cur()
+	p.warn.Add(code, SeverityInfo, msg,
+		map[string]string{"line": strconv.Itoa(line.Lineno), "directive": line.Directive})
+	p.advance()
+	for p.cur() != nil && p.cur().Indent > 0 {
+		p.advance()
+	}
+	return nil
 }

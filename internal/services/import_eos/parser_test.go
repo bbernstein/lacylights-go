@@ -195,6 +195,35 @@ func TestNormalizeAddress(t *testing.T) {
 	}
 }
 
+func TestParse_SoftWarnings(t *testing.T) {
+	f, err := os.Open(filepath.Join("testdata", "unknown_directive.asc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	_, warn, err := Parse(f)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	codes := map[WarningCode]int{}
+	for _, w := range warn.All() {
+		codes[w.Code]++
+	}
+	want := map[WarningCode]int{
+		WarnEffectSkipped:     1,
+		WarnSubmasterSkipped:  1,
+		WarnPartitionSkipped:  1,
+		WarnMagicSheetSkipped: 1,
+		WarnActionSkipped:     1,
+		WarnCurveSkipped:      1,
+	}
+	for code, n := range want {
+		if codes[code] != n {
+			t.Errorf("warning code %s: got %d, want %d (all=%v)", code, codes[code], n, codes)
+		}
+	}
+}
+
 func TestParse_UTextOverridesLabel(t *testing.T) {
 	show := parseFixture(t, "utext_unicode.asc")
 	if show.Patch[0].UnicodeText == nil || *show.Patch[0].UnicodeText != "Café" {
