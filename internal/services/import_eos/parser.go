@@ -91,6 +91,8 @@ func (p *parser) handleTopLevel(line *Line) error {
 		return p.parseCueList()
 	case "Cue":
 		return p.parseCue()
+	case "$Cue":
+		return p.parseCue()
 	default:
 		// All other top-level directives become "skipped" until later tasks teach
 		// the parser to handle them. We emit UNKNOWN_DIRECTIVE only for $-prefixed
@@ -254,6 +256,12 @@ func (p *parser) parseCue() error {
 		return &ParseError{Lineno: line.Lineno, Msg: "Cue listNum not an integer"}
 	}
 	cue := Cue{Number: line.Fields[0]}
+	if slash := strings.IndexByte(cue.Number, '/'); slash >= 0 {
+		if part, err := strconv.Atoi(cue.Number[slash+1:]); err == nil {
+			cue.Part = part
+			cue.Number = cue.Number[:slash]
+		}
+	}
 	p.advance()
 	for p.cur() != nil && p.cur().Indent > 0 {
 		sub := p.cur()

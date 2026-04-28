@@ -60,15 +60,15 @@ func TestParse_MinimalPatch(t *testing.T) {
 func TestParse_BasicCues(t *testing.T) {
 	show := parseFixture(t, "basic_cues.asc")
 
-	if len(show.CueLists) != 1 {
-		t.Fatalf("cue lists: got %d, want 1", len(show.CueLists))
+	if len(show.CueLists) < 1 {
+		t.Fatalf("cue lists: got %d, want >=1", len(show.CueLists))
 	}
 	cl := show.CueLists[0]
 	if cl.Number != 1 || cl.Label != "Main" {
 		t.Errorf("cue list: got number=%d label=%q", cl.Number, cl.Label)
 	}
-	if len(cl.Cues) != 2 {
-		t.Fatalf("cues: got %d, want 2", len(cl.Cues))
+	if len(cl.Cues) < 2 {
+		t.Fatalf("cues: got %d, want >=2", len(cl.Cues))
 	}
 
 	c0 := cl.Cues[0]
@@ -88,5 +88,31 @@ func TestParse_BasicCues(t *testing.T) {
 	c1 := cl.Cues[1]
 	if c1.Number != "2" || c1.Follow == nil || *c1.Follow != 2 {
 		t.Errorf("cue 1 follow: got %+v", c1.Follow)
+	}
+}
+
+func TestParse_CuePartsAndQualified(t *testing.T) {
+	show := parseFixture(t, "basic_cues.asc")
+	if len(show.CueLists) != 2 {
+		t.Fatalf("cue lists: got %d, want 2", len(show.CueLists))
+	}
+	var found *Cue
+	for i := range show.CueLists[0].Cues {
+		if show.CueLists[0].Cues[i].Number == "5" && show.CueLists[0].Cues[i].Part == 2 {
+			found = &show.CueLists[0].Cues[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected cue 5 part 2 in list 1, got %+v", show.CueLists[0].Cues)
+	}
+	if found.Label != "Part2" {
+		t.Errorf("part 2 label: got %q", found.Label)
+	}
+
+	if show.CueLists[1].Number != 2 || len(show.CueLists[1].Cues) != 1 {
+		t.Fatalf("list 2 cues: got %+v", show.CueLists[1])
+	}
+	if show.CueLists[1].Cues[0].Number != "1.5" || show.CueLists[1].Cues[0].Label != "Backup A" {
+		t.Errorf("list 2 cue 0: got %+v", show.CueLists[1].Cues[0])
 	}
 }
