@@ -59,10 +59,33 @@ func NewServiceWithDeps(
 	return &Service{p, f, l, cl, c, lb}
 }
 
+// validateDependencies ensures all required repositories are wired.
+func (s *Service) validateDependencies() error {
+	if s.projectRepo == nil {
+		return fmt.Errorf("import_eos: service not wired with project repository")
+	}
+	if s.fixtureRepo == nil {
+		return fmt.Errorf("import_eos: service not wired with fixture repository")
+	}
+	if s.lookRepo == nil {
+		return fmt.Errorf("import_eos: service not wired with look repository")
+	}
+	if s.cueListRepo == nil {
+		return fmt.Errorf("import_eos: service not wired with cue list repository")
+	}
+	if s.cueRepo == nil {
+		return fmt.Errorf("import_eos: service not wired with cue repository")
+	}
+	if s.lookBoardRepo == nil {
+		return fmt.Errorf("import_eos: service not wired with look board repository")
+	}
+	return nil
+}
+
 // Import reads an Eos ASCII showfile from r and applies it to the database.
 func (s *Service) Import(ctx context.Context, r io.Reader, opts Options) (*Result, error) {
-	if s.projectRepo == nil {
-		return nil, fmt.Errorf("import_eos: service not wired with repositories")
+	if err := s.validateDependencies(); err != nil {
+		return nil, err
 	}
 	show, parseWarn, err := Parse(r)
 	if err != nil {

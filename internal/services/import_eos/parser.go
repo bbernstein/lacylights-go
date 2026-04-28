@@ -380,7 +380,9 @@ func parseChanMoves(fields []string) []ChanMove {
 }
 
 // parseLevel decodes EOS level encoding: H<hex> for hex, or decimal otherwise.
-// Returns 0..255.
+// Returns a value in the range 0..255; returns an error for out-of-range or
+// otherwise unparseable inputs so callers do not silently wrap when the value
+// is later cast to byte for DMX output.
 func parseLevel(raw string) (int, error) {
 	if len(raw) == 0 {
 		return 0, fmt.Errorf("empty level")
@@ -390,11 +392,17 @@ func parseLevel(raw string) (int, error) {
 		if err != nil {
 			return 0, err
 		}
+		if v < 0 || v > 255 {
+			return 0, fmt.Errorf("level out of range: %d", v)
+		}
 		return int(v), nil
 	}
 	v, err := strconv.Atoi(raw)
 	if err != nil {
 		return 0, err
+	}
+	if v < 0 || v > 255 {
+		return 0, fmt.Errorf("level out of range: %d", v)
 	}
 	return v, nil
 }

@@ -143,6 +143,9 @@ func (m *Mapper) resolveProject(ctx context.Context, show *Show, opts Options) (
 		name = "Imported Eos Show"
 	}
 	p := &models.Project{Name: name}
+	if opts.GroupID != nil {
+		p.GroupID = opts.GroupID
+	}
 	if err := m.projectRepo.Create(ctx, p); err != nil {
 		return "", err
 	}

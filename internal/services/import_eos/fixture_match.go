@@ -89,8 +89,17 @@ func (m *Matcher) synthesize(pers Personality) (*models.FixtureDefinition, []mod
 	}
 	channels := make([]models.ChannelDefinition, len(pers.Channels))
 	for i, pc := range pers.Channels {
+		// Eos `$$PersChan` offsets are 1-based DMX offsets; LacyLights treats
+		// channel offsets as 0-based (playback computes StartChannel + Offset).
+		// Convert here so synthesized fixtures play back on the correct DMX
+		// addresses. Clamp to >= 0 to defensively handle malformed input
+		// (Offset == 0 in Eos is invalid; treat as 0-based 0).
+		offset := pc.Offset - 1
+		if offset < 0 {
+			offset = 0
+		}
 		channels[i] = models.ChannelDefinition{
-			Offset:       pc.Offset,
+			Offset:       offset,
 			Name:         channelNameFor(pc.ParamID, m.table),
 			Type:         string(m.table.ChannelType(pc.ParamID)),
 			MinValue:     0,

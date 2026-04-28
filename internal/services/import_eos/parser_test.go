@@ -247,3 +247,40 @@ func TestParse_UTextOverridesLabel(t *testing.T) {
 		t.Errorf("cue unicode: got %v", show.CueLists[0].Cues[0].UnicodeText)
 	}
 }
+
+func TestParseLevel_RangeChecks(t *testing.T) {
+	cases := []struct {
+		name    string
+		raw     string
+		want    int
+		wantErr bool
+	}{
+		{"decimal_min", "0", 0, false},
+		{"decimal_max", "255", 255, false},
+		{"decimal_over", "256", 0, true},
+		{"decimal_negative", "-1", 0, true},
+		{"hex_min", "H0", 0, false},
+		{"hex_max", "HFF", 255, false},
+		{"hex_over", "H100", 0, true},
+		{"hex_lower", "hff", 255, false},
+		{"empty", "", 0, true},
+		{"garbage", "abc", 0, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := parseLevel(c.raw)
+			if c.wantErr {
+				if err == nil {
+					t.Fatalf("parseLevel(%q): expected error, got %d", c.raw, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseLevel(%q): unexpected error: %v", c.raw, err)
+			}
+			if got != c.want {
+				t.Errorf("parseLevel(%q) = %d, want %d", c.raw, got, c.want)
+			}
+		})
+	}
+}

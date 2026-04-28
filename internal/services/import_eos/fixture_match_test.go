@@ -63,3 +63,49 @@ func TestMatcher_Synthesizes(t *testing.T) {
 		t.Errorf("warnings: got %+v", warns)
 	}
 }
+
+func TestMatcher_SynthesizeNormalizesOffsetsToZeroBased(t *testing.T) {
+	// Eos `$$PersChan` offsets are 1-based DMX offsets; LacyLights treats
+	// them as 0-based (playback computes StartChannel + Offset). Synthesizing
+	// must subtract one so imported fixtures play on the correct addresses.
+	m := NewMatcher(&fakeFixtureRepo{}, NewParamTable([]ParamType{
+		{ID: 1, LongName: "Intens"},
+		{ID: 12, LongName: "Red"},
+	}))
+	pers := Personality{
+		Manuf: "Acme", Model: "Dimmer",
+		Channels: []PersChannel{
+			{ParamID: 1, Offset: 1},  // Eos channel 1 -> LL offset 0
+			{ParamID: 12, Offset: 3}, // Eos channel 3 -> LL offset 2
+		},
+	}
+	res, _, err := m.Match(context.Background(), pers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.SynthesizedChannels[0].Offset; got != 0 {
+		t.Errorf("first channel offset: got %d, want 0", got)
+	}
+	if got := res.SynthesizedChannels[1].Offset; got != 2 {
+		t.Errorf("second channel offset: got %d, want 2", got)
+	}
+}
+
+func TestMatcher_SynthesizeClampsZeroOffset(t *testing.T) {
+	// Defensive: malformed Eos input may have Offset == 0 (invalid). Clamp to
+	// 0 rather than producing a negative offset.
+	m := NewMatcher(&fakeFixtureRepo{}, NewParamTable([]ParamType{
+		{ID: 1, LongName: "Intens"},
+	}))
+	pers := Personality{
+		Manuf: "Acme", Model: "Bad",
+		Channels: []PersChannel{{ParamID: 1, Offset: 0}},
+	}
+	res, _, err := m.Match(context.Background(), pers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.SynthesizedChannels[0].Offset; got != 0 {
+		t.Errorf("clamped offset: got %d, want 0", got)
+	}
+}
