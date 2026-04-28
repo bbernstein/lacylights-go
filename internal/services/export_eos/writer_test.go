@@ -69,6 +69,27 @@ func TestWriter_GroupAndUText(t *testing.T) {
 	}
 }
 
+func TestWriter_CueListWrapsCues(t *testing.T) {
+	w := newWriter(WriterOptions{Title: "X"})
+	w.writeCueList(CueListOut{
+		Number: 1, Label: "Main",
+		Cues: []CueOut{
+			{Number: "1", Label: "Open", UpFade: 5},
+		},
+	})
+	got := w.String()
+	for _, want := range []string{
+		"$CueList 1\n",
+		"   Text Main\n",
+		"Cue 1 1\n",
+		"   Text Open\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}
+
 func TestWriter_SidecarSection(t *testing.T) {
 	w := newWriter(WriterOptions{Title: "X"})
 	if err := w.writeSidecar(SidecarOut{
