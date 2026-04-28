@@ -56,3 +56,37 @@ func TestParse_MinimalPatch(t *testing.T) {
 		t.Errorf("patch[1] label: got %q", show.Patch[1].Label)
 	}
 }
+
+func TestParse_BasicCues(t *testing.T) {
+	show := parseFixture(t, "basic_cues.asc")
+
+	if len(show.CueLists) != 1 {
+		t.Fatalf("cue lists: got %d, want 1", len(show.CueLists))
+	}
+	cl := show.CueLists[0]
+	if cl.Number != 1 || cl.Label != "Main" {
+		t.Errorf("cue list: got number=%d label=%q", cl.Number, cl.Label)
+	}
+	if len(cl.Cues) != 2 {
+		t.Fatalf("cues: got %d, want 2", len(cl.Cues))
+	}
+
+	c0 := cl.Cues[0]
+	if c0.Number != "1" || c0.Label != "Open" || c0.UpFade != 5 || c0.DownFade != 5 {
+		t.Errorf("cue 0: got %+v", c0)
+	}
+	if len(c0.ChanMoves) != 2 {
+		t.Fatalf("cue 0 chan moves: got %d", len(c0.ChanMoves))
+	}
+	if c0.ChanMoves[0].Channel != 1 || c0.ChanMoves[0].Value != 0xFF {
+		t.Errorf("cue 0 chan move 0: got %+v", c0.ChanMoves[0])
+	}
+	if c0.ChanMoves[1].Channel != 2 || c0.ChanMoves[1].Value != 0x80 {
+		t.Errorf("cue 0 chan move 1: got %+v", c0.ChanMoves[1])
+	}
+
+	c1 := cl.Cues[1]
+	if c1.Number != "2" || c1.Follow == nil || *c1.Follow != 2 {
+		t.Errorf("cue 1 follow: got %+v", c1.Follow)
+	}
+}

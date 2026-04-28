@@ -87,6 +87,10 @@ func (p *parser) handleTopLevel(line *Line) error {
 		return p.parsePersonality()
 	case "$Patch":
 		return p.parsePatch()
+	case "$CueList":
+		return p.parseCueList()
+	case "Cue":
+		return p.parseCue()
 	default:
 		// All other top-level directives become "skipped" until later tasks teach
 		// the parser to handle them. We emit UNKNOWN_DIRECTIVE only for $-prefixed
@@ -216,4 +220,155 @@ func (p *parser) parsePatch() error {
 	}
 	p.show.Patch = append(p.show.Patch, pe)
 	return nil
+}
+
+func (p *parser) parseCueList() error {
+	line := p.cur()
+	if len(line.Fields) < 1 {
+		return &ParseError{Lineno: line.Lineno, Msg: "$CueList needs number"}
+	}
+	num, err := strconv.Atoi(line.Fields[0])
+	if err != nil {
+		return &ParseError{Lineno: line.Lineno, Msg: "$CueList number not an integer"}
+	}
+	cl := CueList{Number: num}
+	p.advance()
+	for p.cur() != nil && p.cur().Indent > 0 {
+		sub := p.cur()
+		if sub.Directive == "Text" {
+			cl.Label = strings.Join(sub.Fields, " ")
+		}
+		p.advance()
+	}
+	p.show.CueLists = append(p.show.CueLists, cl)
+	return nil
+}
+
+func (p *parser) parseCue() error {
+	line := p.cur()
+	if len(line.Fields) < 2 {
+		return &ParseError{Lineno: line.Lineno, Msg: "Cue needs Number ListNum"}
+	}
+	listNum, err := strconv.Atoi(line.Fields[1])
+	if err != nil {
+		return &ParseError{Lineno: line.Lineno, Msg: "Cue listNum not an integer"}
+	}
+	cue := Cue{Number: line.Fields[0]}
+	p.advance()
+	for p.cur() != nil && p.cur().Indent > 0 {
+		sub := p.cur()
+		switch sub.Directive {
+		case "Text":
+			cue.Label = strings.Join(sub.Fields, " ")
+		case "Up":
+			if len(sub.Fields) >= 1 {
+				cue.UpFade, _ = strconv.ParseFloat(sub.Fields[0], 64)
+			}
+		case "Down":
+			if len(sub.Fields) >= 1 {
+				cue.DownFade, _ = strconv.ParseFloat(sub.Fields[0], 64)
+			}
+		case "$$Follow":
+			if len(sub.Fields) >= 1 {
+				if v, err := strconv.ParseFloat(sub.Fields[0], 64); err == nil {
+					cue.Follow = &v
+				}
+			}
+		case "$$Hang":
+			if len(sub.Fields) >= 1 {
+				if v, err := strconv.ParseFloat(sub.Fields[0], 64); err == nil {
+					cue.Hang = &v
+				}
+			}
+		case "$$Block":
+			cue.Block = true
+		case "$$IntBlock":
+			cue.IntBlock = true
+		case "$$ChanMove":
+			cue.ChanMoves = append(cue.ChanMoves, parseChanMoves(sub.Fields)...)
+		case "$$Param":
+			if pm, ok := parseParamMove(sub.Fields); ok {
+				cue.ParamMoves = append(cue.ParamMoves, pm)
+			}
+		}
+		p.advance()
+	}
+	for i := range p.show.CueLists {
+		if p.show.CueLists[i].Number == listNum {
+			p.show.CueLists[i].Cues = append(p.show.CueLists[i].Cues, cue)
+			return nil
+		}
+	}
+	p.show.CueLists = append(p.show.CueLists, CueList{Number: listNum, Cues: []Cue{cue}})
+	return nil
+}
+
+// parseChanMoves accepts tokens like "1@HFF" or "12@H00" and returns ChanMove entries.
+func parseChanMoves(fields []string) []ChanMove {
+	var out []ChanMove
+	for _, f := range fields {
+		at := strings.IndexByte(f, '@')
+		if at < 0 {
+			continue
+		}
+		ch, err := strconv.Atoi(f[:at])
+		if err != nil {
+			continue
+		}
+		raw := f[at+1:]
+		val, err := parseLevel(raw)
+		if err != nil {
+			continue
+		}
+		out = append(out, ChanMove{Channel: ch, Value: val})
+	}
+	return out
+}
+
+// parseLevel decodes EOS level encoding: H<hex> for hex, or decimal otherwise.
+// Returns 0..255.
+func parseLevel(raw string) (int, error) {
+	if len(raw) == 0 {
+		return 0, fmt.Errorf("empty level")
+	}
+	if raw[0] == 'H' || raw[0] == 'h' {
+		v, err := strconv.ParseInt(raw[1:], 16, 32)
+		if err != nil {
+			return 0, err
+		}
+		return int(v), nil
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+// parseParamMove parses tokens like "41 1@0 12@255 13@201".
+func parseParamMove(fields []string) (ParamMove, bool) {
+	if len(fields) < 2 {
+		return ParamMove{}, false
+	}
+	ch, err := strconv.Atoi(fields[0])
+	if err != nil {
+		return ParamMove{}, false
+	}
+	pm := ParamMove{Channel: ch}
+	for _, f := range fields[1:] {
+		at := strings.IndexByte(f, '@')
+		if at < 0 {
+			continue
+		}
+		paramID, err := strconv.Atoi(f[:at])
+		if err != nil {
+			continue
+		}
+		val, err := parseLevel(f[at+1:])
+		if err != nil {
+			continue
+		}
+		pm.Values = append(pm.Values, ParamValue{ParamID: paramID, Value: val})
+	}
+	return pm, true
 }
