@@ -2,8 +2,13 @@ package importeos
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/bbernstein/lacylights-go/internal/database/models"
 )
 
 func TestMapper_MinimalPatchCreatesProjectAndFixtures(t *testing.T) {
@@ -44,5 +49,96 @@ $Patch 2 2 9001
 	}
 	if res.ProjectID == "" {
 		t.Errorf("expected project ID")
+	}
+}
+
+func openFixtureFile(t *testing.T, name string) *os.File {
+	t.Helper()
+	f, err := os.Open(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatalf("open fixture %s: %v", name, err)
+	}
+	return f
+}
+
+func TestMapper_PalettesBecomeLooksInDedicatedCueLists(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+
+	f := openFixtureFile(t, "palettes_color_focus.asc")
+	defer func() { _ = f.Close() }()
+
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr("Pal")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lists, err := deps.cueListRepo.FindByProjectID(context.Background(), res.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]int{}
+	for _, l := range lists {
+		names[l.Name]++
+	}
+	if names["Color Palettes"] != 1 || names["Focus Palettes"] != 1 {
+		t.Errorf("missing palette cue lists, got %v", names)
+	}
+}
+
+func TestMapper_CuesProduceTrackedSnapshots(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+
+	f := openFixtureFile(t, "tracking.asc")
+	defer func() { _ = f.Close() }()
+
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr("Track")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lists, err := deps.cueListRepo.FindByProjectID(context.Background(), res.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var trackList *models.CueList
+	for i := range lists {
+		if lists[i].Name == "Track" {
+			trackList = &lists[i]
+		}
+	}
+	if trackList == nil {
+		t.Fatalf("expected cue list 'Track', got %+v", lists)
+	}
+	cues, err := deps.cueListRepo.GetCues(context.Background(), trackList.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cues) != 3 {
+		t.Fatalf("cues: got %d, want 3", len(cues))
+	}
+	// Cue 2 should have channels 1,2,3 at full (1,2 tracked, 3 newly moved).
+	cue2 := cues[1]
+	values, err := deps.lookRepo.GetFixtureValues(context.Background(), cue2.LookID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fullCount := 0
+	for _, fv := range values {
+		var chans []models.ChannelValue
+		if err := json.Unmarshal([]byte(fv.Channels), &chans); err != nil {
+			t.Fatalf("unmarshal channels: %v", err)
+		}
+		for _, cv := range chans {
+			if cv.Value == 0xFF {
+				fullCount++
+			}
+		}
+	}
+	if fullCount != 3 {
+		t.Errorf("expected 3 full intensities in cue 2, got %d", fullCount)
 	}
 }

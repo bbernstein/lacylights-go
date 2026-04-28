@@ -2,10 +2,13 @@ package importeos
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
+	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 )
 
 // Mapper applies a parsed Show + Sidecar to LacyLights repos.
@@ -156,23 +159,255 @@ func createInstanceChannelsFor(defChannels []models.ChannelDefinition) []models.
 	return out
 }
 
-// Stubs for sub-tasks 14a-14c.
-func (m *Mapper) applyPalettes(_ context.Context, _ string, _ *Show, _ map[int]string,
-	_ map[int]string, _ map[int][]models.ChannelDefinition, _ *ParamTable,
-	_ *int, _ *int) error {
+// instanceState holds the loaded fixture instance + its definition channels (for offset/type lookup).
+type instanceState struct {
+	instance *models.FixtureInstance
+	defChans []models.ChannelDefinition
+}
+
+// loadInstanceStates returns a map keyed by EOS channel number.
+func (m *Mapper) loadInstanceStates(ctx context.Context, projectID string,
+	eosChannelToInstanceID map[int]string,
+	persToChannels map[int][]models.ChannelDefinition,
+	patch []PatchEntry,
+) (map[int]*instanceState, error) {
+	out := make(map[int]*instanceState, len(eosChannelToInstanceID))
+	persByChannel := make(map[int]int, len(patch))
+	for _, pe := range patch {
+		persByChannel[pe.Channel] = pe.PersonalityID
+	}
+	for eosCh, instID := range eosChannelToInstanceID {
+		fi, err := m.fixtureRepo.FindByID(ctx, instID)
+		if err != nil {
+			return nil, err
+		}
+		if fi == nil {
+			continue
+		}
+		out[eosCh] = &instanceState{
+			instance: fi,
+			defChans: persToChannels[persByChannel[eosCh]],
+		}
+	}
+	return out, nil
+}
+
+// findOffsetForType returns the channel offset within an instance whose type matches ct.
+// Returns -1 if not found.
+func findOffsetForType(defChans []models.ChannelDefinition, ct generated.ChannelType) int {
+	want := string(ct)
+	for _, c := range defChans {
+		if c.Type == want {
+			return c.Offset
+		}
+	}
+	return -1
+}
+
+// buildLookValues converts EOS chan moves and param moves to FixtureValues for a Look.
+func buildLookValues(
+	chanLevels map[int]int,
+	paramLevels map[int]map[int]int,
+	states map[int]*instanceState,
+	table *ParamTable,
+) []models.FixtureValue {
+	type fvAcc struct {
+		fixtureID string
+		channels  []models.ChannelValue
+	}
+	byInstance := map[string]*fvAcc{}
+	add := func(instID string, cv models.ChannelValue) {
+		acc, ok := byInstance[instID]
+		if !ok {
+			acc = &fvAcc{fixtureID: instID}
+			byInstance[instID] = acc
+		}
+		acc.channels = append(acc.channels, cv)
+	}
+	for eosCh, level := range chanLevels {
+		st := states[eosCh]
+		if st == nil {
+			continue
+		}
+		offset := findOffsetForType(st.defChans, generated.ChannelTypeIntensity)
+		if offset < 0 {
+			continue
+		}
+		add(st.instance.ID, models.ChannelValue{Offset: offset, Value: level})
+	}
+	for eosCh, params := range paramLevels {
+		st := states[eosCh]
+		if st == nil {
+			continue
+		}
+		for paramID, raw := range params {
+			ct := table.ChannelType(paramID)
+			offset := findOffsetForType(st.defChans, ct)
+			if offset < 0 {
+				continue
+			}
+			add(st.instance.ID, models.ChannelValue{Offset: offset, Value: raw})
+		}
+	}
+	out := make([]models.FixtureValue, 0, len(byInstance))
+	for _, acc := range byInstance {
+		channelsJSON, _ := json.Marshal(acc.channels)
+		out = append(out, models.FixtureValue{
+			FixtureID: acc.fixtureID,
+			Channels:  string(channelsJSON),
+		})
+	}
+	return out
+}
+
+func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show,
+	eosChannelToInstanceID map[int]string,
+	persToDefID map[int]string,
+	persToChannels map[int][]models.ChannelDefinition,
+	table *ParamTable,
+	looksCount, cueListsCount *int,
+) error {
+	_ = persToDefID
+	states, err := m.loadInstanceStates(ctx, projectID, eosChannelToInstanceID, persToChannels, show.Patch)
+	if err != nil {
+		return err
+	}
+	groups := []struct {
+		name     string
+		palettes []Palette
+	}{
+		{"Color Palettes", show.ColorPalettes},
+		{"Beam Palettes", show.BeamPalettes},
+		{"Focus Palettes", show.FocusPalettes},
+		{"Intensity Palettes", show.IntensPalettes},
+		{"Presets", show.Presets},
+	}
+	for _, g := range groups {
+		if len(g.palettes) == 0 {
+			continue
+		}
+		cl := &models.CueList{ProjectID: projectID, Name: g.name}
+		if err := m.cueListRepo.Create(ctx, cl); err != nil {
+			return fmt.Errorf("create palette cue list %s: %w", g.name, err)
+		}
+		*cueListsCount++
+		for i, pal := range g.palettes {
+			label := pal.Label
+			if pal.UnicodeText != nil {
+				label = *pal.UnicodeText
+			}
+			look := &models.Look{
+				ProjectID: projectID,
+				Name:      fmt.Sprintf("%s %s - %s", g.name, pal.Number, label),
+			}
+			chanLevels := map[int]int{}
+			for _, mv := range pal.ChanMoves {
+				chanLevels[mv.Channel] = mv.Value
+			}
+			paramLevels := map[int]map[int]int{}
+			for _, pm := range pal.ParamMoves {
+				ps, ok := paramLevels[pm.Channel]
+				if !ok {
+					ps = map[int]int{}
+					paramLevels[pm.Channel] = ps
+				}
+				for _, v := range pm.Values {
+					ps[v.ParamID] = v.Value
+				}
+			}
+			values := buildLookValues(chanLevels, paramLevels, states, table)
+			if err := m.lookRepo.CreateWithFixtureValues(ctx, look, values); err != nil {
+				return fmt.Errorf("create palette look: %w", err)
+			}
+			*looksCount++
+			cueNum, _ := strconv.ParseFloat(pal.Number, 64)
+			if cueNum == 0 {
+				cueNum = float64(i + 1)
+			}
+			cue := &models.Cue{
+				CueListID: cl.ID,
+				LookID:    look.ID,
+				Name:      look.Name,
+				CueNumber: cueNum,
+			}
+			if err := m.cueRepo.Create(ctx, cue); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
-func (m *Mapper) applyCues(_ context.Context, _ string, _ *Show, _ map[int]string,
-	_ map[int]string, _ map[int][]models.ChannelDefinition, _ *ParamTable,
-	_ *int, _ *int, _ *int) error {
+func (m *Mapper) applyCues(ctx context.Context, projectID string, show *Show,
+	eosChannelToInstanceID map[int]string,
+	persToDefID map[int]string,
+	persToChannels map[int][]models.ChannelDefinition,
+	table *ParamTable,
+	looksCount, cueListsCount, cuesCount *int,
+) error {
+	_ = persToDefID
+	states, err := m.loadInstanceStates(ctx, projectID, eosChannelToInstanceID, persToChannels, show.Patch)
+	if err != nil {
+		return err
+	}
+	tracker := NewTracker()
+	for _, cl := range show.CueLists {
+		listName := cl.Label
+		if listName == "" {
+			listName = fmt.Sprintf("Cue List %d", cl.Number)
+		}
+		dbList := &models.CueList{ProjectID: projectID, Name: listName}
+		if err := m.cueListRepo.Create(ctx, dbList); err != nil {
+			return err
+		}
+		*cueListsCount++
+
+		snaps := tracker.ResolveCueList(cl.Cues, show.ColorPalettes, show.BeamPalettes,
+			show.FocusPalettes, show.IntensPalettes, show.Presets)
+		for _, snap := range snaps {
+			cueLabel := snap.Label
+			if snap.UnicodeText != nil {
+				cueLabel = *snap.UnicodeText
+			}
+			cueName := fmt.Sprintf("Cue %s", snap.CueNumber)
+			if snap.CuePart > 0 {
+				cueName = fmt.Sprintf("Cue %s Part %d", snap.CueNumber, snap.CuePart)
+			}
+			if cueLabel != "" {
+				cueName = cueName + " - " + cueLabel
+			}
+			look := &models.Look{ProjectID: projectID, Name: cueName}
+			values := buildLookValues(snap.ChannelLevels, snap.ParamLevels, states, table)
+			if err := m.lookRepo.CreateWithFixtureValues(ctx, look, values); err != nil {
+				return err
+			}
+			*looksCount++
+
+			cueNum, _ := strconv.ParseFloat(snap.CueNumber, 64)
+			cue := &models.Cue{
+				CueListID:   dbList.ID,
+				LookID:      look.ID,
+				Name:        cueName,
+				CueNumber:   cueNum,
+				FadeInTime:  snap.UpFade,
+				FadeOutTime: snap.DownFade,
+				FollowTime:  snap.Follow,
+			}
+			if err := m.cueRepo.Create(ctx, cue); err != nil {
+				return err
+			}
+			*cuesCount++
+		}
+	}
 	return nil
 }
 
 func (m *Mapper) applyGroups(_ context.Context, _ string, _ *Show, _ *int) error {
+	// Group persistence is part of Task 14c. Held back until then.
 	return nil
 }
 
 func (m *Mapper) applySidecar(_ context.Context, _ string, _ Sidecar, _ *Collector) error {
+	// Sidecar application is part of Task 14c. Held back until then.
 	return nil
 }
