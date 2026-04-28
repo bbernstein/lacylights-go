@@ -156,6 +156,45 @@ func TestParse_PresetsAndGroups(t *testing.T) {
 	}
 }
 
+func TestParse_MultiUniverseAddresses(t *testing.T) {
+	show := parseFixture(t, "multi_universe.asc")
+	if len(show.Patch) != 4 {
+		t.Fatalf("got %d patch entries", len(show.Patch))
+	}
+	for i, want := range []string{"1", "2.512", "3/100", "1024"} {
+		if show.Patch[i].AddressRaw != want {
+			t.Errorf("patch[%d] addr: got %q, want %q", i, show.Patch[i].AddressRaw, want)
+		}
+	}
+}
+
+func TestNormalizeAddress(t *testing.T) {
+	cases := []struct {
+		raw      string
+		universe int
+		address  int
+		ok       bool
+	}{
+		{"1", 1, 1, true},
+		{"512", 1, 512, true},
+		{"513", 2, 1, true},
+		{"1024", 2, 512, true},
+		{"2.512", 2, 512, true},
+		{"3/100", 3, 100, true},
+		{"abc", 0, 0, false},
+	}
+	for _, c := range cases {
+		u, a, err := NormalizeAddress(c.raw)
+		if (err == nil) != c.ok {
+			t.Errorf("%q: got err=%v, want ok=%v", c.raw, err, c.ok)
+			continue
+		}
+		if c.ok && (u != c.universe || a != c.address) {
+			t.Errorf("%q: got u=%d a=%d, want u=%d a=%d", c.raw, u, a, c.universe, c.address)
+		}
+	}
+}
+
 func TestParse_UTextOverridesLabel(t *testing.T) {
 	show := parseFixture(t, "utext_unicode.asc")
 	if show.Patch[0].UnicodeText == nil || *show.Patch[0].UnicodeText != "Café" {

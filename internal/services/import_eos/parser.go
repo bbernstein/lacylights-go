@@ -494,3 +494,26 @@ func expandChannelTokens(tokens []string) []int {
 	}
 	return out
 }
+
+// NormalizeAddress converts an EOS patch address string to a (universe, address) tuple.
+// Accepts flat absolute ("1024"), dotted ("2.512"), and slashed ("3/100") forms.
+// Universes are 1-based, addresses are 1-based and 1..512.
+func NormalizeAddress(raw string) (universe int, address int, err error) {
+	for _, sep := range []byte{'.', '/'} {
+		if i := strings.IndexByte(raw, sep); i >= 0 {
+			u, e1 := strconv.Atoi(raw[:i])
+			a, e2 := strconv.Atoi(raw[i+1:])
+			if e1 != nil || e2 != nil || u < 1 || a < 1 || a > 512 {
+				return 0, 0, fmt.Errorf("invalid eos address %q", raw)
+			}
+			return u, a, nil
+		}
+	}
+	flat, err := strconv.Atoi(raw)
+	if err != nil || flat < 1 {
+		return 0, 0, fmt.Errorf("invalid eos address %q", raw)
+	}
+	universe = (flat-1)/512 + 1
+	address = (flat-1)%512 + 1
+	return universe, address, nil
+}
