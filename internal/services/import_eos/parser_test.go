@@ -155,3 +155,15 @@ func TestParse_PresetsAndGroups(t *testing.T) {
 		t.Errorf("group 2 thru: got %+v", g2)
 	}
 }
+
+func TestParse_UTextOverridesLabel(t *testing.T) {
+	show := parseFixture(t, "utext_unicode.asc")
+	if show.Patch[0].UnicodeText == nil || *show.Patch[0].UnicodeText != "Café" {
+		t.Errorf("patch unicode: got %v", show.Patch[0].UnicodeText)
+	}
+	if len(show.CueLists[0].Cues) != 1 ||
+		show.CueLists[0].Cues[0].UnicodeText == nil ||
+		*show.CueLists[0].Cues[0].UnicodeText != "Hi" {
+		t.Errorf("cue unicode: got %v", show.CueLists[0].Cues[0].UnicodeText)
+	}
+}

@@ -227,8 +227,17 @@ func (p *parser) parsePatch() error {
 	p.advance()
 	for p.cur() != nil && p.cur().Indent > 0 {
 		sub := p.cur()
-		if sub.Directive == "Text" {
+		switch sub.Directive {
+		case "Text":
 			pe.Label = strings.Join(sub.Fields, " ")
+		case "$$UText":
+			if s, ok := decodeUText(sub.Fields); ok {
+				pe.UnicodeText = &s
+			} else {
+				p.warn.Add(WarnUTextDecode, SeverityWarn,
+					"failed to decode $$UText",
+					map[string]string{"line": strconv.Itoa(sub.Lineno)})
+			}
 		}
 		p.advance()
 	}
@@ -309,6 +318,14 @@ func (p *parser) parseCue() error {
 		case "$$Param":
 			if pm, ok := parseParamMove(sub.Fields); ok {
 				cue.ParamMoves = append(cue.ParamMoves, pm)
+			}
+		case "$$UText":
+			if s, ok := decodeUText(sub.Fields); ok {
+				cue.UnicodeText = &s
+			} else {
+				p.warn.Add(WarnUTextDecode, SeverityWarn,
+					"failed to decode $$UText",
+					map[string]string{"line": strconv.Itoa(sub.Lineno)})
 			}
 		}
 		p.advance()
@@ -411,6 +428,14 @@ func (p *parser) parsePalette(target *[]Palette) error {
 			if pm, ok := parseParamMove(sub.Fields); ok {
 				pal.ParamMoves = append(pal.ParamMoves, pm)
 			}
+		case "$$UText":
+			if s, ok := decodeUText(sub.Fields); ok {
+				pal.UnicodeText = &s
+			} else {
+				p.warn.Add(WarnUTextDecode, SeverityWarn,
+					"failed to decode $$UText",
+					map[string]string{"line": strconv.Itoa(sub.Lineno)})
+			}
 		}
 		p.advance()
 	}
@@ -427,9 +452,18 @@ func (p *parser) parseGroup() error {
 	p.advance()
 	for p.cur() != nil && p.cur().Indent > 0 {
 		sub := p.cur()
-		if sub.Directive == "Text" {
+		switch sub.Directive {
+		case "Text":
 			g.Label = strings.Join(sub.Fields, " ")
-		} else {
+		case "$$UText":
+			if s, ok := decodeUText(sub.Fields); ok {
+				g.UnicodeText = &s
+			} else {
+				p.warn.Add(WarnUTextDecode, SeverityWarn,
+					"failed to decode $$UText",
+					map[string]string{"line": strconv.Itoa(sub.Lineno)})
+			}
+		default:
 			tokens := append([]string{sub.Directive}, sub.Fields...)
 			g.Channels = append(g.Channels, expandChannelTokens(tokens)...)
 		}
