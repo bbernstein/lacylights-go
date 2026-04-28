@@ -18,6 +18,8 @@ const (
 	// Directive names start with `$` (top-level), `$$` (sub-directive), or
 	// are bare identifiers like `Cue`, `Up`, `Down`, `Text`, etc.
 	LineDirective
+	// LineSidecar is a "$$ LACYLIGHTS:..." sidecar comment line.
+	LineSidecar
 )
 
 // Line is a single tokenized line.
@@ -47,6 +49,10 @@ func tokenize(r io.Reader) ([]Line, error) {
 		}
 		if strings.HasPrefix(trimmed, "!") {
 			out = append(out, Line{Lineno: lineno, Kind: LineComment, Raw: raw})
+			continue
+		}
+		if strings.HasPrefix(trimmed, "$$ LACYLIGHTS:") {
+			out = append(out, Line{Lineno: lineno, Kind: LineSidecar, Raw: raw})
 			continue
 		}
 		indent := 0

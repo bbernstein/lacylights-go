@@ -50,6 +50,11 @@ func (p *parser) advance() { p.pos++ }
 func (p *parser) run() error {
 	for p.pos < len(p.lines) {
 		line := p.cur()
+		if line.Kind == LineSidecar {
+			p.show.SidecarLines = append(p.show.SidecarLines, line.Raw)
+			p.advance()
+			continue
+		}
 		if line.Kind != LineDirective || line.Indent > 0 {
 			p.advance()
 			continue
