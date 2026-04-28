@@ -61,6 +61,22 @@ func openFixtureFile(t *testing.T, name string) *os.File {
 	return f
 }
 
+func TestImport_AddressConflictReturnsHardError(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+	f := openFixtureFile(t, "conflict_addresses.asc")
+	defer func() { _ = f.Close() }()
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	_, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr("X")})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "address") {
+		t.Errorf("expected address-conflict error, got %v", err)
+	}
+}
+
 func TestMapper_PalettesBecomeLooksInDedicatedCueLists(t *testing.T) {
 	deps := newTestDeps(t)
 	defer deps.close()

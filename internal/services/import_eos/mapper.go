@@ -73,6 +73,8 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 	}
 
 	eosChannelToInstanceID := make(map[int]string, len(show.Patch))
+	type addrKey struct{ u, a int }
+	seenAddr := make(map[addrKey]int, len(show.Patch))
 	for _, pe := range show.Patch {
 		defID, ok := persToDefID[pe.PersonalityID]
 		if !ok {
@@ -82,6 +84,12 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 		if err != nil {
 			return nil, err
 		}
+		key := addrKey{u: universe, a: address}
+		if prevCh, dup := seenAddr[key]; dup {
+			return nil, fmt.Errorf("eos import: address conflict at universe %d address %d (channels %d and %d)",
+				universe, address, prevCh, pe.Channel)
+		}
+		seenAddr[key] = pe.Channel
 		label := pe.Label
 		if pe.UnicodeText != nil {
 			label = *pe.UnicodeText

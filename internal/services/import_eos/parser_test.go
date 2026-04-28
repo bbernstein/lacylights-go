@@ -195,6 +195,18 @@ func TestNormalizeAddress(t *testing.T) {
 	}
 }
 
+func TestParse_MalformedCueReturnsParseError(t *testing.T) {
+	f, err := os.Open(filepath.Join("testdata", "malformed_cue.asc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	_, _, perr := Parse(f)
+	if perr == nil {
+		t.Fatal("expected parse error")
+	}
+}
+
 func TestParse_SoftWarnings(t *testing.T) {
 	f, err := os.Open(filepath.Join("testdata", "unknown_directive.asc"))
 	if err != nil {
