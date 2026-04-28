@@ -116,3 +116,42 @@ func TestParse_CuePartsAndQualified(t *testing.T) {
 		t.Errorf("list 2 cue 0: got %+v", show.CueLists[1].Cues[0])
 	}
 }
+
+func TestParse_Palettes(t *testing.T) {
+	show := parseFixture(t, "palettes_color_focus.asc")
+	if len(show.ColorPalettes) != 2 {
+		t.Fatalf("color palettes: got %d, want 2", len(show.ColorPalettes))
+	}
+	cp1 := show.ColorPalettes[0]
+	if cp1.Number != "1" || cp1.Label != "Red" {
+		t.Errorf("color palette 1: got %+v", cp1)
+	}
+	if len(cp1.ParamMoves) != 1 || cp1.ParamMoves[0].Channel != 1 ||
+		len(cp1.ParamMoves[0].Values) != 3 {
+		t.Errorf("color palette 1 params: got %+v", cp1.ParamMoves)
+	}
+	if len(show.FocusPalettes) != 1 || show.FocusPalettes[0].Label != "Center" {
+		t.Errorf("focus palettes: got %+v", show.FocusPalettes)
+	}
+}
+
+func TestParse_PresetsAndGroups(t *testing.T) {
+	show := parseFixture(t, "presets_groups.asc")
+	if len(show.Presets) != 1 || show.Presets[0].Label != "Half Up" {
+		t.Fatalf("presets: got %+v", show.Presets)
+	}
+	if len(show.Presets[0].ChanMoves) != 3 {
+		t.Errorf("preset chan moves: got %d, want 3", len(show.Presets[0].ChanMoves))
+	}
+	if len(show.Groups) != 2 {
+		t.Fatalf("groups: got %d, want 2", len(show.Groups))
+	}
+	g1 := show.Groups[0]
+	if g1.Label != "Front Wash" || len(g1.Channels) != 2 || g1.Channels[0] != 1 || g1.Channels[1] != 2 {
+		t.Errorf("group 1: got %+v", g1)
+	}
+	g2 := show.Groups[1]
+	if len(g2.Channels) != 3 || g2.Channels[0] != 1 || g2.Channels[2] != 3 {
+		t.Errorf("group 2 thru: got %+v", g2)
+	}
+}

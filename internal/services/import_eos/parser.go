@@ -93,6 +93,18 @@ func (p *parser) handleTopLevel(line *Line) error {
 		return p.parseCue()
 	case "$Cue":
 		return p.parseCue()
+	case "$ColorPalette":
+		return p.parsePalette(&p.show.ColorPalettes)
+	case "$BeamPalette":
+		return p.parsePalette(&p.show.BeamPalettes)
+	case "$FocusPalette":
+		return p.parsePalette(&p.show.FocusPalettes)
+	case "$IntensPalette":
+		return p.parsePalette(&p.show.IntensPalettes)
+	case "$Preset":
+		return p.parsePalette(&p.show.Presets)
+	case "$Group":
+		return p.parseGroup()
 	default:
 		// All other top-level directives become "skipped" until later tasks teach
 		// the parser to handle them. We emit UNKNOWN_DIRECTIVE only for $-prefixed
@@ -379,4 +391,72 @@ func parseParamMove(fields []string) (ParamMove, bool) {
 		pm.Values = append(pm.Values, ParamValue{ParamID: paramID, Value: val})
 	}
 	return pm, true
+}
+
+func (p *parser) parsePalette(target *[]Palette) error {
+	line := p.cur()
+	if len(line.Fields) < 1 {
+		return &ParseError{Lineno: line.Lineno, Msg: "palette needs number"}
+	}
+	pal := Palette{Number: line.Fields[0]}
+	p.advance()
+	for p.cur() != nil && p.cur().Indent > 0 {
+		sub := p.cur()
+		switch sub.Directive {
+		case "Text":
+			pal.Label = strings.Join(sub.Fields, " ")
+		case "$$ChanMove":
+			pal.ChanMoves = append(pal.ChanMoves, parseChanMoves(sub.Fields)...)
+		case "$$Param":
+			if pm, ok := parseParamMove(sub.Fields); ok {
+				pal.ParamMoves = append(pal.ParamMoves, pm)
+			}
+		}
+		p.advance()
+	}
+	*target = append(*target, pal)
+	return nil
+}
+
+func (p *parser) parseGroup() error {
+	line := p.cur()
+	if len(line.Fields) < 1 {
+		return &ParseError{Lineno: line.Lineno, Msg: "$Group needs number"}
+	}
+	g := Group{Number: line.Fields[0]}
+	p.advance()
+	for p.cur() != nil && p.cur().Indent > 0 {
+		sub := p.cur()
+		if sub.Directive == "Text" {
+			g.Label = strings.Join(sub.Fields, " ")
+		} else {
+			tokens := append([]string{sub.Directive}, sub.Fields...)
+			g.Channels = append(g.Channels, expandChannelTokens(tokens)...)
+		}
+		p.advance()
+	}
+	p.show.Groups = append(p.show.Groups, g)
+	return nil
+}
+
+func expandChannelTokens(tokens []string) []int {
+	var out []int
+	for i := 0; i < len(tokens); i++ {
+		t := tokens[i]
+		if strings.EqualFold(t, "Thru") && len(out) > 0 && i+1 < len(tokens) {
+			endN, err := strconv.Atoi(tokens[i+1])
+			if err == nil {
+				start := out[len(out)-1] + 1
+				for v := start; v <= endN; v++ {
+					out = append(out, v)
+				}
+				i++
+				continue
+			}
+		}
+		if v, err := strconv.Atoi(t); err == nil {
+			out = append(out, v)
+		}
+	}
+	return out
 }
