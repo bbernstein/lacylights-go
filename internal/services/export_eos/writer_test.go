@@ -22,6 +22,53 @@ func TestWriter_HeaderSection(t *testing.T) {
 	}
 }
 
+func TestWriter_RoundtripsPaletteAndCue(t *testing.T) {
+	w := newWriter(WriterOptions{Title: "X"})
+	w.writePalette(PaletteOut{
+		Kind: "ColorPalette", Number: "1", Label: "Red",
+		ParamMoves: []ParamMoveOut{{Channel: 1, Values: []ParamValueOut{{ParamID: 12, Value: 255}}}},
+	})
+	w.writeCue(1, CueOut{
+		Number: "1", Label: "Open", UpFade: 5, DownFade: 5,
+		ChanMoves: []ChanMoveOut{{Channel: 1, Value: 0xFF}},
+	})
+	got := w.String()
+	for _, want := range []string{
+		"$ColorPalette 1\n",
+		"   Text Red\n",
+		"   $$Param 1 12@255\n",
+		"Cue 1 1\n",
+		"   Up 5\n",
+		"   $$ChanMove 1@HFF\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}
+
+func TestWriter_GroupAndUText(t *testing.T) {
+	w := newWriter(WriterOptions{Title: "X"})
+	cafe := "Café"
+	w.writeGroup(GroupOut{
+		Number: "1", Label: "Front Wash", UnicodeText: &cafe,
+		Channels: []int{1, 2, 3},
+	})
+	got := w.String()
+	for _, want := range []string{
+		"$Group 1\n",
+		"   Text Front Wash\n",
+		"   $$UText 4300 6100 6600 E900\n",
+		"   1\n",
+		"   2\n",
+		"   3\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}
+
 func TestWriter_PatchAndPersonality(t *testing.T) {
 	w := newWriter(WriterOptions{Title: "T"})
 	w.writePersonality(PersonalityIn{
