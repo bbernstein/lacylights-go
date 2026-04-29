@@ -215,12 +215,17 @@ func buildInstanceStates(
 // paletteListNames maps EOS palette categories to the list names the importer
 // uses (these are also the names the exporter recognizes for palette
 // synthesis).
+// paletteListNames maps the synthetic cue-list name the importer creates for
+// each EOS palette/preset category to the corresponding writer "Kind". The
+// keys reference exported constants in import_eos so a rename of those
+// constants surfaces here as a build error rather than silent palette
+// disappearance.
 var paletteListNames = map[string]string{
-	"Color Palettes":     "ColorPalette",
-	"Beam Palettes":      "BeamPalette",
-	"Focus Palettes":     "FocusPalette",
-	"Intensity Palettes": "IntensPalette",
-	"Presets":            "Preset",
+	importeos.PaletteListNameColor:     "ColorPalette",
+	importeos.PaletteListNameBeam:      "BeamPalette",
+	importeos.PaletteListNameFocus:     "FocusPalette",
+	importeos.PaletteListNameIntensity: "IntensPalette",
+	importeos.PaletteListNamePreset:    "Preset",
 }
 
 func (s *Service) buildPaletteAndCueLists(

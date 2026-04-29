@@ -24,7 +24,12 @@ func Parse(r io.Reader) (*Show, *Collector, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	p := &parser{lines: lines, show: &Show{}, warn: &Collector{}}
+	p := &parser{
+		lines:          lines,
+		show:           &Show{},
+		warn:           &Collector{},
+		personalityIDs: map[int]struct{}{},
+	}
 	if err := p.run(); err != nil {
 		return nil, nil, err
 	}
@@ -36,6 +41,10 @@ type parser struct {
 	pos   int
 	show  *Show
 	warn  *Collector
+	// personalityIDs is a set of $Personality IDs seen so far; used by
+	// $Patch field-order autodetection in O(1) per lookup. Populated by
+	// parsePersonality and consumed by fieldIsKnownPersonality.
+	personalityIDs map[int]struct{}
 }
 
 func (p *parser) cur() *Line {
@@ -197,6 +206,7 @@ func (p *parser) parsePersonality() error {
 		p.advance()
 	}
 	p.show.Personalities = append(p.show.Personalities, pers)
+	p.personalityIDs[id] = struct{}{}
 	return nil
 }
 
@@ -228,18 +238,16 @@ func parsePersChan(line *Line) (PersChannel, bool) {
 }
 
 // fieldIsKnownPersonality reports whether the textual field is an integer that
-// matches an already-parsed $Personality block.
+// matches an already-parsed $Personality block. Backed by p.personalityIDs so
+// each call is O(1) — important for files like OTBPA with hundreds of
+// $Patch entries and dozens of personalities.
 func (p *parser) fieldIsKnownPersonality(s string) bool {
 	v, err := strconv.Atoi(s)
 	if err != nil {
 		return false
 	}
-	for _, pers := range p.show.Personalities {
-		if pers.ID == v {
-			return true
-		}
-	}
-	return false
+	_, ok := p.personalityIDs[v]
+	return ok
 }
 
 func (p *parser) parsePatch() error {
@@ -258,6 +266,13 @@ func (p *parser) parsePatch() error {
 	// always precede $Patch in the file). Default to the user-authored
 	// ordering when both fields claim valid personality IDs (or neither
 	// does — keeps minimal/synthetic fixtures working as before).
+	//
+	// The library-driven format always emits 5 fields (the ≥ 4 check below
+	// is a deliberately conservative guard); a hypothetical 3-field
+	// library-driven line would silently fall through to user-authored
+	// parsing. We have not seen such a file in the wild, but a follow-up
+	// could make this even safer by also checking the parsed personality's
+	// channel count against the trailing $$PersChan rows.
 	addrIdx, persIdx := 1, 2
 	if len(line.Fields) >= 4 && p.fieldIsKnownPersonality(line.Fields[1]) && !p.fieldIsKnownPersonality(line.Fields[2]) {
 		addrIdx, persIdx = 2, 1

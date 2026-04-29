@@ -12,6 +12,18 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 )
 
+// Cue list names used by the importer to file synthesized palette/preset
+// looks. Exported so the exporter can recognize the same lists when
+// translating LacyLights state back to Eos ASCII; keeping the strings in one
+// place avoids silent drift between the two halves of the round-trip.
+const (
+	PaletteListNameColor     = "Color Palettes"
+	PaletteListNameBeam      = "Beam Palettes"
+	PaletteListNameFocus     = "Focus Palettes"
+	PaletteListNameIntensity = "Intensity Palettes"
+	PaletteListNamePreset    = "Presets"
+)
+
 // Mapper applies a parsed Show + Sidecar to LacyLights repos.
 type Mapper struct {
 	projectRepo   *repositories.ProjectRepository
@@ -294,11 +306,11 @@ func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show
 		name     string
 		palettes []Palette
 	}{
-		{"Color Palettes", show.ColorPalettes},
-		{"Beam Palettes", show.BeamPalettes},
-		{"Focus Palettes", show.FocusPalettes},
-		{"Intensity Palettes", show.IntensPalettes},
-		{"Presets", show.Presets},
+		{PaletteListNameColor, show.ColorPalettes},
+		{PaletteListNameBeam, show.BeamPalettes},
+		{PaletteListNameFocus, show.FocusPalettes},
+		{PaletteListNameIntensity, show.IntensPalettes},
+		{PaletteListNamePreset, show.Presets},
 	}
 	for _, g := range groups {
 		if len(g.palettes) == 0 {

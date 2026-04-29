@@ -4,7 +4,6 @@ package exporteos
 import (
 	"context"
 	"fmt"
-	"io"
 
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	importeos "github.com/bbernstein/lacylights-go/internal/services/import_eos"
@@ -12,9 +11,14 @@ import (
 
 // Result is returned from a successful export.
 type Result struct {
+	ProjectName    string
 	Content        string
 	FilenameSuffix string
-	Warnings       []importeos.Warning
+	// Warnings is reserved for future use; export currently produces no
+	// warnings of its own. The field is kept on the result so we can surface
+	// future writer-side warnings (e.g. lossy palette conversions, dropped
+	// fixture-group references) without breaking the caller signature.
+	Warnings []importeos.Warning
 }
 
 // Service handles Eos ASCII export operations.
@@ -27,7 +31,11 @@ type Service struct {
 	lookBoardRepo *repositories.LookBoardRepository
 }
 
-// NewService constructs an empty Service. Use NewServiceWithDeps in production.
+// NewService constructs an empty Service. Tests use this to exercise the
+// dependency-validation path; production code should always use
+// NewServiceWithDeps.
+//
+// Deprecated: prefer NewServiceWithDeps.
 func NewService() *Service {
 	return &Service{}
 }
@@ -67,13 +75,16 @@ func (s *Service) validateDependencies() error {
 	return nil
 }
 
-// Export writes the project's state as Eos ASCII to w.
-func (s *Service) Export(ctx context.Context, projectID string, w io.Writer) (*Result, error) {
+// Export renders the project's state as Eos ASCII and returns the content via
+// Result. Callers that need to stream to a writer can simply Write the
+// returned content; the entire showfile is held in memory regardless because
+// the deterministic-emit guarantee requires the writer to fully assemble the
+// document before flushing.
+func (s *Service) Export(ctx context.Context, projectID string) (*Result, error) {
 	if err := s.validateDependencies(); err != nil {
 		return nil, err
 	}
 
-	collector := &importeos.Collector{}
 	bundle, err := s.loadBundle(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -111,13 +122,10 @@ func (s *Service) Export(ctx context.Context, projectID string, w io.Writer) (*R
 		return nil, err
 	}
 
-	out := wr.String()
-	if _, err := w.Write([]byte(out)); err != nil {
-		return nil, err
-	}
 	return &Result{
-		Content:        out,
+		ProjectName:    bundle.ProjectName,
+		Content:        wr.String(),
 		FilenameSuffix: ".asc",
-		Warnings:       collector.All(),
+		Warnings:       nil,
 	}, nil
 }

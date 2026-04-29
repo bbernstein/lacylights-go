@@ -1,10 +1,10 @@
 package exporteos
 
 import (
-	"bytes"
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	importeos "github.com/bbernstein/lacylights-go/internal/services/import_eos"
@@ -40,11 +40,14 @@ func TestRoundtrip_GoldenOTBPA(t *testing.T) {
 	if err != nil {
 		t.Fatalf("import: %v", err)
 	}
-	// OTBPA has 44 patch entries but ~half are unpatched (address 0); the
-	// importer skips those with an UNPATCHED_CHANNEL warning. We expect at
-	// least 20 patched fixtures to make it through.
-	if res.FixtureInstancesCount < 20 {
-		t.Errorf("expected at least 20 patched fixtures, got %d", res.FixtureInstancesCount)
+	// OTBPA has 44 $Patch entries; 18 are unpatched (address 0) and skipped
+	// with UNPATCHED_CHANNEL warnings, leaving 26 fixtures imported.
+	// Asserting the exact number would over-couple the test to the fixture
+	// (a small parser change might add or skip one entry); the floor of 20
+	// catches catastrophic regressions while tolerating fixture edits.
+	const expectedMinFixtures = 20
+	if res.FixtureInstancesCount < expectedMinFixtures {
+		t.Errorf("expected at least %d patched fixtures, got %d", expectedMinFixtures, res.FixtureInstancesCount)
 	}
 	codes := map[importeos.WarningCode]int{}
 	for _, w := range res.Warnings {
@@ -59,15 +62,15 @@ func TestRoundtrip_GoldenOTBPA(t *testing.T) {
 
 	exp := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
-	var buf bytes.Buffer
-	if _, err := exp.Export(context.Background(), res.ProjectID, &buf); err != nil {
+	out, err := exp.Export(context.Background(), res.ProjectID)
+	if err != nil {
 		t.Fatalf("export: %v", err)
 	}
-	if buf.Len() == 0 {
+	if len(out.Content) == 0 {
 		t.Fatal("export produced empty output")
 	}
 
-	show2, _, err := importeos.Parse(&buf)
+	show2, _, err := importeos.Parse(strings.NewReader(out.Content))
 	if err != nil {
 		t.Fatalf("re-parse: %v", err)
 	}
@@ -101,12 +104,12 @@ func TestRoundtrip_SyntheticSmall(t *testing.T) {
 
 	exp := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
-	var buf bytes.Buffer
-	if _, err := exp.Export(context.Background(), res.ProjectID, &buf); err != nil {
+	out, err := exp.Export(context.Background(), res.ProjectID)
+	if err != nil {
 		t.Fatalf("export: %v", err)
 	}
 
-	show2, _, err := importeos.Parse(&buf)
+	show2, _, err := importeos.Parse(strings.NewReader(out.Content))
 	if err != nil {
 		t.Fatalf("re-parse: %v", err)
 	}

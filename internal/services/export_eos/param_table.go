@@ -31,34 +31,43 @@ type channelTypeMeta struct {
 // channelTypeMetaTable is the inverse of import_eos.mapParamTypeName: given a
 // LacyLights ChannelType, return the EOS ($ParamType) row to emit.
 //
-// ParamIDs match the conventions used by paramIDForChannelType in the importer
-// where defined; otherwise a stable ID > 1000 is assigned per channel type to
-// keep export output deterministic and avoid collisions with EOS-default IDs.
+// ParamIDs and categories track the convention seen in real-world EOS exports
+// (see testdata/golden_otbpa.asc). EOS category numbers in use here:
+//
+//	1 = Intensity
+//	2 = Position (Pan/Tilt)
+//	3 = Color
+//	5 = Form/Beam (Zoom, Iris, Focus, Gobo, Strobe — anything beam-shape)
+//	6 = Effect
+//	7 = Other/Reset
+//
+// Round-trip is preserved because the importer matches by name (long-name) for
+// known channel types, not by ID.
 var channelTypeMetaTable = map[generated.ChannelType]channelTypeMeta{
 	generated.ChannelTypeIntensity:  {paramID: 1, category: 1, longName: "Intens"},
 	generated.ChannelTypePan:        {paramID: 2, category: 2, longName: "Pan"},
 	generated.ChannelTypeTilt:       {paramID: 3, category: 2, longName: "Tilt"},
+	generated.ChannelTypeCyan:       {paramID: 9, category: 3, longName: "Cyan"},
+	generated.ChannelTypeMagenta:    {paramID: 10, category: 3, longName: "Magenta"},
+	generated.ChannelTypeYellow:     {paramID: 11, category: 3, longName: "Yellow"},
 	generated.ChannelTypeRed:        {paramID: 12, category: 3, longName: "Red"},
 	generated.ChannelTypeGreen:      {paramID: 13, category: 3, longName: "Green"},
 	generated.ChannelTypeBlue:       {paramID: 14, category: 3, longName: "Blue"},
 	generated.ChannelTypeAmber:      {paramID: 48, category: 3, longName: "Amber"},
+	generated.ChannelTypeUv:         {paramID: 49, category: 3, longName: "UV"},
+	generated.ChannelTypeLime:       {paramID: 50, category: 3, longName: "Lime"},
 	generated.ChannelTypeWhite:      {paramID: 51, category: 3, longName: "White"},
 	generated.ChannelTypeColdWhite:  {paramID: 52, category: 3, longName: "Cool_White"},
 	generated.ChannelTypeWarmWhite:  {paramID: 53, category: 3, longName: "Warm_White"},
-	generated.ChannelTypeCyan:       {paramID: 15, category: 3, longName: "Cyan"},
-	generated.ChannelTypeMagenta:    {paramID: 16, category: 3, longName: "Magenta"},
-	generated.ChannelTypeYellow:     {paramID: 17, category: 3, longName: "Yellow"},
-	generated.ChannelTypeUv:         {paramID: 49, category: 3, longName: "UV"},
-	generated.ChannelTypeLime:       {paramID: 50, category: 3, longName: "Lime"},
 	generated.ChannelTypeIndigo:     {paramID: 54, category: 3, longName: "Indigo"},
-	generated.ChannelTypeZoom:       {paramID: 79, category: 4, longName: "Zoom"},
-	generated.ChannelTypeFocus:      {paramID: 78, category: 4, longName: "Focus"},
-	generated.ChannelTypeIris:       {paramID: 77, category: 4, longName: "Iris"},
+	generated.ChannelTypeIris:       {paramID: 77, category: 5, longName: "Iris"},
+	generated.ChannelTypeFocus:      {paramID: 78, category: 5, longName: "Focus"},
+	generated.ChannelTypeZoom:       {paramID: 79, category: 5, longName: "Zoom"},
 	generated.ChannelTypeGobo:       {paramID: 80, category: 5, longName: "Gobo"},
-	generated.ChannelTypeStrobe:     {paramID: 204, category: 1, longName: "Shutter_Strobe"},
 	generated.ChannelTypeColorWheel: {paramID: 81, category: 3, longName: "Color_Wheel"},
 	generated.ChannelTypeEffect:     {paramID: 82, category: 6, longName: "Effect"},
 	generated.ChannelTypeMacro:      {paramID: 83, category: 6, longName: "Macro"},
+	generated.ChannelTypeStrobe:     {paramID: 204, category: 5, longName: "Shutter_Strobe"},
 	generated.ChannelTypeOther:      {paramID: 999, category: 7, longName: "Other"},
 }
 

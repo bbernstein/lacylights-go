@@ -1,7 +1,6 @@
 package exporteos
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"strings"
@@ -109,15 +108,16 @@ func TestExport_Deterministic(t *testing.T) {
 	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 
-	var buf1, buf2 bytes.Buffer
-	if _, err := svc.Export(context.Background(), pid, &buf1); err != nil {
+	res1, err := svc.Export(context.Background(), pid)
+	if err != nil {
 		t.Fatalf("export 1: %v", err)
 	}
-	if _, err := svc.Export(context.Background(), pid, &buf2); err != nil {
+	res2, err := svc.Export(context.Background(), pid)
+	if err != nil {
 		t.Fatalf("export 2: %v", err)
 	}
-	if buf1.String() != buf2.String() {
-		t.Errorf("non-deterministic output:\n--- 1 ---\n%s\n--- 2 ---\n%s", buf1.String(), buf2.String())
+	if res1.Content != res2.Content {
+		t.Errorf("non-deterministic output:\n--- 1 ---\n%s\n--- 2 ---\n%s", res1.Content, res2.Content)
 	}
 }
 
@@ -128,14 +128,16 @@ func TestExport_StructureBasics(t *testing.T) {
 	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 
-	var buf bytes.Buffer
-	res, err := svc.Export(context.Background(), pid, &buf)
+	res, err := svc.Export(context.Background(), pid)
 	if err != nil {
 		t.Fatalf("export: %v", err)
 	}
-	got := buf.String()
+	got := res.Content
 	if res.FilenameSuffix != ".asc" {
 		t.Errorf("FilenameSuffix = %q, want .asc", res.FilenameSuffix)
+	}
+	if res.ProjectName != "Sample Show" {
+		t.Errorf("ProjectName = %q, want Sample Show", res.ProjectName)
 	}
 	for _, want := range []string{
 		"Ident 3:0\n",
@@ -185,7 +187,7 @@ func TestExport_FailsWhenRepositoriesMissing(t *testing.T) {
 			defer deps.close()
 			svc := NewService()
 			c.mutate(deps, svc)
-			_, err := svc.Export(context.Background(), "x", &bytes.Buffer{})
+			_, err := svc.Export(context.Background(), "x")
 			if err == nil || !strings.Contains(err.Error(), c.wantSub) {
 				t.Errorf("err = %v, want substring %q", err, c.wantSub)
 			}
