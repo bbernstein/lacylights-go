@@ -70,8 +70,8 @@ func buildSampleProject(t *testing.T, deps *testDeps) string {
 
 	// Cue 1: full intensity on instance 1 only.
 	look1 := &models.Look{ProjectID: proj.ID, Name: "Cue 1"}
-	fv1ch, _ := json.Marshal([]models.ChannelValue{{Offset: 0, Value: 255}, {Offset: 1, Value: 200}})
-	fv1 := []models.FixtureValue{{FixtureID: instances[0].ID, Channels: string(fv1ch)}}
+	fv1ch := mustMarshal(t, []models.ChannelValue{{Offset: 0, Value: 255}, {Offset: 1, Value: 200}})
+	fv1 := []models.FixtureValue{{FixtureID: instances[0].ID, Channels: fv1ch}}
 	if err := deps.lookRepo.CreateWithFixtureValues(ctx, look1, fv1); err != nil {
 		t.Fatalf("create look 1: %v", err)
 	}
@@ -83,7 +83,7 @@ func buildSampleProject(t *testing.T, deps *testDeps) string {
 	// Cue 2: full intensity on both, blue on second.
 	look2 := &models.Look{ProjectID: proj.ID, Name: "Cue 2"}
 	fv2 := []models.FixtureValue{
-		{FixtureID: instances[0].ID, Channels: string(fv1ch)},
+		{FixtureID: instances[0].ID, Channels: fv1ch},
 		{FixtureID: instances[1].ID, Channels: mustMarshal(t, []models.ChannelValue{{Offset: 0, Value: 255}, {Offset: 3, Value: 255}})},
 	}
 	if err := deps.lookRepo.CreateWithFixtureValues(ctx, look2, fv2); err != nil {

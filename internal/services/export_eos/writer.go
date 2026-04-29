@@ -2,6 +2,11 @@ package exporteos
 
 import "strings"
 
+// asciiReplacer is built once and reused. strings.Replacer is safe for
+// concurrent use, and a single instance avoids allocating a fresh one on
+// every label emission.
+var asciiReplacer = strings.NewReplacer("\r", " ", "\n", " ", "\t", " ")
+
 // sanitizeASCII strips characters that would corrupt the EOS ASCII output:
 // CR/LF would inject phantom directive lines, and tabs misalign the column
 // layout some EOS consoles still rely on. Replaces each problem rune with a
@@ -11,8 +16,7 @@ func sanitizeASCII(s string) string {
 	if !strings.ContainsAny(s, "\r\n\t") {
 		return s
 	}
-	r := strings.NewReplacer("\r", " ", "\n", " ", "\t", " ")
-	return r.Replace(s)
+	return asciiReplacer.Replace(s)
 }
 
 // WriterOptions configures the exporter.

@@ -114,6 +114,9 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 			// same DMX address). We treat the second occurrence as a
 			// soft conflict: warn so the operator can review, but
 			// continue importing rather than aborting the whole file.
+			// Leave seenAddr pointing at the *first* channel so any
+			// subsequent third occurrence still references the original
+			// owner in its warning message.
 			warn.Add(WarnAddressConflict, SeverityWarn,
 				fmt.Sprintf("address conflict at universe %d address %d: channels %d and %d",
 					universe, address, prevCh, pe.Channel),
@@ -123,8 +126,9 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 					"prevCh":   strconv.Itoa(prevCh),
 					"newCh":    strconv.Itoa(pe.Channel),
 				})
+		} else {
+			seenAddr[key] = pe.Channel
 		}
-		seenAddr[key] = pe.Channel
 		label := pe.Label
 		if pe.UnicodeText != nil {
 			label = *pe.UnicodeText

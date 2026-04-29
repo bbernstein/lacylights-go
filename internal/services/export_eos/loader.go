@@ -182,13 +182,15 @@ func buildPatch(instances []models.FixtureInstance, persIDs map[string]int, coll
 		fi := &instances[i]
 		// Fixtures with StartChannel <= 0 have no DMX address. Emitting "0"
 		// would round-trip as ErrAddressUnpatched, silently dropping the
-		// fixture on re-import — skip them at export time instead. (LacyLights
-		// does not currently allow patching at address 0, but a defensive
-		// guard avoids data loss if that invariant ever slips.)
-		if fi.StartChannel <= 0 {
+		// fixture on re-import — skip them at export time instead. The same
+		// applies to a non-positive Universe (which would otherwise produce
+		// a malformed dotted address). (LacyLights does not currently allow
+		// patching at address 0 / universe 0, but a defensive guard avoids
+		// data loss if either invariant ever slips.)
+		if fi.StartChannel <= 0 || fi.Universe <= 0 || fi.StartChannel > 512 {
 			if collector != nil {
 				collector.Add(importeos.WarnUnpatchedInstance, importeos.SeverityInfo,
-					fmt.Sprintf("fixture %q has no DMX address; skipped on export", fi.Name),
+					fmt.Sprintf("fixture %q has no valid DMX address (universe=%d address=%d); skipped on export", fi.Name, fi.Universe, fi.StartChannel),
 					map[string]string{"fixtureId": fi.ID})
 			}
 			continue
