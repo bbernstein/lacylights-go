@@ -4642,6 +4642,12 @@ func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiConten
 	if err != nil {
 		return nil, err
 	}
+	// Combine service warnings (parser/mapper) and resolver-layer warnings
+	// (group auto-assignment) in a single ordered slice — service first so
+	// processing messages precede administrative notes.
+	combined := make([]importeos.Warning, 0, len(res.Warnings)+len(resolverWarnings))
+	combined = append(combined, res.Warnings...)
+	combined = append(combined, resolverWarnings...)
 	// The schema declares synthesizedDefinitionIds as a non-null list.
 	// importeos.Service guarantees a non-nil slice, so we can pass the
 	// service's value through directly.
@@ -4653,7 +4659,7 @@ func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiConten
 		CueListsCount:            res.CueListsCount,
 		CuesCount:                res.CuesCount,
 		GroupsCount:              res.GroupsCount,
-		Warnings:                 toEosWarnings(append(append([]importeos.Warning(nil), res.Warnings...), resolverWarnings...)),
+		Warnings:                 toEosWarnings(combined),
 		SynthesizedDefinitionIds: res.SynthesizedDefinitionIDs,
 	}, nil
 }

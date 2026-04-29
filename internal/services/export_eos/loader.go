@@ -127,10 +127,9 @@ func buildPersonalities(defs map[string]*models.FixtureDefinition,
 	out := make([]PersonalityIn, 0, len(defIDs))
 	// 90001 is the base for LacyLights-synthesized personality IDs. EOS
 	// library personality IDs in observed real-world showfiles top out in
-	// the mid-five-digit range (OTBPA's largest is 23759); starting at
-	// 90001 sits comfortably above that band, avoiding accidental
-	// collisions when a user imports a real showfile and then re-exports
-	// it. Lower five-digit values stay free for hand-written test fixtures.
+	// the mid-five-digit range (OTBPA's largest is 23759), so 90001 sits
+	// comfortably above that band — IDs below 90001 stay free for any
+	// imported library personality plus hand-written test fixtures.
 	const persIDBase = 90001
 	for i, defID := range defIDs {
 		persID := persIDBase + i
