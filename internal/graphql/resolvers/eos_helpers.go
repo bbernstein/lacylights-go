@@ -40,7 +40,6 @@ func severityToGraphQL(s importeos.Severity) generated.EosWarningSeverity {
 // strip it.
 const maxEosContentBytes = 50 << 20 // 50 MiB
 
-
 // toEosWarnings converts importeos warnings to GraphQL warning shapes.
 // Context entries are sorted by key so output is deterministic across runs;
 // Go's map iteration order would otherwise produce flaky tests and unstable

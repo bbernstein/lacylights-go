@@ -149,10 +149,17 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 		res.FixtureInstancesCount++
 	}
 
-	if err := m.applyPalettes(ctx, projectID, show, eosChannelToInstanceID, persToChannels, table, &res.LooksCount, &res.CueListsCount); err != nil {
+	// Compute the per-instance state once and share it with both
+	// applyPalettes and applyCues; the previous code recomputed identical
+	// O(N) fixture lookups twice per import.
+	states, err := m.loadInstanceStates(ctx, eosChannelToInstanceID, persToChannels, show.Patch)
+	if err != nil {
 		return nil, err
 	}
-	if err := m.applyCues(ctx, projectID, show, eosChannelToInstanceID, persToChannels, table, &res.LooksCount, &res.CueListsCount, &res.CuesCount); err != nil {
+	if err := m.applyPalettes(ctx, projectID, show, states, table, &res.LooksCount, &res.CueListsCount); err != nil {
+		return nil, err
+	}
+	if err := m.applyCues(ctx, projectID, show, states, table, &res.LooksCount, &res.CueListsCount, &res.CuesCount); err != nil {
 		return nil, err
 	}
 	if err := m.applyGroups(ctx, projectID, show, &res.GroupsCount, warn); err != nil {
@@ -222,7 +229,7 @@ type instanceState struct {
 }
 
 // loadInstanceStates returns a map keyed by EOS channel number.
-func (m *Mapper) loadInstanceStates(ctx context.Context, projectID string,
+func (m *Mapper) loadInstanceStates(ctx context.Context,
 	eosChannelToInstanceID map[int]string,
 	persToChannels map[int][]models.ChannelDefinition,
 	patch []PatchEntry,
@@ -358,15 +365,10 @@ func buildLookValues(
 }
 
 func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show,
-	eosChannelToInstanceID map[int]string,
-	persToChannels map[int][]models.ChannelDefinition,
+	states map[int]*instanceState,
 	table *ParamTable,
 	looksCount, cueListsCount *int,
 ) error {
-	states, err := m.loadInstanceStates(ctx, projectID, eosChannelToInstanceID, persToChannels, show.Patch)
-	if err != nil {
-		return err
-	}
 	groups := []struct {
 		name     string
 		palettes []Palette
@@ -437,15 +439,10 @@ func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show
 }
 
 func (m *Mapper) applyCues(ctx context.Context, projectID string, show *Show,
-	eosChannelToInstanceID map[int]string,
-	persToChannels map[int][]models.ChannelDefinition,
+	states map[int]*instanceState,
 	table *ParamTable,
 	looksCount, cueListsCount, cuesCount *int,
 ) error {
-	states, err := m.loadInstanceStates(ctx, projectID, eosChannelToInstanceID, persToChannels, show.Patch)
-	if err != nil {
-		return err
-	}
 	tracker := NewTracker()
 	for _, cl := range show.CueLists {
 		listName := cl.Label

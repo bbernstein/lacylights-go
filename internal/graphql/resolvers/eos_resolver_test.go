@@ -149,6 +149,71 @@ func TestImportProjectFromEos_RejectsOversizedContent(t *testing.T) {
 	}
 }
 
+// TestImportProjectFromEos_TargetProjectAppendsContent imports an Eos
+// showfile into an existing project and confirms the result references that
+// project (rather than creating a new one). The mapper currently appends, so
+// the original project's contents remain alongside the imported data.
+func TestImportProjectFromEos_TargetProjectAppendsContent(t *testing.T) {
+	c, resolver, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Pre-create a target project the way the GraphQL flow would have.
+	target := &models.Project{ID: cuid.New(), Name: "Existing"}
+	require.NoError(t, resolver.ProjectRepo.Create(context.Background(), target))
+
+	var resp struct {
+		ImportProjectFromEos struct {
+			ProjectID             string
+			FixtureInstancesCount int
+		}
+	}
+	err := c.Post(`mutation Import($content: String!, $opts: EosImportOptionsInput) {
+		importProjectFromEos(asciiContent: $content, options: $opts) {
+			projectId
+			fixtureInstancesCount
+		}
+	}`, &resp,
+		client.Var("content", minimalEosShowfile),
+		client.Var("opts", map[string]any{"targetProjectId": target.ID}),
+	)
+	if err != nil {
+		t.Fatalf("graphql error: %v", err)
+	}
+	if resp.ImportProjectFromEos.ProjectID != target.ID {
+		t.Errorf("ProjectID = %q, want %q (target)", resp.ImportProjectFromEos.ProjectID, target.ID)
+	}
+	if resp.ImportProjectFromEos.FixtureInstancesCount != 2 {
+		t.Errorf("FixtureInstancesCount = %d, want 2 (from showfile)", resp.ImportProjectFromEos.FixtureInstancesCount)
+	}
+}
+
+// TestImportProjectFromEos_TargetProjectMissing confirms a request targeting
+// a project that doesn't exist fails fast rather than orphaning new fixtures.
+func TestImportProjectFromEos_TargetProjectMissing(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	var resp struct {
+		ImportProjectFromEos struct {
+			ProjectID string
+		}
+	}
+	err := c.Post(`mutation Import($content: String!, $opts: EosImportOptionsInput) {
+		importProjectFromEos(asciiContent: $content, options: $opts) {
+			projectId
+		}
+	}`, &resp,
+		client.Var("content", minimalEosShowfile),
+		client.Var("opts", map[string]any{"targetProjectId": "ghost-project-id"}),
+	)
+	if err == nil {
+		t.Fatal("expected error for nonexistent target project")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error %q missing 'not found'", err.Error())
+	}
+}
+
 // TestImportProjectFromEos_RejectsConflictingOptions verifies the resolver
 // rejects requests that pass both newProjectName and targetProjectId.
 func TestImportProjectFromEos_RejectsConflictingOptions(t *testing.T) {
