@@ -169,6 +169,16 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 
 func (m *Mapper) resolveProject(ctx context.Context, show *Show, opts Options) (string, error) {
 	if opts.TargetProjectID != nil {
+		// Verify the target still exists; the request may have been
+		// queued before the project was deleted. Without this guard we
+		// would create fixtures with an orphaned ProjectID FK.
+		existing, err := m.projectRepo.FindByID(ctx, *opts.TargetProjectID)
+		if err != nil {
+			return "", fmt.Errorf("load target project: %w", err)
+		}
+		if existing == nil {
+			return "", fmt.Errorf("target project %s not found", *opts.TargetProjectID)
+		}
 		return *opts.TargetProjectID, nil
 	}
 	name := show.Title
@@ -257,12 +267,17 @@ func findOffsetForType(defChans []models.ChannelDefinition, ct generated.Channel
 // byte-identical FixtureValue.Channels JSON. Without these sorts, Go's map
 // randomisation would produce different DB rows on each run, breaking
 // round-trip diff tests and surprising clients that compare snapshots.
+//
+// Returns an error if any per-instance channel slice fails to marshal —
+// unreachable today (ChannelValue is two ints) but propagated as a value
+// rather than a panic so callers (including the GraphQL resolver) get a
+// structured error instead of a server crash.
 func buildLookValues(
 	chanLevels map[int]int,
 	paramLevels map[int]map[int]int,
 	states map[int]*instanceState,
 	table *ParamTable,
-) []models.FixtureValue {
+) ([]models.FixtureValue, error) {
 	type fvAcc struct {
 		fixtureID string
 		channels  []models.ChannelValue
@@ -333,19 +348,14 @@ func buildLookValues(
 		sort.Slice(acc.channels, func(i, j int) bool { return acc.channels[i].Offset < acc.channels[j].Offset })
 		channelsJSON, err := json.Marshal(acc.channels)
 		if err != nil {
-			// ChannelValue (Offset int, Value int) cannot produce a
-			// marshal error today, but a future refactor that adds a
-			// non-marshallable field would silently drop look data
-			// without this branch. Keep the value out of the result and
-			// surface the failure rather than corrupting the look.
-			panic(fmt.Sprintf("import_eos: marshal ChannelValue: %v", err))
+			return nil, fmt.Errorf("import_eos: marshal ChannelValue for fixture %s: %w", acc.fixtureID, err)
 		}
 		out = append(out, models.FixtureValue{
 			FixtureID: acc.fixtureID,
 			Channels:  string(channelsJSON),
 		})
 	}
-	return out
+	return out, nil
 }
 
 func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show,
@@ -401,7 +411,10 @@ func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show
 					ps[v.ParamID] = v.Value
 				}
 			}
-			values := buildLookValues(chanLevels, paramLevels, states, table)
+			values, err := buildLookValues(chanLevels, paramLevels, states, table)
+			if err != nil {
+				return err
+			}
 			if err := m.lookRepo.CreateWithFixtureValues(ctx, look, values); err != nil {
 				return fmt.Errorf("create palette look: %w", err)
 			}
@@ -461,7 +474,10 @@ func (m *Mapper) applyCues(ctx context.Context, projectID string, show *Show,
 				cueName = cueName + " - " + cueLabel
 			}
 			look := &models.Look{ProjectID: projectID, Name: cueName}
-			values := buildLookValues(snap.ChannelLevels, snap.ParamLevels, states, table)
+			values, err := buildLookValues(snap.ChannelLevels, snap.ParamLevels, states, table)
+			if err != nil {
+				return err
+			}
 			if err := m.lookRepo.CreateWithFixtureValues(ctx, look, values); err != nil {
 				return err
 			}

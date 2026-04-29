@@ -61,6 +61,31 @@ func openFixtureFile(t *testing.T, name string) *os.File {
 	return f
 }
 
+func TestImport_TargetProjectNotFound(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	missing := "definitely-not-a-real-project"
+	_, err := svc.Import(context.Background(), strings.NewReader(`Ident 3:0
+$$Format 3.20
+$$Title T
+$ParamType 1 1 Intens
+$Personality 9001
+   $$Manuf G
+   $$Model D
+   $$Footprint 1
+   $$PersChan 1 1 1 0 0
+$Patch 1 1 9001
+`), Options{TargetProjectID: &missing})
+	if err == nil {
+		t.Fatal("expected error when target project does not exist")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error %q missing 'not found'", err.Error())
+	}
+}
+
 func TestImport_AddressConflictEmitsWarning(t *testing.T) {
 	// EOS supports multi-patching (two logical channels at the same DMX
 	// address); the importer surfaces that as a WARN-severity warning and

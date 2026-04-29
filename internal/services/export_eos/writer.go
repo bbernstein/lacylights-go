@@ -2,6 +2,19 @@ package exporteos
 
 import "strings"
 
+// sanitizeASCII strips characters that would corrupt the EOS ASCII output:
+// CR/LF would inject phantom directive lines, and tabs misalign the column
+// layout some EOS consoles still rely on. Replaces each problem rune with a
+// single space, preserving overall length-preserving behavior for any
+// downstream offset assumptions.
+func sanitizeASCII(s string) string {
+	if !strings.ContainsAny(s, "\r\n\t") {
+		return s
+	}
+	r := strings.NewReplacer("\r", " ", "\n", " ", "\t", " ")
+	return r.Replace(s)
+}
+
 // WriterOptions configures the exporter.
 type WriterOptions struct {
 	Title         string

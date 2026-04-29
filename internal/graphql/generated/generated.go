@@ -9836,6 +9836,17 @@ type EosExportResult {
   warnings: [EosWarning!]!
 }
 
+"""
+Options controlling how an Eos ASCII import is applied.
+
+Exactly one of ` + "`" + `newProjectName` + "`" + ` or ` + "`" + `targetProjectId` + "`" + ` should be set:
+- ` + "`" + `newProjectName` + "`" + `: create a new project with the given name (or the
+  showfile's ` + "`" + `$$Title` + "`" + ` if both are absent).
+- ` + "`" + `targetProjectId` + "`" + `: append the import into the named existing project.
+  Existing fixtures, looks, cue lists, and look boards are NOT cleared;
+  the new content is added alongside them. A future flag may add a
+  replace mode.
+"""
 input EosImportOptionsInput {
   newProjectName: String
   targetProjectId: ID

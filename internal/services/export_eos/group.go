@@ -13,7 +13,7 @@ type GroupOut struct {
 func (w *writer) writeGroup(g GroupOut) {
 	w.line(fmt.Sprintf("$Group %s", g.Number))
 	if g.Label != "" {
-		w.line("   Text " + g.Label)
+		w.line("   Text " + sanitizeASCII(g.Label))
 	}
 	if g.UnicodeText != nil {
 		w.line("   $$UText " + encodeUText(*g.UnicodeText))

@@ -4582,19 +4582,6 @@ func (r *mutationResolver) ExportProjectToQlc(ctx context.Context, projectID str
 	return nil, fmt.Errorf("QLC+ export not available on this platform")
 }
 
-// maxEosContentBytes caps the size of an inbound EOS ASCII payload. The
-// largest production showfile we have on hand is the OTBPA fixture at ~500 KB;
-// the cap is generous enough for very large shows but small enough that a
-// misconfigured or malicious client can't consume arbitrary memory before the
-// parser sees it.
-//
-// This check is application-layer: by the time it runs, the GraphQL runtime
-// has already decoded the JSON body into a Go string. For complete protection
-// against oversized requests, the HTTP server should also cap the request
-// body via http.MaxBytesReader. That is currently configured at the server
-// boundary; the limit here adds a documented contract at the resolver entry.
-const maxEosContentBytes = 50 << 20 // 50 MiB
-
 // ImportProjectFromEos is the resolver for the importProjectFromEos field.
 func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiContent string, options *generated.EosImportOptionsInput) (*generated.EosImportResult, error) {
 	if r.EosImportService == nil {
@@ -4635,12 +4622,8 @@ func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiConten
 		}
 	}
 	// Capture a warning if we silently picked a group on the caller's
-	// behalf when they belong to multiple groups. The warning code lives
-	// here (and not in import_eos/warnings.go) because the auto-assign
-	// is an authorization-layer concern, not a parser/mapper concern;
-	// keeping it resolver-local avoids leaking transport-shaped
-	// metadata into the service's warning vocabulary.
-	const warnGroupAutoAssigned = importeos.WarningCode("GROUP_AUTO_ASSIGNED")
+	// behalf when they belong to multiple groups; warnGroupAutoAssigned
+	// is defined in eos_helpers.go so it survives `make generate`.
 	var resolverWarnings []importeos.Warning
 	if importOpts.GroupID != nil {
 		groupIDs := middleware.GetUserGroupIDs(ctx)
@@ -8132,4 +8115,3 @@ type settingResolver struct{ *Resolver }
 type subscriptionResolver struct{ *Resolver }
 type userResolver struct{ *Resolver }
 type userGroupResolver struct{ *Resolver }
-

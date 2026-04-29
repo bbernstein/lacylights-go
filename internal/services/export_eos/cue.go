@@ -28,7 +28,7 @@ type CueOut struct {
 func (w *writer) writeCueList(cl CueListOut) {
 	w.line(fmt.Sprintf("$CueList %d", cl.Number))
 	if cl.Label != "" {
-		w.line("   Text " + cl.Label)
+		w.line("   Text " + sanitizeASCII(cl.Label))
 	}
 	w.blank()
 	for _, c := range cl.Cues {
@@ -44,7 +44,7 @@ func (w *writer) writeCue(listNum int, c CueOut) {
 	}
 	w.line(fmt.Sprintf("Cue %s %d", num, listNum))
 	if c.Label != "" {
-		w.line("   Text " + c.Label)
+		w.line("   Text " + sanitizeASCII(c.Label))
 	}
 	if c.UnicodeText != nil {
 		w.line("   $$UText " + encodeUText(*c.UnicodeText))

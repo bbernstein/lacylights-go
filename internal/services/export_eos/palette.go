@@ -37,7 +37,7 @@ type ParamValueOut struct {
 func (w *writer) writePalette(p PaletteOut) {
 	w.line(fmt.Sprintf("$%s %s", p.Kind, p.Number))
 	if p.Label != "" {
-		w.line("   Text " + p.Label)
+		w.line("   Text " + sanitizeASCII(p.Label))
 	}
 	if p.UnicodeText != nil {
 		w.line("   $$UText " + encodeUText(*p.UnicodeText))

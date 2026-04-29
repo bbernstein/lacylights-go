@@ -218,6 +218,58 @@ func TestExport_EmitsWarningForUnpatchedFixture(t *testing.T) {
 	}
 }
 
+// TestExport_SanitizesNewlinesInLabels confirms that user-supplied strings
+// (project name, fixture label) cannot inject phantom EOS directives via
+// embedded CR/LF/tab characters.
+func TestExport_SanitizesNewlinesInLabels(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+	ctx := context.Background()
+
+	proj := &models.Project{Name: "Title\nClear All"}
+	if err := deps.projectRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	def := &models.FixtureDefinition{Manufacturer: "Generic", Model: "Dimmer", Type: "DIMMER"}
+	chs := []models.ChannelDefinition{{Offset: 0, Name: "Intensity", Type: string(generated.ChannelTypeIntensity)}}
+	if err := deps.fixtureRepo.CreateDefinitionWithChannels(ctx, def, chs); err != nil {
+		t.Fatalf("create def: %v", err)
+	}
+	order := 1
+	fi := &models.FixtureInstance{
+		ProjectID: proj.ID, DefinitionID: def.ID,
+		Name:         "Front Wash\n$Patch 999 1 9001",
+		Universe:     1, StartChannel: 1, ProjectOrder: &order,
+	}
+	if err := deps.fixtureRepo.CreateWithChannels(ctx, fi, []models.InstanceChannel{{Offset: 0, Name: "Intensity", Type: string(generated.ChannelTypeIntensity)}}); err != nil {
+		t.Fatalf("create instance: %v", err)
+	}
+
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Export(ctx, proj.ID)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	// $$Title is the only line containing "Clear All" prefix when the
+	// project name carries a newline. After sanitization the title line
+	// reads "$$Title Title Clear All" on a single line.
+	if !strings.Contains(res.Content, "$$Title Title Clear All\n") {
+		t.Errorf("project name newline not sanitized; got:\n%s", res.Content)
+	}
+	// The fixture label embedded a fake "$Patch 999" directive after a
+	// newline. After sanitization that should appear within a Text label
+	// (indented), never as its own top-level directive line.
+	if strings.Contains(res.Content, "\n$Patch 999") {
+		t.Errorf("fixture label injected phantom $Patch directive:\n%s", res.Content)
+	}
+	// And the label should appear on the same line as "Text", not on a
+	// new directive line of its own.
+	if !strings.Contains(res.Content, "   Text Front Wash $Patch 999 1 9001\n") {
+		t.Errorf("fixture label newline not sanitized; got:\n%s", res.Content)
+	}
+}
+
 // TestExport_WarnsOnInvalidLookValuesJSON forces a corrupt FixtureValue
 // row and asserts the export emits LOOK_VALUES_INVALID rather than
 // silently dropping the channel data without feedback.

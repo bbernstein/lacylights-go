@@ -145,8 +145,16 @@ func buildPersonalities(defs map[string]*models.FixtureDefinition,
 			})
 		}
 		footprint := len(channels)
-		manuf := dm.Manufacturer
-		model := dm.Model
+		// FindDefinitionByID can legitimately return (nil, nil) when the
+		// referenced definition has been deleted; emit a synthetic
+		// "Unknown" personality rather than dereferencing nil. The
+		// resulting EOS file still re-imports cleanly because the
+		// channel-only fingerprint matches.
+		manuf, model := "Unknown", "Unknown"
+		if dm != nil {
+			manuf = dm.Manufacturer
+			model = dm.Model
+		}
 		out = append(out, PersonalityIn{
 			ID:        persID,
 			Manuf:     manuf,

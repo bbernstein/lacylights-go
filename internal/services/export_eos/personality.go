@@ -24,10 +24,10 @@ type PersonalityChannelIn struct {
 
 func (w *writer) writePersonality(p PersonalityIn) {
 	w.line(fmt.Sprintf("$Personality %d", p.ID))
-	w.line(fmt.Sprintf("   $$Manuf %s", p.Manuf))
-	w.line(fmt.Sprintf("   $$Model %s", p.Model))
+	w.line(fmt.Sprintf("   $$Manuf %s", sanitizeASCII(p.Manuf)))
+	w.line(fmt.Sprintf("   $$Model %s", sanitizeASCII(p.Model)))
 	if p.Dcid != "" {
-		w.line(fmt.Sprintf("   $$Dcid %s", p.Dcid))
+		w.line(fmt.Sprintf("   $$Dcid %s", sanitizeASCII(p.Dcid)))
 	}
 	w.line(fmt.Sprintf("   $$Footprint %d", p.Footprint))
 	for _, c := range p.Channels {
