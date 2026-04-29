@@ -4582,10 +4582,20 @@ func (r *mutationResolver) ExportProjectToQlc(ctx context.Context, projectID str
 	return nil, fmt.Errorf("QLC+ export not available on this platform")
 }
 
+// maxEosContentBytes caps the size of an inbound EOS ASCII payload. The
+// largest production showfile we have on hand is the OTBPA fixture at ~500 KB;
+// the cap is generous enough for very large shows but small enough that a
+// misconfigured or malicious client can't consume arbitrary memory before the
+// parser sees it.
+const maxEosContentBytes = 50 << 20 // 50 MiB
+
 // ImportProjectFromEos is the resolver for the importProjectFromEos field.
 func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiContent string, options *generated.EosImportOptionsInput) (*generated.EosImportResult, error) {
 	if r.EosImportService == nil {
 		return nil, fmt.Errorf("eos import not available on this platform")
+	}
+	if len(asciiContent) > maxEosContentBytes {
+		return nil, fmt.Errorf("asciiContent exceeds maximum size of %d bytes", maxEosContentBytes)
 	}
 	importOpts := importeos.Options{}
 	if options != nil {
@@ -4623,6 +4633,14 @@ func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiConten
 	if err != nil {
 		return nil, err
 	}
+	// The schema declares synthesizedDefinitionIds as a non-null list. The
+	// import service returns nil when no definitions were synthesized;
+	// coerce to an empty slice so gqlgen serializes [] rather than null
+	// (which would violate the schema and produce a runtime error).
+	synths := res.SynthesizedDefinitionIDs
+	if synths == nil {
+		synths = []string{}
+	}
 	return &generated.EosImportResult{
 		ProjectID:                res.ProjectID,
 		FixtureDefinitionsCount:  res.FixtureDefinitionsCount,
@@ -4632,7 +4650,7 @@ func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiConten
 		CuesCount:                res.CuesCount,
 		GroupsCount:              res.GroupsCount,
 		Warnings:                 toEosWarnings(res.Warnings),
-		SynthesizedDefinitionIds: res.SynthesizedDefinitionIDs,
+		SynthesizedDefinitionIds: synths,
 	}, nil
 }
 

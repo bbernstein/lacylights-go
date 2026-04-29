@@ -261,21 +261,21 @@ func (p *parser) parsePatch() error {
 		return &ParseError{Lineno: line.Lineno, Msg: "$Patch channel not an integer"}
 	}
 	// EOS exports use two field orderings depending on the source:
-	//   user-authored:  $Patch <chan> <addr> <persID>
-	//   library-driven: $Patch <chan> <persID> <addr> <wheel> <count>
-	// Resolve by matching against the personalities already parsed (they
-	// always precede $Patch in the file). Default to the user-authored
-	// ordering when both fields claim valid personality IDs (or neither
-	// does — keeps minimal/synthetic fixtures working as before).
+	//   user-authored:  $Patch <chan> <addr> <persID>                 (3 fields)
+	//   library-driven: $Patch <chan> <persID> <addr> <wheel> <count> (5 fields)
 	//
-	// The library-driven format always emits 5 fields (the ≥ 4 check below
-	// is a deliberately conservative guard); a hypothetical 3-field
-	// library-driven line would silently fall through to user-authored
-	// parsing. We have not seen such a file in the wild, but a follow-up
-	// could make this even safer by also checking the parsed personality's
-	// channel count against the trailing $$PersChan rows.
+	// We resolve by:
+	//   1. Requiring exactly 5 fields for the library-driven form. This
+	//      avoids a false positive when a user-authored 3-field line
+	//      happens to have a flat absolute address that matches a
+	//      synthesized personality ID (e.g. addr 9001 on a 4-universe rig,
+	//      where 9001 is also our persIDBase).
+	//   2. Within a 5-field line, swapping only when fields[1] is a
+	//      declared personality ID and fields[2] is not — both fields
+	//      being valid personalities (or neither) is ambiguous, so we
+	//      leave the user-authored ordering as the safe default.
 	addrIdx, persIdx := 1, 2
-	if len(line.Fields) >= 4 && p.fieldIsKnownPersonality(line.Fields[1]) && !p.fieldIsKnownPersonality(line.Fields[2]) {
+	if len(line.Fields) == 5 && p.fieldIsKnownPersonality(line.Fields[1]) && !p.fieldIsKnownPersonality(line.Fields[2]) {
 		addrIdx, persIdx = 2, 1
 	}
 	persID, err := strconv.Atoi(line.Fields[persIdx])

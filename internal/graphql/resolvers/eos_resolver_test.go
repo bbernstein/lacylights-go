@@ -90,6 +90,65 @@ func TestImportProjectFromEos_E2E(t *testing.T) {
 	}
 }
 
+// TestImportProjectFromEos_SynthesizedDefinitionIdsIsAlwaysList confirms the
+// resolver coerces a nil SynthesizedDefinitionIDs from the import service into
+// an empty list, satisfying the schema's non-null list contract.
+func TestImportProjectFromEos_SynthesizedDefinitionIdsIsAlwaysList(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	var resp struct {
+		ImportProjectFromEos struct {
+			ProjectID                string
+			SynthesizedDefinitionIds []string
+		}
+	}
+	err := c.Post(`mutation Import($content: String!, $opts: EosImportOptionsInput) {
+		importProjectFromEos(asciiContent: $content, options: $opts) {
+			projectId
+			synthesizedDefinitionIds
+		}
+	}`, &resp,
+		client.Var("content", minimalEosShowfile),
+		client.Var("opts", map[string]any{"newProjectName": "Synth List Test"}),
+	)
+	if err != nil {
+		t.Fatalf("graphql error: %v", err)
+	}
+	if resp.ImportProjectFromEos.SynthesizedDefinitionIds == nil {
+		t.Errorf("synthesizedDefinitionIds must be a non-nil list, got nil")
+	}
+}
+
+// TestImportProjectFromEos_RejectsOversizedContent verifies the resolver caps
+// the size of asciiContent to prevent unbounded memory growth from a malicious
+// or misconfigured client.
+func TestImportProjectFromEos_RejectsOversizedContent(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	// Build a payload just over the cap. Use a simple repeated character so
+	// the payload itself is cheap to construct.
+	oversized := strings.Repeat("X", maxEosContentBytes+1)
+
+	var resp struct {
+		ImportProjectFromEos struct {
+			ProjectID string
+		}
+	}
+	err := c.Post(`mutation Import($content: String!) {
+		importProjectFromEos(asciiContent: $content) {
+			projectId
+		}
+	}`, &resp, client.Var("content", oversized))
+	if err == nil {
+		t.Fatal("expected oversized payload to be rejected")
+	}
+	if !strings.Contains(err.Error(), "exceeds maximum size") {
+		t.Errorf("error %q missing 'exceeds maximum size'", err.Error())
+	}
+}
+
 // TestImportProjectFromEos_RejectsConflictingOptions verifies the resolver
 // rejects requests that pass both newProjectName and targetProjectId.
 func TestImportProjectFromEos_RejectsConflictingOptions(t *testing.T) {
