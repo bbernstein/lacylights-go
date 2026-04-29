@@ -44,7 +44,11 @@ func NewMapper(p *repositories.ProjectRepository, f *repositories.FixtureReposit
 
 // Apply maps the parsed show into the database.
 func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Options, warn *Collector) (*Result, error) {
-	res := &Result{}
+	// Initialize SynthesizedDefinitionIDs as a non-nil empty slice so
+	// callers (including the GraphQL resolver, which marshals it to a
+	// non-null list) never see a nil. Without this, append() leaves the
+	// field nil when no definitions were synthesized.
+	res := &Result{SynthesizedDefinitionIDs: []string{}}
 
 	projectID, err := m.resolveProject(ctx, show, opts)
 	if err != nil {
@@ -329,11 +333,12 @@ func buildLookValues(
 		sort.Slice(acc.channels, func(i, j int) bool { return acc.channels[i].Offset < acc.channels[j].Offset })
 		channelsJSON, err := json.Marshal(acc.channels)
 		if err != nil {
-			// In practice ChannelValue (Offset int, Value int) cannot
-			// produce a marshal error; this branch exists so a future
-			// refactor that adds non-marshallable fields surfaces the
-			// problem instead of silently writing "" into the DB.
-			continue
+			// ChannelValue (Offset int, Value int) cannot produce a
+			// marshal error today, but a future refactor that adds a
+			// non-marshallable field would silently drop look data
+			// without this branch. Keep the value out of the result and
+			// surface the failure rather than corrupting the look.
+			panic(fmt.Sprintf("import_eos: marshal ChannelValue: %v", err))
 		}
 		out = append(out, models.FixtureValue{
 			FixtureID: acc.fixtureID,

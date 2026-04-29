@@ -4658,14 +4658,9 @@ func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiConten
 	if err != nil {
 		return nil, err
 	}
-	// The schema declares synthesizedDefinitionIds as a non-null list. The
-	// import service returns nil when no definitions were synthesized;
-	// coerce to an empty slice so gqlgen serializes [] rather than null
-	// (which would violate the schema and produce a runtime error).
-	synths := res.SynthesizedDefinitionIDs
-	if synths == nil {
-		synths = []string{}
-	}
+	// The schema declares synthesizedDefinitionIds as a non-null list.
+	// importeos.Service guarantees a non-nil slice, so we can pass the
+	// service's value through directly.
 	return &generated.EosImportResult{
 		ProjectID:                res.ProjectID,
 		FixtureDefinitionsCount:  res.FixtureDefinitionsCount,
@@ -4675,7 +4670,7 @@ func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiConten
 		CuesCount:                res.CuesCount,
 		GroupsCount:              res.GroupsCount,
 		Warnings:                 toEosWarnings(append(resolverWarnings, res.Warnings...)),
-		SynthesizedDefinitionIds: synths,
+		SynthesizedDefinitionIds: res.SynthesizedDefinitionIDs,
 	}, nil
 }
 

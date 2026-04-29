@@ -172,7 +172,7 @@ func buildPatch(instances []models.FixtureInstance, persIDs map[string]int, coll
 			if collector != nil {
 				collector.Add(importeos.WarnUnpatchedInstance, importeos.SeverityInfo,
 					fmt.Sprintf("fixture %q has no DMX address; skipped on export", fi.Name),
-					map[string]string{"fixtureId": fi.ID, "name": fi.Name})
+					map[string]string{"fixtureId": fi.ID})
 			}
 			continue
 		}
