@@ -121,18 +121,13 @@ func buildPersonalities(defs map[string]*models.FixtureDefinition,
 
 	idMap := make(map[string]int, len(defIDs))
 	out := make([]PersonalityIn, 0, len(defIDs))
-	// 9001 is the conventional base for LacyLights-synthesized personality IDs;
-	// EOS library personalities use IDs in the low five digits (e.g. OTBPA's
-	// 11896, 14983, 23759). Starting at 9001 leaves the typical 1..1000 range
-	// for hand-written test fixtures and documents that these IDs are
-	// project-local rather than EOS-library references.
-	//
-	// TODO: collision risk if a user imports a showfile that uses library
-	// personality IDs >= 9001 (rare but possible) and then re-exports it.
-	// A safer scheme would scan existing personality IDs in the project
-	// and pick a base above the max, or move the base to >= 900000 where
-	// no real-world collision is likely.
-	const persIDBase = 9001
+	// 90001 is the base for LacyLights-synthesized personality IDs. EOS
+	// library personality IDs in observed real-world showfiles top out in
+	// the mid-five-digit range (OTBPA's largest is 23759); starting at
+	// 90001 sits comfortably above that band, avoiding accidental
+	// collisions when a user imports a real showfile and then re-exports
+	// it. Lower five-digit values stay free for hand-written test fixtures.
+	const persIDBase = 90001
 	for i, defID := range defIDs {
 		persID := persIDBase + i
 		idMap[defID] = persID
@@ -201,9 +196,11 @@ func buildPatch(instances []models.FixtureInstance, persIDs map[string]int, coll
 }
 
 // formatEOSAddress emits the dotted form ("1.512") for non-trivial universes,
-// and a flat form for universe 1 (matches what the parser accepts). Callers
-// must pre-filter out address <= 0; emitting "0" here would re-parse as
-// ErrAddressUnpatched on round-trip.
+// and a flat form for universe <= 1 (matches what the parser accepts).
+// Callers must pre-filter out address <= 0; emitting "0" here would re-parse
+// as ErrAddressUnpatched on round-trip. Universe 0 collapses to the flat
+// form for the same reason — there is no real "universe 0" in EOS, but a
+// fixture stored that way can still produce a valid flat address.
 func formatEOSAddress(universe, address int) string {
 	if universe <= 1 {
 		return strconv.Itoa(address)

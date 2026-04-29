@@ -151,12 +151,12 @@ func TestExport_StructureBasics(t *testing.T) {
 		"$$Title Sample Show\n",
 		"$ParamType 1 1 Intens\n",
 		"$ParamType 12 3 Red\n",
-		"$Personality 9001\n",
+		"$Personality 90001\n",
 		"   $$Manuf Generic\n",
 		"   $$Model RGBW\n",
-		"$Patch 1 1 9001\n",
+		"$Patch 1 1 90001\n",
 		"   Text Front Wash\n",
-		"$Patch 2 5 9001\n", // EOS channel 2, address 5 (universe 1, start 5)
+		"$Patch 2 5 90001\n", // EOS channel 2, address 5 (universe 1, start 5)
 		"$CueList 1\n",
 		"   Text Main\n",
 		"Cue 1 1\n",
@@ -239,7 +239,7 @@ func TestExport_SanitizesNewlinesInLabels(t *testing.T) {
 	order := 1
 	fi := &models.FixtureInstance{
 		ProjectID: proj.ID, DefinitionID: def.ID,
-		Name:         "Front Wash\n$Patch 999 1 9001",
+		Name:         "Front Wash\n$Patch 999 1 90001",
 		Universe:     1, StartChannel: 1, ProjectOrder: &order,
 	}
 	if err := deps.fixtureRepo.CreateWithChannels(ctx, fi, []models.InstanceChannel{{Offset: 0, Name: "Intensity", Type: string(generated.ChannelTypeIntensity)}}); err != nil {
@@ -266,7 +266,7 @@ func TestExport_SanitizesNewlinesInLabels(t *testing.T) {
 	}
 	// And the label should appear on the same line as "Text", not on a
 	// new directive line of its own.
-	if !strings.Contains(res.Content, "   Text Front Wash $Patch 999 1 9001\n") {
+	if !strings.Contains(res.Content, "   Text Front Wash $Patch 999 1 90001\n") {
 		t.Errorf("fixture label newline not sanitized; got:\n%s", res.Content)
 	}
 }
@@ -357,7 +357,7 @@ func TestExport_DottedAddressForMultiUniverse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("export: %v", err)
 	}
-	if !strings.Contains(res.Content, "$Patch 1 2.100 9001") {
+	if !strings.Contains(res.Content, "$Patch 1 2.100 90001") {
 		t.Errorf("expected dotted address '2.100' in patch line, got:\n%s", res.Content)
 	}
 }

@@ -40,7 +40,14 @@ func NewServiceWithDeps(
 	c *repositories.CueRepository,
 	lb *repositories.LookBoardRepository,
 ) *Service {
-	return &Service{p, f, l, cl, c, lb}
+	return &Service{
+		projectRepo:   p,
+		fixtureRepo:   f,
+		lookRepo:      l,
+		cueListRepo:   cl,
+		cueRepo:       c,
+		lookBoardRepo: lb,
+	}
 }
 
 // validateDependencies ensures all required repositories are wired.

@@ -285,7 +285,6 @@ func TestParseLevel_RangeChecks(t *testing.T) {
 	}
 }
 
-
 // TestParsePersChan_StrictNumericFields locks in the contract that any
 // non-numeric required field on a $$PersChan line drops the channel rather
 // than silently substituting a zero value (which would corrupt patch

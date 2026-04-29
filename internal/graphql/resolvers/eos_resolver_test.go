@@ -319,7 +319,7 @@ func TestExportProjectToEos_E2E(t *testing.T) {
 	for _, want := range []string{
 		"Ident 3:0",
 		"$$Title E2E Roundtrip",
-		"$Personality 9001",
+		"$Personality 90001",
 		"$Patch 1",
 		"$CueList 1",
 	} {
