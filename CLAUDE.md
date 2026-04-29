@@ -105,7 +105,8 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 - Parser/mapper: `internal/services/import_eos/`
 - Writer: `internal/services/export_eos/`
 - GraphQL surface: `importProjectFromEos`, `exportProjectToEos` mutations
-- Real-world test fixture: `../docs/OTBPA DRESS TUES.asc` (lives in the lacylights aggregator dir)
+- Real-world test fixture: `internal/services/import_eos/testdata/golden_otbpa.asc`
+  (an in-repo copy of "OTBPA DRESS TUES" used by the round-trip and golden tests)
 - Lossy LacyLights→ASCII concepts (Look Boards, per-channel fade behaviors,
   synthesized fixture definitions) round-trip via a `$$ LACYLIGHTS:`
   comment-sidecar block at end-of-file. EOS itself ignores those comments.
