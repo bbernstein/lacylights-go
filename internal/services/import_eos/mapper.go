@@ -149,7 +149,6 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 		res.FixtureInstancesCount++
 	}
 
-	_ = persToDefID // currently unused; reserved for Task 14c group/sidecar persistence.
 	if err := m.applyPalettes(ctx, projectID, show, eosChannelToInstanceID, persToChannels, table, &res.LooksCount, &res.CueListsCount); err != nil {
 		return nil, err
 	}

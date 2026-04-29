@@ -4622,14 +4622,15 @@ func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiConten
 		}
 	}
 	// Capture a warning if we silently picked a group on the caller's
-	// behalf when they belong to multiple groups; warnGroupAutoAssigned
-	// is defined in eos_helpers.go so it survives `make generate`.
+	// behalf when they belong to multiple groups. The code is centralized
+	// in importeos.WarnGroupAutoAssigned even though the emission happens
+	// here at the resolver layer.
 	var resolverWarnings []importeos.Warning
 	if importOpts.GroupID != nil {
 		groupIDs := middleware.GetUserGroupIDs(ctx)
 		if len(groupIDs) > 1 {
 			resolverWarnings = append(resolverWarnings, importeos.Warning{
-				Code:     warnGroupAutoAssigned,
+				Code:     importeos.WarnGroupAutoAssigned,
 				Severity: importeos.SeverityInfo,
 				Message:  "imported project assigned to your first group; pass options.targetProjectId or wait for groupId support to choose explicitly",
 				Context:  map[string]string{"groupId": *importOpts.GroupID},

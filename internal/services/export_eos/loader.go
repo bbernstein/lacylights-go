@@ -126,6 +126,12 @@ func buildPersonalities(defs map[string]*models.FixtureDefinition,
 	// 11896, 14983, 23759). Starting at 9001 leaves the typical 1..1000 range
 	// for hand-written test fixtures and documents that these IDs are
 	// project-local rather than EOS-library references.
+	//
+	// TODO: collision risk if a user imports a showfile that uses library
+	// personality IDs >= 9001 (rare but possible) and then re-exports it.
+	// A safer scheme would scan existing personality IDs in the project
+	// and pick a base above the max, or move the base to >= 900000 where
+	// no real-world collision is likely.
 	const persIDBase = 9001
 	for i, defID := range defIDs {
 		persID := persIDBase + i

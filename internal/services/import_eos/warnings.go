@@ -30,6 +30,13 @@ const (
 	WarnLookValuesInvalid  WarningCode = "LOOK_VALUES_INVALID"
 	WarnGroupsSkipped      WarningCode = "GROUPS_SKIPPED"
 	WarnAddressConflict    WarningCode = "ADDRESS_CONFLICT"
+	// WarnGroupAutoAssigned is emitted by the GraphQL resolver layer
+	// (not the parser/mapper) when a multi-group user gets their new
+	// imported project silently assigned to groupIDs[0]. Listed here
+	// so the registry of every code a client may receive lives in one
+	// canonical place, even though the warning is produced outside
+	// import_eos.
+	WarnGroupAutoAssigned WarningCode = "GROUP_AUTO_ASSIGNED"
 )
 
 // Warning is a structured non-fatal warning emitted during import or export.

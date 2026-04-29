@@ -7,6 +7,23 @@ import (
 	importeos "github.com/bbernstein/lacylights-go/internal/services/import_eos"
 )
 
+// severityToGraphQL maps an importeos severity to its generated GraphQL
+// enum constant. A typed switch instead of a raw string cast surfaces enum
+// drift (e.g. a new severity added to the service layer without a schema
+// update) at compile time rather than emitting an invalid enum to clients.
+func severityToGraphQL(s importeos.Severity) generated.EosWarningSeverity {
+	switch s {
+	case importeos.SeverityInfo:
+		return generated.EosWarningSeverityInfo
+	case importeos.SeverityWarn:
+		return generated.EosWarningSeverityWarn
+	}
+	// Unknown severity → fall back to WARN so the message is at least
+	// surfaced rather than dropped, but a future linter run will catch
+	// the unhandled case if Severity gains a new constant.
+	return generated.EosWarningSeverityWarn
+}
+
 // maxEosContentBytes caps the size of an inbound EOS ASCII payload. The
 // largest production showfile we have on hand is the OTBPA fixture at ~500 KB;
 // the cap is generous enough for very large shows but small enough that a
@@ -23,11 +40,6 @@ import (
 // strip it.
 const maxEosContentBytes = 50 << 20 // 50 MiB
 
-// warnGroupAutoAssigned is emitted by ImportProjectFromEos when the resolver
-// silently picks groupIDs[0] for a new-project import. The code lives here
-// rather than in import_eos/warnings.go because the auto-assign is an
-// authorization-layer concern, not parser/mapper vocabulary.
-const warnGroupAutoAssigned = importeos.WarningCode("GROUP_AUTO_ASSIGNED")
 
 // toEosWarnings converts importeos warnings to GraphQL warning shapes.
 // Context entries are sorted by key so output is deterministic across runs;
@@ -43,7 +55,7 @@ func toEosWarnings(in []importeos.Warning) []*generated.EosWarning {
 	for _, w := range in {
 		ew := &generated.EosWarning{
 			Code:     string(w.Code),
-			Severity: generated.EosWarningSeverity(string(w.Severity)),
+			Severity: severityToGraphQL(w.Severity),
 			Message:  w.Message,
 		}
 		ew.Context = make([]*generated.EosWarningContextEntry, 0, len(w.Context))

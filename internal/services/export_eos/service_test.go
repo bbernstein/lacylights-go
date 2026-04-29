@@ -8,6 +8,7 @@ import (
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
+	importeos "github.com/bbernstein/lacylights-go/internal/services/import_eos"
 )
 
 // buildSampleProject creates a minimal project with a single 4-channel RGBW
@@ -205,7 +206,7 @@ func TestExport_EmitsWarningForUnpatchedFixture(t *testing.T) {
 
 	var sawWarning bool
 	for _, w := range res.Warnings {
-		if w.Code == "UNPATCHED_INSTANCE" {
+		if w.Code == importeos.WarnUnpatchedInstance {
 			sawWarning = true
 			break
 		}
@@ -315,7 +316,7 @@ func TestExport_WarnsOnInvalidLookValuesJSON(t *testing.T) {
 	}
 	var saw bool
 	for _, w := range res.Warnings {
-		if w.Code == "LOOK_VALUES_INVALID" {
+		if w.Code == importeos.WarnLookValuesInvalid {
 			saw = true
 			break
 		}
