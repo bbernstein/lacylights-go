@@ -75,7 +75,7 @@ func (s *Service) loadBundle(ctx context.Context, projectID string, collector *i
 
 	instanceStates, eosChannelByInstance := buildInstanceStates(instances, defChannels)
 
-	palettes, regularLists, err := s.buildPaletteAndCueLists(ctx, cueLists, instanceStates, eosChannelByInstance)
+	palettes, regularLists, err := s.buildPaletteAndCueLists(ctx, cueLists, instanceStates, eosChannelByInstance, collector)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +252,11 @@ func (s *Service) buildPaletteAndCueLists(
 	cueLists []models.CueList,
 	states map[string]*instanceState,
 	eosByInstance map[string]int,
+	collector *importeos.Collector,
 ) ([]PaletteOut, []CueListOut, error) {
+	// TODO: batch the per-cue GetFixtureValues calls when project scale
+	// warrants — currently O(cues) round-trips per export. Acceptable for
+	// typical theatre showfiles; consider GetFixtureValuesByLookIDs.
 	var palettes []PaletteOut
 	var regular []CueListOut
 	regularNumber := 1
@@ -270,7 +274,7 @@ func (s *Service) buildPaletteAndCueLists(
 				if err != nil {
 					return nil, nil, fmt.Errorf("export_eos: palette values: %w", err)
 				}
-				chanMoves, paramMoves := renderMoves(values, states, eosByInstance)
+				chanMoves, paramMoves := renderMoves(values, states, eosByInstance, collector)
 				palettes = append(palettes, PaletteOut{
 					Kind:       kind,
 					Number:     formatNumber(cue.CueNumber),
@@ -292,7 +296,7 @@ func (s *Service) buildPaletteAndCueLists(
 			if err != nil {
 				return nil, nil, fmt.Errorf("export_eos: cue values: %w", err)
 			}
-			chanMoves, paramMoves := renderMoves(values, states, eosByInstance)
+			chanMoves, paramMoves := renderMoves(values, states, eosByInstance, collector)
 			c := CueOut{
 				Number:     formatNumber(cue.CueNumber),
 				Label:      cueLabelFor(cue),
@@ -338,7 +342,10 @@ func cueLabelFor(cue models.Cue) string {
 
 // renderMoves materializes a Look's fixture values into chan/param move lists.
 // Channel-type INTENSITY values become $$ChanMove; all others become $$Param.
-func renderMoves(values []models.FixtureValue, states map[string]*instanceState, eosByInstance map[string]int) ([]ChanMoveOut, []ParamMoveOut) {
+// Malformed FixtureValue.Channels JSON is reported as a LOOK_VALUES_INVALID
+// warning and the offending row is skipped; the alternative (failing the
+// whole export) would be more disruptive than dropping a single look's data.
+func renderMoves(values []models.FixtureValue, states map[string]*instanceState, eosByInstance map[string]int, collector *importeos.Collector) ([]ChanMoveOut, []ParamMoveOut) {
 	var chanMoves []ChanMoveOut
 	type paramAcc struct {
 		channel int
@@ -359,7 +366,15 @@ func renderMoves(values []models.FixtureValue, states map[string]*instanceState,
 			continue
 		}
 		var chanList []models.ChannelValue
-		if err := json.Unmarshal([]byte(fv.Channels), &chanList); err != nil || len(chanList) == 0 {
+		if err := json.Unmarshal([]byte(fv.Channels), &chanList); err != nil {
+			if collector != nil {
+				collector.Add(importeos.WarnLookValuesInvalid, importeos.SeverityWarn,
+					fmt.Sprintf("invalid FixtureValue.Channels JSON for fixture %s; skipping", fv.FixtureID),
+					map[string]string{"fixtureId": fv.FixtureID, "lookId": fv.LookID, "err": err.Error()})
+			}
+			continue
+		}
+		if len(chanList) == 0 {
 			continue
 		}
 		rows = append(rows, valueRow{
@@ -426,6 +441,9 @@ func (s *Service) buildSidecar(
 		return SidecarOut{}, fmt.Errorf("export_eos: look boards: %w", err)
 	}
 	sort.SliceStable(boards, func(i, j int) bool { return boards[i].ID < boards[j].ID })
+	// TODO: batch the per-board GetButtons calls when project scale warrants
+	// — currently O(boards) round-trips per export. Acceptable for typical
+	// shows (low single-digit board counts).
 	for _, b := range boards {
 		buttons, err := s.lookBoardRepo.GetButtons(ctx, b.ID)
 		if err != nil {

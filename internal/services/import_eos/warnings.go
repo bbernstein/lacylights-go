@@ -27,6 +27,7 @@ const (
 	WarnSidecarUnresolved  WarningCode = "SIDECAR_UNRESOLVED"
 	WarnUnpatchedChannel   WarningCode = "UNPATCHED_CHANNEL"
 	WarnUnpatchedInstance  WarningCode = "UNPATCHED_INSTANCE"
+	WarnLookValuesInvalid  WarningCode = "LOOK_VALUES_INVALID"
 )
 
 // Warning is a structured non-fatal warning emitted during import or export.

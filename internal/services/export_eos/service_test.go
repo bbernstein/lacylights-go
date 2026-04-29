@@ -251,7 +251,7 @@ func TestExport_FailsWhenRepositoriesMissing(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			deps := newTestDeps(t)
 			defer deps.close()
-			svc := NewService()
+			svc := &Service{}
 			c.mutate(deps, svc)
 			_, err := svc.Export(context.Background(), "x")
 			if err == nil || !strings.Contains(err.Error(), c.wantSub) {
