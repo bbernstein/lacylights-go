@@ -101,6 +101,23 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 - Configurable update rate (default 60Hz)
 - Handles concurrent scene activations
 
+### Eos ASCII Import/Export
+- Parser/mapper: `internal/services/import_eos/`
+- Writer: `internal/services/export_eos/`
+- GraphQL surface: `importProjectFromEos`, `exportProjectToEos` mutations
+- Real-world test fixture: `internal/services/import_eos/testdata/golden_otbpa.asc`
+  (an in-repo copy of "OTBPA DRESS TUES" used by the round-trip and golden tests)
+- Lossy LacyLights→ASCII concepts (Look Boards, per-channel fade behaviors,
+  synthesized fixture definitions) round-trip via a `$$ LACYLIGHTS:`
+  comment-sidecar block at end-of-file. EOS itself ignores those comments.
+- Effects, partitions, magic sheets, action triggers, curves, submasters
+  are skipped on import and surface as structured `EosWarning` records.
+- Writer is **deterministic**: the same input produces byte-identical output
+  (verified by `TestExport_Deterministic`).
+- `EosImportOptionsInput`: provide either `newProjectName` (create) or
+  `targetProjectId` (append) — they are mutually exclusive and the resolver
+  returns an error if both are set.
+
 ## Testing Guidelines
 
 - Unit tests alongside code: `foo_test.go` next to `foo.go`
