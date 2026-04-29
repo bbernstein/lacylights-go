@@ -70,7 +70,9 @@ func (s *Service) validateDependencies() error {
 // Result. Callers that need to stream to a writer can simply Write the
 // returned content; the entire showfile is held in memory regardless because
 // the deterministic-emit guarantee requires the writer to fully assemble the
-// document before flushing.
+// document before flushing. Theatre-scale projects fit comfortably (the OTBPA
+// reference fixture is ~500 KB); the practical upper bound is well under the
+// 50 MiB import cap declared in the GraphQL resolver.
 func (s *Service) Export(ctx context.Context, projectID string) (*Result, error) {
 	if err := s.validateDependencies(); err != nil {
 		return nil, err

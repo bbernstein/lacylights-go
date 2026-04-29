@@ -4635,14 +4635,18 @@ func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiConten
 		}
 	}
 	// Capture a warning if we silently picked a group on the caller's
-	// behalf when they belong to multiple groups. This is appended to the
-	// service's warnings so the UI can surface the choice.
+	// behalf when they belong to multiple groups. The warning code lives
+	// here (and not in import_eos/warnings.go) because the auto-assign
+	// is an authorization-layer concern, not a parser/mapper concern;
+	// keeping it resolver-local avoids leaking transport-shaped
+	// metadata into the service's warning vocabulary.
+	const warnGroupAutoAssigned = importeos.WarningCode("GROUP_AUTO_ASSIGNED")
 	var resolverWarnings []importeos.Warning
 	if importOpts.GroupID != nil {
 		groupIDs := middleware.GetUserGroupIDs(ctx)
 		if len(groupIDs) > 1 {
 			resolverWarnings = append(resolverWarnings, importeos.Warning{
-				Code:     importeos.WarnGroupAutoAssigned,
+				Code:     warnGroupAutoAssigned,
 				Severity: importeos.SeverityInfo,
 				Message:  "imported project assigned to your first group; pass options.targetProjectId or wait for groupId support to choose explicitly",
 				Context:  map[string]string{"groupId": *importOpts.GroupID},

@@ -284,3 +284,34 @@ func TestParseLevel_RangeChecks(t *testing.T) {
 		})
 	}
 }
+
+
+// TestParsePersChan_StrictNumericFields locks in the contract that any
+// non-numeric required field on a $$PersChan line drops the channel rather
+// than silently substituting a zero value (which would corrupt patch
+// addressing or fixture defaults).
+func TestParsePersChan_StrictNumericFields(t *testing.T) {
+	cases := []struct {
+		name   string
+		fields []string
+		ok     bool
+	}{
+		{"valid_8bit", []string{"1", "1", "1", "0", "0"}, true},
+		{"valid_16bit", []string{"1", "2", "1", "2", "0"}, true},
+		{"too_few_fields", []string{"1", "1", "1"}, false},
+		{"non_numeric_paramID", []string{"x", "1", "1", "0", "0"}, false},
+		{"non_numeric_size", []string{"1", "x", "1", "0", "0"}, false},
+		{"non_numeric_offset", []string{"1", "1", "x", "0", "0"}, false},
+		{"non_numeric_offset16", []string{"1", "2", "1", "x", "0"}, false},
+		{"non_numeric_home", []string{"1", "1", "1", "x"}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			line := &Line{Fields: c.fields}
+			_, ok := parsePersChan(line)
+			if ok != c.ok {
+				t.Errorf("parsePersChan(%v) ok=%v, want %v", c.fields, ok, c.ok)
+			}
+		})
+	}
+}
