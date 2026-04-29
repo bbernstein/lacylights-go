@@ -208,6 +208,16 @@ func (p *parser) parsePersonality() error {
 	}
 	p.show.Personalities = append(p.show.Personalities, pers)
 	p.personalityIDs[id] = struct{}{}
+	// LacyLights synthesizes IDs starting at 90001 on export; warn if an
+	// incoming file already uses an ID in that range so a future re-export
+	// collision is at least visible to the operator.
+	const synthesizedPersIDFloor = 90001
+	if id >= synthesizedPersIDFloor {
+		p.warn.Add(WarnUnknownDirective, SeverityInfo,
+			fmt.Sprintf("$Personality %d uses an ID in the LacyLights synthesized range (>= %d); re-export may collide",
+				id, synthesizedPersIDFloor),
+			map[string]string{"line": strconv.Itoa(line.Lineno), "personalityId": strconv.Itoa(id)})
+	}
 	return nil
 }
 
@@ -296,12 +306,25 @@ func (p *parser) parsePatch() error {
 	//      being valid personalities (or neither) is ambiguous, so we
 	//      leave the user-authored ordering as the safe default.
 	addrIdx, persIdx := 1, 2
-	if len(line.Fields) >= 5 && p.fieldIsKnownPersonality(line.Fields[1]) && !p.fieldIsKnownPersonality(line.Fields[2]) {
-		addrIdx, persIdx = 2, 1
-		if len(line.Fields) > 5 {
-			p.warn.Add(WarnUnknownDirective, SeverityInfo,
-				fmt.Sprintf("$Patch line has %d fields (expected 5 for library-driven form); extra fields ignored",
-					len(line.Fields)),
+	if len(line.Fields) >= 5 {
+		f1Pers := p.fieldIsKnownPersonality(line.Fields[1])
+		f2Pers := p.fieldIsKnownPersonality(line.Fields[2])
+		if f1Pers && !f2Pers {
+			addrIdx, persIdx = 2, 1
+			if len(line.Fields) > 5 {
+				p.warn.Add(WarnUnknownDirective, SeverityInfo,
+					fmt.Sprintf("$Patch line has %d fields (expected 5 for library-driven form); extra fields ignored",
+						len(line.Fields)),
+					map[string]string{"line": strconv.Itoa(line.Lineno)})
+			}
+		} else if f1Pers && f2Pers {
+			// Both fields parse as known personality IDs — the line is
+			// genuinely ambiguous. Default to user-authored ordering
+			// (fields[1] = address, fields[2] = persID) so synthetic
+			// fixtures keep working, but warn so an operator can review.
+			p.warn.Add(WarnUnknownDirective, SeverityWarn,
+				fmt.Sprintf("$Patch line is ambiguous (fields[1]=%s and fields[2]=%s both parse as known personality IDs); defaulting to user-authored ordering",
+					line.Fields[1], line.Fields[2]),
 				map[string]string{"line": strconv.Itoa(line.Lineno)})
 		}
 	}
