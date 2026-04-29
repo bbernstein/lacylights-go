@@ -241,10 +241,11 @@ type instanceState struct {
 }
 
 // buildInstanceStates returns lookup maps from instance ID and EOS channel.
-// Unpatched instances (StartChannel <= 0) are excluded so that values
-// referencing them in a Look don't render as a phantom $$ChanMove on
-// channel 0 — channel 0 is invalid in EOS and would corrupt the cue
-// section on re-import.
+// Unpatched instances are excluded so values referencing them in a Look don't
+// render as a phantom $$ChanMove referencing a channel that doesn't appear
+// in the $Patch section — that would corrupt the cue section on re-import.
+// The exclusion criteria mirror buildPatch exactly so the two sets stay in
+// sync.
 func buildInstanceStates(
 	instances []models.FixtureInstance,
 	defChannels map[string][]models.ChannelDefinition,
@@ -253,7 +254,7 @@ func buildInstanceStates(
 	eosByInstance := make(map[string]int, len(instances))
 	for i := range instances {
 		fi := &instances[i]
-		if fi.StartChannel <= 0 {
+		if fi.StartChannel <= 0 || fi.Universe <= 0 || fi.StartChannel > 512 {
 			continue
 		}
 		states[fi.ID] = &instanceState{instance: fi, channels: defChannels[fi.DefinitionID]}

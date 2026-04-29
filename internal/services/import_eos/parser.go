@@ -213,7 +213,7 @@ func (p *parser) parsePersonality() error {
 	// collision is at least visible to the operator.
 	const synthesizedPersIDFloor = 90001
 	if id >= synthesizedPersIDFloor {
-		p.warn.Add(WarnUnknownDirective, SeverityInfo,
+		p.warn.Add(WarnPersonalityIDInSynthRange, SeverityInfo,
 			fmt.Sprintf("$Personality %d uses an ID in the LacyLights synthesized range (>= %d); re-export may collide",
 				id, synthesizedPersIDFloor),
 			map[string]string{"line": strconv.Itoa(line.Lineno), "personalityId": strconv.Itoa(id)})
@@ -312,7 +312,7 @@ func (p *parser) parsePatch() error {
 		if f1Pers && !f2Pers {
 			addrIdx, persIdx = 2, 1
 			if len(line.Fields) > 5 {
-				p.warn.Add(WarnUnknownDirective, SeverityInfo,
+				p.warn.Add(WarnPatchExtendedFields, SeverityInfo,
 					fmt.Sprintf("$Patch line has %d fields (expected 5 for library-driven form); extra fields ignored",
 						len(line.Fields)),
 					map[string]string{"line": strconv.Itoa(line.Lineno)})
@@ -322,7 +322,7 @@ func (p *parser) parsePatch() error {
 			// genuinely ambiguous. Default to user-authored ordering
 			// (fields[1] = address, fields[2] = persID) so synthetic
 			// fixtures keep working, but warn so an operator can review.
-			p.warn.Add(WarnUnknownDirective, SeverityWarn,
+			p.warn.Add(WarnPatchAmbiguousFields, SeverityWarn,
 				fmt.Sprintf("$Patch line is ambiguous (fields[1]=%s and fields[2]=%s both parse as known personality IDs); defaulting to user-authored ordering",
 					line.Fields[1], line.Fields[2]),
 				map[string]string{"line": strconv.Itoa(line.Lineno)})

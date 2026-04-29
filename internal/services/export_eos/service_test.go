@@ -362,6 +362,23 @@ func TestExport_DottedAddressForMultiUniverse(t *testing.T) {
 	}
 }
 
+// TestExport_FailsWhenProjectMissing locks in the contract that a request
+// for a project ID that doesn't exist returns a structured "not found"
+// error rather than panicking on the nil project pointer.
+func TestExport_FailsWhenProjectMissing(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	_, err := svc.Export(context.Background(), "definitely-not-a-real-project")
+	if err == nil {
+		t.Fatal("expected error for non-existent project")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error %q missing 'not found'", err.Error())
+	}
+}
+
 func TestExport_FailsWhenRepositoriesMissing(t *testing.T) {
 	cases := []struct {
 		name    string

@@ -37,6 +37,18 @@ const (
 	// canonical place, even though the warning is produced outside
 	// import_eos.
 	WarnGroupAutoAssigned WarningCode = "GROUP_AUTO_ASSIGNED"
+	// WarnPersonalityIDInSynthRange fires when an incoming $Personality
+	// uses an ID at or above the LacyLights synthesized range (>= 90001),
+	// which could collide on re-export.
+	WarnPersonalityIDInSynthRange WarningCode = "PERSONALITY_ID_IN_SYNTH_RANGE"
+	// WarnPatchExtendedFields fires when a $Patch line has more than the
+	// 5 fields documented for the library-driven form. Extra fields are
+	// ignored; the warning surfaces the variance for review.
+	WarnPatchExtendedFields WarningCode = "PATCH_EXTENDED_FIELDS"
+	// WarnPatchAmbiguousFields fires when both candidate persID positions
+	// in a $Patch line resolve to known personality IDs. The parser falls
+	// through to user-authored ordering as the safe default.
+	WarnPatchAmbiguousFields WarningCode = "PATCH_AMBIGUOUS_FIELDS"
 )
 
 // Warning is a structured non-fatal warning emitted during import or export.
