@@ -93,7 +93,7 @@ func (s *Service) loadBundle(ctx context.Context, projectID string, collector *i
 		Patch:         patch,
 		Palettes:      palettes,
 		CueLists:      regularLists,
-		Groups:        nil, // FixtureGroup model not yet present (Task 14c)
+		Groups:        []GroupOut{}, // FixtureGroup model not yet present (Task 14c)
 		Sidecar:       sidecar,
 	}, nil
 }

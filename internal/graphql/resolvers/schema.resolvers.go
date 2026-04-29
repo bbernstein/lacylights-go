@@ -4653,7 +4653,7 @@ func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiConten
 		CueListsCount:            res.CueListsCount,
 		CuesCount:                res.CuesCount,
 		GroupsCount:              res.GroupsCount,
-		Warnings:                 toEosWarnings(append(resolverWarnings, res.Warnings...)),
+		Warnings:                 toEosWarnings(append(append([]importeos.Warning(nil), res.Warnings...), resolverWarnings...)),
 		SynthesizedDefinitionIds: res.SynthesizedDefinitionIDs,
 	}, nil
 }

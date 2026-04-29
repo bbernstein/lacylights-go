@@ -333,6 +333,16 @@ func (p *parser) parsePatch() error {
 				fmt.Sprintf("$Patch line is ambiguous (fields[1]=%s and fields[2]=%s both parse as known personality IDs); defaulting to user-authored ordering",
 					line.Fields[1], line.Fields[2]),
 				map[string]string{"line": strconv.Itoa(line.Lineno)})
+		} else if !f1Pers && !f2Pers {
+			// Neither field matches a known personality — the line was
+			// emitted before its personality was declared, or the
+			// referenced ID was never declared. Default to user-authored
+			// ordering and warn so the operator knows the autodetect
+			// fallback fired.
+			p.warn.Add(WarnPatchAmbiguousFields, SeverityInfo,
+				fmt.Sprintf("$Patch line has no recognizable personality reference (fields[1]=%s, fields[2]=%s); defaulting to user-authored ordering",
+					line.Fields[1], line.Fields[2]),
+				map[string]string{"line": strconv.Itoa(line.Lineno)})
 		}
 	}
 	persID, err := strconv.Atoi(line.Fields[persIdx])
