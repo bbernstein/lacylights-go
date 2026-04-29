@@ -306,6 +306,13 @@ func (p *parser) parsePatch() error {
 	//      being valid personalities (or neither) is ambiguous, so we
 	//      leave the user-authored ordering as the safe default.
 	addrIdx, persIdx := 1, 2
+	if len(line.Fields) == 4 {
+		// 4-field form is undocumented in the EOS spec we target. Warn so
+		// it doesn't silently misparse as user-authored ordering.
+		p.warn.Add(WarnPatchExtendedFields, SeverityWarn,
+			"$Patch line has 4 fields (expected 3 or 5+); parsing as user-authored ordering",
+			map[string]string{"line": strconv.Itoa(line.Lineno)})
+	}
 	if len(line.Fields) >= 5 {
 		f1Pers := p.fieldIsKnownPersonality(line.Fields[1])
 		f2Pers := p.fieldIsKnownPersonality(line.Fields[2])

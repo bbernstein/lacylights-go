@@ -205,12 +205,8 @@ func buildPatch(instances []models.FixtureInstance, persIDs map[string]int, coll
 	return out
 }
 
-// formatEOSAddress emits the dotted form ("1.512") for non-trivial universes,
-// and a flat form for universe <= 1 (matches what the parser accepts).
-// Callers must pre-filter out address <= 0; emitting "0" here would re-parse
-// as ErrAddressUnpatched on round-trip. Universe 0 collapses to the flat
-// form for the same reason — there is no real "universe 0" in EOS, but a
-// fixture stored that way can still produce a valid flat address.
+// formatEOSAddress emits dotted form for universe > 1 and flat form for 1.
+// Callers (buildPatch) pre-filter address <= 0 and universe <= 0.
 func formatEOSAddress(universe, address int) string {
 	if universe <= 1 {
 		return strconv.Itoa(address)

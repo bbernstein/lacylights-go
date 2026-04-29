@@ -24,20 +24,8 @@ func severityToGraphQL(s importeos.Severity) generated.EosWarningSeverity {
 	return generated.EosWarningSeverityWarn
 }
 
-// maxEosContentBytes caps the size of an inbound EOS ASCII payload. The
-// largest production showfile we have on hand is the OTBPA fixture at ~500 KB;
-// the cap is generous enough for very large shows but small enough that a
-// misconfigured or malicious client can't consume arbitrary memory before the
-// parser sees it.
-//
-// This check is application-layer: by the time it runs, the GraphQL runtime
-// has already decoded the JSON body into a Go string. For complete protection
-// against oversized requests, the HTTP server should also cap the request
-// body via http.MaxBytesReader. That is currently configured at the server
-// boundary; the limit here adds a documented contract at the resolver entry.
-//
-// Lives in this file (not schema.resolvers.go) so gqlgen regeneration won't
-// strip it.
+// maxEosContentBytes caps inbound EOS ASCII payload size at the resolver
+// entry. Defined here (not in schema.resolvers.go) to survive gqlgen regen.
 const maxEosContentBytes = 50 << 20 // 50 MiB
 
 // toEosWarnings converts importeos warnings to GraphQL warning shapes.
