@@ -31,11 +31,10 @@ type Service struct {
 	lookBoardRepo *repositories.LookBoardRepository
 }
 
-// NewService constructs an empty Service. Tests use this to exercise the
-// dependency-validation path; production code should always use
-// NewServiceWithDeps.
-//
-// Deprecated: prefer NewServiceWithDeps.
+// NewService constructs an empty Service. It exists so the
+// dependency-validation path (TestExport_FailsWhenRepositoriesMissing) can
+// instantiate a Service with no repos wired and observe a clear error rather
+// than a nil-pointer panic. Production code calls NewServiceWithDeps.
 func NewService() *Service {
 	return &Service{}
 }

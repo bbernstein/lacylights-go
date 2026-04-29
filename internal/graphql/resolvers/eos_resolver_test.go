@@ -1,10 +1,14 @@
 package resolvers
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/99designs/gqlgen/client"
+	"github.com/bbernstein/lacylights-go/internal/database/models"
+	"github.com/lucsky/cuid"
+	"github.com/stretchr/testify/require"
 )
 
 const minimalEosShowfile = `Ident 3:0
@@ -113,6 +117,30 @@ func TestImportProjectFromEos_RejectsConflictingOptions(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "mutually exclusive") {
 		t.Errorf("error %q missing 'mutually exclusive'", err.Error())
+	}
+}
+
+// TestExportProjectToEos_RejectsUnauthorizedUser confirms ensureProjectAccess
+// is enforced before the export runs: a user who is not a member of the
+// project's group must not be able to export it.
+func TestExportProjectToEos_RejectsUnauthorizedUser(t *testing.T) {
+	resolver, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+
+	// Project belongs to group G1; user is a member of group G2.
+	groupID := cuid.New()
+	otherGroupID := cuid.New()
+	project := &models.Project{ID: cuid.New(), Name: "Owned by G1", GroupID: &groupID}
+	require.NoError(t, resolver.ProjectRepo.Create(context.Background(), project))
+
+	mut := resolver.Mutation().(*mutationResolver)
+	ctx := createMemberContext("user-1", "user@test.com", otherGroupID)
+	res, err := mut.ExportProjectToEos(ctx, project.ID)
+	if err == nil {
+		t.Fatalf("expected unauthorized error, got result %+v", res)
+	}
+	if !strings.Contains(err.Error(), "not authorized") {
+		t.Errorf("expected 'not authorized' in error, got %q", err.Error())
 	}
 }
 

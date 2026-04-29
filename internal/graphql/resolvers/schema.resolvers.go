@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"sort"
 	"strings"
 	"time"
 
@@ -4607,6 +4606,10 @@ func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiConten
 			return nil, err
 		}
 	} else if r.AuthService != nil && r.AuthService.IsEnabled() {
+		// New-project case: assign ownership to the caller's first group.
+		// Mirrors the native ImportProject mutation; both stop short of
+		// surfacing group selection to the API. TODO: expose a groupId in
+		// EosImportOptionsInput so multi-group users can choose explicitly.
 		groupIDs := middleware.GetUserGroupIDs(ctx)
 		if len(groupIDs) >= 1 {
 			gid := groupIDs[0]
@@ -4653,35 +4656,6 @@ func (r *mutationResolver) ExportProjectToEos(ctx context.Context, projectID str
 		Warnings:       toEosWarnings(res.Warnings),
 	}, nil
 }
-
-// toEosWarnings converts importeos warnings to GraphQL warning shapes.
-// Context entries are sorted by key so output is deterministic across runs;
-// Go's map iteration order would otherwise produce flaky tests and unstable
-// client diffs.
-func toEosWarnings(in []importeos.Warning) []*generated.EosWarning {
-	out := make([]*generated.EosWarning, 0, len(in))
-	for _, w := range in {
-		ew := &generated.EosWarning{
-			Code:     string(w.Code),
-			Severity: generated.EosWarningSeverity(string(w.Severity)),
-			Message:  w.Message,
-		}
-		if len(w.Context) > 0 {
-			keys := make([]string, 0, len(w.Context))
-			for k := range w.Context {
-				keys = append(keys, k)
-			}
-			sort.Strings(keys)
-			ew.Context = make([]*generated.EosWarningContextEntry, 0, len(keys))
-			for _, k := range keys {
-				ew.Context = append(ew.Context, &generated.EosWarningContextEntry{Key: k, Value: w.Context[k]})
-			}
-		}
-		out = append(out, ew)
-	}
-	return out
-}
-
 
 // UpdateSetting is the resolver for the updateSetting field.
 func (r *mutationResolver) UpdateSetting(ctx context.Context, input generated.UpdateSettingInput) (*models.Setting, error) {
@@ -8120,3 +8094,4 @@ type settingResolver struct{ *Resolver }
 type subscriptionResolver struct{ *Resolver }
 type userResolver struct{ *Resolver }
 type userGroupResolver struct{ *Resolver }
+

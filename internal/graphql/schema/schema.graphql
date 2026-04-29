@@ -1520,7 +1520,7 @@ type EosWarning {
   code: String!
   severity: EosWarningSeverity!
   message: String!
-  context: [EosWarningContextEntry!]
+  context: [EosWarningContextEntry!]!
 }
 
 type EosWarningContextEntry {

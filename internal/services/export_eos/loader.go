@@ -156,6 +156,14 @@ func buildPatch(instances []models.FixtureInstance, persIDs map[string]int) []Pa
 	out := make([]PatchEntryOut, 0, len(instances))
 	for i := range instances {
 		fi := &instances[i]
+		// Fixtures with StartChannel <= 0 have no DMX address. Emitting "0"
+		// would round-trip as ErrAddressUnpatched, silently dropping the
+		// fixture on re-import — skip them at export time instead. (LacyLights
+		// does not currently allow patching at address 0, but a defensive
+		// guard avoids data loss if that invariant ever slips.)
+		if fi.StartChannel <= 0 {
+			continue
+		}
 		out = append(out, PatchEntryOut{
 			Channel:       eosChannelFor(fi),
 			Address:       formatEOSAddress(fi.Universe, fi.StartChannel),
@@ -167,7 +175,9 @@ func buildPatch(instances []models.FixtureInstance, persIDs map[string]int) []Pa
 }
 
 // formatEOSAddress emits the dotted form ("1.512") for non-trivial universes,
-// and a flat form for universe 1 (matches what the parser accepts).
+// and a flat form for universe 1 (matches what the parser accepts). Callers
+// must pre-filter out address <= 0; emitting "0" here would re-parse as
+// ErrAddressUnpatched on round-trip.
 func formatEOSAddress(universe, address int) string {
 	if universe <= 1 {
 		return strconv.Itoa(address)

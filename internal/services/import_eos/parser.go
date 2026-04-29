@@ -1,6 +1,7 @@
 package importeos
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -563,7 +564,7 @@ func expandChannelTokens(tokens []string) []int {
 
 // ErrAddressUnpatched indicates the EOS patch entry has no DMX address (raw "0").
 // Callers may choose to skip such entries rather than fail the whole import.
-var ErrAddressUnpatched = fmt.Errorf("eos: address is 0 (unpatched)")
+var ErrAddressUnpatched = errors.New("eos: address is 0 (unpatched)")
 
 // NormalizeAddress converts an EOS patch address string to a (universe, address) tuple.
 // Accepts flat absolute ("1024"), dotted ("2.512"), and slashed ("3/100") forms.

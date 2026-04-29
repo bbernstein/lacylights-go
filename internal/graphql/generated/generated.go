@@ -9808,7 +9808,7 @@ type EosWarning {
   code: String!
   severity: EosWarningSeverity!
   message: String!
-  context: [EosWarningContextEntry!]
+  context: [EosWarningContextEntry!]!
 }
 
 type EosWarningContextEntry {
@@ -21059,9 +21059,9 @@ func (ec *executionContext) _EosWarning_context(ctx context.Context, field graph
 			return obj.Context, nil
 		},
 		nil,
-		ec.marshalOEosWarningContextEntry2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarningContextEntryᚄ,
+		ec.marshalNEosWarningContextEntry2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarningContextEntryᚄ,
 		true,
-		false,
+		true,
 	)
 }
 
@@ -55125,6 +55125,9 @@ func (ec *executionContext) _EosWarning(ctx context.Context, sel ast.SelectionSe
 			}
 		case "context":
 			out.Values[i] = ec._EosWarning_context(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -66488,6 +66491,50 @@ func (ec *executionContext) marshalNEosWarning2ᚖgithubᚗcomᚋbbernsteinᚋla
 	return ec._EosWarning(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNEosWarningContextEntry2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarningContextEntryᚄ(ctx context.Context, sel ast.SelectionSet, v []*EosWarningContextEntry) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNEosWarningContextEntry2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarningContextEntry(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
 func (ec *executionContext) marshalNEosWarningContextEntry2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarningContextEntry(ctx context.Context, sel ast.SelectionSet, v *EosWarningContextEntry) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -70098,53 +70145,6 @@ func (ec *executionContext) unmarshalOEosImportOptionsInput2ᚖgithubᚗcomᚋbb
 	}
 	res, err := ec.unmarshalInputEosImportOptionsInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalOEosWarningContextEntry2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarningContextEntryᚄ(ctx context.Context, sel ast.SelectionSet, v []*EosWarningContextEntry) graphql.Marshaler {
-	if v == nil {
-		return graphql.Null
-	}
-	ret := make(graphql.Array, len(v))
-	var wg sync.WaitGroup
-	isLen1 := len(v) == 1
-	if !isLen1 {
-		wg.Add(len(v))
-	}
-	for i := range v {
-		i := i
-		fc := &graphql.FieldContext{
-			Index:  &i,
-			Result: &v[i],
-		}
-		ctx := graphql.WithFieldContext(ctx, fc)
-		f := func(i int) {
-			defer func() {
-				if r := recover(); r != nil {
-					ec.Error(ctx, ec.Recover(ctx, r))
-					ret = nil
-				}
-			}()
-			if !isLen1 {
-				defer wg.Done()
-			}
-			ret[i] = ec.marshalNEosWarningContextEntry2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarningContextEntry(ctx, sel, v[i])
-		}
-		if isLen1 {
-			f(i)
-		} else {
-			go f(i)
-		}
-
-	}
-	wg.Wait()
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
 }
 
 func (ec *executionContext) unmarshalOExportOptionsInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐExportOptionsInput(ctx context.Context, v any) (*ExportOptionsInput, error) {

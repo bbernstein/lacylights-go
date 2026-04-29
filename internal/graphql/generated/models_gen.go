@@ -566,7 +566,7 @@ type EosWarning struct {
 	Code     string                    `json:"code"`
 	Severity EosWarningSeverity        `json:"severity"`
 	Message  string                    `json:"message"`
-	Context  []*EosWarningContextEntry `json:"context,omitempty"`
+	Context  []*EosWarningContextEntry `json:"context"`
 }
 
 type EosWarningContextEntry struct {
