@@ -3,6 +3,7 @@ package importeos
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -82,6 +83,12 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 		}
 		universe, address, err := NormalizeAddress(pe.AddressRaw)
 		if err != nil {
+			if errors.Is(err, ErrAddressUnpatched) {
+				warn.Add(WarnUnpatchedChannel, SeverityInfo,
+					fmt.Sprintf("channel %d has no DMX address (skipping)", pe.Channel),
+					map[string]string{"channel": strconv.Itoa(pe.Channel)})
+				continue
+			}
 			return nil, err
 		}
 		key := addrKey{u: universe, a: address}

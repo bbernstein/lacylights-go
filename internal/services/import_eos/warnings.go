@@ -25,6 +25,7 @@ const (
 	WarnUTextDecode        WarningCode = "UTEXT_DECODE"
 	WarnSidecarInvalid     WarningCode = "SIDECAR_INVALID"
 	WarnSidecarUnresolved  WarningCode = "SIDECAR_UNRESOLVED"
+	WarnUnpatchedChannel   WarningCode = "UNPATCHED_CHANNEL"
 )
 
 // Warning is a structured non-fatal warning emitted during import or export.

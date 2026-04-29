@@ -227,6 +227,21 @@ func parsePersChan(line *Line) (PersChannel, bool) {
 	return pc, true
 }
 
+// fieldIsKnownPersonality reports whether the textual field is an integer that
+// matches an already-parsed $Personality block.
+func (p *parser) fieldIsKnownPersonality(s string) bool {
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return false
+	}
+	for _, pers := range p.show.Personalities {
+		if pers.ID == v {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *parser) parsePatch() error {
 	line := p.cur()
 	if len(line.Fields) < 3 {
@@ -236,11 +251,22 @@ func (p *parser) parsePatch() error {
 	if err != nil {
 		return &ParseError{Lineno: line.Lineno, Msg: "$Patch channel not an integer"}
 	}
-	persID, err := strconv.Atoi(line.Fields[2])
+	// EOS exports use two field orderings depending on the source:
+	//   user-authored:  $Patch <chan> <addr> <persID>
+	//   library-driven: $Patch <chan> <persID> <addr> <wheel> <count>
+	// Resolve by matching against the personalities already parsed (they
+	// always precede $Patch in the file). Default to the user-authored
+	// ordering when both fields claim valid personality IDs (or neither
+	// does — keeps minimal/synthetic fixtures working as before).
+	addrIdx, persIdx := 1, 2
+	if len(line.Fields) >= 4 && p.fieldIsKnownPersonality(line.Fields[1]) && !p.fieldIsKnownPersonality(line.Fields[2]) {
+		addrIdx, persIdx = 2, 1
+	}
+	persID, err := strconv.Atoi(line.Fields[persIdx])
 	if err != nil {
 		return &ParseError{Lineno: line.Lineno, Msg: "$Patch personality not an integer"}
 	}
-	pe := PatchEntry{Channel: channel, AddressRaw: line.Fields[1], PersonalityID: persID}
+	pe := PatchEntry{Channel: channel, AddressRaw: line.Fields[addrIdx], PersonalityID: persID}
 	p.advance()
 	for p.cur() != nil && p.cur().Indent > 0 {
 		sub := p.cur()
@@ -520,9 +546,15 @@ func expandChannelTokens(tokens []string) []int {
 	return out
 }
 
+// ErrAddressUnpatched indicates the EOS patch entry has no DMX address (raw "0").
+// Callers may choose to skip such entries rather than fail the whole import.
+var ErrAddressUnpatched = fmt.Errorf("eos: address is 0 (unpatched)")
+
 // NormalizeAddress converts an EOS patch address string to a (universe, address) tuple.
 // Accepts flat absolute ("1024"), dotted ("2.512"), and slashed ("3/100") forms.
 // Universes are 1-based, addresses are 1-based and 1..512.
+// Returns ErrAddressUnpatched for the literal value "0", which EOS uses to mark
+// channels that exist in the show but are not patched to any DMX output.
 func NormalizeAddress(raw string) (universe int, address int, err error) {
 	for _, sep := range []byte{'.', '/'} {
 		if i := strings.IndexByte(raw, sep); i >= 0 {
@@ -535,7 +567,13 @@ func NormalizeAddress(raw string) (universe int, address int, err error) {
 		}
 	}
 	flat, err := strconv.Atoi(raw)
-	if err != nil || flat < 1 {
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid eos address %q", raw)
+	}
+	if flat == 0 {
+		return 0, 0, ErrAddressUnpatched
+	}
+	if flat < 0 {
 		return 0, 0, fmt.Errorf("invalid eos address %q", raw)
 	}
 	universe = (flat-1)/512 + 1
