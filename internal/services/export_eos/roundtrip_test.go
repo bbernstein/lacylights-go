@@ -32,7 +32,7 @@ func TestRoundtrip_GoldenOTBPA(t *testing.T) {
 	defer deps.close()
 
 	f := openFixture(t, "golden_otbpa.asc")
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	imp := importeos.NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
@@ -84,7 +84,7 @@ func TestRoundtrip_SyntheticSmall(t *testing.T) {
 	defer deps.close()
 
 	f := openFixture(t, "basic_cues.asc")
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	imp := importeos.NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
