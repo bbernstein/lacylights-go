@@ -581,6 +581,11 @@ func TestFadeToLook_MultipleUniverses(t *testing.T) {
 }
 
 // TestFadeToLook_MidFadeTransition tests starting a new fade while one is in progress.
+//
+// Avoids fixed sleep timing: polls until fade-1 has demonstrably started
+// (value > 0) and is still in progress (value < target). Without this,
+// time.Sleep(100ms) under CI load can overshoot the 200ms total fade and
+// land outside the [20,80] mid-range window, causing flakes.
 func TestFadeToLook_MidFadeTransition(t *testing.T) {
 	engine, dmxService := createTestModulatorEngine()
 	_ = engine.Start()
@@ -589,24 +594,32 @@ func TestFadeToLook_MidFadeTransition(t *testing.T) {
 	// Start at 0
 	dmxService.SetChannelValue(1, 1, 0)
 
-	// Start fade to 100
-	channels1 := []LookChannel{{Universe: 1, Channel: 1, Value: 100}}
-	engine.FadeToLook(channels1, 200*time.Millisecond, "fade-1", EasingLinear)
+	// Start fade to 100 over a generous duration so that even a slow CI
+	// scheduler can land the polling window inside the fade.
+	const fadeTarget = 100
+	const fadeDuration = 1 * time.Second
+	channels1 := []LookChannel{{Universe: 1, Channel: 1, Value: fadeTarget}}
+	engine.FadeToLook(channels1, fadeDuration, "fade-1", EasingLinear)
 
-	// Wait until mid-fade
-	time.Sleep(100 * time.Millisecond)
-	midValue := dmxService.GetChannelValue(1, 1)
+	// Poll until we observe a value strictly between 0 and the target — that
+	// is, fade-1 is in progress. This is the actual condition we care about
+	// for "mid-fade transition", and it doesn't depend on wall-clock timing.
+	var midValue byte
+	waitForCondition(t, 2*time.Second,
+		func() bool {
+			midValue = dmxService.GetChannelValue(1, 1)
+			return midValue > 0 && midValue < fadeTarget
+		},
+		func() {
+			t.Fatalf("fade-1 never reached an in-progress value (last %d)", midValue)
+		},
+	)
 
-	// Mid-value should be roughly around 50 (could vary due to timing)
-	if midValue < 20 || midValue > 80 {
-		t.Errorf("Mid-fade value should be roughly 50, got %d", midValue)
-	}
-
-	// Start new fade to 200 from current position
+	// Start new fade to 200 from the observed mid-fade value.
 	channels2 := []LookChannel{{Universe: 1, Channel: 1, Value: 200}}
 	engine.FadeToLook(channels2, 200*time.Millisecond, "fade-2", EasingLinear)
 
-	// Poll until fade completes
+	// Poll until fade-2 completes.
 	waitForCondition(t, 2*time.Second,
 		func() bool { return dmxService.GetChannelValue(1, 1) == 200 },
 		func() { t.Fatalf("Final value should be 200, got %d", dmxService.GetChannelValue(1, 1)) },
