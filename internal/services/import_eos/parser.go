@@ -280,27 +280,30 @@ func (p *parser) parsePatch() error {
 	}
 	// EOS exports use two field orderings depending on the source:
 	//   user-authored:  $Patch <chan> <addr> <persID>                 (3 fields)
-	//   library-driven: $Patch <chan> <persID> <addr> <wheel> <count> (5 fields)
+	//   library-driven: $Patch <chan> <persID> <addr> <wheel> <count> (5+ fields)
 	//
 	// We resolve by:
-	//   1. Requiring exactly 5 fields for the library-driven form. This
+	//   1. Requiring at least 5 fields for the library-driven form. This
 	//      avoids a false positive when a user-authored 3-field line
 	//      happens to have a flat absolute address that matches a
 	//      synthesized personality ID (e.g. addr 9001 on a 4-universe rig,
-	//      where 9001 is also our persIDBase).
-	//   2. Within a 5-field line, swapping only when fields[1] is a
-	//      declared personality ID and fields[2] is not — both fields
+	//      where 9001 is also our persIDBase). Lines with 6+ fields are
+	//      treated as library-driven too (forward-compatible with future
+	//      EOS revisions that may append optional fields), with a
+	//      diagnostic so anyone reading warnings notices the variance.
+	//   2. Within a library-driven line, swapping only when fields[1] is
+	//      a declared personality ID and fields[2] is not — both fields
 	//      being valid personalities (or neither) is ambiguous, so we
 	//      leave the user-authored ordering as the safe default.
-	//
-	// EOS format observed: 3.20 (as of EOS 3.x). If a future EOS revision
-	// adds a 6th field to the library-driven form, this guard will silently
-	// fall back to user-authored ordering and produce wrong addresses;
-	// re-verify against a current showfile when bumping the supported
-	// $$Format version.
 	addrIdx, persIdx := 1, 2
-	if len(line.Fields) == 5 && p.fieldIsKnownPersonality(line.Fields[1]) && !p.fieldIsKnownPersonality(line.Fields[2]) {
+	if len(line.Fields) >= 5 && p.fieldIsKnownPersonality(line.Fields[1]) && !p.fieldIsKnownPersonality(line.Fields[2]) {
 		addrIdx, persIdx = 2, 1
+		if len(line.Fields) > 5 {
+			p.warn.Add(WarnUnknownDirective, SeverityInfo,
+				fmt.Sprintf("$Patch line has %d fields (expected 5 for library-driven form); extra fields ignored",
+					len(line.Fields)),
+				map[string]string{"line": strconv.Itoa(line.Lineno)})
+		}
 	}
 	persID, err := strconv.Atoi(line.Fields[persIdx])
 	if err != nil {

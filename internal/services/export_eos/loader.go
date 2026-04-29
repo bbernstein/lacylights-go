@@ -329,6 +329,12 @@ func formatNumber(n float64) string {
 
 // cueLabelFor strips the synthetic "Cue X - " prefix the importer adds, so the
 // label round-trips cleanly. Falls back to the full name otherwise.
+//
+// Edge case: a user who deliberately names their cue exactly "Cue 3" (with no
+// label) will see their name stripped on round-trip. The importer can't
+// distinguish "user typed Cue 3" from "imported with no label", so this is
+// inherent to the current data model. Adding a separate user-set-label
+// field on models.Cue would resolve it; out of scope for Phase 1.
 func cueLabelFor(cue models.Cue) string {
 	prefix := fmt.Sprintf("Cue %s", formatNumber(cue.CueNumber))
 	if rest, ok := strings.CutPrefix(cue.Name, prefix+" - "); ok {
@@ -494,6 +500,11 @@ func (s *Service) buildSidecar(
 
 // channelFingerprint produces a stable comma-separated list of EOS paramIDs in
 // channel-offset order. Mirrors the importer's fingerprint format.
+//
+// TODO (Task 14c): when the sidecar is actually re-applied on import, add a
+// round-trip test that imports a synthesized definition, exports it, and
+// verifies the recomputed fingerprint matches what the importer wrote into
+// the sidecar — currently this alignment is only enforced by convention.
 func channelFingerprint(channels []models.ChannelDefinition) string {
 	sorted := append([]models.ChannelDefinition(nil), channels...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Offset < sorted[j].Offset })

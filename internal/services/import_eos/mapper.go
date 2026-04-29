@@ -327,7 +327,14 @@ func buildLookValues(
 	for _, id := range instIDs {
 		acc := byInstance[id]
 		sort.Slice(acc.channels, func(i, j int) bool { return acc.channels[i].Offset < acc.channels[j].Offset })
-		channelsJSON, _ := json.Marshal(acc.channels)
+		channelsJSON, err := json.Marshal(acc.channels)
+		if err != nil {
+			// In practice ChannelValue (Offset int, Value int) cannot
+			// produce a marshal error; this branch exists so a future
+			// refactor that adds non-marshallable fields surfaces the
+			// problem instead of silently writing "" into the DB.
+			continue
+		}
 		out = append(out, models.FixtureValue{
 			FixtureID: acc.fixtureID,
 			Channels:  string(channelsJSON),

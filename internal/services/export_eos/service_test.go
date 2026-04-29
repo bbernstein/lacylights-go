@@ -218,6 +218,61 @@ func TestExport_EmitsWarningForUnpatchedFixture(t *testing.T) {
 	}
 }
 
+// TestExport_WarnsOnInvalidLookValuesJSON forces a corrupt FixtureValue
+// row and asserts the export emits LOOK_VALUES_INVALID rather than
+// silently dropping the channel data without feedback.
+func TestExport_WarnsOnInvalidLookValuesJSON(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+	ctx := context.Background()
+
+	proj := &models.Project{Name: "bad-json-test"}
+	if err := deps.projectRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	def := &models.FixtureDefinition{Manufacturer: "Generic", Model: "Dimmer", Type: "DIMMER"}
+	chs := []models.ChannelDefinition{{Offset: 0, Name: "Intensity", Type: string(generated.ChannelTypeIntensity)}}
+	if err := deps.fixtureRepo.CreateDefinitionWithChannels(ctx, def, chs); err != nil {
+		t.Fatalf("create def: %v", err)
+	}
+	order := 1
+	fi := &models.FixtureInstance{ProjectID: proj.ID, DefinitionID: def.ID, Name: "F1", Universe: 1, StartChannel: 1, ProjectOrder: &order}
+	if err := deps.fixtureRepo.CreateWithChannels(ctx, fi, []models.InstanceChannel{{Offset: 0, Name: "Intensity", Type: string(generated.ChannelTypeIntensity)}}); err != nil {
+		t.Fatalf("create instance: %v", err)
+	}
+	cl := &models.CueList{ProjectID: proj.ID, Name: "Main"}
+	if err := deps.cueListRepo.Create(ctx, cl); err != nil {
+		t.Fatalf("create cue list: %v", err)
+	}
+	look := &models.Look{ProjectID: proj.ID, Name: "L1"}
+	if err := deps.lookRepo.CreateWithFixtureValues(ctx, look, []models.FixtureValue{
+		{FixtureID: fi.ID, Channels: "not-valid-json"},
+	}); err != nil {
+		t.Fatalf("create look: %v", err)
+	}
+	cue := &models.Cue{CueListID: cl.ID, LookID: look.ID, Name: "Cue 1", CueNumber: 1}
+	if err := deps.cueRepo.Create(ctx, cue); err != nil {
+		t.Fatalf("create cue: %v", err)
+	}
+
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Export(ctx, proj.ID)
+	if err != nil {
+		t.Fatalf("export: %v (expected success with warning)", err)
+	}
+	var saw bool
+	for _, w := range res.Warnings {
+		if w.Code == "LOOK_VALUES_INVALID" {
+			saw = true
+			break
+		}
+	}
+	if !saw {
+		t.Errorf("expected LOOK_VALUES_INVALID warning, got %+v", res.Warnings)
+	}
+}
+
 func TestExport_FailsWhenRepositoriesMissing(t *testing.T) {
 	cases := []struct {
 		name    string
