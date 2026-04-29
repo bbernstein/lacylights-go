@@ -504,7 +504,7 @@ func (m *Mapper) applyGroups(_ context.Context, _ string, show *Show, _ *int, wa
 	// caller doesn't silently lose that data.
 	if len(show.Groups) > 0 {
 		warn.Add(WarnGroupsSkipped, SeverityInfo,
-			fmt.Sprintf("dropped %d $Group block(s) — Task 14c will land FixtureGroup persistence",
+			fmt.Sprintf("dropped %d $Group block(s); group persistence is not yet implemented",
 				len(show.Groups)),
 			map[string]string{"count": strconv.Itoa(len(show.Groups))})
 	}
@@ -516,7 +516,7 @@ func (m *Mapper) applySidecar(_ context.Context, _ string, sc Sidecar, warn *Col
 	// rather than silently swallow the parsed sidecar contents.
 	if len(sc.LookBoards) > 0 || len(sc.FadeBehaviors) > 0 || len(sc.SynthDefs) > 0 {
 		warn.Add(WarnSidecarUnresolved, SeverityInfo,
-			"sidecar metadata parsed but not applied (Task 14c)",
+			"sidecar metadata was parsed but is not yet re-applied; will activate in a future release",
 			map[string]string{
 				"lookBoards":    strconv.Itoa(len(sc.LookBoards)),
 				"fadeBehaviors": strconv.Itoa(len(sc.FadeBehaviors)),

@@ -4632,7 +4632,7 @@ func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiConten
 			resolverWarnings = append(resolverWarnings, importeos.Warning{
 				Code:     importeos.WarnGroupAutoAssigned,
 				Severity: importeos.SeverityInfo,
-				Message:  "imported project assigned to your first group; pass options.targetProjectId or wait for groupId support to choose explicitly",
+				Message:  "imported project assigned to your first group; pass targetProjectId in options to choose explicitly",
 				Context:  map[string]string{"groupId": *importOpts.GroupID},
 			})
 		}
