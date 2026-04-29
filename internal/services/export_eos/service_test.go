@@ -166,6 +166,54 @@ func TestExport_StructureBasics(t *testing.T) {
 	}
 }
 
+// TestExport_EmitsWarningForUnpatchedFixture confirms the writer surfaces an
+// UNPATCHED_INSTANCE warning for any fixture with StartChannel <= 0 instead
+// of silently dropping it.
+func TestExport_EmitsWarningForUnpatchedFixture(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+	ctx := context.Background()
+
+	proj := &models.Project{Name: "unpatched-test"}
+	if err := deps.projectRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	def := &models.FixtureDefinition{Manufacturer: "Generic", Model: "Dimmer", Type: "DIMMER"}
+	chs := []models.ChannelDefinition{{Offset: 0, Name: "Intensity", Type: string(generated.ChannelTypeIntensity)}}
+	if err := deps.fixtureRepo.CreateDefinitionWithChannels(ctx, def, chs); err != nil {
+		t.Fatalf("create def: %v", err)
+	}
+	// One patched, one unpatched (StartChannel = 0).
+	patched := &models.FixtureInstance{ProjectID: proj.ID, DefinitionID: def.ID, Name: "Patched", Universe: 1, StartChannel: 1}
+	unpatched := &models.FixtureInstance{ProjectID: proj.ID, DefinitionID: def.ID, Name: "Unpatched", Universe: 1, StartChannel: 0}
+	for _, fi := range []*models.FixtureInstance{patched, unpatched} {
+		if err := deps.fixtureRepo.CreateWithChannels(ctx, fi, []models.InstanceChannel{{Offset: 0, Name: "Intensity", Type: string(generated.ChannelTypeIntensity)}}); err != nil {
+			t.Fatalf("create instance %s: %v", fi.Name, err)
+		}
+	}
+
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Export(ctx, proj.ID)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+
+	var sawWarning bool
+	for _, w := range res.Warnings {
+		if w.Code == "UNPATCHED_INSTANCE" {
+			sawWarning = true
+			break
+		}
+	}
+	if !sawWarning {
+		t.Errorf("expected UNPATCHED_INSTANCE warning, got %+v", res.Warnings)
+	}
+	if strings.Contains(res.Content, "$Patch 2 0") {
+		t.Errorf("export emitted Patch line for unpatched fixture; should have skipped")
+	}
+}
+
 func TestExport_FailsWhenRepositoriesMissing(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -180,6 +228,24 @@ func TestExport_FailsWhenRepositoriesMissing(t *testing.T) {
 			s.projectRepo = d.projectRepo
 			s.fixtureRepo = d.fixtureRepo
 		}, wantSub: "look repository"},
+		{name: "missing_cue_list", mutate: func(d *testDeps, s *Service) {
+			s.projectRepo = d.projectRepo
+			s.fixtureRepo = d.fixtureRepo
+			s.lookRepo = d.lookRepo
+		}, wantSub: "cue list repository"},
+		{name: "missing_cue", mutate: func(d *testDeps, s *Service) {
+			s.projectRepo = d.projectRepo
+			s.fixtureRepo = d.fixtureRepo
+			s.lookRepo = d.lookRepo
+			s.cueListRepo = d.cueListRepo
+		}, wantSub: "cue repository"},
+		{name: "missing_look_board", mutate: func(d *testDeps, s *Service) {
+			s.projectRepo = d.projectRepo
+			s.fixtureRepo = d.fixtureRepo
+			s.lookRepo = d.lookRepo
+			s.cueListRepo = d.cueListRepo
+			s.cueRepo = d.cueRepo
+		}, wantSub: "look board repository"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

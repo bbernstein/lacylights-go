@@ -568,7 +568,9 @@ var ErrAddressUnpatched = errors.New("eos: address is 0 (unpatched)")
 
 // NormalizeAddress converts an EOS patch address string to a (universe, address) tuple.
 // Accepts flat absolute ("1024"), dotted ("2.512"), and slashed ("3/100") forms.
-// Universes are 1-based, addresses are 1-based and 1..512.
+// Universes are 1-based, addresses are 1-based and 1..512. Flat values are
+// allowed to span multiple universes (e.g. flat=1024 → universe 2, address 512;
+// flat=1025 → universe 3, address 1).
 // Returns ErrAddressUnpatched for the literal value "0", which EOS uses to mark
 // channels that exist in the show but are not patched to any DMX output.
 func NormalizeAddress(raw string) (universe int, address int, err error) {

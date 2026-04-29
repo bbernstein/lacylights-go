@@ -15,8 +15,10 @@ import (
 
 // loadBundle reads a project from the repositories and translates it to the
 // writer's input shapes. The returned bundle is suitable for direct emission
-// in a fixed section order (see Service.Export).
-func (s *Service) loadBundle(ctx context.Context, projectID string) (*bundle, error) {
+// in a fixed section order (see Service.Export). The collector receives any
+// non-fatal warnings produced while assembling the bundle (e.g. fixtures
+// skipped because they are unpatched).
+func (s *Service) loadBundle(ctx context.Context, projectID string, collector *importeos.Collector) (*bundle, error) {
 	proj, err := s.projectRepo.FindByID(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("export_eos: project: %w", err)
@@ -60,7 +62,7 @@ func (s *Service) loadBundle(ctx context.Context, projectID string) (*bundle, er
 
 	personalityIDs, personalities := buildPersonalities(defModels, defChannels)
 
-	patch := buildPatch(instances, personalityIDs)
+	patch := buildPatch(instances, personalityIDs, collector)
 
 	paramTypes := buildParamTable(collectChannelTypes(defChannels))
 
@@ -119,6 +121,11 @@ func buildPersonalities(defs map[string]*models.FixtureDefinition,
 
 	idMap := make(map[string]int, len(defIDs))
 	out := make([]PersonalityIn, 0, len(defIDs))
+	// 9001 is the conventional base for LacyLights-synthesized personality IDs;
+	// EOS library personalities use IDs in the low five digits (e.g. OTBPA's
+	// 11896, 14983, 23759). Starting at 9001 leaves the typical 1..1000 range
+	// for hand-written test fixtures and documents that these IDs are
+	// project-local rather than EOS-library references.
 	const persIDBase = 9001
 	for i, defID := range defIDs {
 		persID := persIDBase + i
@@ -152,7 +159,7 @@ func buildPersonalities(defs map[string]*models.FixtureDefinition,
 }
 
 // buildPatch renders one $Patch line per fixture instance.
-func buildPatch(instances []models.FixtureInstance, persIDs map[string]int) []PatchEntryOut {
+func buildPatch(instances []models.FixtureInstance, persIDs map[string]int, collector *importeos.Collector) []PatchEntryOut {
 	out := make([]PatchEntryOut, 0, len(instances))
 	for i := range instances {
 		fi := &instances[i]
@@ -162,6 +169,11 @@ func buildPatch(instances []models.FixtureInstance, persIDs map[string]int) []Pa
 		// does not currently allow patching at address 0, but a defensive
 		// guard avoids data loss if that invariant ever slips.)
 		if fi.StartChannel <= 0 {
+			if collector != nil {
+				collector.Add(importeos.WarnUnpatchedInstance, importeos.SeverityInfo,
+					fmt.Sprintf("fixture %q has no DMX address; skipped on export", fi.Name),
+					map[string]string{"fixtureId": fi.ID, "name": fi.Name})
+			}
 			continue
 		}
 		out = append(out, PatchEntryOut{
@@ -222,9 +234,6 @@ func buildInstanceStates(
 	return states, eosByInstance
 }
 
-// paletteListNames maps EOS palette categories to the list names the importer
-// uses (these are also the names the exporter recognizes for palette
-// synthesis).
 // paletteListNames maps the synthetic cue-list name the importer creates for
 // each EOS palette/preset category to the corresponding writer "Kind". The
 // keys reference exported constants in import_eos so a rename of those

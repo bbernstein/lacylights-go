@@ -14,10 +14,10 @@ type Result struct {
 	ProjectName    string
 	Content        string
 	FilenameSuffix string
-	// Warnings is reserved for future use; export currently produces no
-	// warnings of its own. The field is kept on the result so we can surface
-	// future writer-side warnings (e.g. lossy palette conversions, dropped
-	// fixture-group references) without breaking the caller signature.
+	// Warnings collects non-fatal issues encountered during export, e.g.
+	// fixtures skipped because they have no DMX address (UNPATCHED_INSTANCE).
+	// More codes may be added as the writer learns to flag lossy palette
+	// conversions, dropped fixture-group references, etc.
 	Warnings []importeos.Warning
 }
 
@@ -84,7 +84,8 @@ func (s *Service) Export(ctx context.Context, projectID string) (*Result, error)
 		return nil, err
 	}
 
-	bundle, err := s.loadBundle(ctx, projectID)
+	collector := &importeos.Collector{}
+	bundle, err := s.loadBundle(ctx, projectID, collector)
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +126,6 @@ func (s *Service) Export(ctx context.Context, projectID string) (*Result, error)
 		ProjectName:    bundle.ProjectName,
 		Content:        wr.String(),
 		FilenameSuffix: ".asc",
-		Warnings:       nil,
+		Warnings:       collector.All(),
 	}, nil
 }

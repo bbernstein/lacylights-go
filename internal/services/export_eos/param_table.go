@@ -43,6 +43,12 @@ type channelTypeMeta struct {
 //
 // Round-trip is preserved because the importer matches by name (long-name) for
 // known channel types, not by ID.
+//
+// Not yet mapped: EOS paramIDs 7 (Hue) and 8 (Saturation). LacyLights does not
+// currently model Hue/Saturation as channel types; fixtures that expose those
+// channels in their EOS personality are imported as ChannelTypeOther (and
+// exported back as paramID 999). Add `ChannelTypeHue`/`ChannelTypeSaturation`
+// here when the model gains those types.
 var channelTypeMetaTable = map[generated.ChannelType]channelTypeMeta{
 	generated.ChannelTypeIntensity:  {paramID: 1, category: 1, longName: "Intens"},
 	generated.ChannelTypePan:        {paramID: 2, category: 2, longName: "Pan"},
