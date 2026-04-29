@@ -292,6 +292,12 @@ func (p *parser) parsePatch() error {
 	//      declared personality ID and fields[2] is not — both fields
 	//      being valid personalities (or neither) is ambiguous, so we
 	//      leave the user-authored ordering as the safe default.
+	//
+	// EOS format observed: 3.20 (as of EOS 3.x). If a future EOS revision
+	// adds a 6th field to the library-driven form, this guard will silently
+	// fall back to user-authored ordering and produce wrong addresses;
+	// re-verify against a current showfile when bumping the supported
+	// $$Format version.
 	addrIdx, persIdx := 1, 2
 	if len(line.Fields) == 5 && p.fieldIsKnownPersonality(line.Fields[1]) && !p.fieldIsKnownPersonality(line.Fields[2]) {
 		addrIdx, persIdx = 2, 1

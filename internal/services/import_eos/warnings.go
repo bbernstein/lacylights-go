@@ -29,6 +29,8 @@ const (
 	WarnUnpatchedInstance  WarningCode = "UNPATCHED_INSTANCE"
 	WarnLookValuesInvalid  WarningCode = "LOOK_VALUES_INVALID"
 	WarnGroupsSkipped      WarningCode = "GROUPS_SKIPPED"
+	WarnAddressConflict    WarningCode = "ADDRESS_CONFLICT"
+	WarnGroupAutoAssigned  WarningCode = "GROUP_AUTO_ASSIGNED"
 )
 
 // Warning is a structured non-fatal warning emitted during import or export.

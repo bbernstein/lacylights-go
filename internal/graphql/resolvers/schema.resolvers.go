@@ -4587,6 +4587,12 @@ func (r *mutationResolver) ExportProjectToQlc(ctx context.Context, projectID str
 // the cap is generous enough for very large shows but small enough that a
 // misconfigured or malicious client can't consume arbitrary memory before the
 // parser sees it.
+//
+// This check is application-layer: by the time it runs, the GraphQL runtime
+// has already decoded the JSON body into a Go string. For complete protection
+// against oversized requests, the HTTP server should also cap the request
+// body via http.MaxBytesReader. That is currently configured at the server
+// boundary; the limit here adds a documented contract at the resolver entry.
 const maxEosContentBytes = 50 << 20 // 50 MiB
 
 // ImportProjectFromEos is the resolver for the importProjectFromEos field.
@@ -4595,7 +4601,7 @@ func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiConten
 		return nil, fmt.Errorf("eos import not available on this platform")
 	}
 	if len(asciiContent) > maxEosContentBytes {
-		return nil, fmt.Errorf("asciiContent exceeds maximum size of %d bytes", maxEosContentBytes)
+		return nil, fmt.Errorf("asciiContent exceeds the %d MiB maximum", maxEosContentBytes>>20)
 	}
 	importOpts := importeos.Options{}
 	if options != nil {
@@ -4628,6 +4634,21 @@ func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiConten
 			return nil, fmt.Errorf("cannot import project: user does not belong to any groups")
 		}
 	}
+	// Capture a warning if we silently picked a group on the caller's
+	// behalf when they belong to multiple groups. This is appended to the
+	// service's warnings so the UI can surface the choice.
+	var resolverWarnings []importeos.Warning
+	if importOpts.GroupID != nil {
+		groupIDs := middleware.GetUserGroupIDs(ctx)
+		if len(groupIDs) > 1 {
+			resolverWarnings = append(resolverWarnings, importeos.Warning{
+				Code:     importeos.WarnGroupAutoAssigned,
+				Severity: importeos.SeverityInfo,
+				Message:  "imported project assigned to your first group; pass options.targetProjectId or wait for groupId support to choose explicitly",
+				Context:  map[string]string{"groupId": *importOpts.GroupID},
+			})
+		}
+	}
 
 	res, err := r.EosImportService.Import(ctx, strings.NewReader(asciiContent), importOpts)
 	if err != nil {
@@ -4649,7 +4670,7 @@ func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiConten
 		CueListsCount:            res.CueListsCount,
 		CuesCount:                res.CuesCount,
 		GroupsCount:              res.GroupsCount,
-		Warnings:                 toEosWarnings(res.Warnings),
+		Warnings:                 toEosWarnings(append(resolverWarnings, res.Warnings...)),
 		SynthesizedDefinitionIds: synths,
 	}, nil
 }

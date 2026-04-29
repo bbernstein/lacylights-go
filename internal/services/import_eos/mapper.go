@@ -106,8 +106,19 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 		}
 		key := addrKey{u: universe, a: address}
 		if prevCh, dup := seenAddr[key]; dup {
-			return nil, fmt.Errorf("eos import: address conflict at universe %d address %d (channels %d and %d)",
-				universe, address, prevCh, pe.Channel)
+			// EOS supports multi-patching (two logical channels at the
+			// same DMX address). We treat the second occurrence as a
+			// soft conflict: warn so the operator can review, but
+			// continue importing rather than aborting the whole file.
+			warn.Add(WarnAddressConflict, SeverityWarn,
+				fmt.Sprintf("address conflict at universe %d address %d: channels %d and %d",
+					universe, address, prevCh, pe.Channel),
+				map[string]string{
+					"universe": strconv.Itoa(universe),
+					"address":  strconv.Itoa(address),
+					"prevCh":   strconv.Itoa(prevCh),
+					"newCh":    strconv.Itoa(pe.Channel),
+				})
 		}
 		seenAddr[key] = pe.Channel
 		label := pe.Label

@@ -144,8 +144,8 @@ func TestImportProjectFromEos_RejectsOversizedContent(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected oversized payload to be rejected")
 	}
-	if !strings.Contains(err.Error(), "exceeds maximum size") {
-		t.Errorf("error %q missing 'exceeds maximum size'", err.Error())
+	if !strings.Contains(err.Error(), "exceeds the 50 MiB maximum") {
+		t.Errorf("error %q missing 'exceeds the 50 MiB maximum'", err.Error())
 	}
 }
 

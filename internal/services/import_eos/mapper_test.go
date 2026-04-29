@@ -61,19 +61,29 @@ func openFixtureFile(t *testing.T, name string) *os.File {
 	return f
 }
 
-func TestImport_AddressConflictReturnsHardError(t *testing.T) {
+func TestImport_AddressConflictEmitsWarning(t *testing.T) {
+	// EOS supports multi-patching (two logical channels at the same DMX
+	// address); the importer surfaces that as a WARN-severity warning and
+	// continues, rather than aborting the whole file with a hard error.
 	deps := newTestDeps(t)
 	defer deps.close()
 	f := openFixtureFile(t, "conflict_addresses.asc")
 	defer func() { _ = f.Close() }()
 	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
-	_, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr("X")})
-	if err == nil {
-		t.Fatal("expected error")
+	res, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr("X")})
+	if err != nil {
+		t.Fatalf("import: %v (expected success with warning)", err)
 	}
-	if !strings.Contains(err.Error(), "address") {
-		t.Errorf("expected address-conflict error, got %v", err)
+	var sawConflict bool
+	for _, w := range res.Warnings {
+		if w.Code == WarnAddressConflict {
+			sawConflict = true
+			break
+		}
+	}
+	if !sawConflict {
+		t.Errorf("expected ADDRESS_CONFLICT warning, got %+v", res.Warnings)
 	}
 }
 
