@@ -326,6 +326,42 @@ func TestExport_WarnsOnInvalidLookValuesJSON(t *testing.T) {
 	}
 }
 
+// TestExport_DottedAddressForMultiUniverse confirms formatEOSAddress emits
+// the dotted form for non-unit universes.
+func TestExport_DottedAddressForMultiUniverse(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+	ctx := context.Background()
+
+	proj := &models.Project{Name: "Multi-Universe Show"}
+	if err := deps.projectRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	def := &models.FixtureDefinition{Manufacturer: "Generic", Model: "Dimmer", Type: "DIMMER"}
+	chs := []models.ChannelDefinition{{Offset: 0, Name: "Intensity", Type: string(generated.ChannelTypeIntensity)}}
+	if err := deps.fixtureRepo.CreateDefinitionWithChannels(ctx, def, chs); err != nil {
+		t.Fatalf("create def: %v", err)
+	}
+	order := 1
+	fi := &models.FixtureInstance{
+		ProjectID: proj.ID, DefinitionID: def.ID, Name: "U2", Universe: 2, StartChannel: 100,
+		ProjectOrder: &order,
+	}
+	if err := deps.fixtureRepo.CreateWithChannels(ctx, fi, []models.InstanceChannel{{Offset: 0, Name: "Intensity", Type: string(generated.ChannelTypeIntensity)}}); err != nil {
+		t.Fatalf("create instance: %v", err)
+	}
+
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Export(ctx, proj.ID)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if !strings.Contains(res.Content, "$Patch 1 2.100 9001") {
+		t.Errorf("expected dotted address '2.100' in patch line, got:\n%s", res.Content)
+	}
+}
+
 func TestExport_FailsWhenRepositoriesMissing(t *testing.T) {
 	cases := []struct {
 		name    string
