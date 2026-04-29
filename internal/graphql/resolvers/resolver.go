@@ -14,7 +14,9 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 	"github.com/bbernstein/lacylights-go/internal/services/dmx"
 	"github.com/bbernstein/lacylights-go/internal/services/export"
+	exporteos "github.com/bbernstein/lacylights-go/internal/services/export_eos"
 	importservice "github.com/bbernstein/lacylights-go/internal/services/import"
+	importeos "github.com/bbernstein/lacylights-go/internal/services/import_eos"
 	"github.com/bbernstein/lacylights-go/internal/services/modulator"
 	"github.com/bbernstein/lacylights-go/internal/services/ofl"
 	"github.com/bbernstein/lacylights-go/internal/services/playback"
@@ -50,6 +52,8 @@ type Resolver struct {
 	PlaybackService *playback.Service
 	ExportService   *export.Service
 	ImportService   *importservice.Service
+	EosImportService *importeos.Service
+	EosExportService *exporteos.Service
 	OFLService      *ofl.Service
 	OFLManager      *ofl.Manager
 	PreviewService  *preview.Service
@@ -107,8 +111,10 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *modulator.Eng
 		DMXService:      dmxService,
 		FadeEngine:      fadeEngine,
 		PlaybackService: playbackService,
-		ExportService:   export.NewServiceWithLookBoards(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo),
-		ImportService:   importservice.NewServiceWithLookBoards(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo),
+		ExportService:    export.NewServiceWithLookBoards(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo),
+		ImportService:    importservice.NewServiceWithLookBoards(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo),
+		EosImportService: importeos.NewServiceWithDeps(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo),
+		EosExportService: exporteos.NewServiceWithDeps(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo),
 		OFLService:      ofl.NewService(db, fixtureRepo),
 		OFLManager:      oflManager,
 		PreviewService:  preview.NewService(fixtureRepo, lookRepo, dmxService),

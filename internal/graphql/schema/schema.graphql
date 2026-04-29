@@ -1508,6 +1508,52 @@ type QLCFixtureMappingResult {
 }
 
 # =============================================================================
+# EOS ASCII TYPES
+# =============================================================================
+
+enum EosWarningSeverity {
+  INFO
+  WARN
+}
+
+type EosWarning {
+  code: String!
+  severity: EosWarningSeverity!
+  message: String!
+  context: [EosWarningContextEntry!]
+}
+
+type EosWarningContextEntry {
+  key: String!
+  value: String!
+}
+
+type EosImportResult {
+  projectId: ID!
+  fixtureDefinitionsCount: Int!
+  fixtureInstancesCount: Int!
+  looksCount: Int!
+  cueListsCount: Int!
+  cuesCount: Int!
+  groupsCount: Int!
+  warnings: [EosWarning!]!
+  synthesizedDefinitionIds: [String!]!
+}
+
+type EosExportResult {
+  projectId: ID!
+  projectName: String!
+  asciiContent: String!
+  filenameSuffix: String!
+  warnings: [EosWarning!]!
+}
+
+input EosImportOptionsInput {
+  newProjectName: String
+  targetProjectId: ID
+}
+
+# =============================================================================
 # INPUT TYPES
 # =============================================================================
 
@@ -2566,6 +2612,13 @@ type Mutation {
     projectId: ID!
     fixtureMappings: [FixtureMappingInput!]
   ): QLCExportResult!
+
+  # ETC Eos ASCII Import/Export
+  importProjectFromEos(
+    asciiContent: String!
+    options: EosImportOptionsInput
+  ): EosImportResult!
+  exportProjectToEos(projectId: ID!): EosExportResult!
 
   # Settings
   updateSetting(input: UpdateSettingInput!): Setting!
