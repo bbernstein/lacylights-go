@@ -216,11 +216,22 @@ func TestFadeToLook_ReplacesExistingCrossfade(t *testing.T) {
 		t.Errorf("Expected 1 active fade after replacement, got %d", engine.ActiveFadeCount())
 	}
 
-	// Poll until second fade completes (bounded to avoid flaky timing failures)
+	// Poll until the engine reports the fade is fully retired, then check
+	// the final value. Asserting strict equality on the in-flight value is
+	// flaky in CI: the linear interpolation can land on 199 one tick before
+	// the engine writes the exact target, and an overloaded scheduler can
+	// delay that final tick past the polling deadline.
 	waitForCondition(t, 2*time.Second,
-		func() bool { return dmxService.GetChannelValue(1, 1) == 200 },
-		func() { t.Fatalf("Replacement fade did not reach target 200 within timeout, last value %d", dmxService.GetChannelValue(1, 1)) },
+		func() bool { return engine.ActiveFadeCount() == 0 },
+		func() {
+			t.Fatalf("Replacement fade did not finish within timeout, last value %d, active=%d",
+				dmxService.GetChannelValue(1, 1), engine.ActiveFadeCount())
+		},
 	)
+	final := dmxService.GetChannelValue(1, 1)
+	if final != 200 {
+		t.Errorf("Replacement fade final value = %d, want 200", final)
+	}
 }
 
 // TestFadeToLook_SnapBehavior tests that SNAP channels jump to target immediately.
