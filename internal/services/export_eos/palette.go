@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf16"
+	"unicode/utf8"
 )
 
 // PaletteOut configures one palette emission.
@@ -53,22 +54,43 @@ func (w *writer) writePalette(p PaletteOut) {
 func formatChanMoves(moves []ChanMoveOut) string {
 	parts := make([]string, len(moves))
 	for i, m := range moves {
-		parts[i] = fmt.Sprintf("%d@H%02X", m.Channel, m.Value&0xFF)
+		// Clamp the DMX byte before formatting. The mask is defensive:
+		// a corrupt FixtureValue with Value > 255 would otherwise emit
+		// a multi-hex-digit token that EOS won't re-import.
+		parts[i] = fmt.Sprintf("%d@H%02X", m.Channel, clampByte(m.Value))
 	}
 	return strings.Join(parts, " ")
+}
+
+// clampByte coerces an int channel value into the valid 0..255 DMX range.
+func clampByte(v int) int {
+	if v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return v
 }
 
 func formatParamMove(pm ParamMoveOut) string {
 	parts := make([]string, 0, 1+len(pm.Values))
 	parts = append(parts, fmt.Sprintf("%d", pm.Channel))
 	for _, v := range pm.Values {
-		parts = append(parts, fmt.Sprintf("%d@%d", v.ParamID, v.Value))
+		// Clamp to a valid DMX byte for consistency with $$ChanMove —
+		// EOS uses the same 0..255 range for $$Param values.
+		parts = append(parts, fmt.Sprintf("%d@%d", v.ParamID, clampByte(v.Value)))
 	}
 	return strings.Join(parts, " ")
 }
 
-// encodeUText returns hex-encoded UTF-16-LE for s.
+// encodeUText returns hex-encoded UTF-16-LE for s. Invalid UTF-8 input is
+// coerced to the Unicode replacement character (U+FFFD) before encoding so a
+// corrupt label can never produce a malformed $$UText block.
 func encodeUText(s string) string {
+	if !utf8.ValidString(s) {
+		s = strings.ToValidUTF8(s, "�")
+	}
 	u16 := utf16.Encode([]rune(s))
 	parts := make([]string, len(u16))
 	for i, c := range u16 {

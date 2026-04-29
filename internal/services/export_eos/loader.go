@@ -60,7 +60,7 @@ func (s *Service) loadBundle(ctx context.Context, projectID string, collector *i
 		defModels[def] = dm
 	}
 
-	personalityIDs, personalities := buildPersonalities(defModels, defChannels)
+	personalityIDs, personalities := buildPersonalities(defModels, defChannels, collector)
 
 	patch := buildPatch(instances, personalityIDs, collector)
 
@@ -110,8 +110,12 @@ func eosChannelFor(fi *models.FixtureInstance) int {
 
 // buildPersonalities assigns a stable personality ID to every distinct
 // FixtureDefinition referenced by the project and emits the writer-shape rows.
+// Definitions that have been deleted (FindDefinitionByID returned nil) are
+// emitted as a placeholder "Unknown" personality and reported through the
+// collector so the operator can see that the export is missing data.
 func buildPersonalities(defs map[string]*models.FixtureDefinition,
 	defChannels map[string][]models.ChannelDefinition,
+	collector *importeos.Collector,
 ) (map[string]int, []PersonalityIn) {
 	defIDs := make([]string, 0, len(defs))
 	for id := range defs {
@@ -155,6 +159,10 @@ func buildPersonalities(defs map[string]*models.FixtureDefinition,
 		if dm != nil {
 			manuf = dm.Manufacturer
 			model = dm.Model
+		} else if collector != nil {
+			collector.Add(importeos.WarnSynthesizedFixture, importeos.SeverityInfo,
+				fmt.Sprintf("fixture definition %s missing; emitting placeholder personality", defID),
+				map[string]string{"definitionId": defID, "personalityId": strconv.Itoa(persID)})
 		}
 		out = append(out, PersonalityIn{
 			ID:        persID,
