@@ -381,6 +381,38 @@ type ComplexityRoot struct {
 		PhaseOffset    func(childComplexity int) int
 	}
 
+	EosExportResult struct {
+		ASCIIContent   func(childComplexity int) int
+		FilenameSuffix func(childComplexity int) int
+		ProjectID      func(childComplexity int) int
+		ProjectName    func(childComplexity int) int
+		Warnings       func(childComplexity int) int
+	}
+
+	EosImportResult struct {
+		CueListsCount            func(childComplexity int) int
+		CuesCount                func(childComplexity int) int
+		FixtureDefinitionsCount  func(childComplexity int) int
+		FixtureInstancesCount    func(childComplexity int) int
+		GroupsCount              func(childComplexity int) int
+		LooksCount               func(childComplexity int) int
+		ProjectID                func(childComplexity int) int
+		SynthesizedDefinitionIds func(childComplexity int) int
+		Warnings                 func(childComplexity int) int
+	}
+
+	EosWarning struct {
+		Code     func(childComplexity int) int
+		Context  func(childComplexity int) int
+		Message  func(childComplexity int) int
+		Severity func(childComplexity int) int
+	}
+
+	EosWarningContextEntry struct {
+		Key   func(childComplexity int) int
+		Value func(childComplexity int) int
+	}
+
 	ExportResult struct {
 		JSONContent func(childComplexity int) int
 		ProjectID   func(childComplexity int) int
@@ -738,12 +770,14 @@ type ComplexityRoot struct {
 		DisconnectWiFi                         func(childComplexity int) int
 		DuplicateLook                          func(childComplexity int, id string) int
 		ExportProject                          func(childComplexity int, projectID string, options *ExportOptionsInput) int
+		ExportProjectToEos                     func(childComplexity int, projectID string) int
 		ExportProjectToQlc                     func(childComplexity int, projectID string, fixtureMappings []*FixtureMappingInput) int
 		FadeToBlack                            func(childComplexity int, fadeOutTime float64) int
 		ForgetWiFiNetwork                      func(childComplexity int, ssid string) int
 		GoToCue                                func(childComplexity int, cueListID string, cueIndex int, fadeInTime *float64) int
 		ImportOFLFixture                       func(childComplexity int, input ImportOFLFixtureInput) int
 		ImportProject                          func(childComplexity int, jsonContent string, options ImportOptionsInput) int
+		ImportProjectFromEos                   func(childComplexity int, asciiContent string, options *EosImportOptionsInput) int
 		ImportProjectFromQlc                   func(childComplexity int, xmlContent string, originalFileName string) int
 		InitializePreviewWithLook              func(childComplexity int, sessionID string, lookID string) int
 		InviteToGroup                          func(childComplexity int, groupID string, email string, role *GroupMemberRole) int
@@ -1470,6 +1504,8 @@ type MutationResolver interface {
 	ImportProject(ctx context.Context, jsonContent string, options ImportOptionsInput) (*ImportResult, error)
 	ImportProjectFromQlc(ctx context.Context, xmlContent string, originalFileName string) (*QLCImportResult, error)
 	ExportProjectToQlc(ctx context.Context, projectID string, fixtureMappings []*FixtureMappingInput) (*QLCExportResult, error)
+	ImportProjectFromEos(ctx context.Context, asciiContent string, options *EosImportOptionsInput) (*EosImportResult, error)
+	ExportProjectToEos(ctx context.Context, projectID string) (*EosExportResult, error)
 	UpdateSetting(ctx context.Context, input UpdateSettingInput) (*models.Setting, error)
 	UpdateFadeUpdateRate(ctx context.Context, rateHz int) (bool, error)
 	SetArtNetEnabled(ctx context.Context, enabled bool, fadeTime *float64) (*ArtNetStatus, error)
@@ -2953,6 +2989,130 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.EffectFixture.PhaseOffset(childComplexity), true
+
+	case "EosExportResult.asciiContent":
+		if e.complexity.EosExportResult.ASCIIContent == nil {
+			break
+		}
+
+		return e.complexity.EosExportResult.ASCIIContent(childComplexity), true
+	case "EosExportResult.filenameSuffix":
+		if e.complexity.EosExportResult.FilenameSuffix == nil {
+			break
+		}
+
+		return e.complexity.EosExportResult.FilenameSuffix(childComplexity), true
+	case "EosExportResult.projectId":
+		if e.complexity.EosExportResult.ProjectID == nil {
+			break
+		}
+
+		return e.complexity.EosExportResult.ProjectID(childComplexity), true
+	case "EosExportResult.projectName":
+		if e.complexity.EosExportResult.ProjectName == nil {
+			break
+		}
+
+		return e.complexity.EosExportResult.ProjectName(childComplexity), true
+	case "EosExportResult.warnings":
+		if e.complexity.EosExportResult.Warnings == nil {
+			break
+		}
+
+		return e.complexity.EosExportResult.Warnings(childComplexity), true
+
+	case "EosImportResult.cueListsCount":
+		if e.complexity.EosImportResult.CueListsCount == nil {
+			break
+		}
+
+		return e.complexity.EosImportResult.CueListsCount(childComplexity), true
+	case "EosImportResult.cuesCount":
+		if e.complexity.EosImportResult.CuesCount == nil {
+			break
+		}
+
+		return e.complexity.EosImportResult.CuesCount(childComplexity), true
+	case "EosImportResult.fixtureDefinitionsCount":
+		if e.complexity.EosImportResult.FixtureDefinitionsCount == nil {
+			break
+		}
+
+		return e.complexity.EosImportResult.FixtureDefinitionsCount(childComplexity), true
+	case "EosImportResult.fixtureInstancesCount":
+		if e.complexity.EosImportResult.FixtureInstancesCount == nil {
+			break
+		}
+
+		return e.complexity.EosImportResult.FixtureInstancesCount(childComplexity), true
+	case "EosImportResult.groupsCount":
+		if e.complexity.EosImportResult.GroupsCount == nil {
+			break
+		}
+
+		return e.complexity.EosImportResult.GroupsCount(childComplexity), true
+	case "EosImportResult.looksCount":
+		if e.complexity.EosImportResult.LooksCount == nil {
+			break
+		}
+
+		return e.complexity.EosImportResult.LooksCount(childComplexity), true
+	case "EosImportResult.projectId":
+		if e.complexity.EosImportResult.ProjectID == nil {
+			break
+		}
+
+		return e.complexity.EosImportResult.ProjectID(childComplexity), true
+	case "EosImportResult.synthesizedDefinitionIds":
+		if e.complexity.EosImportResult.SynthesizedDefinitionIds == nil {
+			break
+		}
+
+		return e.complexity.EosImportResult.SynthesizedDefinitionIds(childComplexity), true
+	case "EosImportResult.warnings":
+		if e.complexity.EosImportResult.Warnings == nil {
+			break
+		}
+
+		return e.complexity.EosImportResult.Warnings(childComplexity), true
+
+	case "EosWarning.code":
+		if e.complexity.EosWarning.Code == nil {
+			break
+		}
+
+		return e.complexity.EosWarning.Code(childComplexity), true
+	case "EosWarning.context":
+		if e.complexity.EosWarning.Context == nil {
+			break
+		}
+
+		return e.complexity.EosWarning.Context(childComplexity), true
+	case "EosWarning.message":
+		if e.complexity.EosWarning.Message == nil {
+			break
+		}
+
+		return e.complexity.EosWarning.Message(childComplexity), true
+	case "EosWarning.severity":
+		if e.complexity.EosWarning.Severity == nil {
+			break
+		}
+
+		return e.complexity.EosWarning.Severity(childComplexity), true
+
+	case "EosWarningContextEntry.key":
+		if e.complexity.EosWarningContextEntry.Key == nil {
+			break
+		}
+
+		return e.complexity.EosWarningContextEntry.Key(childComplexity), true
+	case "EosWarningContextEntry.value":
+		if e.complexity.EosWarningContextEntry.Value == nil {
+			break
+		}
+
+		return e.complexity.EosWarningContextEntry.Value(childComplexity), true
 
 	case "ExportResult.jsonContent":
 		if e.complexity.ExportResult.JSONContent == nil {
@@ -4906,6 +5066,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.ExportProject(childComplexity, args["projectId"].(string), args["options"].(*ExportOptionsInput)), true
+	case "Mutation.exportProjectToEos":
+		if e.complexity.Mutation.ExportProjectToEos == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_exportProjectToEos_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.ExportProjectToEos(childComplexity, args["projectId"].(string)), true
 	case "Mutation.exportProjectToQLC":
 		if e.complexity.Mutation.ExportProjectToQlc == nil {
 			break
@@ -4972,6 +5143,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.ImportProject(childComplexity, args["jsonContent"].(string), args["options"].(ImportOptionsInput)), true
+	case "Mutation.importProjectFromEos":
+		if e.complexity.Mutation.ImportProjectFromEos == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_importProjectFromEos_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.ImportProjectFromEos(childComplexity, args["asciiContent"].(string), args["options"].(*EosImportOptionsInput)), true
 	case "Mutation.importProjectFromQLC":
 		if e.complexity.Mutation.ImportProjectFromQlc == nil {
 			break
@@ -7956,6 +8138,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCueListUpdateItem,
 		ec.unmarshalInputCueOrderInput,
 		ec.unmarshalInputEffectChannelInput,
+		ec.unmarshalInputEosImportOptionsInput,
 		ec.unmarshalInputExportOptionsInput,
 		ec.unmarshalInputFixtureDefinitionFilter,
 		ec.unmarshalInputFixtureDefinitionUpdateItem,
@@ -9613,6 +9796,63 @@ type QLCFixtureMappingResult {
 }
 
 # =============================================================================
+# EOS ASCII TYPES
+# =============================================================================
+
+enum EosWarningSeverity {
+  INFO
+  WARN
+}
+
+type EosWarning {
+  code: String!
+  severity: EosWarningSeverity!
+  message: String!
+  context: [EosWarningContextEntry!]!
+}
+
+type EosWarningContextEntry {
+  key: String!
+  value: String!
+}
+
+type EosImportResult {
+  projectId: ID!
+  fixtureDefinitionsCount: Int!
+  fixtureInstancesCount: Int!
+  looksCount: Int!
+  cueListsCount: Int!
+  cuesCount: Int!
+  groupsCount: Int!
+  warnings: [EosWarning!]!
+  synthesizedDefinitionIds: [String!]!
+}
+
+type EosExportResult {
+  projectId: ID!
+  projectName: String!
+  asciiContent: String!
+  filenameSuffix: String!
+  warnings: [EosWarning!]!
+}
+
+"""
+Options controlling how an Eos ASCII import is applied.
+
+Exactly one of ` + "`" + `newProjectName` + "`" + ` or ` + "`" + `targetProjectId` + "`" + ` should be set:
+- ` + "`" + `newProjectName` + "`" + `: create a new project with the given name (or the
+  showfile's ` + "`" + `$$Title` + "`" + ` if both are absent).
+- ` + "`" + `targetProjectId` + "`" + `: append the import into the named existing project.
+  Existing fixtures, looks, cue lists, and look boards are NOT cleared;
+  the new content is added alongside them. A future flag may add a
+  replace mode.
+"""
+input EosImportOptionsInput {
+  newProjectName: String
+  targetProjectId: ID
+}
+
+# =============================================================================
 # INPUT TYPES
 # =============================================================================
 
@@ -10672,6 +10912,13 @@ type Mutation {
     fixtureMappings: [FixtureMappingInput!]
   ): QLCExportResult!
 
+  # ETC Eos ASCII Import/Export
+  importProjectFromEos(
+    asciiContent: String!
+    options: EosImportOptionsInput
+  ): EosImportResult!
+  exportProjectToEos(projectId: ID!): EosExportResult!
+
   # Settings
   updateSetting(input: UpdateSettingInput!): Setting!
   updateFadeUpdateRate(rateHz: Int!): Boolean!
@@ -11659,6 +11906,17 @@ func (ec *executionContext) field_Mutation_duplicateLook_args(ctx context.Contex
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_exportProjectToEos_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_exportProjectToQLC_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -11742,6 +12000,22 @@ func (ec *executionContext) field_Mutation_importOFLFixture_args(ctx context.Con
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_importProjectFromEos_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "asciiContent", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["asciiContent"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "options", ec.unmarshalOEosImportOptionsInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosImportOptionsInput)
+	if err != nil {
+		return nil, err
+	}
+	args["options"] = arg1
 	return args, nil
 }
 
@@ -20268,6 +20542,612 @@ func (ec *executionContext) fieldContext_EffectFixture_channels(_ context.Contex
 				return ec.fieldContext_EffectChannel_maxValue(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type EffectChannel", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosExportResult_projectId(ctx context.Context, field graphql.CollectedField, obj *EosExportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosExportResult_projectId,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosExportResult_projectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosExportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosExportResult_projectName(ctx context.Context, field graphql.CollectedField, obj *EosExportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosExportResult_projectName,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectName, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosExportResult_projectName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosExportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosExportResult_asciiContent(ctx context.Context, field graphql.CollectedField, obj *EosExportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosExportResult_asciiContent,
+		func(ctx context.Context) (any, error) {
+			return obj.ASCIIContent, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosExportResult_asciiContent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosExportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosExportResult_filenameSuffix(ctx context.Context, field graphql.CollectedField, obj *EosExportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosExportResult_filenameSuffix,
+		func(ctx context.Context) (any, error) {
+			return obj.FilenameSuffix, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosExportResult_filenameSuffix(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosExportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosExportResult_warnings(ctx context.Context, field graphql.CollectedField, obj *EosExportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosExportResult_warnings,
+		func(ctx context.Context) (any, error) {
+			return obj.Warnings, nil
+		},
+		nil,
+		ec.marshalNEosWarning2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarningᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosExportResult_warnings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosExportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "code":
+				return ec.fieldContext_EosWarning_code(ctx, field)
+			case "severity":
+				return ec.fieldContext_EosWarning_severity(ctx, field)
+			case "message":
+				return ec.fieldContext_EosWarning_message(ctx, field)
+			case "context":
+				return ec.fieldContext_EosWarning_context(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type EosWarning", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosImportResult_projectId(ctx context.Context, field graphql.CollectedField, obj *EosImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosImportResult_projectId,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosImportResult_projectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosImportResult_fixtureDefinitionsCount(ctx context.Context, field graphql.CollectedField, obj *EosImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosImportResult_fixtureDefinitionsCount,
+		func(ctx context.Context) (any, error) {
+			return obj.FixtureDefinitionsCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosImportResult_fixtureDefinitionsCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosImportResult_fixtureInstancesCount(ctx context.Context, field graphql.CollectedField, obj *EosImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosImportResult_fixtureInstancesCount,
+		func(ctx context.Context) (any, error) {
+			return obj.FixtureInstancesCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosImportResult_fixtureInstancesCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosImportResult_looksCount(ctx context.Context, field graphql.CollectedField, obj *EosImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosImportResult_looksCount,
+		func(ctx context.Context) (any, error) {
+			return obj.LooksCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosImportResult_looksCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosImportResult_cueListsCount(ctx context.Context, field graphql.CollectedField, obj *EosImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosImportResult_cueListsCount,
+		func(ctx context.Context) (any, error) {
+			return obj.CueListsCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosImportResult_cueListsCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosImportResult_cuesCount(ctx context.Context, field graphql.CollectedField, obj *EosImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosImportResult_cuesCount,
+		func(ctx context.Context) (any, error) {
+			return obj.CuesCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosImportResult_cuesCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosImportResult_groupsCount(ctx context.Context, field graphql.CollectedField, obj *EosImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosImportResult_groupsCount,
+		func(ctx context.Context) (any, error) {
+			return obj.GroupsCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosImportResult_groupsCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosImportResult_warnings(ctx context.Context, field graphql.CollectedField, obj *EosImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosImportResult_warnings,
+		func(ctx context.Context) (any, error) {
+			return obj.Warnings, nil
+		},
+		nil,
+		ec.marshalNEosWarning2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarningᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosImportResult_warnings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "code":
+				return ec.fieldContext_EosWarning_code(ctx, field)
+			case "severity":
+				return ec.fieldContext_EosWarning_severity(ctx, field)
+			case "message":
+				return ec.fieldContext_EosWarning_message(ctx, field)
+			case "context":
+				return ec.fieldContext_EosWarning_context(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type EosWarning", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosImportResult_synthesizedDefinitionIds(ctx context.Context, field graphql.CollectedField, obj *EosImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosImportResult_synthesizedDefinitionIds,
+		func(ctx context.Context) (any, error) {
+			return obj.SynthesizedDefinitionIds, nil
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosImportResult_synthesizedDefinitionIds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosWarning_code(ctx context.Context, field graphql.CollectedField, obj *EosWarning) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosWarning_code,
+		func(ctx context.Context) (any, error) {
+			return obj.Code, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosWarning_code(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosWarning",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosWarning_severity(ctx context.Context, field graphql.CollectedField, obj *EosWarning) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosWarning_severity,
+		func(ctx context.Context) (any, error) {
+			return obj.Severity, nil
+		},
+		nil,
+		ec.marshalNEosWarningSeverity2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarningSeverity,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosWarning_severity(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosWarning",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type EosWarningSeverity does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosWarning_message(ctx context.Context, field graphql.CollectedField, obj *EosWarning) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosWarning_message,
+		func(ctx context.Context) (any, error) {
+			return obj.Message, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosWarning_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosWarning",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosWarning_context(ctx context.Context, field graphql.CollectedField, obj *EosWarning) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosWarning_context,
+		func(ctx context.Context) (any, error) {
+			return obj.Context, nil
+		},
+		nil,
+		ec.marshalNEosWarningContextEntry2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarningContextEntryᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosWarning_context(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosWarning",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "key":
+				return ec.fieldContext_EosWarningContextEntry_key(ctx, field)
+			case "value":
+				return ec.fieldContext_EosWarningContextEntry_value(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type EosWarningContextEntry", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosWarningContextEntry_key(ctx context.Context, field graphql.CollectedField, obj *EosWarningContextEntry) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosWarningContextEntry_key,
+		func(ctx context.Context) (any, error) {
+			return obj.Key, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosWarningContextEntry_key(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosWarningContextEntry",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EosWarningContextEntry_value(ctx context.Context, field graphql.CollectedField, obj *EosWarningContextEntry) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EosWarningContextEntry_value,
+		func(ctx context.Context) (any, error) {
+			return obj.Value, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_EosWarningContextEntry_value(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EosWarningContextEntry",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -32710,6 +33590,120 @@ func (ec *executionContext) fieldContext_Mutation_exportProjectToQLC(ctx context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_exportProjectToQLC_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_importProjectFromEos(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_importProjectFromEos,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().ImportProjectFromEos(ctx, fc.Args["asciiContent"].(string), fc.Args["options"].(*EosImportOptionsInput))
+		},
+		nil,
+		ec.marshalNEosImportResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosImportResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_importProjectFromEos(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "projectId":
+				return ec.fieldContext_EosImportResult_projectId(ctx, field)
+			case "fixtureDefinitionsCount":
+				return ec.fieldContext_EosImportResult_fixtureDefinitionsCount(ctx, field)
+			case "fixtureInstancesCount":
+				return ec.fieldContext_EosImportResult_fixtureInstancesCount(ctx, field)
+			case "looksCount":
+				return ec.fieldContext_EosImportResult_looksCount(ctx, field)
+			case "cueListsCount":
+				return ec.fieldContext_EosImportResult_cueListsCount(ctx, field)
+			case "cuesCount":
+				return ec.fieldContext_EosImportResult_cuesCount(ctx, field)
+			case "groupsCount":
+				return ec.fieldContext_EosImportResult_groupsCount(ctx, field)
+			case "warnings":
+				return ec.fieldContext_EosImportResult_warnings(ctx, field)
+			case "synthesizedDefinitionIds":
+				return ec.fieldContext_EosImportResult_synthesizedDefinitionIds(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type EosImportResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_importProjectFromEos_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_exportProjectToEos(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_exportProjectToEos,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().ExportProjectToEos(ctx, fc.Args["projectId"].(string))
+		},
+		nil,
+		ec.marshalNEosExportResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosExportResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_exportProjectToEos(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "projectId":
+				return ec.fieldContext_EosExportResult_projectId(ctx, field)
+			case "projectName":
+				return ec.fieldContext_EosExportResult_projectName(ctx, field)
+			case "asciiContent":
+				return ec.fieldContext_EosExportResult_asciiContent(ctx, field)
+			case "filenameSuffix":
+				return ec.fieldContext_EosExportResult_filenameSuffix(ctx, field)
+			case "warnings":
+				return ec.fieldContext_EosExportResult_warnings(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type EosExportResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_exportProjectToEos_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -49226,6 +50220,40 @@ func (ec *executionContext) unmarshalInputEffectChannelInput(ctx context.Context
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputEosImportOptionsInput(ctx context.Context, obj any) (EosImportOptionsInput, error) {
+	var it EosImportOptionsInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"newProjectName", "targetProjectId"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "newProjectName":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("newProjectName"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.NewProjectName = graphql.OmittableOf(data)
+		case "targetProjectId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("targetProjectId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TargetProjectID = graphql.OmittableOf(data)
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputExportOptionsInput(ctx context.Context, obj any) (ExportOptionsInput, error) {
 	var it ExportOptionsInput
 	asMap := map[string]any{}
@@ -53942,6 +54970,242 @@ func (ec *executionContext) _EffectFixture(ctx context.Context, sel ast.Selectio
 	return out
 }
 
+var eosExportResultImplementors = []string{"EosExportResult"}
+
+func (ec *executionContext) _EosExportResult(ctx context.Context, sel ast.SelectionSet, obj *EosExportResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, eosExportResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("EosExportResult")
+		case "projectId":
+			out.Values[i] = ec._EosExportResult_projectId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "projectName":
+			out.Values[i] = ec._EosExportResult_projectName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "asciiContent":
+			out.Values[i] = ec._EosExportResult_asciiContent(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "filenameSuffix":
+			out.Values[i] = ec._EosExportResult_filenameSuffix(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "warnings":
+			out.Values[i] = ec._EosExportResult_warnings(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var eosImportResultImplementors = []string{"EosImportResult"}
+
+func (ec *executionContext) _EosImportResult(ctx context.Context, sel ast.SelectionSet, obj *EosImportResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, eosImportResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("EosImportResult")
+		case "projectId":
+			out.Values[i] = ec._EosImportResult_projectId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fixtureDefinitionsCount":
+			out.Values[i] = ec._EosImportResult_fixtureDefinitionsCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fixtureInstancesCount":
+			out.Values[i] = ec._EosImportResult_fixtureInstancesCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "looksCount":
+			out.Values[i] = ec._EosImportResult_looksCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cueListsCount":
+			out.Values[i] = ec._EosImportResult_cueListsCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cuesCount":
+			out.Values[i] = ec._EosImportResult_cuesCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "groupsCount":
+			out.Values[i] = ec._EosImportResult_groupsCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "warnings":
+			out.Values[i] = ec._EosImportResult_warnings(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "synthesizedDefinitionIds":
+			out.Values[i] = ec._EosImportResult_synthesizedDefinitionIds(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var eosWarningImplementors = []string{"EosWarning"}
+
+func (ec *executionContext) _EosWarning(ctx context.Context, sel ast.SelectionSet, obj *EosWarning) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, eosWarningImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("EosWarning")
+		case "code":
+			out.Values[i] = ec._EosWarning_code(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "severity":
+			out.Values[i] = ec._EosWarning_severity(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "message":
+			out.Values[i] = ec._EosWarning_message(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "context":
+			out.Values[i] = ec._EosWarning_context(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var eosWarningContextEntryImplementors = []string{"EosWarningContextEntry"}
+
+func (ec *executionContext) _EosWarningContextEntry(ctx context.Context, sel ast.SelectionSet, obj *EosWarningContextEntry) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, eosWarningContextEntryImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("EosWarningContextEntry")
+		case "key":
+			out.Values[i] = ec._EosWarningContextEntry_key(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "value":
+			out.Values[i] = ec._EosWarningContextEntry_value(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var exportResultImplementors = []string{"ExportResult"}
 
 func (ec *executionContext) _ExportResult(ctx context.Context, sel ast.SelectionSet, obj *ExportResult) graphql.Marshaler {
@@ -57939,6 +59203,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "exportProjectToQLC":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_exportProjectToQLC(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "importProjectFromEos":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_importProjectFromEos(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "exportProjectToEos":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_exportProjectToEos(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -65142,6 +66420,152 @@ func (ec *executionContext) marshalNEntityDataChangeType2githubᚗcomᚋbbernste
 	return v
 }
 
+func (ec *executionContext) marshalNEosExportResult2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosExportResult(ctx context.Context, sel ast.SelectionSet, v EosExportResult) graphql.Marshaler {
+	return ec._EosExportResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNEosExportResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosExportResult(ctx context.Context, sel ast.SelectionSet, v *EosExportResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._EosExportResult(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNEosImportResult2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosImportResult(ctx context.Context, sel ast.SelectionSet, v EosImportResult) graphql.Marshaler {
+	return ec._EosImportResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNEosImportResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosImportResult(ctx context.Context, sel ast.SelectionSet, v *EosImportResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._EosImportResult(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNEosWarning2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarningᚄ(ctx context.Context, sel ast.SelectionSet, v []*EosWarning) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNEosWarning2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarning(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNEosWarning2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarning(ctx context.Context, sel ast.SelectionSet, v *EosWarning) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._EosWarning(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNEosWarningContextEntry2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarningContextEntryᚄ(ctx context.Context, sel ast.SelectionSet, v []*EosWarningContextEntry) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNEosWarningContextEntry2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarningContextEntry(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNEosWarningContextEntry2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarningContextEntry(ctx context.Context, sel ast.SelectionSet, v *EosWarningContextEntry) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._EosWarningContextEntry(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNEosWarningSeverity2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarningSeverity(ctx context.Context, v any) (EosWarningSeverity, error) {
+	var res EosWarningSeverity
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNEosWarningSeverity2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosWarningSeverity(ctx context.Context, sel ast.SelectionSet, v EosWarningSeverity) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) marshalNExportResult2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐExportResult(ctx context.Context, sel ast.SelectionSet, v ExportResult) graphql.Marshaler {
 	return ec._ExportResult(ctx, sel, &v)
 }
@@ -68724,6 +70148,14 @@ func (ec *executionContext) marshalOEffectType2ᚖgithubᚗcomᚋbbernsteinᚋla
 		return graphql.Null
 	}
 	return v
+}
+
+func (ec *executionContext) unmarshalOEosImportOptionsInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosImportOptionsInput(ctx context.Context, v any) (*EosImportOptionsInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputEosImportOptionsInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalOExportOptionsInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐExportOptionsInput(ctx context.Context, v any) (*ExportOptionsInput, error) {

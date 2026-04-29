@@ -1,6 +1,7 @@
 package importeos
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -24,7 +25,12 @@ func Parse(r io.Reader) (*Show, *Collector, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	p := &parser{lines: lines, show: &Show{}, warn: &Collector{}}
+	p := &parser{
+		lines:          lines,
+		show:           &Show{},
+		warn:           &Collector{},
+		personalityIDs: map[int]struct{}{},
+	}
 	if err := p.run(); err != nil {
 		return nil, nil, err
 	}
@@ -36,6 +42,10 @@ type parser struct {
 	pos   int
 	show  *Show
 	warn  *Collector
+	// personalityIDs is a set of $Personality IDs seen so far; used by
+	// $Patch field-order autodetection in O(1) per lookup. Populated by
+	// parsePersonality and consumed by fieldIsKnownPersonality.
+	personalityIDs map[int]struct{}
 }
 
 func (p *parser) cur() *Line {
@@ -197,11 +207,26 @@ func (p *parser) parsePersonality() error {
 		p.advance()
 	}
 	p.show.Personalities = append(p.show.Personalities, pers)
+	p.personalityIDs[id] = struct{}{}
+	// LacyLights synthesizes IDs starting at 90001 on export; warn if an
+	// incoming file already uses an ID in that range so a future re-export
+	// collision is at least visible to the operator.
+	const synthesizedPersIDFloor = 90001
+	if id >= synthesizedPersIDFloor {
+		p.warn.Add(WarnPersonalityIDInSynthRange, SeverityInfo,
+			fmt.Sprintf("$Personality %d uses an ID in the LacyLights synthesized range (>= %d); re-export may collide",
+				id, synthesizedPersIDFloor),
+			map[string]string{"line": strconv.Itoa(line.Lineno), "personalityId": strconv.Itoa(id)})
+	}
 	return nil
 }
 
 func parsePersChan(line *Line) (PersChannel, bool) {
 	// Fields: paramID size offset (offset16) home (flags)
+	// All numeric fields are strictly parsed: a malformed value drops the
+	// whole channel rather than silently substituting zero, since a wrong
+	// offset would corrupt patch addressing and a wrong home value would
+	// silently change fixture defaults.
 	if len(line.Fields) < 4 {
 		return PersChannel{}, false
 	}
@@ -209,22 +234,49 @@ func parsePersChan(line *Line) (PersChannel, bool) {
 	if err != nil {
 		return PersChannel{}, false
 	}
-	size, _ := strconv.Atoi(line.Fields[1])
-	offset, _ := strconv.Atoi(line.Fields[2])
+	size, err := strconv.Atoi(line.Fields[1])
+	if err != nil {
+		return PersChannel{}, false
+	}
+	offset, err := strconv.Atoi(line.Fields[2])
+	if err != nil {
+		return PersChannel{}, false
+	}
 	pc := PersChannel{ParamID: paramID, Size: size, Offset: offset}
 	idx := 3
 	if size == 2 && len(line.Fields) > idx {
-		pc.Offset16, _ = strconv.Atoi(line.Fields[idx])
+		v, err := strconv.Atoi(line.Fields[idx])
+		if err != nil {
+			return PersChannel{}, false
+		}
+		pc.Offset16 = v
 		idx++
 	}
 	if idx < len(line.Fields) {
-		pc.HomeValue, _ = strconv.Atoi(line.Fields[idx])
+		v, err := strconv.Atoi(line.Fields[idx])
+		if err != nil {
+			return PersChannel{}, false
+		}
+		pc.HomeValue = v
 		idx++
 	}
 	if idx < len(line.Fields) {
 		pc.Flags = line.Fields[idx]
 	}
 	return pc, true
+}
+
+// fieldIsKnownPersonality reports whether the textual field is an integer that
+// matches an already-parsed $Personality block. Backed by p.personalityIDs so
+// each call is O(1) — important for files like OTBPA with hundreds of
+// $Patch entries and dozens of personalities.
+func (p *parser) fieldIsKnownPersonality(s string) bool {
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return false
+	}
+	_, ok := p.personalityIDs[v]
+	return ok
 }
 
 func (p *parser) parsePatch() error {
@@ -236,11 +288,68 @@ func (p *parser) parsePatch() error {
 	if err != nil {
 		return &ParseError{Lineno: line.Lineno, Msg: "$Patch channel not an integer"}
 	}
-	persID, err := strconv.Atoi(line.Fields[2])
+	// EOS exports use two field orderings depending on the source:
+	//   user-authored:  $Patch <chan> <addr> <persID>                 (3 fields)
+	//   library-driven: $Patch <chan> <persID> <addr> <wheel> <count> (5+ fields)
+	//
+	// We resolve by:
+	//   1. Requiring at least 5 fields for the library-driven form. This
+	//      avoids a false positive when a user-authored 3-field line
+	//      happens to have a flat absolute address that matches a
+	//      synthesized personality ID (e.g. addr 9001 on a 4-universe rig,
+	//      where 9001 is also our persIDBase). Lines with 6+ fields are
+	//      treated as library-driven too (forward-compatible with future
+	//      EOS revisions that may append optional fields), with a
+	//      diagnostic so anyone reading warnings notices the variance.
+	//   2. Within a library-driven line, swapping only when fields[1] is
+	//      a declared personality ID and fields[2] is not — both fields
+	//      being valid personalities (or neither) is ambiguous, so we
+	//      leave the user-authored ordering as the safe default.
+	addrIdx, persIdx := 1, 2
+	if len(line.Fields) == 4 {
+		// 4-field form is undocumented in the EOS spec we target. Warn so
+		// it doesn't silently misparse as user-authored ordering.
+		p.warn.Add(WarnPatchExtendedFields, SeverityWarn,
+			"$Patch line has 4 fields (expected 3 or 5+); parsing as user-authored ordering",
+			map[string]string{"line": strconv.Itoa(line.Lineno)})
+	}
+	if len(line.Fields) >= 5 {
+		f1Pers := p.fieldIsKnownPersonality(line.Fields[1])
+		f2Pers := p.fieldIsKnownPersonality(line.Fields[2])
+		if f1Pers && !f2Pers {
+			addrIdx, persIdx = 2, 1
+			if len(line.Fields) > 5 {
+				p.warn.Add(WarnPatchExtendedFields, SeverityInfo,
+					fmt.Sprintf("$Patch line has %d fields (expected 5 for library-driven form); extra fields ignored",
+						len(line.Fields)),
+					map[string]string{"line": strconv.Itoa(line.Lineno)})
+			}
+		} else if f1Pers && f2Pers {
+			// Both fields parse as known personality IDs — the line is
+			// genuinely ambiguous. Default to user-authored ordering
+			// (fields[1] = address, fields[2] = persID) so synthetic
+			// fixtures keep working, but warn so an operator can review.
+			p.warn.Add(WarnPatchAmbiguousFields, SeverityWarn,
+				fmt.Sprintf("$Patch line is ambiguous (fields[1]=%s and fields[2]=%s both parse as known personality IDs); defaulting to user-authored ordering",
+					line.Fields[1], line.Fields[2]),
+				map[string]string{"line": strconv.Itoa(line.Lineno)})
+		} else if !f1Pers && !f2Pers {
+			// Neither field matches a known personality — the line was
+			// emitted before its personality was declared, or the
+			// referenced ID was never declared. Default to user-authored
+			// ordering and warn so the operator knows the autodetect
+			// fallback fired.
+			p.warn.Add(WarnPatchAmbiguousFields, SeverityInfo,
+				fmt.Sprintf("$Patch line has no recognizable personality reference (fields[1]=%s, fields[2]=%s); defaulting to user-authored ordering",
+					line.Fields[1], line.Fields[2]),
+				map[string]string{"line": strconv.Itoa(line.Lineno)})
+		}
+	}
+	persID, err := strconv.Atoi(line.Fields[persIdx])
 	if err != nil {
 		return &ParseError{Lineno: line.Lineno, Msg: "$Patch personality not an integer"}
 	}
-	pe := PatchEntry{Channel: channel, AddressRaw: line.Fields[1], PersonalityID: persID}
+	pe := PatchEntry{Channel: channel, AddressRaw: line.Fields[addrIdx], PersonalityID: persID}
 	p.advance()
 	for p.cur() != nil && p.cur().Indent > 0 {
 		sub := p.cur()
@@ -520,9 +629,17 @@ func expandChannelTokens(tokens []string) []int {
 	return out
 }
 
+// ErrAddressUnpatched indicates the EOS patch entry has no DMX address (raw "0").
+// Callers may choose to skip such entries rather than fail the whole import.
+var ErrAddressUnpatched = errors.New("eos: address is 0 (unpatched)")
+
 // NormalizeAddress converts an EOS patch address string to a (universe, address) tuple.
 // Accepts flat absolute ("1024"), dotted ("2.512"), and slashed ("3/100") forms.
-// Universes are 1-based, addresses are 1-based and 1..512.
+// Universes are 1-based, addresses are 1-based and 1..512. Flat values are
+// allowed to span multiple universes (e.g. flat=1024 → universe 2, address 512;
+// flat=1025 → universe 3, address 1).
+// Returns ErrAddressUnpatched for the literal value "0", which EOS uses to mark
+// channels that exist in the show but are not patched to any DMX output.
 func NormalizeAddress(raw string) (universe int, address int, err error) {
 	for _, sep := range []byte{'.', '/'} {
 		if i := strings.IndexByte(raw, sep); i >= 0 {
@@ -535,7 +652,13 @@ func NormalizeAddress(raw string) (universe int, address int, err error) {
 		}
 	}
 	flat, err := strconv.Atoi(raw)
-	if err != nil || flat < 1 {
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid eos address %q", raw)
+	}
+	if flat == 0 {
+		return 0, 0, ErrAddressUnpatched
+	}
+	if flat < 0 {
 		return 0, 0, fmt.Errorf("invalid eos address %q", raw)
 	}
 	universe = (flat-1)/512 + 1

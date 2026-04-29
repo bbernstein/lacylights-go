@@ -3,12 +3,26 @@ package importeos
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
+)
+
+// Cue list names used by the importer to file synthesized palette/preset
+// looks. Exported so the exporter can recognize the same lists when
+// translating LacyLights state back to Eos ASCII; keeping the strings in one
+// place avoids silent drift between the two halves of the round-trip.
+const (
+	PaletteListNameColor     = "Color Palettes"
+	PaletteListNameBeam      = "Beam Palettes"
+	PaletteListNameFocus     = "Focus Palettes"
+	PaletteListNameIntensity = "Intensity Palettes"
+	PaletteListNamePreset    = "Presets"
 )
 
 // Mapper applies a parsed Show + Sidecar to LacyLights repos.
@@ -30,7 +44,11 @@ func NewMapper(p *repositories.ProjectRepository, f *repositories.FixtureReposit
 
 // Apply maps the parsed show into the database.
 func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Options, warn *Collector) (*Result, error) {
-	res := &Result{}
+	// Initialize SynthesizedDefinitionIDs as a non-nil empty slice so
+	// callers (including the GraphQL resolver, which marshals it to a
+	// non-null list) never see a nil. Without this, append() leaves the
+	// field nil when no definitions were synthesized.
+	res := &Result{SynthesizedDefinitionIDs: []string{}}
 
 	projectID, err := m.resolveProject(ctx, show, opts)
 	if err != nil {
@@ -82,14 +100,35 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 		}
 		universe, address, err := NormalizeAddress(pe.AddressRaw)
 		if err != nil {
+			if errors.Is(err, ErrAddressUnpatched) {
+				warn.Add(WarnUnpatchedChannel, SeverityInfo,
+					fmt.Sprintf("channel %d has no DMX address (skipping)", pe.Channel),
+					map[string]string{"channel": strconv.Itoa(pe.Channel)})
+				continue
+			}
 			return nil, err
 		}
 		key := addrKey{u: universe, a: address}
 		if prevCh, dup := seenAddr[key]; dup {
-			return nil, fmt.Errorf("eos import: address conflict at universe %d address %d (channels %d and %d)",
-				universe, address, prevCh, pe.Channel)
+			// EOS supports multi-patching (two logical channels at the
+			// same DMX address). We treat the second occurrence as a
+			// soft conflict: warn so the operator can review, but
+			// continue importing rather than aborting the whole file.
+			// Leave seenAddr pointing at the *first* channel so any
+			// subsequent third occurrence still references the original
+			// owner in its warning message.
+			warn.Add(WarnAddressConflict, SeverityWarn,
+				fmt.Sprintf("address conflict at universe %d address %d: channels %d and %d",
+					universe, address, prevCh, pe.Channel),
+				map[string]string{
+					"universe": strconv.Itoa(universe),
+					"address":  strconv.Itoa(address),
+					"prevCh":   strconv.Itoa(prevCh),
+					"newCh":    strconv.Itoa(pe.Channel),
+				})
+		} else {
+			seenAddr[key] = pe.Channel
 		}
-		seenAddr[key] = pe.Channel
 		label := pe.Label
 		if pe.UnicodeText != nil {
 			label = *pe.UnicodeText
@@ -114,13 +153,20 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 		res.FixtureInstancesCount++
 	}
 
-	if err := m.applyPalettes(ctx, projectID, show, eosChannelToInstanceID, persToDefID, persToChannels, table, &res.LooksCount, &res.CueListsCount); err != nil {
+	// Compute the per-instance state once and share it with both
+	// applyPalettes and applyCues; the previous code recomputed identical
+	// O(N) fixture lookups twice per import.
+	states, err := m.loadInstanceStates(ctx, eosChannelToInstanceID, persToChannels, show.Patch)
+	if err != nil {
 		return nil, err
 	}
-	if err := m.applyCues(ctx, projectID, show, eosChannelToInstanceID, persToDefID, persToChannels, table, &res.LooksCount, &res.CueListsCount, &res.CuesCount); err != nil {
+	if err := m.applyPalettes(ctx, projectID, show, states, table, &res.LooksCount, &res.CueListsCount); err != nil {
 		return nil, err
 	}
-	if err := m.applyGroups(ctx, projectID, show, &res.GroupsCount); err != nil {
+	if err := m.applyCues(ctx, projectID, show, states, table, &res.LooksCount, &res.CueListsCount, &res.CuesCount); err != nil {
+		return nil, err
+	}
+	if err := m.applyGroups(ctx, projectID, show, &res.GroupsCount, warn); err != nil {
 		return nil, err
 	}
 	if err := m.applySidecar(ctx, projectID, sidecar, warn); err != nil {
@@ -133,6 +179,16 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 
 func (m *Mapper) resolveProject(ctx context.Context, show *Show, opts Options) (string, error) {
 	if opts.TargetProjectID != nil {
+		// Verify the target still exists; the request may have been
+		// queued before the project was deleted. Without this guard we
+		// would create fixtures with an orphaned ProjectID FK.
+		existing, err := m.projectRepo.FindByID(ctx, *opts.TargetProjectID)
+		if err != nil {
+			return "", fmt.Errorf("load target project: %w", err)
+		}
+		if existing == nil {
+			return "", fmt.Errorf("target project %s not found", *opts.TargetProjectID)
+		}
 		return *opts.TargetProjectID, nil
 	}
 	name := show.Title
@@ -177,7 +233,7 @@ type instanceState struct {
 }
 
 // loadInstanceStates returns a map keyed by EOS channel number.
-func (m *Mapper) loadInstanceStates(ctx context.Context, projectID string,
+func (m *Mapper) loadInstanceStates(ctx context.Context,
 	eosChannelToInstanceID map[int]string,
 	persToChannels map[int][]models.ChannelDefinition,
 	patch []PatchEntry,
@@ -215,13 +271,23 @@ func findOffsetForType(defChans []models.ChannelDefinition, ct generated.Channel
 	return -1
 }
 
-// buildLookValues converts EOS chan moves and param moves to FixtureValues for a Look.
+// buildLookValues converts EOS chan moves and param moves to FixtureValues
+// for a Look. The output is sorted by FixtureID, and each fixture's channel
+// list is sorted by Offset, so two imports of the same showfile produce
+// byte-identical FixtureValue.Channels JSON. Without these sorts, Go's map
+// randomisation would produce different DB rows on each run, breaking
+// round-trip diff tests and surprising clients that compare snapshots.
+//
+// Returns an error if any per-instance channel slice fails to marshal —
+// unreachable today (ChannelValue is two ints) but propagated as a value
+// rather than a panic so callers (including the GraphQL resolver) get a
+// structured error instead of a server crash.
 func buildLookValues(
 	chanLevels map[int]int,
 	paramLevels map[int]map[int]int,
 	states map[int]*instanceState,
 	table *ParamTable,
-) []models.FixtureValue {
+) ([]models.FixtureValue, error) {
 	type fvAcc struct {
 		fixtureID string
 		channels  []models.ChannelValue
@@ -235,7 +301,15 @@ func buildLookValues(
 		}
 		acc.channels = append(acc.channels, cv)
 	}
-	for eosCh, level := range chanLevels {
+
+	// Walk the input maps in deterministic key order so duplicate
+	// (instance, offset) collisions resolve identically across runs.
+	chanKeys := make([]int, 0, len(chanLevels))
+	for k := range chanLevels {
+		chanKeys = append(chanKeys, k)
+	}
+	sort.Ints(chanKeys)
+	for _, eosCh := range chanKeys {
 		st := states[eosCh]
 		if st == nil {
 			continue
@@ -244,54 +318,70 @@ func buildLookValues(
 		if offset < 0 {
 			continue
 		}
-		add(st.instance.ID, models.ChannelValue{Offset: offset, Value: level})
+		add(st.instance.ID, models.ChannelValue{Offset: offset, Value: chanLevels[eosCh]})
 	}
-	for eosCh, params := range paramLevels {
+
+	paramKeys := make([]int, 0, len(paramLevels))
+	for k := range paramLevels {
+		paramKeys = append(paramKeys, k)
+	}
+	sort.Ints(paramKeys)
+	for _, eosCh := range paramKeys {
 		st := states[eosCh]
 		if st == nil {
 			continue
 		}
-		for paramID, raw := range params {
+		params := paramLevels[eosCh]
+		innerKeys := make([]int, 0, len(params))
+		for k := range params {
+			innerKeys = append(innerKeys, k)
+		}
+		sort.Ints(innerKeys)
+		for _, paramID := range innerKeys {
 			ct := table.ChannelType(paramID)
 			offset := findOffsetForType(st.defChans, ct)
 			if offset < 0 {
 				continue
 			}
-			add(st.instance.ID, models.ChannelValue{Offset: offset, Value: raw})
+			add(st.instance.ID, models.ChannelValue{Offset: offset, Value: params[paramID]})
 		}
 	}
+
+	instIDs := make([]string, 0, len(byInstance))
+	for id := range byInstance {
+		instIDs = append(instIDs, id)
+	}
+	sort.Strings(instIDs)
 	out := make([]models.FixtureValue, 0, len(byInstance))
-	for _, acc := range byInstance {
-		channelsJSON, _ := json.Marshal(acc.channels)
+	for _, id := range instIDs {
+		acc := byInstance[id]
+		sort.Slice(acc.channels, func(i, j int) bool { return acc.channels[i].Offset < acc.channels[j].Offset })
+		channelsJSON, err := json.Marshal(acc.channels)
+		if err != nil {
+			return nil, fmt.Errorf("import_eos: marshal ChannelValue for fixture %s: %w", acc.fixtureID, err)
+		}
 		out = append(out, models.FixtureValue{
 			FixtureID: acc.fixtureID,
 			Channels:  string(channelsJSON),
 		})
 	}
-	return out
+	return out, nil
 }
 
 func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show,
-	eosChannelToInstanceID map[int]string,
-	persToDefID map[int]string,
-	persToChannels map[int][]models.ChannelDefinition,
+	states map[int]*instanceState,
 	table *ParamTable,
 	looksCount, cueListsCount *int,
 ) error {
-	_ = persToDefID
-	states, err := m.loadInstanceStates(ctx, projectID, eosChannelToInstanceID, persToChannels, show.Patch)
-	if err != nil {
-		return err
-	}
 	groups := []struct {
 		name     string
 		palettes []Palette
 	}{
-		{"Color Palettes", show.ColorPalettes},
-		{"Beam Palettes", show.BeamPalettes},
-		{"Focus Palettes", show.FocusPalettes},
-		{"Intensity Palettes", show.IntensPalettes},
-		{"Presets", show.Presets},
+		{PaletteListNameColor, show.ColorPalettes},
+		{PaletteListNameBeam, show.BeamPalettes},
+		{PaletteListNameFocus, show.FocusPalettes},
+		{PaletteListNameIntensity, show.IntensPalettes},
+		{PaletteListNamePreset, show.Presets},
 	}
 	for _, g := range groups {
 		if len(g.palettes) == 0 {
@@ -326,7 +416,10 @@ func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show
 					ps[v.ParamID] = v.Value
 				}
 			}
-			values := buildLookValues(chanLevels, paramLevels, states, table)
+			values, err := buildLookValues(chanLevels, paramLevels, states, table)
+			if err != nil {
+				return err
+			}
 			if err := m.lookRepo.CreateWithFixtureValues(ctx, look, values); err != nil {
 				return fmt.Errorf("create palette look: %w", err)
 			}
@@ -350,17 +443,10 @@ func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show
 }
 
 func (m *Mapper) applyCues(ctx context.Context, projectID string, show *Show,
-	eosChannelToInstanceID map[int]string,
-	persToDefID map[int]string,
-	persToChannels map[int][]models.ChannelDefinition,
+	states map[int]*instanceState,
 	table *ParamTable,
 	looksCount, cueListsCount, cuesCount *int,
 ) error {
-	_ = persToDefID
-	states, err := m.loadInstanceStates(ctx, projectID, eosChannelToInstanceID, persToChannels, show.Patch)
-	if err != nil {
-		return err
-	}
 	tracker := NewTracker()
 	for _, cl := range show.CueLists {
 		listName := cl.Label
@@ -388,7 +474,10 @@ func (m *Mapper) applyCues(ctx context.Context, projectID string, show *Show,
 				cueName = cueName + " - " + cueLabel
 			}
 			look := &models.Look{ProjectID: projectID, Name: cueName}
-			values := buildLookValues(snap.ChannelLevels, snap.ParamLevels, states, table)
+			values, err := buildLookValues(snap.ChannelLevels, snap.ParamLevels, states, table)
+			if err != nil {
+				return err
+			}
 			if err := m.lookRepo.CreateWithFixtureValues(ctx, look, values); err != nil {
 				return err
 			}
@@ -413,12 +502,30 @@ func (m *Mapper) applyCues(ctx context.Context, projectID string, show *Show,
 	return nil
 }
 
-func (m *Mapper) applyGroups(_ context.Context, _ string, _ *Show, _ *int) error {
-	// Group persistence is part of Task 14c. Held back until then.
+func (m *Mapper) applyGroups(_ context.Context, _ string, show *Show, _ *int, warn *Collector) error {
+	// Group persistence is part of Task 14c. Held back until then — but
+	// surface a warning when the file actually contained groups, so a
+	// caller doesn't silently lose that data.
+	if len(show.Groups) > 0 {
+		warn.Add(WarnGroupsSkipped, SeverityInfo,
+			fmt.Sprintf("dropped %d $Group block(s); group persistence is not yet implemented",
+				len(show.Groups)),
+			map[string]string{"count": strconv.Itoa(len(show.Groups))})
+	}
 	return nil
 }
 
-func (m *Mapper) applySidecar(_ context.Context, _ string, _ Sidecar, _ *Collector) error {
-	// Sidecar application is part of Task 14c. Held back until then.
+func (m *Mapper) applySidecar(_ context.Context, _ string, sc Sidecar, warn *Collector) error {
+	// Sidecar application is part of Task 14c. As with applyGroups, warn
+	// rather than silently swallow the parsed sidecar contents.
+	if len(sc.LookBoards) > 0 || len(sc.FadeBehaviors) > 0 || len(sc.SynthDefs) > 0 {
+		warn.Add(WarnSidecarUnresolved, SeverityInfo,
+			"sidecar metadata was parsed but is not yet re-applied; will activate in a future release",
+			map[string]string{
+				"lookBoards":    strconv.Itoa(len(sc.LookBoards)),
+				"fadeBehaviors": strconv.Itoa(len(sc.FadeBehaviors)),
+				"synthDefs":     strconv.Itoa(len(sc.SynthDefs)),
+			})
+	}
 	return nil
 }

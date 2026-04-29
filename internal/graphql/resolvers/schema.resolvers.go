@@ -18,6 +18,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 	"github.com/bbernstein/lacylights-go/internal/middleware"
 	importservice "github.com/bbernstein/lacylights-go/internal/services/import"
+	importeos "github.com/bbernstein/lacylights-go/internal/services/import_eos"
 	"github.com/bbernstein/lacylights-go/internal/services/modulator"
 	"github.com/bbernstein/lacylights-go/internal/services/network"
 	"github.com/bbernstein/lacylights-go/internal/services/ofl"
@@ -4579,6 +4580,109 @@ func (r *mutationResolver) ExportProjectToQlc(ctx context.Context, projectID str
 		return nil, err
 	}
 	return nil, fmt.Errorf("QLC+ export not available on this platform")
+}
+
+// ImportProjectFromEos is the resolver for the importProjectFromEos field.
+func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiContent string, options *generated.EosImportOptionsInput) (*generated.EosImportResult, error) {
+	if r.EosImportService == nil {
+		return nil, fmt.Errorf("eos import not available on this platform")
+	}
+	if len(asciiContent) > maxEosContentBytes {
+		return nil, fmt.Errorf("asciiContent exceeds the %d MiB maximum", maxEosContentBytes>>20)
+	}
+	importOpts := importeos.Options{}
+	if options != nil {
+		hasNewProjectName := options.NewProjectName.IsSet() && options.NewProjectName.Value() != nil
+		hasTargetProjectID := options.TargetProjectID.IsSet() && options.TargetProjectID.Value() != nil
+		if hasNewProjectName && hasTargetProjectID {
+			return nil, fmt.Errorf("newProjectName and targetProjectId are mutually exclusive")
+		}
+		if hasNewProjectName {
+			importOpts.NewProjectName = options.NewProjectName.Value()
+		}
+		if hasTargetProjectID {
+			importOpts.TargetProjectID = options.TargetProjectID.Value()
+		}
+	}
+	if importOpts.TargetProjectID != nil {
+		if err := r.ensureProjectAccess(ctx, *importOpts.TargetProjectID); err != nil {
+			return nil, err
+		}
+	} else if r.AuthService != nil && r.AuthService.IsEnabled() {
+		// New-project case: assign ownership to the caller's first group.
+		// Mirrors the native ImportProject mutation; both stop short of
+		// surfacing group selection to the API. TODO: expose a groupId in
+		// EosImportOptionsInput so multi-group users can choose explicitly.
+		groupIDs := middleware.GetUserGroupIDs(ctx)
+		if len(groupIDs) >= 1 {
+			gid := groupIDs[0]
+			importOpts.GroupID = &gid
+		} else if !middleware.IsAdmin(ctx) {
+			return nil, fmt.Errorf("cannot import project: user does not belong to any groups")
+		}
+	}
+	// Capture a warning if we silently picked a group on the caller's
+	// behalf when they belong to multiple groups. The code is centralized
+	// in importeos.WarnGroupAutoAssigned even though the emission happens
+	// here at the resolver layer.
+	var resolverWarnings []importeos.Warning
+	if importOpts.GroupID != nil {
+		groupIDs := middleware.GetUserGroupIDs(ctx)
+		if len(groupIDs) > 1 {
+			resolverWarnings = append(resolverWarnings, importeos.Warning{
+				Code:     importeos.WarnGroupAutoAssigned,
+				Severity: importeos.SeverityInfo,
+				Message:  "imported project was auto-assigned to your first group; a future groupId option will allow you to choose explicitly",
+				Context:  map[string]string{"groupId": *importOpts.GroupID},
+			})
+		}
+	}
+
+	res, err := r.EosImportService.Import(ctx, strings.NewReader(asciiContent), importOpts)
+	if err != nil {
+		return nil, err
+	}
+	// Combine service warnings (parser/mapper) and resolver-layer warnings
+	// (group auto-assignment) in a single ordered slice — service first so
+	// processing messages precede administrative notes.
+	combined := make([]importeos.Warning, 0, len(res.Warnings)+len(resolverWarnings))
+	combined = append(combined, res.Warnings...)
+	combined = append(combined, resolverWarnings...)
+	// The schema declares synthesizedDefinitionIds as a non-null list.
+	// importeos.Service guarantees a non-nil slice, so we can pass the
+	// service's value through directly.
+	return &generated.EosImportResult{
+		ProjectID:                res.ProjectID,
+		FixtureDefinitionsCount:  res.FixtureDefinitionsCount,
+		FixtureInstancesCount:    res.FixtureInstancesCount,
+		LooksCount:               res.LooksCount,
+		CueListsCount:            res.CueListsCount,
+		CuesCount:                res.CuesCount,
+		GroupsCount:              res.GroupsCount,
+		Warnings:                 toEosWarnings(combined),
+		SynthesizedDefinitionIds: res.SynthesizedDefinitionIDs,
+	}, nil
+}
+
+// ExportProjectToEos is the resolver for the exportProjectToEos field.
+func (r *mutationResolver) ExportProjectToEos(ctx context.Context, projectID string) (*generated.EosExportResult, error) {
+	if r.EosExportService == nil {
+		return nil, fmt.Errorf("eos export not available on this platform")
+	}
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
+	res, err := r.EosExportService.Export(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return &generated.EosExportResult{
+		ProjectID:      projectID,
+		ProjectName:    res.ProjectName,
+		ASCIIContent:   res.Content,
+		FilenameSuffix: res.FilenameSuffix,
+		Warnings:       toEosWarnings(res.Warnings),
+	}, nil
 }
 
 // UpdateSetting is the resolver for the updateSetting field.

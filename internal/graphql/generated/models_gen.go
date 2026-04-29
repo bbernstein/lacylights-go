@@ -537,6 +537,52 @@ type EffectChannelInput struct {
 	MaxValue graphql.Omittable[*float64] `json:"maxValue,omitempty"`
 }
 
+type EosExportResult struct {
+	ProjectID      string        `json:"projectId"`
+	ProjectName    string        `json:"projectName"`
+	ASCIIContent   string        `json:"asciiContent"`
+	FilenameSuffix string        `json:"filenameSuffix"`
+	Warnings       []*EosWarning `json:"warnings"`
+}
+
+// Options controlling how an Eos ASCII import is applied.
+//
+// Exactly one of `newProjectName` or `targetProjectId` should be set:
+//   - `newProjectName`: create a new project with the given name (or the
+//     showfile's `$$Title` if both are absent).
+//   - `targetProjectId`: append the import into the named existing project.
+//     Existing fixtures, looks, cue lists, and look boards are NOT cleared;
+//     the new content is added alongside them. A future flag may add a
+//     replace mode.
+type EosImportOptionsInput struct {
+	NewProjectName  graphql.Omittable[*string] `json:"newProjectName,omitempty"`
+	TargetProjectID graphql.Omittable[*string] `json:"targetProjectId,omitempty"`
+}
+
+type EosImportResult struct {
+	ProjectID                string        `json:"projectId"`
+	FixtureDefinitionsCount  int           `json:"fixtureDefinitionsCount"`
+	FixtureInstancesCount    int           `json:"fixtureInstancesCount"`
+	LooksCount               int           `json:"looksCount"`
+	CueListsCount            int           `json:"cueListsCount"`
+	CuesCount                int           `json:"cuesCount"`
+	GroupsCount              int           `json:"groupsCount"`
+	Warnings                 []*EosWarning `json:"warnings"`
+	SynthesizedDefinitionIds []string      `json:"synthesizedDefinitionIds"`
+}
+
+type EosWarning struct {
+	Code     string                    `json:"code"`
+	Severity EosWarningSeverity        `json:"severity"`
+	Message  string                    `json:"message"`
+	Context  []*EosWarningContextEntry `json:"context"`
+}
+
+type EosWarningContextEntry struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
 type ExportOptionsInput struct {
 	Description     graphql.Omittable[*string] `json:"description,omitempty"`
 	IncludeFixtures graphql.Omittable[*bool]   `json:"includeFixtures,omitempty"`
@@ -1914,6 +1960,61 @@ func (e *EntityDataChangeType) UnmarshalJSON(b []byte) error {
 }
 
 func (e EntityDataChangeType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type EosWarningSeverity string
+
+const (
+	EosWarningSeverityInfo EosWarningSeverity = "INFO"
+	EosWarningSeverityWarn EosWarningSeverity = "WARN"
+)
+
+var AllEosWarningSeverity = []EosWarningSeverity{
+	EosWarningSeverityInfo,
+	EosWarningSeverityWarn,
+}
+
+func (e EosWarningSeverity) IsValid() bool {
+	switch e {
+	case EosWarningSeverityInfo, EosWarningSeverityWarn:
+		return true
+	}
+	return false
+}
+
+func (e EosWarningSeverity) String() string {
+	return string(e)
+}
+
+func (e *EosWarningSeverity) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = EosWarningSeverity(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid EosWarningSeverity", str)
+	}
+	return nil
+}
+
+func (e EosWarningSeverity) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *EosWarningSeverity) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e EosWarningSeverity) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

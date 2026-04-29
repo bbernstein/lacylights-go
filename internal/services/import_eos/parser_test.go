@@ -3,6 +3,7 @@ package importeos
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -282,5 +283,110 @@ func TestParseLevel_RangeChecks(t *testing.T) {
 				t.Errorf("parseLevel(%q) = %d, want %d", c.raw, got, c.want)
 			}
 		})
+	}
+}
+
+// TestParsePersChan_StrictNumericFields locks in the contract that any
+// non-numeric required field on a $$PersChan line drops the channel rather
+// than silently substituting a zero value (which would corrupt patch
+// addressing or fixture defaults).
+func TestParsePersChan_StrictNumericFields(t *testing.T) {
+	cases := []struct {
+		name   string
+		fields []string
+		ok     bool
+	}{
+		{"valid_8bit", []string{"1", "1", "1", "0", "0"}, true},
+		{"valid_16bit", []string{"1", "2", "1", "2", "0"}, true},
+		{"too_few_fields", []string{"1", "1", "1"}, false},
+		{"non_numeric_paramID", []string{"x", "1", "1", "0", "0"}, false},
+		{"non_numeric_size", []string{"1", "x", "1", "0", "0"}, false},
+		{"non_numeric_offset", []string{"1", "1", "x", "0", "0"}, false},
+		{"non_numeric_offset16", []string{"1", "2", "1", "x", "0"}, false},
+		{"non_numeric_home", []string{"1", "1", "1", "x"}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			line := &Line{Fields: c.fields}
+			_, ok := parsePersChan(line)
+			if ok != c.ok {
+				t.Errorf("parsePersChan(%v) ok=%v, want %v", c.fields, ok, c.ok)
+			}
+		})
+	}
+}
+
+// TestParse_PatchAmbiguousFields covers the case where both candidate persID
+// positions in a $Patch line resolve to declared personality IDs. The parser
+// should fall back to user-authored ordering and emit
+// WarnPatchAmbiguousFields so the operator can review.
+func TestParse_PatchAmbiguousFields(t *testing.T) {
+	src := `Ident 3:0
+$$Format 3.20
+$$Title T
+$ParamType 1 1 Intens
+$Personality 100
+   $$Manuf G
+   $$Model D
+   $$Footprint 1
+   $$PersChan 1 1 1 0 0
+$Personality 200
+   $$Manuf G
+   $$Model D2
+   $$Footprint 1
+   $$PersChan 1 1 1 0 0
+$Patch 1 100 200 0 1
+`
+	show, warn, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(show.Patch) != 1 {
+		t.Fatalf("expected 1 patch entry, got %d", len(show.Patch))
+	}
+	// Default ordering: addr=fields[1]=100, persID=fields[2]=200.
+	if show.Patch[0].PersonalityID != 200 {
+		t.Errorf("PersonalityID = %d, want 200 (user-authored default)", show.Patch[0].PersonalityID)
+	}
+	var saw bool
+	for _, w := range warn.All() {
+		if w.Code == WarnPatchAmbiguousFields {
+			saw = true
+			break
+		}
+	}
+	if !saw {
+		t.Errorf("expected WarnPatchAmbiguousFields warning, got %+v", warn.All())
+	}
+}
+
+// TestParse_PatchFourFields covers the undocumented 4-field $Patch form: the
+// parser should emit a WarnPatchExtendedFields and fall back to user-authored
+// ordering rather than silently misparsing.
+func TestParse_PatchFourFields(t *testing.T) {
+	src := `Ident 3:0
+$$Format 3.20
+$$Title T
+$ParamType 1 1 Intens
+$Personality 9001
+   $$Manuf G
+   $$Model D
+   $$Footprint 1
+   $$PersChan 1 1 1 0 0
+$Patch 1 5 9001 0
+`
+	_, warn, err := Parse(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	var saw bool
+	for _, w := range warn.All() {
+		if w.Code == WarnPatchExtendedFields {
+			saw = true
+			break
+		}
+	}
+	if !saw {
+		t.Errorf("expected WarnPatchExtendedFields warning for 4-field $Patch, got %+v", warn.All())
 	}
 }
