@@ -86,6 +86,36 @@ func TestImportProjectFromEos_E2E(t *testing.T) {
 	}
 }
 
+// TestImportProjectFromEos_RejectsConflictingOptions verifies the resolver
+// rejects requests that pass both newProjectName and targetProjectId.
+func TestImportProjectFromEos_RejectsConflictingOptions(t *testing.T) {
+	c, _, cleanup := testSetup(t)
+	defer cleanup()
+
+	var resp struct {
+		ImportProjectFromEos struct {
+			ProjectID string
+		}
+	}
+	err := c.Post(`mutation Import($content: String!, $opts: EosImportOptionsInput) {
+		importProjectFromEos(asciiContent: $content, options: $opts) {
+			projectId
+		}
+	}`, &resp,
+		client.Var("content", minimalEosShowfile),
+		client.Var("opts", map[string]any{
+			"newProjectName":  "Conflict",
+			"targetProjectId": "some-project",
+		}),
+	)
+	if err == nil {
+		t.Fatal("expected error when both options are set")
+	}
+	if !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Errorf("error %q missing 'mutually exclusive'", err.Error())
+	}
+}
+
 // TestExportProjectToEos_E2E imports a project, exports it via GraphQL, and
 // verifies key sections of the output.
 func TestExportProjectToEos_E2E(t *testing.T) {

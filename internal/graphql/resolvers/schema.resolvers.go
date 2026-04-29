@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -4586,18 +4587,27 @@ func (r *mutationResolver) ExportProjectToQlc(ctx context.Context, projectID str
 // ImportProjectFromEos is the resolver for the importProjectFromEos field.
 func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiContent string, options *generated.EosImportOptionsInput) (*generated.EosImportResult, error) {
 	if r.EosImportService == nil {
-		return nil, fmt.Errorf("Eos import not available on this platform")
+		return nil, fmt.Errorf("eos import not available on this platform")
 	}
 	importOpts := importeos.Options{}
 	if options != nil {
-		if options.NewProjectName.IsSet() && options.NewProjectName.Value() != nil {
+		hasNewProjectName := options.NewProjectName.IsSet() && options.NewProjectName.Value() != nil
+		hasTargetProjectID := options.TargetProjectID.IsSet() && options.TargetProjectID.Value() != nil
+		if hasNewProjectName && hasTargetProjectID {
+			return nil, fmt.Errorf("newProjectName and targetProjectId are mutually exclusive")
+		}
+		if hasNewProjectName {
 			importOpts.NewProjectName = options.NewProjectName.Value()
 		}
-		if options.TargetProjectID.IsSet() && options.TargetProjectID.Value() != nil {
+		if hasTargetProjectID {
 			importOpts.TargetProjectID = options.TargetProjectID.Value()
 		}
 	}
-	if r.AuthService != nil && r.AuthService.IsEnabled() && importOpts.TargetProjectID == nil {
+	if importOpts.TargetProjectID != nil {
+		if err := r.ensureProjectAccess(ctx, *importOpts.TargetProjectID); err != nil {
+			return nil, err
+		}
+	} else if r.AuthService != nil && r.AuthService.IsEnabled() {
 		groupIDs := middleware.GetUserGroupIDs(ctx)
 		if len(groupIDs) >= 1 {
 			gid := groupIDs[0]
@@ -4630,7 +4640,7 @@ func (r *mutationResolver) ExportProjectToEos(ctx context.Context, projectID str
 		return nil, err
 	}
 	if r.EosExportService == nil {
-		return nil, fmt.Errorf("Eos export not available on this platform")
+		return nil, fmt.Errorf("eos export not available on this platform")
 	}
 	project, err := r.ProjectRepo.FindByID(ctx, projectID)
 	if err != nil {
@@ -4655,6 +4665,9 @@ func (r *mutationResolver) ExportProjectToEos(ctx context.Context, projectID str
 }
 
 // toEosWarnings converts importeos warnings to GraphQL warning shapes.
+// Context entries are sorted by key so output is deterministic across runs;
+// Go's map iteration order would otherwise produce flaky tests and unstable
+// client diffs.
 func toEosWarnings(in []importeos.Warning) []*generated.EosWarning {
 	out := make([]*generated.EosWarning, 0, len(in))
 	for _, w := range in {
@@ -4663,8 +4676,16 @@ func toEosWarnings(in []importeos.Warning) []*generated.EosWarning {
 			Severity: generated.EosWarningSeverity(string(w.Severity)),
 			Message:  w.Message,
 		}
-		for k, v := range w.Context {
-			ew.Context = append(ew.Context, &generated.EosWarningContextEntry{Key: k, Value: v})
+		if len(w.Context) > 0 {
+			keys := make([]string, 0, len(w.Context))
+			for k := range w.Context {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			ew.Context = make([]*generated.EosWarningContextEntry, 0, len(keys))
+			for _, k := range keys {
+				ew.Context = append(ew.Context, &generated.EosWarningContextEntry{Key: k, Value: w.Context[k]})
+			}
 		}
 		out = append(out, ew)
 	}
