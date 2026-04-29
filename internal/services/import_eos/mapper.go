@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
@@ -133,13 +134,14 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 		res.FixtureInstancesCount++
 	}
 
-	if err := m.applyPalettes(ctx, projectID, show, eosChannelToInstanceID, persToDefID, persToChannels, table, &res.LooksCount, &res.CueListsCount); err != nil {
+	_ = persToDefID // currently unused; reserved for Task 14c group/sidecar persistence.
+	if err := m.applyPalettes(ctx, projectID, show, eosChannelToInstanceID, persToChannels, table, &res.LooksCount, &res.CueListsCount); err != nil {
 		return nil, err
 	}
-	if err := m.applyCues(ctx, projectID, show, eosChannelToInstanceID, persToDefID, persToChannels, table, &res.LooksCount, &res.CueListsCount, &res.CuesCount); err != nil {
+	if err := m.applyCues(ctx, projectID, show, eosChannelToInstanceID, persToChannels, table, &res.LooksCount, &res.CueListsCount, &res.CuesCount); err != nil {
 		return nil, err
 	}
-	if err := m.applyGroups(ctx, projectID, show, &res.GroupsCount); err != nil {
+	if err := m.applyGroups(ctx, projectID, show, &res.GroupsCount, warn); err != nil {
 		return nil, err
 	}
 	if err := m.applySidecar(ctx, projectID, sidecar, warn); err != nil {
@@ -234,7 +236,12 @@ func findOffsetForType(defChans []models.ChannelDefinition, ct generated.Channel
 	return -1
 }
 
-// buildLookValues converts EOS chan moves and param moves to FixtureValues for a Look.
+// buildLookValues converts EOS chan moves and param moves to FixtureValues
+// for a Look. The output is sorted by FixtureID, and each fixture's channel
+// list is sorted by Offset, so two imports of the same showfile produce
+// byte-identical FixtureValue.Channels JSON. Without these sorts, Go's map
+// randomisation would produce different DB rows on each run, breaking
+// round-trip diff tests and surprising clients that compare snapshots.
 func buildLookValues(
 	chanLevels map[int]int,
 	paramLevels map[int]map[int]int,
@@ -254,7 +261,15 @@ func buildLookValues(
 		}
 		acc.channels = append(acc.channels, cv)
 	}
-	for eosCh, level := range chanLevels {
+
+	// Walk the input maps in deterministic key order so duplicate
+	// (instance, offset) collisions resolve identically across runs.
+	chanKeys := make([]int, 0, len(chanLevels))
+	for k := range chanLevels {
+		chanKeys = append(chanKeys, k)
+	}
+	sort.Ints(chanKeys)
+	for _, eosCh := range chanKeys {
 		st := states[eosCh]
 		if st == nil {
 			continue
@@ -263,24 +278,44 @@ func buildLookValues(
 		if offset < 0 {
 			continue
 		}
-		add(st.instance.ID, models.ChannelValue{Offset: offset, Value: level})
+		add(st.instance.ID, models.ChannelValue{Offset: offset, Value: chanLevels[eosCh]})
 	}
-	for eosCh, params := range paramLevels {
+
+	paramKeys := make([]int, 0, len(paramLevels))
+	for k := range paramLevels {
+		paramKeys = append(paramKeys, k)
+	}
+	sort.Ints(paramKeys)
+	for _, eosCh := range paramKeys {
 		st := states[eosCh]
 		if st == nil {
 			continue
 		}
-		for paramID, raw := range params {
+		params := paramLevels[eosCh]
+		innerKeys := make([]int, 0, len(params))
+		for k := range params {
+			innerKeys = append(innerKeys, k)
+		}
+		sort.Ints(innerKeys)
+		for _, paramID := range innerKeys {
 			ct := table.ChannelType(paramID)
 			offset := findOffsetForType(st.defChans, ct)
 			if offset < 0 {
 				continue
 			}
-			add(st.instance.ID, models.ChannelValue{Offset: offset, Value: raw})
+			add(st.instance.ID, models.ChannelValue{Offset: offset, Value: params[paramID]})
 		}
 	}
+
+	instIDs := make([]string, 0, len(byInstance))
+	for id := range byInstance {
+		instIDs = append(instIDs, id)
+	}
+	sort.Strings(instIDs)
 	out := make([]models.FixtureValue, 0, len(byInstance))
-	for _, acc := range byInstance {
+	for _, id := range instIDs {
+		acc := byInstance[id]
+		sort.Slice(acc.channels, func(i, j int) bool { return acc.channels[i].Offset < acc.channels[j].Offset })
 		channelsJSON, _ := json.Marshal(acc.channels)
 		out = append(out, models.FixtureValue{
 			FixtureID: acc.fixtureID,
@@ -292,12 +327,10 @@ func buildLookValues(
 
 func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show,
 	eosChannelToInstanceID map[int]string,
-	persToDefID map[int]string,
 	persToChannels map[int][]models.ChannelDefinition,
 	table *ParamTable,
 	looksCount, cueListsCount *int,
 ) error {
-	_ = persToDefID
 	states, err := m.loadInstanceStates(ctx, projectID, eosChannelToInstanceID, persToChannels, show.Patch)
 	if err != nil {
 		return err
@@ -370,12 +403,10 @@ func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show
 
 func (m *Mapper) applyCues(ctx context.Context, projectID string, show *Show,
 	eosChannelToInstanceID map[int]string,
-	persToDefID map[int]string,
 	persToChannels map[int][]models.ChannelDefinition,
 	table *ParamTable,
 	looksCount, cueListsCount, cuesCount *int,
 ) error {
-	_ = persToDefID
 	states, err := m.loadInstanceStates(ctx, projectID, eosChannelToInstanceID, persToChannels, show.Patch)
 	if err != nil {
 		return err
@@ -432,12 +463,30 @@ func (m *Mapper) applyCues(ctx context.Context, projectID string, show *Show,
 	return nil
 }
 
-func (m *Mapper) applyGroups(_ context.Context, _ string, _ *Show, _ *int) error {
-	// Group persistence is part of Task 14c. Held back until then.
+func (m *Mapper) applyGroups(_ context.Context, _ string, show *Show, _ *int, warn *Collector) error {
+	// Group persistence is part of Task 14c. Held back until then — but
+	// surface a warning when the file actually contained groups, so a
+	// caller doesn't silently lose that data.
+	if len(show.Groups) > 0 {
+		warn.Add(WarnGroupsSkipped, SeverityInfo,
+			fmt.Sprintf("dropped %d $Group block(s) — Task 14c will land FixtureGroup persistence",
+				len(show.Groups)),
+			map[string]string{"count": strconv.Itoa(len(show.Groups))})
+	}
 	return nil
 }
 
-func (m *Mapper) applySidecar(_ context.Context, _ string, _ Sidecar, _ *Collector) error {
-	// Sidecar application is part of Task 14c. Held back until then.
+func (m *Mapper) applySidecar(_ context.Context, _ string, sc Sidecar, warn *Collector) error {
+	// Sidecar application is part of Task 14c. As with applyGroups, warn
+	// rather than silently swallow the parsed sidecar contents.
+	if len(sc.LookBoards) > 0 || len(sc.FadeBehaviors) > 0 || len(sc.SynthDefs) > 0 {
+		warn.Add(WarnSidecarUnresolved, SeverityInfo,
+			"sidecar metadata parsed but not applied (Task 14c)",
+			map[string]string{
+				"lookBoards":    strconv.Itoa(len(sc.LookBoards)),
+				"fadeBehaviors": strconv.Itoa(len(sc.FadeBehaviors)),
+				"synthDefs":     strconv.Itoa(len(sc.SynthDefs)),
+			})
+	}
 	return nil
 }

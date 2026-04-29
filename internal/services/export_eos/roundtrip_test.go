@@ -123,4 +123,16 @@ func TestRoundtrip_SyntheticSmall(t *testing.T) {
 	if totalCues != res.CuesCount {
 		t.Errorf("cue count: got %d want %d", totalCues, res.CuesCount)
 	}
+
+	// Value-level fidelity: confirm the first cue of the first cue list
+	// carries forward at least one channel move with the same level. This
+	// catches map-iteration nondeterminism that would slip past the
+	// count-only checks.
+	if len(show2.CueLists) == 0 || len(show2.CueLists[0].Cues) == 0 {
+		t.Fatalf("re-parsed file has no cues")
+	}
+	firstCue := show2.CueLists[0].Cues[0]
+	if len(firstCue.ChanMoves) == 0 && len(firstCue.ParamMoves) == 0 {
+		t.Errorf("first cue has no chan/param moves; values were lost on round-trip")
+	}
 }

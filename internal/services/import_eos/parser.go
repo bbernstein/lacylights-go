@@ -213,6 +213,10 @@ func (p *parser) parsePersonality() error {
 
 func parsePersChan(line *Line) (PersChannel, bool) {
 	// Fields: paramID size offset (offset16) home (flags)
+	// All numeric fields are strictly parsed: a malformed value drops the
+	// whole channel rather than silently substituting zero, since a wrong
+	// offset would corrupt patch addressing and a wrong home value would
+	// silently change fixture defaults.
 	if len(line.Fields) < 4 {
 		return PersChannel{}, false
 	}
@@ -220,16 +224,30 @@ func parsePersChan(line *Line) (PersChannel, bool) {
 	if err != nil {
 		return PersChannel{}, false
 	}
-	size, _ := strconv.Atoi(line.Fields[1])
-	offset, _ := strconv.Atoi(line.Fields[2])
+	size, err := strconv.Atoi(line.Fields[1])
+	if err != nil {
+		return PersChannel{}, false
+	}
+	offset, err := strconv.Atoi(line.Fields[2])
+	if err != nil {
+		return PersChannel{}, false
+	}
 	pc := PersChannel{ParamID: paramID, Size: size, Offset: offset}
 	idx := 3
 	if size == 2 && len(line.Fields) > idx {
-		pc.Offset16, _ = strconv.Atoi(line.Fields[idx])
+		v, err := strconv.Atoi(line.Fields[idx])
+		if err != nil {
+			return PersChannel{}, false
+		}
+		pc.Offset16 = v
 		idx++
 	}
 	if idx < len(line.Fields) {
-		pc.HomeValue, _ = strconv.Atoi(line.Fields[idx])
+		v, err := strconv.Atoi(line.Fields[idx])
+		if err != nil {
+			return PersChannel{}, false
+		}
+		pc.HomeValue = v
 		idx++
 	}
 	if idx < len(line.Fields) {

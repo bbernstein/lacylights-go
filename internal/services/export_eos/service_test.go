@@ -83,7 +83,7 @@ func buildSampleProject(t *testing.T, deps *testDeps) string {
 	look2 := &models.Look{ProjectID: proj.ID, Name: "Cue 2"}
 	fv2 := []models.FixtureValue{
 		{FixtureID: instances[0].ID, Channels: string(fv1ch)},
-		{FixtureID: instances[1].ID, Channels: mustMarshal([]models.ChannelValue{{Offset: 0, Value: 255}, {Offset: 3, Value: 255}})},
+		{FixtureID: instances[1].ID, Channels: mustMarshal(t, []models.ChannelValue{{Offset: 0, Value: 255}, {Offset: 3, Value: 255}})},
 	}
 	if err := deps.lookRepo.CreateWithFixtureValues(ctx, look2, fv2); err != nil {
 		t.Fatalf("create look 2: %v", err)
@@ -96,8 +96,12 @@ func buildSampleProject(t *testing.T, deps *testDeps) string {
 	return proj.ID
 }
 
-func mustMarshal(v any) string {
-	b, _ := json.Marshal(v)
+func mustMarshal(t *testing.T, v any) string {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
 	return string(b)
 }
 
