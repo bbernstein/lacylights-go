@@ -737,12 +737,19 @@ func (m *Mapper) applySidecarLookBoards(ctx context.Context, projectID string, b
 					})
 				continue
 			}
-			color := btn.Color
+			// Store nil for empty color so GraphQL clients see null
+			// rather than "" (the GraphQL type is `String`, not
+			// `String!`).
+			var colorPtr *string
+			if btn.Color != "" {
+				c := btn.Color
+				colorPtr = &c
+			}
 			buttons = append(buttons, models.LookBoardButton{
 				LookID:  lookID,
 				LayoutX: btn.X,
 				LayoutY: btn.Y,
-				Color:   &color,
+				Color:   colorPtr,
 			})
 		}
 

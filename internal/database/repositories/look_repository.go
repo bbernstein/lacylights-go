@@ -164,9 +164,14 @@ func (r *LookRepository) DeleteFixtureValuesByFixtureID(ctx context.Context, fix
 // FixtureValues in a single transaction. If CreateFixtureValues fails after
 // DeleteFixtureValues, the entire change is rolled back so the Look retains
 // its previous values rather than being left empty.
+//
+// Only the Name field is updated — RefID is intentionally protected from
+// overwrite (it's frozen post-creation per Task 14c contract).
 func (r *LookRepository) UpdateAndReplaceFixtureValues(ctx context.Context, look *models.Look, values []models.FixtureValue) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Save(look).Error; err != nil {
+		if err := tx.Model(&models.Look{}).
+			Where("id = ?", look.ID).
+			Updates(map[string]interface{}{"name": look.Name}).Error; err != nil {
 			return err
 		}
 		if err := tx.Delete(&models.FixtureValue{}, "look_id = ?", look.ID).Error; err != nil {

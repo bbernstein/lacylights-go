@@ -567,4 +567,17 @@ func TestMapper_GroupsIdempotentReimport(t *testing.T) {
 	if len(second) != 2 {
 		t.Errorf("after re-import: %d groups (want 2)", len(second))
 	}
+
+	// Verify the SetMembers update path actually fired by checking the
+	// surviving membership reflects the second import (each group should
+	// have its full set of fixtures re-attached).
+	for _, g := range second {
+		ms, err := deps.fixtureGroupRepo.GetMembers(context.Background(), g.ID)
+		if err != nil {
+			t.Fatalf("members for %s: %v", g.Name, err)
+		}
+		if len(ms) == 0 {
+			t.Errorf("group %s has 0 members after re-import (SetMembers regression?)", g.Name)
+		}
+	}
 }

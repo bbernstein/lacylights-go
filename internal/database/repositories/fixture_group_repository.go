@@ -121,6 +121,28 @@ func (r *FixtureGroupRepository) CreateWithMembers(ctx context.Context, g *model
 	})
 }
 
+// GetMembersByGroupIDs batches GetMembers into a single SELECT … WHERE
+// group_id IN (…). Returns a map keyed by group ID with each value sorted
+// by OrderIndex ASC. Used by the EOS exporter to avoid an O(groups)
+// round-trip pattern. Empty input returns an empty map without a query.
+func (r *FixtureGroupRepository) GetMembersByGroupIDs(ctx context.Context, groupIDs []string) (map[string][]models.FixtureGroupMember, error) {
+	out := make(map[string][]models.FixtureGroupMember, len(groupIDs))
+	if len(groupIDs) == 0 {
+		return out, nil
+	}
+	var members []models.FixtureGroupMember
+	if err := r.db.WithContext(ctx).
+		Where("group_id IN ?", groupIDs).
+		Order("group_id ASC, order_index ASC, fixture_id ASC").
+		Find(&members).Error; err != nil {
+		return nil, err
+	}
+	for _, m := range members {
+		out[m.GroupID] = append(out[m.GroupID], m)
+	}
+	return out, nil
+}
+
 // GetMembers returns the members of a group sorted by OrderIndex.
 func (r *FixtureGroupRepository) GetMembers(ctx context.Context, groupID string) ([]models.FixtureGroupMember, error) {
 	var ms []models.FixtureGroupMember
@@ -243,6 +265,10 @@ func (r *FixtureGroupRepository) ReorderMembers(ctx context.Context, groupID str
 // AssignNextEosNumber returns one more than the largest EosNumber in the
 // project, or 1 if no group has an assigned number. It does NOT mutate
 // state — callers persist via Update.
+//
+// Concurrency: not safe — two parallel callers will compute the same
+// number. For atomic batch assignment use AssignAndPersistMissingEosNumbers
+// instead.
 func (r *FixtureGroupRepository) AssignNextEosNumber(ctx context.Context, projectID string) (int, error) {
 	var maxNum *int
 	err := r.db.WithContext(ctx).

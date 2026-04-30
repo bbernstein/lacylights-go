@@ -443,3 +443,47 @@ func TestFixtureGroupRepository_AssignAndPersistMissingEosNumbers(t *testing.T) 
 	}
 }
 
+
+func TestFixtureGroupRepository_GetMembersByGroupIDs(t *testing.T) {
+	repo, fr, _ := newFixtureGroupRepoForTest(t)
+	ctx := context.Background()
+
+	a := seedFixtureForGroup(t, fr, "p1", "ch-1")
+	b := seedFixtureForGroup(t, fr, "p1", "ch-2")
+	c := seedFixtureForGroup(t, fr, "p1", "ch-3")
+
+	g1 := &models.FixtureGroup{ProjectID: "p1", Name: "G1"}
+	g2 := &models.FixtureGroup{ProjectID: "p1", Name: "G2"}
+	if err := repo.CreateWithMembers(ctx, g1, []string{a.ID, b.ID}); err != nil {
+		t.Fatalf("g1: %v", err)
+	}
+	if err := repo.CreateWithMembers(ctx, g2, []string{c.ID}); err != nil {
+		t.Fatalf("g2: %v", err)
+	}
+
+	got, err := repo.GetMembersByGroupIDs(ctx, nil)
+	if err != nil {
+		t.Errorf("empty: %v", err)
+	}
+	if got == nil || len(got) != 0 {
+		t.Errorf("empty: want non-nil empty map, got %v", got)
+	}
+
+	got, err = repo.GetMembersByGroupIDs(ctx, []string{g1.ID, g2.ID, "missing"})
+	if err != nil {
+		t.Fatalf("hits: %v", err)
+	}
+	if len(got[g1.ID]) != 2 {
+		t.Errorf("g1 members = %d, want 2", len(got[g1.ID]))
+	}
+	if len(got[g2.ID]) != 1 {
+		t.Errorf("g2 members = %d, want 1", len(got[g2.ID]))
+	}
+	if _, ok := got["missing"]; ok {
+		t.Errorf("missing should not be in result")
+	}
+	// Order check: g1 members sorted by OrderIndex.
+	if got[g1.ID][0].FixtureID != a.ID || got[g1.ID][1].FixtureID != b.ID {
+		t.Errorf("g1 order: got %+v", got[g1.ID])
+	}
+}

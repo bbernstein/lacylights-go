@@ -106,4 +106,11 @@ func TestCreateRefIDIndexes_EnforcesEosNumberPartialUniqueness(t *testing.T) {
 	if err := db.Exec(`INSERT INTO fixture_groups (id, project_id, ref_id, eos_number) VALUES ('d','p1','d',NULL)`).Error; err != nil {
 		t.Fatalf("fourth: %v", err)
 	}
+
+	// Same EosNumber in DIFFERENT projects must succeed — the partial
+	// unique index is scoped on (project_id, eos_number), not global.
+	// This is the multi-tenant invariant.
+	if err := db.Exec(`INSERT INTO fixture_groups (id, project_id, ref_id, eos_number) VALUES ('e','p2','e',1)`).Error; err != nil {
+		t.Errorf("same eos_number in different project should be allowed; got: %v", err)
+	}
 }

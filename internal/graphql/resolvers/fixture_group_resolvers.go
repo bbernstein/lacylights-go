@@ -119,6 +119,12 @@ func (r *Resolver) deleteFixtureGroup(ctx context.Context, id string) (bool, err
 	return true, nil
 }
 
+// addFixturesToGroup, removeFixturesFromGroup, and reorderFixturesInGroup
+// return the group struct loaded BEFORE the membership mutation. This is
+// safe because the GraphQL `fixtures` field is resolved lazily by
+// fixturesForGroup, which re-reads from the DB and reflects the post-
+// mutation state. Don't try to populate `Members` here; gqlgen never
+// reads it — it always invokes the field resolver.
 func (r *Resolver) addFixturesToGroup(ctx context.Context, groupID string, fixtureIDs []string) (*models.FixtureGroup, error) {
 	g, err := r.requireGroup(ctx, groupID)
 	if err != nil {

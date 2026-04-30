@@ -153,12 +153,20 @@ func (s *Service) loadGroups(
 		return nil, fmt.Errorf("export_eos: persist auto-assigned eos_number: %w", err)
 	}
 
+	// Batch-load all groups' members in one query to avoid an O(groups)
+	// round-trip pattern.
+	groupIDs := make([]string, len(groups))
+	for i := range groups {
+		groupIDs[i] = groups[i].ID
+	}
+	membersByGroup, err := s.fixtureGroupRepo.GetMembersByGroupIDs(ctx, groupIDs)
+	if err != nil {
+		return nil, fmt.Errorf("export_eos: group members batch: %w", err)
+	}
+
 	out := make([]GroupOut, 0, len(groups))
 	for _, g := range groups {
-		members, err := s.fixtureGroupRepo.GetMembers(ctx, g.ID)
-		if err != nil {
-			return nil, fmt.Errorf("export_eos: group members: %w", err)
-		}
+		members := membersByGroup[g.ID]
 		channels := make([]int, 0, len(members))
 		for _, m := range members {
 			ch, ok := eosByInstance[m.FixtureID]

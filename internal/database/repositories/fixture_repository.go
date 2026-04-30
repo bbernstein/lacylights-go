@@ -395,9 +395,12 @@ func (r *FixtureRepository) FindInstanceByRefID(ctx context.Context, projectID, 
 // (instanceID, offset) row. Returns ErrChannelOffsetNotFound if no matching
 // row exists — callers convert this to a structured warning.
 func (r *FixtureRepository) UpdateInstanceChannelFadeBehavior(ctx context.Context, instanceID string, offset int, behavior string) error {
+	// "offset" is a SQL reserved word; quote with double quotes (SQL
+	// standard) so the query works across SQLite/Postgres without the
+	// MySQL-specific backtick syntax.
 	res := r.db.WithContext(ctx).
 		Model(&models.InstanceChannel{}).
-		Where("fixture_id = ? AND `offset` = ?", instanceID, offset).
+		Where(`fixture_id = ? AND "offset" = ?`, instanceID, offset).
 		Update("fade_behavior", behavior)
 	if res.Error != nil {
 		return res.Error
