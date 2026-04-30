@@ -332,7 +332,7 @@ func TestMapper_SidecarLookBoardRebuilt(t *testing.T) {
 	defer deps.close()
 
 	f := openFixtureFile(t, "sidecar_roundtrip.asc")
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr("T")})
@@ -509,7 +509,7 @@ func TestMapper_GroupsIdempotentReimport(t *testing.T) {
 
 	importOnce := func(targetID *string) (*Result, error) {
 		f := openFixtureFile(t, "groups_only.asc")
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 			deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 		opts := Options{}
