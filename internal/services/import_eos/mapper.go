@@ -118,6 +118,7 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 	matcher := NewMatcher(newRepoAdapter(m.fixtureRepo), table)
 	persToDefID := make(map[int]string, len(show.Personalities))
 	persToChannels := make(map[int][]models.ChannelDefinition, len(show.Personalities))
+	defByID := make(map[string]*models.FixtureDefinition, len(show.Personalities))
 	for _, pers := range show.Personalities {
 		mr, mWarns, err := matcher.Match(ctx, pers)
 		if err != nil {
@@ -134,6 +135,15 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 			if err != nil {
 				return nil, fmt.Errorf("load existing def channels: %w", err)
 			}
+			if _, seen := defByID[defID]; !seen {
+				existingDef, err := m.fixtureRepo.FindDefinitionByID(ctx, defID)
+				if err != nil {
+					return nil, fmt.Errorf("load existing def: %w", err)
+				}
+				if existingDef != nil {
+					defByID[defID] = existingDef
+				}
+			}
 		} else {
 			refID := eosFixtureDefRefID(mr.SynthesizedDef.Manufacturer, mr.SynthesizedDef.Model)
 			// Re-import idempotency: if a synth def with this refID already
@@ -148,6 +158,7 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 				if err != nil {
 					return nil, fmt.Errorf("load existing synth def channels: %w", err)
 				}
+				defByID[defID] = existing
 			} else {
 				mr.SynthesizedDef.RefID = refID
 				if err := m.fixtureRepo.CreateDefinitionWithChannels(ctx, mr.SynthesizedDef, mr.SynthesizedChannels); err != nil {
@@ -156,6 +167,7 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 				defID = mr.SynthesizedDef.ID
 				channels = mr.SynthesizedChannels
 				res.SynthesizedDefinitionIDs = append(res.SynthesizedDefinitionIDs, defID)
+				defByID[defID] = mr.SynthesizedDef
 			}
 		}
 		persToDefID[pers.ID] = defID
@@ -217,6 +229,7 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 		if err != nil {
 			return nil, fmt.Errorf("find instance by refID: %w", err)
 		}
+		channelCount := len(persToChannels[pe.PersonalityID])
 		if existing != nil {
 			// Re-import: update mutable patch fields (name, universe,
 			// address, definition, order) so changes in the .asc since
@@ -226,6 +239,7 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 			existing.StartChannel = address
 			existing.DefinitionID = defID
 			existing.ProjectOrder = &order
+			applyDenormalizedDefFields(existing, defByID[defID], channelCount)
 			if err := m.fixtureRepo.Update(ctx, existing); err != nil {
 				return nil, fmt.Errorf("update instance on re-import: %w", err)
 			}
@@ -242,6 +256,7 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 			ProjectOrder: &order,
 			RefID:        refID,
 		}
+		applyDenormalizedDefFields(instance, defByID[defID], channelCount)
 		instanceChannels := createInstanceChannelsFor(persToChannels[pe.PersonalityID])
 		if err := m.fixtureRepo.CreateWithChannels(ctx, instance, instanceChannels); err != nil {
 			return nil, fmt.Errorf("create instance: %w", err)
@@ -303,6 +318,24 @@ func (m *Mapper) resolveProject(ctx context.Context, show *Show, opts Options) (
 		return "", err
 	}
 	return p.ID, nil
+}
+
+// applyDenormalizedDefFields copies manufacturer, model, type and channel
+// count from the fixture definition onto a fixture instance. The instance
+// table denormalizes these to avoid a JOIN on every read; without this,
+// downstream consumers (notably the GraphQL API) see empty strings.
+func applyDenormalizedDefFields(instance *models.FixtureInstance, def *models.FixtureDefinition, channelCount int) {
+	if instance == nil {
+		return
+	}
+	count := channelCount
+	instance.ChannelCount = &count
+	if def == nil {
+		return
+	}
+	instance.Manufacturer = &def.Manufacturer
+	instance.Model = &def.Model
+	instance.Type = &def.Type
 }
 
 // createInstanceChannelsFor copies definition channels to instance channels.
