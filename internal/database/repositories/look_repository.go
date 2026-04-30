@@ -46,6 +46,9 @@ func (r *LookRepository) Create(ctx context.Context, look *models.Look) error {
 	if look.ID == "" {
 		look.ID = cuid.New()
 	}
+	if look.RefID == "" {
+		look.RefID = look.ID
+	}
 	return r.db.WithContext(ctx).Create(look).Error
 }
 
@@ -84,6 +87,9 @@ func (r *LookRepository) CreateWithFixtureValues(ctx context.Context, look *mode
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if look.ID == "" {
 			look.ID = cuid.New()
+		}
+		if look.RefID == "" {
+			look.RefID = look.ID
 		}
 		if err := tx.Create(look).Error; err != nil {
 			return err

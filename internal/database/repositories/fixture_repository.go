@@ -46,6 +46,9 @@ func (r *FixtureRepository) Create(ctx context.Context, fixture *models.FixtureI
 	if fixture.ID == "" {
 		fixture.ID = cuid.New()
 	}
+	if fixture.RefID == "" {
+		fixture.RefID = fixture.ID
+	}
 	return r.db.WithContext(ctx).Create(fixture).Error
 }
 
@@ -176,6 +179,9 @@ func (r *FixtureRepository) CreateWithChannels(ctx context.Context, fixture *mod
 		if fixture.ID == "" {
 			fixture.ID = cuid.New()
 		}
+		if fixture.RefID == "" {
+			fixture.RefID = fixture.ID
+		}
 		if err := tx.Create(fixture).Error; err != nil {
 			return err
 		}
@@ -199,6 +205,9 @@ func (r *FixtureRepository) CreateWithChannels(ctx context.Context, fixture *mod
 func (r *FixtureRepository) CreateDefinition(ctx context.Context, definition *models.FixtureDefinition) error {
 	if definition.ID == "" {
 		definition.ID = cuid.New()
+	}
+	if definition.RefID == "" {
+		definition.RefID = definition.ID
 	}
 	return r.db.WithContext(ctx).Create(definition).Error
 }
@@ -244,6 +253,9 @@ func (r *FixtureRepository) CreateDefinitionWithChannels(ctx context.Context, de
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if definition.ID == "" {
 			definition.ID = cuid.New()
+		}
+		if definition.RefID == "" {
+			definition.RefID = definition.ID
 		}
 		if err := tx.Create(definition).Error; err != nil {
 			return err

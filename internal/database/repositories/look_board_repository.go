@@ -47,6 +47,9 @@ func (r *LookBoardRepository) Create(ctx context.Context, board *models.LookBoar
 	if board.ID == "" {
 		board.ID = cuid.New()
 	}
+	if board.RefID == "" {
+		board.RefID = board.ID
+	}
 	return r.db.WithContext(ctx).Create(board).Error
 }
 
@@ -109,6 +112,9 @@ func (r *LookBoardRepository) CreateWithButtons(ctx context.Context, board *mode
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if board.ID == "" {
 			board.ID = cuid.New()
+		}
+		if board.RefID == "" {
+			board.RefID = board.ID
 		}
 		if err := tx.Create(board).Error; err != nil {
 			return err
