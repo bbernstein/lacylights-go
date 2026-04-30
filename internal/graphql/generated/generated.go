@@ -45,6 +45,7 @@ type ResolverRoot interface {
 	Device() DeviceResolver
 	Effect() EffectResolver
 	FixtureDefinition() FixtureDefinitionResolver
+	FixtureGroup() FixtureGroupResolver
 	FixtureInstance() FixtureInstanceResolver
 	FixtureMode() FixtureModeResolver
 	FixtureValue() FixtureValueResolver
@@ -455,7 +456,21 @@ type ComplexityRoot struct {
 		Manufacturer func(childComplexity int) int
 		Model        func(childComplexity int) int
 		Modes        func(childComplexity int) int
+		RefID        func(childComplexity int) int
 		Type         func(childComplexity int) int
+	}
+
+	FixtureGroup struct {
+		CreatedAt    func(childComplexity int) int
+		Description  func(childComplexity int) int
+		EosNumber    func(childComplexity int) int
+		Fixtures     func(childComplexity int) int
+		ID           func(childComplexity int) int
+		Name         func(childComplexity int) int
+		Project      func(childComplexity int) int
+		ProjectOrder func(childComplexity int) int
+		RefID        func(childComplexity int) int
+		UpdatedAt    func(childComplexity int) int
 	}
 
 	FixtureInstance struct {
@@ -474,6 +489,7 @@ type ComplexityRoot struct {
 		Name           func(childComplexity int) int
 		Project        func(childComplexity int) int
 		ProjectOrder   func(childComplexity int) int
+		RefID          func(childComplexity int) int
 		StartChannel   func(childComplexity int) int
 		Tags           func(childComplexity int) int
 		Type           func(childComplexity int) int
@@ -589,6 +605,7 @@ type ComplexityRoot struct {
 		ID            func(childComplexity int) int
 		Name          func(childComplexity int) int
 		Project       func(childComplexity int) int
+		RefID         func(childComplexity int) int
 		UpdatedAt     func(childComplexity int) int
 	}
 
@@ -603,6 +620,7 @@ type ComplexityRoot struct {
 		ID              func(childComplexity int) int
 		Name            func(childComplexity int) int
 		Project         func(childComplexity int) int
+		RefID           func(childComplexity int) int
 		UpdatedAt       func(childComplexity int) int
 	}
 
@@ -704,6 +722,7 @@ type ComplexityRoot struct {
 		AddDeviceToGroup                       func(childComplexity int, deviceID string, groupID string) int
 		AddEffectToCue                         func(childComplexity int, input AddEffectToCueInput) int
 		AddFixtureToEffect                     func(childComplexity int, input AddFixtureToEffectInput) int
+		AddFixturesToGroup                     func(childComplexity int, groupID string, fixtureIds []string) int
 		AddFixturesToLook                      func(childComplexity int, lookID string, fixtureValues []*FixtureValueInput, overwriteExisting *bool) int
 		AddLookToBoard                         func(childComplexity int, input CreateLookBoardButtonInput) int
 		AddUserToGroup                         func(childComplexity int, userID string, groupID string, role *GroupMemberRole) int
@@ -713,6 +732,7 @@ type ComplexityRoot struct {
 		BulkCreateCueLists                     func(childComplexity int, input BulkCueListCreateInput) int
 		BulkCreateCues                         func(childComplexity int, input BulkCueCreateInput) int
 		BulkCreateFixtureDefinitions           func(childComplexity int, input BulkFixtureDefinitionCreateInput) int
+		BulkCreateFixtureGroups                func(childComplexity int, inputs []*CreateFixtureGroupInput) int
 		BulkCreateFixtures                     func(childComplexity int, input BulkFixtureCreateInput) int
 		BulkCreateLookBoardButtons             func(childComplexity int, input BulkLookBoardButtonCreateInput) int
 		BulkCreateLookBoards                   func(childComplexity int, input BulkLookBoardCreateInput) int
@@ -721,6 +741,7 @@ type ComplexityRoot struct {
 		BulkDeleteCueLists                     func(childComplexity int, cueListIds []string) int
 		BulkDeleteCues                         func(childComplexity int, cueIds []string) int
 		BulkDeleteFixtureDefinitions           func(childComplexity int, definitionIds []string) int
+		BulkDeleteFixtureGroups                func(childComplexity int, ids []string) int
 		BulkDeleteFixtures                     func(childComplexity int, fixtureIds []string) int
 		BulkDeleteLookBoardButtons             func(childComplexity int, buttonIds []string) int
 		BulkDeleteLookBoards                   func(childComplexity int, lookBoardIds []string) int
@@ -729,6 +750,7 @@ type ComplexityRoot struct {
 		BulkUpdateCueLists                     func(childComplexity int, input BulkCueListUpdateInput) int
 		BulkUpdateCues                         func(childComplexity int, input BulkCueUpdateInput) int
 		BulkUpdateFixtureDefinitions           func(childComplexity int, input BulkFixtureDefinitionUpdateInput) int
+		BulkUpdateFixtureGroups                func(childComplexity int, inputs []*UpdateFixtureGroupInput) int
 		BulkUpdateFixtures                     func(childComplexity int, input BulkFixtureUpdateInput) int
 		BulkUpdateInstanceChannelsFadeBehavior func(childComplexity int, updates []*ChannelFadeBehaviorInput) int
 		BulkUpdateLookBoardButtons             func(childComplexity int, input BulkLookBoardButtonUpdateInput) int
@@ -750,6 +772,7 @@ type ComplexityRoot struct {
 		CreateDeviceAuthCode                   func(childComplexity int, deviceID string) int
 		CreateEffect                           func(childComplexity int, input CreateEffectInput) int
 		CreateFixtureDefinition                func(childComplexity int, input CreateFixtureDefinitionInput) int
+		CreateFixtureGroup                     func(childComplexity int, input CreateFixtureGroupInput) int
 		CreateFixtureInstance                  func(childComplexity int, input CreateFixtureInstanceInput) int
 		CreateLook                             func(childComplexity int, input CreateLookInput) int
 		CreateLookBoard                        func(childComplexity int, input CreateLookBoardInput) int
@@ -761,6 +784,7 @@ type ComplexityRoot struct {
 		DeleteCueList                          func(childComplexity int, id string) int
 		DeleteEffect                           func(childComplexity int, id string) int
 		DeleteFixtureDefinition                func(childComplexity int, id string) int
+		DeleteFixtureGroup                     func(childComplexity int, id string) int
 		DeleteFixtureInstance                  func(childComplexity int, id string) int
 		DeleteLook                             func(childComplexity int, id string) int
 		DeleteLookBoard                        func(childComplexity int, id string) int
@@ -798,10 +822,12 @@ type ComplexityRoot struct {
 		RemoveDeviceFromGroup                  func(childComplexity int, deviceID string, groupID string) int
 		RemoveEffectFromCue                    func(childComplexity int, cueID string, effectID string) int
 		RemoveFixtureFromEffect                func(childComplexity int, effectID string, fixtureID string) int
+		RemoveFixturesFromGroup                func(childComplexity int, groupID string, fixtureIds []string) int
 		RemoveFixturesFromLook                 func(childComplexity int, lookID string, fixtureIds []string) int
 		RemoveLookFromBoard                    func(childComplexity int, buttonID string) int
 		RemoveUserFromGroup                    func(childComplexity int, userID string, groupID string) int
 		ReorderCues                            func(childComplexity int, cueListID string, cueOrders []*CueOrderInput) int
+		ReorderFixturesInGroup                 func(childComplexity int, input ReorderFixturesInGroupInput) int
 		ReorderLookFixtures                    func(childComplexity int, lookID string, fixtureOrders []*FixtureOrderInput) int
 		ReorderProjectFixtures                 func(childComplexity int, projectID string, fixtureOrders []*FixtureOrderInput) int
 		RequestEmailVerification               func(childComplexity int) int
@@ -838,6 +864,7 @@ type ComplexityRoot struct {
 		UpdateEffectFixture                    func(childComplexity int, id string, input UpdateEffectFixtureInput) int
 		UpdateFadeUpdateRate                   func(childComplexity int, rateHz int) int
 		UpdateFixtureDefinition                func(childComplexity int, id string, input CreateFixtureDefinitionInput) int
+		UpdateFixtureGroup                     func(childComplexity int, input UpdateFixtureGroupInput) int
 		UpdateFixtureInstance                  func(childComplexity int, id string, input UpdateFixtureInstanceInput) int
 		UpdateFixturePositions                 func(childComplexity int, positions []*FixturePositionInput) int
 		UpdateGroupMemberRole                  func(childComplexity int, userID string, groupID string, role GroupMemberRole) int
@@ -1062,6 +1089,8 @@ type ComplexityRoot struct {
 		FixtureDefinition               func(childComplexity int, id string) int
 		FixtureDefinitions              func(childComplexity int, filter *FixtureDefinitionFilter) int
 		FixtureDefinitionsByIds         func(childComplexity int, ids []string) int
+		FixtureGroup                    func(childComplexity int, id string) int
+		FixtureGroups                   func(childComplexity int, projectID string) int
 		FixtureInstance                 func(childComplexity int, id string) int
 		FixtureInstances                func(childComplexity int, projectID string, page *int, perPage *int, filter *FixtureFilterInput) int
 		FixtureUsage                    func(childComplexity int, fixtureID string) int
@@ -1320,6 +1349,12 @@ type FixtureDefinitionResolver interface {
 
 	CreatedAt(ctx context.Context, obj *models.FixtureDefinition) (string, error)
 }
+type FixtureGroupResolver interface {
+	Project(ctx context.Context, obj *models.FixtureGroup) (*models.Project, error)
+	Fixtures(ctx context.Context, obj *models.FixtureGroup) ([]*models.FixtureInstance, error)
+	CreatedAt(ctx context.Context, obj *models.FixtureGroup) (string, error)
+	UpdatedAt(ctx context.Context, obj *models.FixtureGroup) (string, error)
+}
 type FixtureInstanceResolver interface {
 	Manufacturer(ctx context.Context, obj *models.FixtureInstance) (string, error)
 	Model(ctx context.Context, obj *models.FixtureInstance) (string, error)
@@ -1470,6 +1505,15 @@ type MutationResolver interface {
 	BulkUpdateLookBoardButtons(ctx context.Context, input BulkLookBoardButtonUpdateInput) ([]*models.LookBoardButton, error)
 	BulkDeleteLookBoardButtons(ctx context.Context, buttonIds []string) (*BulkDeleteResult, error)
 	ActivateLookFromBoard(ctx context.Context, lookBoardID string, lookID string, fadeTimeOverride *float64) (bool, error)
+	CreateFixtureGroup(ctx context.Context, input CreateFixtureGroupInput) (*models.FixtureGroup, error)
+	UpdateFixtureGroup(ctx context.Context, input UpdateFixtureGroupInput) (*models.FixtureGroup, error)
+	DeleteFixtureGroup(ctx context.Context, id string) (bool, error)
+	AddFixturesToGroup(ctx context.Context, groupID string, fixtureIds []string) (*models.FixtureGroup, error)
+	RemoveFixturesFromGroup(ctx context.Context, groupID string, fixtureIds []string) (*models.FixtureGroup, error)
+	ReorderFixturesInGroup(ctx context.Context, input ReorderFixturesInGroupInput) (*models.FixtureGroup, error)
+	BulkCreateFixtureGroups(ctx context.Context, inputs []*CreateFixtureGroupInput) ([]*models.FixtureGroup, error)
+	BulkUpdateFixtureGroups(ctx context.Context, inputs []*UpdateFixtureGroupInput) ([]*models.FixtureGroup, error)
+	BulkDeleteFixtureGroups(ctx context.Context, ids []string) (int, error)
 	CreateCueList(ctx context.Context, input CreateCueListInput) (*models.CueList, error)
 	UpdateCueList(ctx context.Context, id string, input CreateCueListInput) (*models.CueList, error)
 	DeleteCueList(ctx context.Context, id string) (bool, error)
@@ -1610,6 +1654,8 @@ type QueryResolver interface {
 	LookBoards(ctx context.Context, projectID string) ([]*models.LookBoard, error)
 	LookBoard(ctx context.Context, id string) (*models.LookBoard, error)
 	LookBoardButton(ctx context.Context, id string) (*models.LookBoardButton, error)
+	FixtureGroup(ctx context.Context, id string) (*models.FixtureGroup, error)
+	FixtureGroups(ctx context.Context, projectID string) ([]*models.FixtureGroup, error)
 	FixtureUsage(ctx context.Context, fixtureID string) (*FixtureUsage, error)
 	LookUsage(ctx context.Context, lookID string) (*LookUsage, error)
 	CompareLooks(ctx context.Context, lookID1 string, lookID2 string) (*LookComparison, error)
@@ -3292,12 +3338,79 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.FixtureDefinition.Modes(childComplexity), true
+	case "FixtureDefinition.refId":
+		if e.complexity.FixtureDefinition.RefID == nil {
+			break
+		}
+
+		return e.complexity.FixtureDefinition.RefID(childComplexity), true
 	case "FixtureDefinition.type":
 		if e.complexity.FixtureDefinition.Type == nil {
 			break
 		}
 
 		return e.complexity.FixtureDefinition.Type(childComplexity), true
+
+	case "FixtureGroup.createdAt":
+		if e.complexity.FixtureGroup.CreatedAt == nil {
+			break
+		}
+
+		return e.complexity.FixtureGroup.CreatedAt(childComplexity), true
+	case "FixtureGroup.description":
+		if e.complexity.FixtureGroup.Description == nil {
+			break
+		}
+
+		return e.complexity.FixtureGroup.Description(childComplexity), true
+	case "FixtureGroup.eosNumber":
+		if e.complexity.FixtureGroup.EosNumber == nil {
+			break
+		}
+
+		return e.complexity.FixtureGroup.EosNumber(childComplexity), true
+	case "FixtureGroup.fixtures":
+		if e.complexity.FixtureGroup.Fixtures == nil {
+			break
+		}
+
+		return e.complexity.FixtureGroup.Fixtures(childComplexity), true
+	case "FixtureGroup.id":
+		if e.complexity.FixtureGroup.ID == nil {
+			break
+		}
+
+		return e.complexity.FixtureGroup.ID(childComplexity), true
+	case "FixtureGroup.name":
+		if e.complexity.FixtureGroup.Name == nil {
+			break
+		}
+
+		return e.complexity.FixtureGroup.Name(childComplexity), true
+	case "FixtureGroup.project":
+		if e.complexity.FixtureGroup.Project == nil {
+			break
+		}
+
+		return e.complexity.FixtureGroup.Project(childComplexity), true
+	case "FixtureGroup.projectOrder":
+		if e.complexity.FixtureGroup.ProjectOrder == nil {
+			break
+		}
+
+		return e.complexity.FixtureGroup.ProjectOrder(childComplexity), true
+	case "FixtureGroup.refId":
+		if e.complexity.FixtureGroup.RefID == nil {
+			break
+		}
+
+		return e.complexity.FixtureGroup.RefID(childComplexity), true
+	case "FixtureGroup.updatedAt":
+		if e.complexity.FixtureGroup.UpdatedAt == nil {
+			break
+		}
+
+		return e.complexity.FixtureGroup.UpdatedAt(childComplexity), true
 
 	case "FixtureInstance.channelCount":
 		if e.complexity.FixtureInstance.ChannelCount == nil {
@@ -3389,6 +3502,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.FixtureInstance.ProjectOrder(childComplexity), true
+	case "FixtureInstance.refId":
+		if e.complexity.FixtureInstance.RefID == nil {
+			break
+		}
+
+		return e.complexity.FixtureInstance.RefID(childComplexity), true
 	case "FixtureInstance.startChannel":
 		if e.complexity.FixtureInstance.StartChannel == nil {
 			break
@@ -3841,6 +3960,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Look.Project(childComplexity), true
+	case "Look.refId":
+		if e.complexity.Look.RefID == nil {
+			break
+		}
+
+		return e.complexity.Look.RefID(childComplexity), true
 	case "Look.updatedAt":
 		if e.complexity.Look.UpdatedAt == nil {
 			break
@@ -3908,6 +4033,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.LookBoard.Project(childComplexity), true
+	case "LookBoard.refId":
+		if e.complexity.LookBoard.RefID == nil {
+			break
+		}
+
+		return e.complexity.LookBoard.RefID(childComplexity), true
 	case "LookBoard.updatedAt":
 		if e.complexity.LookBoard.UpdatedAt == nil {
 			break
@@ -4350,6 +4481,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.AddFixtureToEffect(childComplexity, args["input"].(AddFixtureToEffectInput)), true
+	case "Mutation.addFixturesToGroup":
+		if e.complexity.Mutation.AddFixturesToGroup == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_addFixturesToGroup_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.AddFixturesToGroup(childComplexity, args["groupId"].(string), args["fixtureIds"].([]string)), true
 	case "Mutation.addFixturesToLook":
 		if e.complexity.Mutation.AddFixturesToLook == nil {
 			break
@@ -4449,6 +4591,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.BulkCreateFixtureDefinitions(childComplexity, args["input"].(BulkFixtureDefinitionCreateInput)), true
+	case "Mutation.bulkCreateFixtureGroups":
+		if e.complexity.Mutation.BulkCreateFixtureGroups == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkCreateFixtureGroups_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkCreateFixtureGroups(childComplexity, args["inputs"].([]*CreateFixtureGroupInput)), true
 	case "Mutation.bulkCreateFixtures":
 		if e.complexity.Mutation.BulkCreateFixtures == nil {
 			break
@@ -4537,6 +4690,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.BulkDeleteFixtureDefinitions(childComplexity, args["definitionIds"].([]string)), true
+	case "Mutation.bulkDeleteFixtureGroups":
+		if e.complexity.Mutation.BulkDeleteFixtureGroups == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkDeleteFixtureGroups_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkDeleteFixtureGroups(childComplexity, args["ids"].([]string)), true
 	case "Mutation.bulkDeleteFixtures":
 		if e.complexity.Mutation.BulkDeleteFixtures == nil {
 			break
@@ -4625,6 +4789,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.BulkUpdateFixtureDefinitions(childComplexity, args["input"].(BulkFixtureDefinitionUpdateInput)), true
+	case "Mutation.bulkUpdateFixtureGroups":
+		if e.complexity.Mutation.BulkUpdateFixtureGroups == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_bulkUpdateFixtureGroups_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.BulkUpdateFixtureGroups(childComplexity, args["inputs"].([]*UpdateFixtureGroupInput)), true
 	case "Mutation.bulkUpdateFixtures":
 		if e.complexity.Mutation.BulkUpdateFixtures == nil {
 			break
@@ -4851,6 +5026,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.CreateFixtureDefinition(childComplexity, args["input"].(CreateFixtureDefinitionInput)), true
+	case "Mutation.createFixtureGroup":
+		if e.complexity.Mutation.CreateFixtureGroup == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createFixtureGroup_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.CreateFixtureGroup(childComplexity, args["input"].(CreateFixtureGroupInput)), true
 	case "Mutation.createFixtureInstance":
 		if e.complexity.Mutation.CreateFixtureInstance == nil {
 			break
@@ -4972,6 +5158,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.DeleteFixtureDefinition(childComplexity, args["id"].(string)), true
+	case "Mutation.deleteFixtureGroup":
+		if e.complexity.Mutation.DeleteFixtureGroup == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteFixtureGroup_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.DeleteFixtureGroup(childComplexity, args["id"].(string)), true
 	case "Mutation.deleteFixtureInstance":
 		if e.complexity.Mutation.DeleteFixtureInstance == nil {
 			break
@@ -5364,6 +5561,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.RemoveFixtureFromEffect(childComplexity, args["effectId"].(string), args["fixtureId"].(string)), true
+	case "Mutation.removeFixturesFromGroup":
+		if e.complexity.Mutation.RemoveFixturesFromGroup == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_removeFixturesFromGroup_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.RemoveFixturesFromGroup(childComplexity, args["groupId"].(string), args["fixtureIds"].([]string)), true
 	case "Mutation.removeFixturesFromLook":
 		if e.complexity.Mutation.RemoveFixturesFromLook == nil {
 			break
@@ -5408,6 +5616,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.ReorderCues(childComplexity, args["cueListId"].(string), args["cueOrders"].([]*CueOrderInput)), true
+	case "Mutation.reorderFixturesInGroup":
+		if e.complexity.Mutation.ReorderFixturesInGroup == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_reorderFixturesInGroup_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.ReorderFixturesInGroup(childComplexity, args["input"].(ReorderFixturesInGroupInput)), true
 	case "Mutation.reorderLookFixtures":
 		if e.complexity.Mutation.ReorderLookFixtures == nil {
 			break
@@ -5784,6 +6003,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.UpdateFixtureDefinition(childComplexity, args["id"].(string), args["input"].(CreateFixtureDefinitionInput)), true
+	case "Mutation.updateFixtureGroup":
+		if e.complexity.Mutation.UpdateFixtureGroup == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateFixtureGroup_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.UpdateFixtureGroup(childComplexity, args["input"].(UpdateFixtureGroupInput)), true
 	case "Mutation.updateFixtureInstance":
 		if e.complexity.Mutation.UpdateFixtureInstance == nil {
 			break
@@ -6990,6 +7220,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.FixtureDefinitionsByIds(childComplexity, args["ids"].([]string)), true
+	case "Query.fixtureGroup":
+		if e.complexity.Query.FixtureGroup == nil {
+			break
+		}
+
+		args, err := ec.field_Query_fixtureGroup_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.FixtureGroup(childComplexity, args["id"].(string)), true
+	case "Query.fixtureGroups":
+		if e.complexity.Query.FixtureGroups == nil {
+			break
+		}
+
+		args, err := ec.field_Query_fixtureGroups_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.FixtureGroups(childComplexity, args["projectId"].(string)), true
 	case "Query.fixtureInstance":
 		if e.complexity.Query.FixtureInstance == nil {
 			break
@@ -8127,6 +8379,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCreateCueListInput,
 		ec.unmarshalInputCreateEffectInput,
 		ec.unmarshalInputCreateFixtureDefinitionInput,
+		ec.unmarshalInputCreateFixtureGroupInput,
 		ec.unmarshalInputCreateFixtureInstanceInput,
 		ec.unmarshalInputCreateLookBoardButtonInput,
 		ec.unmarshalInputCreateLookBoardInput,
@@ -8161,10 +8414,12 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputPreviewChannelUpdateInput,
 		ec.unmarshalInputProjectUpdateItem,
 		ec.unmarshalInputRegisterInput,
+		ec.unmarshalInputReorderFixturesInGroupInput,
 		ec.unmarshalInputUpdateAuthSettingsInput,
 		ec.unmarshalInputUpdateDeviceInput,
 		ec.unmarshalInputUpdateEffectFixtureInput,
 		ec.unmarshalInputUpdateEffectInput,
+		ec.unmarshalInputUpdateFixtureGroupInput,
 		ec.unmarshalInputUpdateFixtureInstanceInput,
 		ec.unmarshalInputUpdateLookBoardButtonInput,
 		ec.unmarshalInputUpdateLookBoardInput,
@@ -8877,6 +9132,7 @@ type Project {
 
 type FixtureDefinition {
   id: ID!
+  refId: String!
   manufacturer: String!
   model: String!
   type: FixtureType!
@@ -8914,6 +9170,7 @@ type ChannelDefinition {
 
 type FixtureInstance {
   id: ID!
+  refId: String!
   name: String!
   description: String
 
@@ -8962,6 +9219,7 @@ type InstanceChannel {
 
 type Look {
   id: ID!
+  refId: String!
   name: String!
   description: String
   project: Project!
@@ -8984,6 +9242,7 @@ type FixtureValue {
 
 type LookBoard {
   id: ID!
+  refId: String!
   name: String!
   description: String
   project: Project!
@@ -9006,6 +9265,19 @@ type LookBoardButton {
   height: Int
   color: String
   label: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+type FixtureGroup {
+  id: ID!
+  refId: String!
+  name: String!
+  description: String
+  eosNumber: Int
+  projectOrder: Int
+  project: Project!
+  fixtures: [FixtureInstance!]!
   createdAt: String!
   updatedAt: String!
 }
@@ -10074,6 +10346,27 @@ input LookBoardButtonPositionInput {
   layoutY: Int!
 }
 
+input CreateFixtureGroupInput {
+  projectId: ID!
+  name: String!
+  description: String
+  fixtureIds: [ID!]!
+  eosNumber: Int
+}
+
+input UpdateFixtureGroupInput {
+  id: ID!
+  name: String
+  description: String
+  eosNumber: Int
+  projectOrder: Int
+}
+
+input ReorderFixturesInGroupInput {
+  groupId: ID!
+  fixtureIds: [ID!]!
+}
+
 input FixtureDefinitionFilter {
   manufacturer: String
   model: String
@@ -10540,6 +10833,10 @@ type Query {
   lookBoard(id: ID!): LookBoard
   lookBoardButton(id: ID!): LookBoardButton
 
+  # Fixture Groups
+  fixtureGroup(id: ID!): FixtureGroup
+  fixtureGroups(projectId: ID!): [FixtureGroup!]!
+
   # Relationship Queries
   fixtureUsage(fixtureId: ID!): FixtureUsage!
   lookUsage(lookId: ID!): LookUsage!
@@ -10848,6 +11145,19 @@ type Mutation {
     fadeTimeOverride: Float
   ): Boolean!
 
+  # Fixture Groups
+  createFixtureGroup(input: CreateFixtureGroupInput!): FixtureGroup!
+  updateFixtureGroup(input: UpdateFixtureGroupInput!): FixtureGroup!
+  deleteFixtureGroup(id: ID!): Boolean!
+
+  addFixturesToGroup(groupId: ID!, fixtureIds: [ID!]!): FixtureGroup!
+  removeFixturesFromGroup(groupId: ID!, fixtureIds: [ID!]!): FixtureGroup!
+  reorderFixturesInGroup(input: ReorderFixturesInGroupInput!): FixtureGroup!
+
+  bulkCreateFixtureGroups(inputs: [CreateFixtureGroupInput!]!): [FixtureGroup!]!
+  bulkUpdateFixtureGroups(inputs: [UpdateFixtureGroupInput!]!): [FixtureGroup!]!
+  bulkDeleteFixtureGroups(ids: [ID!]!): Int!
+
   # Cue Lists
   createCueList(input: CreateCueListInput!): CueList!
   updateCueList(id: ID!, input: CreateCueListInput!): CueList!
@@ -11148,6 +11458,22 @@ func (ec *executionContext) field_Mutation_addFixtureToEffect_args(ctx context.C
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_addFixturesToGroup_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "groupId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["groupId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "fixtureIds", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["fixtureIds"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_addFixturesToLook_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -11292,6 +11618,17 @@ func (ec *executionContext) field_Mutation_bulkCreateFixtureDefinitions_args(ctx
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_bulkCreateFixtureGroups_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "inputs", ec.unmarshalNCreateFixtureGroupInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateFixtureGroupInputᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["inputs"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_bulkCreateFixtures_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -11380,6 +11717,17 @@ func (ec *executionContext) field_Mutation_bulkDeleteFixtureDefinitions_args(ctx
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_bulkDeleteFixtureGroups_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "ids", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["ids"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_bulkDeleteFixtures_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -11465,6 +11813,17 @@ func (ec *executionContext) field_Mutation_bulkUpdateFixtureDefinitions_args(ctx
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_bulkUpdateFixtureGroups_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "inputs", ec.unmarshalNUpdateFixtureGroupInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUpdateFixtureGroupInputᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["inputs"] = arg0
 	return args, nil
 }
 
@@ -11708,6 +12067,17 @@ func (ec *executionContext) field_Mutation_createFixtureDefinition_args(ctx cont
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_createFixtureGroup_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateFixtureGroupInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateFixtureGroupInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_createFixtureInstance_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -11819,6 +12189,17 @@ func (ec *executionContext) field_Mutation_deleteEffect_args(ctx context.Context
 }
 
 func (ec *executionContext) field_Mutation_deleteFixtureDefinition_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_deleteFixtureGroup_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
@@ -12298,6 +12679,22 @@ func (ec *executionContext) field_Mutation_removeFixtureFromEffect_args(ctx cont
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_removeFixturesFromGroup_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "groupId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["groupId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "fixtureIds", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["fixtureIds"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_removeFixturesFromLook_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -12354,6 +12751,17 @@ func (ec *executionContext) field_Mutation_reorderCues_args(ctx context.Context,
 		return nil, err
 	}
 	args["cueOrders"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_reorderFixturesInGroup_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNReorderFixturesInGroupInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐReorderFixturesInGroupInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -12791,6 +13199,17 @@ func (ec *executionContext) field_Mutation_updateFixtureDefinition_args(ctx cont
 		return nil, err
 	}
 	args["input"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateFixtureGroup_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateFixtureGroupInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUpdateFixtureGroupInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -13329,6 +13748,28 @@ func (ec *executionContext) field_Query_fixtureDefinitions_args(ctx context.Cont
 		return nil, err
 	}
 	args["filter"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_fixtureGroup_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_fixtureGroups_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
 	return args, nil
 }
 
@@ -16195,6 +16636,8 @@ func (ec *executionContext) fieldContext_CopyFixturesToLooksResult_updatedLooks(
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Look_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_Look_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_Look_name(ctx, field)
 			case "description":
@@ -16356,6 +16799,8 @@ func (ec *executionContext) fieldContext_Cue_look(_ context.Context, field graph
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Look_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_Look_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_Look_name(ctx, field)
 			case "description":
@@ -20370,6 +20815,8 @@ func (ec *executionContext) fieldContext_EffectFixture_fixture(_ context.Context
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureInstance_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureInstance_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_FixtureInstance_name(ctx, field)
 			case "description":
@@ -21834,6 +22281,35 @@ func (ec *executionContext) fieldContext_FixtureDefinition_id(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _FixtureDefinition_refId(ctx context.Context, field graphql.CollectedField, obj *models.FixtureDefinition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureDefinition_refId,
+		func(ctx context.Context) (any, error) {
+			return obj.RefID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureDefinition_refId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureDefinition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _FixtureDefinition_manufacturer(ctx context.Context, field graphql.CollectedField, obj *models.FixtureDefinition) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -22069,6 +22545,376 @@ func (ec *executionContext) fieldContext_FixtureDefinition_createdAt(_ context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _FixtureGroup_id(ctx context.Context, field graphql.CollectedField, obj *models.FixtureGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureGroup_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureGroup_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureGroup",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FixtureGroup_refId(ctx context.Context, field graphql.CollectedField, obj *models.FixtureGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureGroup_refId,
+		func(ctx context.Context) (any, error) {
+			return obj.RefID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureGroup_refId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureGroup",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FixtureGroup_name(ctx context.Context, field graphql.CollectedField, obj *models.FixtureGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureGroup_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureGroup_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureGroup",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FixtureGroup_description(ctx context.Context, field graphql.CollectedField, obj *models.FixtureGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureGroup_description,
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureGroup_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureGroup",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FixtureGroup_eosNumber(ctx context.Context, field graphql.CollectedField, obj *models.FixtureGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureGroup_eosNumber,
+		func(ctx context.Context) (any, error) {
+			return obj.EosNumber, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureGroup_eosNumber(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureGroup",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FixtureGroup_projectOrder(ctx context.Context, field graphql.CollectedField, obj *models.FixtureGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureGroup_projectOrder,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectOrder, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureGroup_projectOrder(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureGroup",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FixtureGroup_project(ctx context.Context, field graphql.CollectedField, obj *models.FixtureGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureGroup_project,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.FixtureGroup().Project(ctx, obj)
+		},
+		nil,
+		ec.marshalNProject2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐProject,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureGroup_project(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureGroup",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Project_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Project_name(ctx, field)
+			case "description":
+				return ec.fieldContext_Project_description(ctx, field)
+			case "fixtureCount":
+				return ec.fieldContext_Project_fixtureCount(ctx, field)
+			case "lookCount":
+				return ec.fieldContext_Project_lookCount(ctx, field)
+			case "cueListCount":
+				return ec.fieldContext_Project_cueListCount(ctx, field)
+			case "group":
+				return ec.fieldContext_Project_group(ctx, field)
+			case "groupId":
+				return ec.fieldContext_Project_groupId(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Project_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Project_updatedAt(ctx, field)
+			case "deletedAt":
+				return ec.fieldContext_Project_deletedAt(ctx, field)
+			case "fixtures":
+				return ec.fieldContext_Project_fixtures(ctx, field)
+			case "looks":
+				return ec.fieldContext_Project_looks(ctx, field)
+			case "cueLists":
+				return ec.fieldContext_Project_cueLists(ctx, field)
+			case "lookBoards":
+				return ec.fieldContext_Project_lookBoards(ctx, field)
+			case "users":
+				return ec.fieldContext_Project_users(ctx, field)
+			case "layoutCanvasWidth":
+				return ec.fieldContext_Project_layoutCanvasWidth(ctx, field)
+			case "layoutCanvasHeight":
+				return ec.fieldContext_Project_layoutCanvasHeight(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FixtureGroup_fixtures(ctx context.Context, field graphql.CollectedField, obj *models.FixtureGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureGroup_fixtures,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.FixtureGroup().Fixtures(ctx, obj)
+		},
+		nil,
+		ec.marshalNFixtureInstance2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureInstanceᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureGroup_fixtures(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureGroup",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FixtureInstance_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureInstance_refId(ctx, field)
+			case "name":
+				return ec.fieldContext_FixtureInstance_name(ctx, field)
+			case "description":
+				return ec.fieldContext_FixtureInstance_description(ctx, field)
+			case "definitionId":
+				return ec.fieldContext_FixtureInstance_definitionId(ctx, field)
+			case "manufacturer":
+				return ec.fieldContext_FixtureInstance_manufacturer(ctx, field)
+			case "model":
+				return ec.fieldContext_FixtureInstance_model(ctx, field)
+			case "type":
+				return ec.fieldContext_FixtureInstance_type(ctx, field)
+			case "modeName":
+				return ec.fieldContext_FixtureInstance_modeName(ctx, field)
+			case "channelCount":
+				return ec.fieldContext_FixtureInstance_channelCount(ctx, field)
+			case "channels":
+				return ec.fieldContext_FixtureInstance_channels(ctx, field)
+			case "project":
+				return ec.fieldContext_FixtureInstance_project(ctx, field)
+			case "universe":
+				return ec.fieldContext_FixtureInstance_universe(ctx, field)
+			case "startChannel":
+				return ec.fieldContext_FixtureInstance_startChannel(ctx, field)
+			case "tags":
+				return ec.fieldContext_FixtureInstance_tags(ctx, field)
+			case "projectOrder":
+				return ec.fieldContext_FixtureInstance_projectOrder(ctx, field)
+			case "layoutX":
+				return ec.fieldContext_FixtureInstance_layoutX(ctx, field)
+			case "layoutY":
+				return ec.fieldContext_FixtureInstance_layoutY(ctx, field)
+			case "layoutRotation":
+				return ec.fieldContext_FixtureInstance_layoutRotation(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_FixtureInstance_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FixtureInstance", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FixtureGroup_createdAt(ctx context.Context, field graphql.CollectedField, obj *models.FixtureGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureGroup_createdAt,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.FixtureGroup().CreatedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureGroup_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureGroup",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FixtureGroup_updatedAt(ctx context.Context, field graphql.CollectedField, obj *models.FixtureGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureGroup_updatedAt,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.FixtureGroup().UpdatedAt(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureGroup_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureGroup",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _FixtureInstance_id(ctx context.Context, field graphql.CollectedField, obj *models.FixtureInstance) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -22093,6 +22939,35 @@ func (ec *executionContext) fieldContext_FixtureInstance_id(_ context.Context, f
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FixtureInstance_refId(ctx context.Context, field graphql.CollectedField, obj *models.FixtureInstance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureInstance_refId,
+		func(ctx context.Context) (any, error) {
+			return obj.RefID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureInstance_refId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureInstance",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -22704,6 +23579,8 @@ func (ec *executionContext) fieldContext_FixtureInstancePage_fixtures(_ context.
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureInstance_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureInstance_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_FixtureInstance_name(ctx, field)
 			case "description":
@@ -23328,6 +24205,8 @@ func (ec *executionContext) fieldContext_FixtureValue_fixture(_ context.Context,
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureInstance_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureInstance_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_FixtureInstance_name(ctx, field)
 			case "description":
@@ -24744,6 +25623,35 @@ func (ec *executionContext) fieldContext_Look_id(_ context.Context, field graphq
 	return fc, nil
 }
 
+func (ec *executionContext) _Look_refId(ctx context.Context, field graphql.CollectedField, obj *models.Look) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Look_refId,
+		func(ctx context.Context) (any, error) {
+			return obj.RefID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Look_refId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Look",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Look_name(ctx context.Context, field graphql.CollectedField, obj *models.Look) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -24990,6 +25898,35 @@ func (ec *executionContext) fieldContext_LookBoard_id(_ context.Context, field g
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _LookBoard_refId(ctx context.Context, field graphql.CollectedField, obj *models.LookBoard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_LookBoard_refId,
+		func(ctx context.Context) (any, error) {
+			return obj.RefID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_LookBoard_refId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "LookBoard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -25402,6 +26339,8 @@ func (ec *executionContext) fieldContext_LookBoardButton_lookBoard(_ context.Con
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_LookBoard_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_LookBoard_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_LookBoard_name(ctx, field)
 			case "description":
@@ -25455,6 +26394,8 @@ func (ec *executionContext) fieldContext_LookBoardButton_look(_ context.Context,
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Look_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_Look_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_Look_name(ctx, field)
 			case "description":
@@ -29414,6 +30355,8 @@ func (ec *executionContext) fieldContext_Mutation_createFixtureDefinition(ctx co
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureDefinition_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureDefinition_refId(ctx, field)
 			case "manufacturer":
 				return ec.fieldContext_FixtureDefinition_manufacturer(ctx, field)
 			case "model":
@@ -29473,6 +30416,8 @@ func (ec *executionContext) fieldContext_Mutation_importOFLFixture(ctx context.C
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureDefinition_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureDefinition_refId(ctx, field)
 			case "manufacturer":
 				return ec.fieldContext_FixtureDefinition_manufacturer(ctx, field)
 			case "model":
@@ -29532,6 +30477,8 @@ func (ec *executionContext) fieldContext_Mutation_updateFixtureDefinition(ctx co
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureDefinition_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureDefinition_refId(ctx, field)
 			case "manufacturer":
 				return ec.fieldContext_FixtureDefinition_manufacturer(ctx, field)
 			case "model":
@@ -29632,6 +30579,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkCreateFixtureDefinitions(c
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureDefinition_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureDefinition_refId(ctx, field)
 			case "manufacturer":
 				return ec.fieldContext_FixtureDefinition_manufacturer(ctx, field)
 			case "model":
@@ -29691,6 +30640,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkUpdateFixtureDefinitions(c
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureDefinition_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureDefinition_refId(ctx, field)
 			case "manufacturer":
 				return ec.fieldContext_FixtureDefinition_manufacturer(ctx, field)
 			case "model":
@@ -29797,6 +30748,8 @@ func (ec *executionContext) fieldContext_Mutation_createFixtureInstance(ctx cont
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureInstance_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureInstance_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_FixtureInstance_name(ctx, field)
 			case "description":
@@ -29878,6 +30831,8 @@ func (ec *executionContext) fieldContext_Mutation_updateFixtureInstance(ctx cont
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureInstance_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureInstance_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_FixtureInstance_name(ctx, field)
 			case "description":
@@ -29959,6 +30914,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkUpdateFixtures(ctx context
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureInstance_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureInstance_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_FixtureInstance_name(ctx, field)
 			case "description":
@@ -30040,6 +30997,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkCreateFixtures(ctx context
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureInstance_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureInstance_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_FixtureInstance_name(ctx, field)
 			case "description":
@@ -30454,6 +31413,8 @@ func (ec *executionContext) fieldContext_Mutation_createLook(ctx context.Context
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Look_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_Look_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_Look_name(ctx, field)
 			case "description":
@@ -30511,6 +31472,8 @@ func (ec *executionContext) fieldContext_Mutation_updateLook(ctx context.Context
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Look_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_Look_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_Look_name(ctx, field)
 			case "description":
@@ -30568,6 +31531,8 @@ func (ec *executionContext) fieldContext_Mutation_duplicateLook(ctx context.Cont
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Look_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_Look_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_Look_name(ctx, field)
 			case "description":
@@ -30625,6 +31590,8 @@ func (ec *executionContext) fieldContext_Mutation_cloneLook(ctx context.Context,
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Look_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_Look_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_Look_name(ctx, field)
 			case "description":
@@ -30723,6 +31690,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkCreateLooks(ctx context.Co
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Look_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_Look_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_Look_name(ctx, field)
 			case "description":
@@ -30780,6 +31749,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkUpdateLooks(ctx context.Co
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Look_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_Look_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_Look_name(ctx, field)
 			case "description":
@@ -30884,6 +31855,8 @@ func (ec *executionContext) fieldContext_Mutation_addFixturesToLook(ctx context.
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Look_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_Look_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_Look_name(ctx, field)
 			case "description":
@@ -30941,6 +31914,8 @@ func (ec *executionContext) fieldContext_Mutation_removeFixturesFromLook(ctx con
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Look_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_Look_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_Look_name(ctx, field)
 			case "description":
@@ -30998,6 +31973,8 @@ func (ec *executionContext) fieldContext_Mutation_updateLookPartial(ctx context.
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Look_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_Look_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_Look_name(ctx, field)
 			case "description":
@@ -31055,6 +32032,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkUpdateLooksPartial(ctx con
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Look_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_Look_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_Look_name(ctx, field)
 			case "description":
@@ -31163,6 +32142,8 @@ func (ec *executionContext) fieldContext_Mutation_createLookBoard(ctx context.Co
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_LookBoard_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_LookBoard_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_LookBoard_name(ctx, field)
 			case "description":
@@ -31228,6 +32209,8 @@ func (ec *executionContext) fieldContext_Mutation_updateLookBoard(ctx context.Co
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_LookBoard_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_LookBoard_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_LookBoard_name(ctx, field)
 			case "description":
@@ -31334,6 +32317,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkCreateLookBoards(ctx conte
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_LookBoard_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_LookBoard_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_LookBoard_name(ctx, field)
 			case "description":
@@ -31399,6 +32384,8 @@ func (ec *executionContext) fieldContext_Mutation_bulkUpdateLookBoards(ctx conte
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_LookBoard_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_LookBoard_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_LookBoard_name(ctx, field)
 			case "description":
@@ -31908,6 +32895,529 @@ func (ec *executionContext) fieldContext_Mutation_activateLookFromBoard(ctx cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_activateLookFromBoard_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_createFixtureGroup(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_createFixtureGroup,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().CreateFixtureGroup(ctx, fc.Args["input"].(CreateFixtureGroupInput))
+		},
+		nil,
+		ec.marshalNFixtureGroup2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureGroup,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_createFixtureGroup(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FixtureGroup_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureGroup_refId(ctx, field)
+			case "name":
+				return ec.fieldContext_FixtureGroup_name(ctx, field)
+			case "description":
+				return ec.fieldContext_FixtureGroup_description(ctx, field)
+			case "eosNumber":
+				return ec.fieldContext_FixtureGroup_eosNumber(ctx, field)
+			case "projectOrder":
+				return ec.fieldContext_FixtureGroup_projectOrder(ctx, field)
+			case "project":
+				return ec.fieldContext_FixtureGroup_project(ctx, field)
+			case "fixtures":
+				return ec.fieldContext_FixtureGroup_fixtures(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_FixtureGroup_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_FixtureGroup_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FixtureGroup", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createFixtureGroup_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateFixtureGroup(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateFixtureGroup,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().UpdateFixtureGroup(ctx, fc.Args["input"].(UpdateFixtureGroupInput))
+		},
+		nil,
+		ec.marshalNFixtureGroup2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureGroup,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateFixtureGroup(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FixtureGroup_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureGroup_refId(ctx, field)
+			case "name":
+				return ec.fieldContext_FixtureGroup_name(ctx, field)
+			case "description":
+				return ec.fieldContext_FixtureGroup_description(ctx, field)
+			case "eosNumber":
+				return ec.fieldContext_FixtureGroup_eosNumber(ctx, field)
+			case "projectOrder":
+				return ec.fieldContext_FixtureGroup_projectOrder(ctx, field)
+			case "project":
+				return ec.fieldContext_FixtureGroup_project(ctx, field)
+			case "fixtures":
+				return ec.fieldContext_FixtureGroup_fixtures(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_FixtureGroup_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_FixtureGroup_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FixtureGroup", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateFixtureGroup_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteFixtureGroup(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_deleteFixtureGroup,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().DeleteFixtureGroup(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_deleteFixtureGroup(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteFixtureGroup_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_addFixturesToGroup(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_addFixturesToGroup,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().AddFixturesToGroup(ctx, fc.Args["groupId"].(string), fc.Args["fixtureIds"].([]string))
+		},
+		nil,
+		ec.marshalNFixtureGroup2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureGroup,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_addFixturesToGroup(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FixtureGroup_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureGroup_refId(ctx, field)
+			case "name":
+				return ec.fieldContext_FixtureGroup_name(ctx, field)
+			case "description":
+				return ec.fieldContext_FixtureGroup_description(ctx, field)
+			case "eosNumber":
+				return ec.fieldContext_FixtureGroup_eosNumber(ctx, field)
+			case "projectOrder":
+				return ec.fieldContext_FixtureGroup_projectOrder(ctx, field)
+			case "project":
+				return ec.fieldContext_FixtureGroup_project(ctx, field)
+			case "fixtures":
+				return ec.fieldContext_FixtureGroup_fixtures(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_FixtureGroup_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_FixtureGroup_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FixtureGroup", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_addFixturesToGroup_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_removeFixturesFromGroup(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_removeFixturesFromGroup,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().RemoveFixturesFromGroup(ctx, fc.Args["groupId"].(string), fc.Args["fixtureIds"].([]string))
+		},
+		nil,
+		ec.marshalNFixtureGroup2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureGroup,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_removeFixturesFromGroup(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FixtureGroup_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureGroup_refId(ctx, field)
+			case "name":
+				return ec.fieldContext_FixtureGroup_name(ctx, field)
+			case "description":
+				return ec.fieldContext_FixtureGroup_description(ctx, field)
+			case "eosNumber":
+				return ec.fieldContext_FixtureGroup_eosNumber(ctx, field)
+			case "projectOrder":
+				return ec.fieldContext_FixtureGroup_projectOrder(ctx, field)
+			case "project":
+				return ec.fieldContext_FixtureGroup_project(ctx, field)
+			case "fixtures":
+				return ec.fieldContext_FixtureGroup_fixtures(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_FixtureGroup_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_FixtureGroup_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FixtureGroup", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_removeFixturesFromGroup_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_reorderFixturesInGroup(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_reorderFixturesInGroup,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().ReorderFixturesInGroup(ctx, fc.Args["input"].(ReorderFixturesInGroupInput))
+		},
+		nil,
+		ec.marshalNFixtureGroup2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureGroup,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_reorderFixturesInGroup(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FixtureGroup_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureGroup_refId(ctx, field)
+			case "name":
+				return ec.fieldContext_FixtureGroup_name(ctx, field)
+			case "description":
+				return ec.fieldContext_FixtureGroup_description(ctx, field)
+			case "eosNumber":
+				return ec.fieldContext_FixtureGroup_eosNumber(ctx, field)
+			case "projectOrder":
+				return ec.fieldContext_FixtureGroup_projectOrder(ctx, field)
+			case "project":
+				return ec.fieldContext_FixtureGroup_project(ctx, field)
+			case "fixtures":
+				return ec.fieldContext_FixtureGroup_fixtures(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_FixtureGroup_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_FixtureGroup_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FixtureGroup", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_reorderFixturesInGroup_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkCreateFixtureGroups(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkCreateFixtureGroups,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkCreateFixtureGroups(ctx, fc.Args["inputs"].([]*CreateFixtureGroupInput))
+		},
+		nil,
+		ec.marshalNFixtureGroup2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureGroupᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkCreateFixtureGroups(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FixtureGroup_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureGroup_refId(ctx, field)
+			case "name":
+				return ec.fieldContext_FixtureGroup_name(ctx, field)
+			case "description":
+				return ec.fieldContext_FixtureGroup_description(ctx, field)
+			case "eosNumber":
+				return ec.fieldContext_FixtureGroup_eosNumber(ctx, field)
+			case "projectOrder":
+				return ec.fieldContext_FixtureGroup_projectOrder(ctx, field)
+			case "project":
+				return ec.fieldContext_FixtureGroup_project(ctx, field)
+			case "fixtures":
+				return ec.fieldContext_FixtureGroup_fixtures(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_FixtureGroup_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_FixtureGroup_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FixtureGroup", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkCreateFixtureGroups_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkUpdateFixtureGroups(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkUpdateFixtureGroups,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkUpdateFixtureGroups(ctx, fc.Args["inputs"].([]*UpdateFixtureGroupInput))
+		},
+		nil,
+		ec.marshalNFixtureGroup2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureGroupᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkUpdateFixtureGroups(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FixtureGroup_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureGroup_refId(ctx, field)
+			case "name":
+				return ec.fieldContext_FixtureGroup_name(ctx, field)
+			case "description":
+				return ec.fieldContext_FixtureGroup_description(ctx, field)
+			case "eosNumber":
+				return ec.fieldContext_FixtureGroup_eosNumber(ctx, field)
+			case "projectOrder":
+				return ec.fieldContext_FixtureGroup_projectOrder(ctx, field)
+			case "project":
+				return ec.fieldContext_FixtureGroup_project(ctx, field)
+			case "fixtures":
+				return ec.fieldContext_FixtureGroup_fixtures(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_FixtureGroup_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_FixtureGroup_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FixtureGroup", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkUpdateFixtureGroups_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_bulkDeleteFixtureGroups(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_bulkDeleteFixtureGroups,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().BulkDeleteFixtureGroups(ctx, fc.Args["ids"].([]string))
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_bulkDeleteFixtureGroups(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_bulkDeleteFixtureGroups_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -38043,6 +39553,8 @@ func (ec *executionContext) fieldContext_Project_fixtures(_ context.Context, fie
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureInstance_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureInstance_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_FixtureInstance_name(ctx, field)
 			case "description":
@@ -38112,6 +39624,8 @@ func (ec *executionContext) fieldContext_Project_looks(_ context.Context, field 
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Look_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_Look_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_Look_name(ctx, field)
 			case "description":
@@ -38208,6 +39722,8 @@ func (ec *executionContext) fieldContext_Project_lookBoards(_ context.Context, f
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_LookBoard_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_LookBoard_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_LookBoard_name(ctx, field)
 			case "description":
@@ -40312,6 +41828,8 @@ func (ec *executionContext) fieldContext_Query_fixtureDefinitions(ctx context.Co
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureDefinition_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureDefinition_refId(ctx, field)
 			case "manufacturer":
 				return ec.fieldContext_FixtureDefinition_manufacturer(ctx, field)
 			case "model":
@@ -40371,6 +41889,8 @@ func (ec *executionContext) fieldContext_Query_fixtureDefinition(ctx context.Con
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureDefinition_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureDefinition_refId(ctx, field)
 			case "manufacturer":
 				return ec.fieldContext_FixtureDefinition_manufacturer(ctx, field)
 			case "model":
@@ -40477,6 +41997,8 @@ func (ec *executionContext) fieldContext_Query_fixtureInstance(ctx context.Conte
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureInstance_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureInstance_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_FixtureInstance_name(ctx, field)
 			case "description":
@@ -40750,6 +42272,8 @@ func (ec *executionContext) fieldContext_Query_look(ctx context.Context, field g
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Look_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_Look_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_Look_name(ctx, field)
 			case "description":
@@ -40903,6 +42427,8 @@ func (ec *executionContext) fieldContext_Query_lookBoards(ctx context.Context, f
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_LookBoard_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_LookBoard_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_LookBoard_name(ctx, field)
 			case "description":
@@ -40968,6 +42494,8 @@ func (ec *executionContext) fieldContext_Query_lookBoard(ctx context.Context, fi
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_LookBoard_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_LookBoard_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_LookBoard_name(ctx, field)
 			case "description":
@@ -41065,6 +42593,132 @@ func (ec *executionContext) fieldContext_Query_lookBoardButton(ctx context.Conte
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_lookBoardButton_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_fixtureGroup(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_fixtureGroup,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().FixtureGroup(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		ec.marshalOFixtureGroup2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureGroup,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_fixtureGroup(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FixtureGroup_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureGroup_refId(ctx, field)
+			case "name":
+				return ec.fieldContext_FixtureGroup_name(ctx, field)
+			case "description":
+				return ec.fieldContext_FixtureGroup_description(ctx, field)
+			case "eosNumber":
+				return ec.fieldContext_FixtureGroup_eosNumber(ctx, field)
+			case "projectOrder":
+				return ec.fieldContext_FixtureGroup_projectOrder(ctx, field)
+			case "project":
+				return ec.fieldContext_FixtureGroup_project(ctx, field)
+			case "fixtures":
+				return ec.fieldContext_FixtureGroup_fixtures(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_FixtureGroup_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_FixtureGroup_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FixtureGroup", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_fixtureGroup_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_fixtureGroups(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_fixtureGroups,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().FixtureGroups(ctx, fc.Args["projectId"].(string))
+		},
+		nil,
+		ec.marshalNFixtureGroup2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureGroupᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_fixtureGroups(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FixtureGroup_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureGroup_refId(ctx, field)
+			case "name":
+				return ec.fieldContext_FixtureGroup_name(ctx, field)
+			case "description":
+				return ec.fieldContext_FixtureGroup_description(ctx, field)
+			case "eosNumber":
+				return ec.fieldContext_FixtureGroup_eosNumber(ctx, field)
+			case "projectOrder":
+				return ec.fieldContext_FixtureGroup_projectOrder(ctx, field)
+			case "project":
+				return ec.fieldContext_FixtureGroup_project(ctx, field)
+			case "fixtures":
+				return ec.fieldContext_FixtureGroup_fixtures(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_FixtureGroup_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_FixtureGroup_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FixtureGroup", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_fixtureGroups_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -41776,6 +43430,8 @@ func (ec *executionContext) fieldContext_Query_currentActiveLook(_ context.Conte
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Look_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_Look_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_Look_name(ctx, field)
 			case "description":
@@ -42776,6 +44432,8 @@ func (ec *executionContext) fieldContext_Query_fixturesByIds(ctx context.Context
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureInstance_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureInstance_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_FixtureInstance_name(ctx, field)
 			case "description":
@@ -42857,6 +44515,8 @@ func (ec *executionContext) fieldContext_Query_looksByIds(ctx context.Context, f
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Look_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_Look_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_Look_name(ctx, field)
 			case "description":
@@ -43044,6 +44704,8 @@ func (ec *executionContext) fieldContext_Query_lookBoardsByIds(ctx context.Conte
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_LookBoard_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_LookBoard_refId(ctx, field)
 			case "name":
 				return ec.fieldContext_LookBoard_name(ctx, field)
 			case "description":
@@ -43109,6 +44771,8 @@ func (ec *executionContext) fieldContext_Query_fixtureDefinitionsByIds(ctx conte
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_FixtureDefinition_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureDefinition_refId(ctx, field)
 			case "manufacturer":
 				return ec.fieldContext_FixtureDefinition_manufacturer(ctx, field)
 			case "model":
@@ -49591,6 +51255,61 @@ func (ec *executionContext) unmarshalInputCreateFixtureDefinitionInput(ctx conte
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputCreateFixtureGroupInput(ctx context.Context, obj any) (CreateFixtureGroupInput, error) {
+	var it CreateFixtureGroupInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"projectId", "name", "description", "fixtureIds", "eosNumber"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "projectId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProjectID = data
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "description":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Description = graphql.OmittableOf(data)
+		case "fixtureIds":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("fixtureIds"))
+			data, err := ec.unmarshalNID2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FixtureIds = data
+		case "eosNumber":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("eosNumber"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.EosNumber = graphql.OmittableOf(data)
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCreateFixtureInstanceInput(ctx context.Context, obj any) (CreateFixtureInstanceInput, error) {
 	var it CreateFixtureInstanceInput
 	asMap := map[string]any{}
@@ -51373,6 +53092,40 @@ func (ec *executionContext) unmarshalInputRegisterInput(ctx context.Context, obj
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputReorderFixturesInGroupInput(ctx context.Context, obj any) (ReorderFixturesInGroupInput, error) {
+	var it ReorderFixturesInGroupInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"groupId", "fixtureIds"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "groupId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("groupId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.GroupID = data
+		case "fixtureIds":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("fixtureIds"))
+			data, err := ec.unmarshalNID2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FixtureIds = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUpdateAuthSettingsInput(ctx context.Context, obj any) (UpdateAuthSettingsInput, error) {
 	var it UpdateAuthSettingsInput
 	asMap := map[string]any{}
@@ -51643,6 +53396,61 @@ func (ec *executionContext) unmarshalInputUpdateEffectInput(ctx context.Context,
 				return it, err
 			}
 			it.MasterValue = graphql.OmittableOf(data)
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateFixtureGroupInput(ctx context.Context, obj any) (UpdateFixtureGroupInput, error) {
+	var it UpdateFixtureGroupInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"id", "name", "description", "eosNumber", "projectOrder"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "id":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ID = data
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = graphql.OmittableOf(data)
+		case "description":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Description = graphql.OmittableOf(data)
+		case "eosNumber":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("eosNumber"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.EosNumber = graphql.OmittableOf(data)
+		case "projectOrder":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectOrder"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProjectOrder = graphql.OmittableOf(data)
 		}
 	}
 
@@ -55465,6 +57273,11 @@ func (ec *executionContext) _FixtureDefinition(ctx context.Context, sel ast.Sele
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "refId":
+			out.Values[i] = ec._FixtureDefinition_refId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "manufacturer":
 			out.Values[i] = ec._FixtureDefinition_manufacturer(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -55647,6 +57460,205 @@ func (ec *executionContext) _FixtureDefinition(ctx context.Context, sel ast.Sele
 	return out
 }
 
+var fixtureGroupImplementors = []string{"FixtureGroup"}
+
+func (ec *executionContext) _FixtureGroup(ctx context.Context, sel ast.SelectionSet, obj *models.FixtureGroup) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, fixtureGroupImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("FixtureGroup")
+		case "id":
+			out.Values[i] = ec._FixtureGroup_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "refId":
+			out.Values[i] = ec._FixtureGroup_refId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "name":
+			out.Values[i] = ec._FixtureGroup_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "description":
+			out.Values[i] = ec._FixtureGroup_description(ctx, field, obj)
+		case "eosNumber":
+			out.Values[i] = ec._FixtureGroup_eosNumber(ctx, field, obj)
+		case "projectOrder":
+			out.Values[i] = ec._FixtureGroup_projectOrder(ctx, field, obj)
+		case "project":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._FixtureGroup_project(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "fixtures":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._FixtureGroup_fixtures(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "createdAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._FixtureGroup_createdAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "updatedAt":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._FixtureGroup_updatedAt(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var fixtureInstanceImplementors = []string{"FixtureInstance"}
 
 func (ec *executionContext) _FixtureInstance(ctx context.Context, sel ast.SelectionSet, obj *models.FixtureInstance) graphql.Marshaler {
@@ -55660,6 +57672,11 @@ func (ec *executionContext) _FixtureInstance(ctx context.Context, sel ast.Select
 			out.Values[i] = graphql.MarshalString("FixtureInstance")
 		case "id":
 			out.Values[i] = ec._FixtureInstance_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "refId":
+			out.Values[i] = ec._FixtureInstance_refId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
@@ -57161,6 +59178,11 @@ func (ec *executionContext) _Look(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "refId":
+			out.Values[i] = ec._Look_refId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "name":
 			out.Values[i] = ec._Look_name(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -57348,6 +59370,11 @@ func (ec *executionContext) _LookBoard(ctx context.Context, sel ast.SelectionSet
 			out.Values[i] = graphql.MarshalString("LookBoard")
 		case "id":
 			out.Values[i] = ec._LookBoard_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "refId":
+			out.Values[i] = ec._LookBoard_refId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
@@ -58965,6 +60992,69 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "activateLookFromBoard":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_activateLookFromBoard(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createFixtureGroup":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createFixtureGroup(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateFixtureGroup":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateFixtureGroup(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteFixtureGroup":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteFixtureGroup(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "addFixturesToGroup":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_addFixturesToGroup(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "removeFixturesFromGroup":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_removeFixturesFromGroup(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reorderFixturesInGroup":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_reorderFixturesInGroup(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkCreateFixtureGroups":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkCreateFixtureGroups(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkUpdateFixtureGroups":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkUpdateFixtureGroups(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bulkDeleteFixtureGroups":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_bulkDeleteFixtureGroups(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -62071,6 +64161,47 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_lookBoardButton(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "fixtureGroup":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_fixtureGroup(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "fixtureGroups":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_fixtureGroups(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
 				return res
 			}
 
@@ -65485,6 +67616,31 @@ func (ec *executionContext) unmarshalNCreateFixtureDefinitionInput2ᚖgithubᚗc
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNCreateFixtureGroupInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateFixtureGroupInput(ctx context.Context, v any) (CreateFixtureGroupInput, error) {
+	res, err := ec.unmarshalInputCreateFixtureGroupInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNCreateFixtureGroupInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateFixtureGroupInputᚄ(ctx context.Context, v any) ([]*CreateFixtureGroupInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*CreateFixtureGroupInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNCreateFixtureGroupInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateFixtureGroupInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNCreateFixtureGroupInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateFixtureGroupInput(ctx context.Context, v any) (*CreateFixtureGroupInput, error) {
+	res, err := ec.unmarshalInputCreateFixtureGroupInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateFixtureInstanceInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐCreateFixtureInstanceInput(ctx context.Context, v any) (CreateFixtureInstanceInput, error) {
 	res, err := ec.unmarshalInputCreateFixtureInstanceInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -66738,6 +68894,64 @@ func (ec *executionContext) unmarshalNFixtureDefinitionUpdateItem2ᚕᚖgithub�
 func (ec *executionContext) unmarshalNFixtureDefinitionUpdateItem2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureDefinitionUpdateItem(ctx context.Context, v any) (*FixtureDefinitionUpdateItem, error) {
 	res, err := ec.unmarshalInputFixtureDefinitionUpdateItem(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNFixtureGroup2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureGroup(ctx context.Context, sel ast.SelectionSet, v models.FixtureGroup) graphql.Marshaler {
+	return ec._FixtureGroup(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNFixtureGroup2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureGroupᚄ(ctx context.Context, sel ast.SelectionSet, v []*models.FixtureGroup) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNFixtureGroup2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureGroup(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNFixtureGroup2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureGroup(ctx context.Context, sel ast.SelectionSet, v *models.FixtureGroup) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._FixtureGroup(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNFixtureInstance2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureInstance(ctx context.Context, sel ast.SelectionSet, v models.FixtureInstance) graphql.Marshaler {
@@ -68814,6 +71028,11 @@ func (ec *executionContext) unmarshalNRegisterInput2githubᚗcomᚋbbernsteinᚋ
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNReorderFixturesInGroupInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐReorderFixturesInGroupInput(ctx context.Context, v any) (ReorderFixturesInGroupInput, error) {
+	res, err := ec.unmarshalInputReorderFixturesInGroupInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNRepositoryVersion2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐRepositoryVersionᚄ(ctx context.Context, sel ast.SelectionSet, v []*RepositoryVersion) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
@@ -69232,6 +71451,31 @@ func (ec *executionContext) unmarshalNUpdateEffectFixtureInput2githubᚗcomᚋbb
 func (ec *executionContext) unmarshalNUpdateEffectInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUpdateEffectInput(ctx context.Context, v any) (UpdateEffectInput, error) {
 	res, err := ec.unmarshalInputUpdateEffectInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateFixtureGroupInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUpdateFixtureGroupInput(ctx context.Context, v any) (UpdateFixtureGroupInput, error) {
+	res, err := ec.unmarshalInputUpdateFixtureGroupInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateFixtureGroupInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUpdateFixtureGroupInputᚄ(ctx context.Context, v any) ([]*UpdateFixtureGroupInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*UpdateFixtureGroupInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNUpdateFixtureGroupInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUpdateFixtureGroupInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNUpdateFixtureGroupInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUpdateFixtureGroupInput(ctx context.Context, v any) (*UpdateFixtureGroupInput, error) {
+	res, err := ec.unmarshalInputUpdateFixtureGroupInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalNUpdateFixtureInstanceInput2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐUpdateFixtureInstanceInput(ctx context.Context, v any) (UpdateFixtureInstanceInput, error) {
@@ -70219,6 +72463,13 @@ func (ec *executionContext) unmarshalOFixtureFilterInput2ᚖgithubᚗcomᚋbbern
 	}
 	res, err := ec.unmarshalInputFixtureFilterInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOFixtureGroup2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureGroup(ctx context.Context, sel ast.SelectionSet, v *models.FixtureGroup) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._FixtureGroup(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalOFixtureInstance2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureInstance(ctx context.Context, sel ast.SelectionSet, v *models.FixtureInstance) graphql.Marshaler {
