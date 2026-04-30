@@ -685,3 +685,36 @@ type OperationPointer struct {
 }
 
 func (OperationPointer) TableName() string { return "operation_pointers" }
+
+// FixtureGroup represents a named collection of fixture instances within a
+// project. Surfaces in EOS ASCII as $Group blocks; each LacyLights group has
+// an optional EosNumber that the writer uses for stable group numbering.
+// Table: fixture_groups
+type FixtureGroup struct {
+	ID           string  `gorm:"column:id;primaryKey"`
+	ProjectID    string  `gorm:"column:project_id;index;not null"`
+	Name         string  `gorm:"column:name;not null"`
+	Description  *string `gorm:"column:description"`
+	EosNumber    *int    `gorm:"column:eos_number"` // nullable; stable across exports once assigned
+	RefID        string  `gorm:"column:ref_id;not null;default:''"`
+	ProjectOrder *int    `gorm:"column:project_order"`
+
+	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt time.Time `gorm:"column:updated_at;autoUpdateTime"`
+
+	Members []FixtureGroupMember `gorm:"foreignKey:GroupID;constraint:OnDelete:CASCADE"`
+}
+
+func (FixtureGroup) TableName() string { return "fixture_groups" }
+
+// FixtureGroupMember is a junction row tying a FixtureGroup to a
+// FixtureInstance. Composite PK (group_id, fixture_id) ensures one
+// row per membership; the OrderIndex column gives stable iteration.
+// Table: fixture_group_members
+type FixtureGroupMember struct {
+	GroupID    string `gorm:"column:group_id;primaryKey"`
+	FixtureID  string `gorm:"column:fixture_id;primaryKey"`
+	OrderIndex int    `gorm:"column:order_index;not null"`
+}
+
+func (FixtureGroupMember) TableName() string { return "fixture_group_members" }
