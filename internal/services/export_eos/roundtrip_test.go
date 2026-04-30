@@ -34,7 +34,7 @@ func TestRoundtrip_GoldenOTBPA(t *testing.T) {
 	f := openFixture(t, "golden_otbpa.asc")
 	defer func() { _ = f.Close() }()
 
-	imp := importeos.NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	imp := importeos.NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := imp.Import(context.Background(), f, importeos.Options{NewProjectName: ptr("OTBPA Roundtrip")})
 	if err != nil {
@@ -89,7 +89,7 @@ func TestRoundtrip_SyntheticSmall(t *testing.T) {
 	f := openFixture(t, "basic_cues.asc")
 	defer func() { _ = f.Close() }()
 
-	imp := importeos.NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	imp := importeos.NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := imp.Import(context.Background(), f, importeos.Options{NewProjectName: ptr("Roundtrip Small")})
 	if err != nil {

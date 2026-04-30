@@ -62,19 +62,21 @@ func formatCueNumber(n float64) string {
 
 // Mapper applies a parsed Show + Sidecar to LacyLights repos.
 type Mapper struct {
-	projectRepo   *repositories.ProjectRepository
-	fixtureRepo   *repositories.FixtureRepository
-	lookRepo      *repositories.LookRepository
-	cueListRepo   *repositories.CueListRepository
-	cueRepo       *repositories.CueRepository
-	lookBoardRepo *repositories.LookBoardRepository
+	projectRepo      *repositories.ProjectRepository
+	fixtureRepo      *repositories.FixtureRepository
+	fixtureGroupRepo *repositories.FixtureGroupRepository
+	lookRepo         *repositories.LookRepository
+	cueListRepo      *repositories.CueListRepository
+	cueRepo          *repositories.CueRepository
+	lookBoardRepo    *repositories.LookBoardRepository
 }
 
 // NewMapper constructs a Mapper.
 func NewMapper(p *repositories.ProjectRepository, f *repositories.FixtureRepository,
+	fg *repositories.FixtureGroupRepository,
 	l *repositories.LookRepository, cl *repositories.CueListRepository,
 	c *repositories.CueRepository, lb *repositories.LookBoardRepository) *Mapper {
-	return &Mapper{p, f, l, cl, c, lb}
+	return &Mapper{p, f, fg, l, cl, c, lb}
 }
 
 // Apply maps the parsed show into the database.
@@ -203,7 +205,7 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 	if err := m.applyCues(ctx, projectID, show, states, table, &res.LooksCount, &res.CueListsCount, &res.CuesCount); err != nil {
 		return nil, err
 	}
-	if err := m.applyGroups(ctx, projectID, show, &res.GroupsCount, warn); err != nil {
+	if err := m.applyGroups(ctx, projectID, show, eosChannelToInstanceID, &res.GroupsCount, warn); err != nil {
 		return nil, err
 	}
 	if err := m.applySidecar(ctx, projectID, sidecar, warn); err != nil {
@@ -545,15 +547,67 @@ func (m *Mapper) applyCues(ctx context.Context, projectID string, show *Show,
 	return nil
 }
 
-func (m *Mapper) applyGroups(_ context.Context, _ string, show *Show, _ *int, warn *Collector) error {
-	// Group persistence is part of Task 14c. Held back until then — but
-	// surface a warning when the file actually contained groups, so a
-	// caller doesn't silently lose that data.
-	if len(show.Groups) > 0 {
-		warn.Add(WarnGroupsSkipped, SeverityInfo,
-			fmt.Sprintf("dropped %d $Group block(s); group persistence is not yet implemented",
-				len(show.Groups)),
-			map[string]string{"count": strconv.Itoa(len(show.Groups))})
+func (m *Mapper) applyGroups(ctx context.Context, projectID string, show *Show, chToFix map[int]string, groupsCount *int, warn *Collector) error {
+	for _, g := range show.Groups {
+		// Resolve group members from EOS channel numbers to fixture IDs.
+		fixtureIDs := make([]string, 0, len(g.Channels))
+		for _, ch := range g.Channels {
+			fid, ok := chToFix[ch]
+			if !ok {
+				warn.Add(WarnGroupChannelUnresolved, SeverityWarn,
+					fmt.Sprintf("group %s references unpatched channel %d", g.Number, ch),
+					map[string]string{
+						"groupNumber": g.Number,
+						"channel":     strconv.Itoa(ch),
+					})
+				continue
+			}
+			fixtureIDs = append(fixtureIDs, fid)
+		}
+
+		name := g.Label
+		if name == "" && g.UnicodeText != nil {
+			name = *g.UnicodeText
+		}
+		if name == "" {
+			name = fmt.Sprintf("Group %s", g.Number)
+		}
+
+		var eosNumber *int
+		if n, err := strconv.Atoi(g.Number); err == nil {
+			eosNumber = &n
+		}
+
+		// Idempotent re-import: if a group with the same EosNumber already
+		// exists in this project, update its name and members rather than
+		// creating a duplicate.
+		if eosNumber != nil {
+			existing, err := m.fixtureGroupRepo.FindByEosNumber(ctx, projectID, *eosNumber)
+			if err != nil {
+				return fmt.Errorf("find existing group: %w", err)
+			}
+			if existing != nil {
+				existing.Name = name
+				if err := m.fixtureGroupRepo.Update(ctx, existing); err != nil {
+					return fmt.Errorf("update group: %w", err)
+				}
+				if err := m.fixtureGroupRepo.SetMembers(ctx, existing.ID, fixtureIDs); err != nil {
+					return fmt.Errorf("set members: %w", err)
+				}
+				*groupsCount++
+				continue
+			}
+		}
+
+		fg := &models.FixtureGroup{
+			ProjectID: projectID,
+			Name:      name,
+			EosNumber: eosNumber,
+		}
+		if err := m.fixtureGroupRepo.CreateWithMembers(ctx, fg, fixtureIDs); err != nil {
+			return fmt.Errorf("create group: %w", err)
+		}
+		*groupsCount++
 	}
 	return nil
 }

@@ -36,7 +36,7 @@ $Patch 2 2 9001
    Text Back
 `)
 
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Import(context.Background(), src, Options{NewProjectName: ptr("Test Show")})
 	if err != nil {
@@ -65,7 +65,7 @@ func openFixtureFile(t *testing.T, name string) *os.File {
 func TestImport_TargetProjectNotFound(t *testing.T) {
 	deps := newTestDeps(t)
 	defer deps.close()
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	missing := "definitely-not-a-real-project"
 	_, err := svc.Import(context.Background(), strings.NewReader(`Ident 3:0
@@ -95,7 +95,7 @@ func TestImport_AddressConflictEmitsWarning(t *testing.T) {
 	defer deps.close()
 	f := openFixtureFile(t, "conflict_addresses.asc")
 	defer func() { _ = f.Close() }()
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr("X")})
 	if err != nil {
@@ -120,7 +120,7 @@ func TestMapper_PalettesBecomeLooksInDedicatedCueLists(t *testing.T) {
 	f := openFixtureFile(t, "palettes_color_focus.asc")
 	defer func() { _ = f.Close() }()
 
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr("Pal")})
 	if err != nil {
@@ -146,7 +146,7 @@ func TestMapper_CuesProduceTrackedSnapshots(t *testing.T) {
 	f := openFixtureFile(t, "tracking.asc")
 	defer func() { _ = f.Close() }()
 
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr("Track")})
 	if err != nil {
@@ -205,7 +205,7 @@ func TestMapper_RefIDsDeterministicAcrossProjects(t *testing.T) {
 		t.Cleanup(deps.close)
 		f := openFixtureFile(t, "minimal_patch.asc")
 		t.Cleanup(func() { _ = f.Close() })
-		svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+		svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 			deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 		res, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr(name)})
 		if err != nil {
@@ -240,5 +240,89 @@ func TestMapper_RefIDsDeterministicAcrossProjects(t *testing.T) {
 	}
 	if !strings.Contains(a, "ch-") {
 		t.Errorf("expected EOS-derived RefIDs in %q", a)
+	}
+}
+
+func TestMapper_GroupsCreated(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+
+	f := openFixtureFile(t, "groups_only.asc")
+	defer func() { _ = f.Close() }()
+
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr("Test Show")})
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	if res.GroupsCount != 2 {
+		t.Errorf("GroupsCount = %d, want 2", res.GroupsCount)
+	}
+
+	groups := deps.MustListGroupsByProject(t, res.ProjectID)
+	if len(groups) != 2 {
+		t.Fatalf("got %d groups, want 2", len(groups))
+	}
+
+	byEos := map[int]models.FixtureGroup{}
+	for _, g := range groups {
+		if g.EosNumber == nil {
+			t.Errorf("group %s has nil EosNumber", g.Name)
+			continue
+		}
+		byEos[*g.EosNumber] = g
+	}
+
+	if got := byEos[1].Name; got != "SR Specials" {
+		t.Errorf("group 1 name = %q", got)
+	}
+	if got := byEos[2].Name; got != "All Lights" {
+		t.Errorf("group 2 name = %q", got)
+	}
+
+	// Membership check: group 2 should have 3 fixtures.
+	ms2, err := deps.fixtureGroupRepo.GetMembers(context.Background(), byEos[2].ID)
+	if err != nil {
+		t.Fatalf("members: %v", err)
+	}
+	if len(ms2) != 3 {
+		t.Errorf("group 2 members = %d, want 3", len(ms2))
+	}
+}
+
+func TestMapper_GroupChannelUnresolvedWarn(t *testing.T) {
+	asc := `Ident 3:0
+$ParamType 1 1 Intens
+$Personality 1
+$$Manuf Generic
+$$Model Dimmer
+$$Footprint 1
+$$PersChan 1 1 1 0 0
+$Patch 1 1 1
+   Text A
+$Group 1
+   Text Mostly
+   1 99
+`
+	deps := newTestDeps(t)
+	defer deps.close()
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Import(context.Background(), strings.NewReader(asc), Options{NewProjectName: ptr("T")})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if res.GroupsCount != 1 {
+		t.Errorf("GroupsCount = %d", res.GroupsCount)
+	}
+	saw := false
+	for _, w := range res.Warnings {
+		if w.Code == WarnGroupChannelUnresolved {
+			saw = true
+		}
+	}
+	if !saw {
+		t.Errorf("expected WarnGroupChannelUnresolved")
 	}
 }

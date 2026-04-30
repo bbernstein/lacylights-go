@@ -30,10 +30,19 @@ func TestService_ImportFailsWhenRepositoriesMissing(t *testing.T) {
 			wantSub: "fixture repository",
 		},
 		{
+			name: "missing_fixture_group",
+			mutate: func(d *testDeps, s *Service) {
+				s.projectRepo = d.projectRepo
+				s.fixtureRepo = d.fixtureRepo
+			},
+			wantSub: "fixture group repository",
+		},
+		{
 			name: "missing_look",
 			mutate: func(d *testDeps, s *Service) {
 				s.projectRepo = d.projectRepo
 				s.fixtureRepo = d.fixtureRepo
+				s.fixtureGroupRepo = d.fixtureGroupRepo
 			},
 			wantSub: "look repository",
 		},
@@ -42,6 +51,7 @@ func TestService_ImportFailsWhenRepositoriesMissing(t *testing.T) {
 			mutate: func(d *testDeps, s *Service) {
 				s.projectRepo = d.projectRepo
 				s.fixtureRepo = d.fixtureRepo
+				s.fixtureGroupRepo = d.fixtureGroupRepo
 				s.lookRepo = d.lookRepo
 			},
 			wantSub: "cue list repository",
@@ -51,6 +61,7 @@ func TestService_ImportFailsWhenRepositoriesMissing(t *testing.T) {
 			mutate: func(d *testDeps, s *Service) {
 				s.projectRepo = d.projectRepo
 				s.fixtureRepo = d.fixtureRepo
+				s.fixtureGroupRepo = d.fixtureGroupRepo
 				s.lookRepo = d.lookRepo
 				s.cueListRepo = d.cueListRepo
 			},
@@ -61,6 +72,7 @@ func TestService_ImportFailsWhenRepositoriesMissing(t *testing.T) {
 			mutate: func(d *testDeps, s *Service) {
 				s.projectRepo = d.projectRepo
 				s.fixtureRepo = d.fixtureRepo
+				s.fixtureGroupRepo = d.fixtureGroupRepo
 				s.lookRepo = d.lookRepo
 				s.cueListRepo = d.cueListRepo
 				s.cueRepo = d.cueRepo
@@ -117,7 +129,7 @@ $Patch 1 1 9001
    Text Front
 `)
 
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Import(context.Background(), src, Options{
 		NewProjectName: ptr("With Group"),

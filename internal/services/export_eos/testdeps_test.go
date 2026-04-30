@@ -11,13 +11,14 @@ import (
 )
 
 type testDeps struct {
-	db            *gorm.DB
-	projectRepo   *repositories.ProjectRepository
-	fixtureRepo   *repositories.FixtureRepository
-	lookRepo      *repositories.LookRepository
-	cueListRepo   *repositories.CueListRepository
-	cueRepo       *repositories.CueRepository
-	lookBoardRepo *repositories.LookBoardRepository
+	db               *gorm.DB
+	projectRepo      *repositories.ProjectRepository
+	fixtureRepo      *repositories.FixtureRepository
+	fixtureGroupRepo *repositories.FixtureGroupRepository
+	lookRepo         *repositories.LookRepository
+	cueListRepo      *repositories.CueListRepository
+	cueRepo          *repositories.CueRepository
+	lookBoardRepo    *repositories.LookBoardRepository
 }
 
 func newTestDeps(t *testing.T) *testDeps {
@@ -43,19 +44,22 @@ func newTestDeps(t *testing.T) *testDeps {
 		&models.Setting{},
 		&models.LookBoard{},
 		&models.LookBoardButton{},
+		&models.FixtureGroup{},
+		&models.FixtureGroupMember{},
 		&models.UserGroup{},
 		&models.UserGroupMember{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	return &testDeps{
-		db:            db,
-		projectRepo:   repositories.NewProjectRepository(db),
-		fixtureRepo:   repositories.NewFixtureRepository(db),
-		lookRepo:      repositories.NewLookRepository(db),
-		cueListRepo:   repositories.NewCueListRepository(db),
-		cueRepo:       repositories.NewCueRepository(db),
-		lookBoardRepo: repositories.NewLookBoardRepository(db),
+		db:               db,
+		projectRepo:      repositories.NewProjectRepository(db),
+		fixtureRepo:      repositories.NewFixtureRepository(db),
+		fixtureGroupRepo: repositories.NewFixtureGroupRepository(db),
+		lookRepo:         repositories.NewLookRepository(db),
+		cueListRepo:      repositories.NewCueListRepository(db),
+		cueRepo:          repositories.NewCueRepository(db),
+		lookBoardRepo:    repositories.NewLookBoardRepository(db),
 	}
 }
 
