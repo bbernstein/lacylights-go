@@ -171,6 +171,12 @@ func (s *Service) loadGroups(
 			}
 			continue
 		}
+		// Defensive: AssignAndPersistMissingEosNumbers above guarantees
+		// EosNumber is non-nil here. Skip if the invariant is somehow
+		// violated rather than panicking.
+		if g.EosNumber == nil {
+			continue
+		}
 		number := strconv.Itoa(*g.EosNumber)
 		out = append(out, GroupOut{
 			Number:   number,

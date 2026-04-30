@@ -114,7 +114,6 @@ func main() {
 		{"mode_channels", &models.ModeChannel{}, []string{"id", "mode_id", "channel_id"}},
 		{"fixture_instances", &models.FixtureInstance{}, []string{"id", "project_id"}},
 		{"instance_channels", &models.InstanceChannel{}, []string{"id", "fixture_id"}},
-		// Task 14c: fixture groups + junction
 		{"fixture_groups", &models.FixtureGroup{}, []string{"id", "project_id"}},
 		{"fixture_group_members", &models.FixtureGroupMember{}, []string{"group_id", "fixture_id"}},
 		{"looks", &models.Look{}, []string{"id", "project_id"}},
@@ -161,7 +160,7 @@ func main() {
 
 	log.Println("Database migrations complete")
 
-	// Task 14c: backfill ref_id columns and create unique indexes.
+	// Backfill ref_id columns and create unique indexes.
 	// Both functions are idempotent so they're safe to run on every boot.
 	if err := migrations.BackfillRefIDs(db); err != nil {
 		log.Fatalf("Failed to backfill ref_ids: %v", err)

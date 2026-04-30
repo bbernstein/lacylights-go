@@ -60,7 +60,7 @@ func sanitizeRefIDPart(s string) string {
 		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_', r == '-':
 			b.WriteRune(r)
 		default:
-			b.WriteByte('_')
+			b.WriteRune('_')
 		}
 	}
 	return b.String()
