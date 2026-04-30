@@ -320,7 +320,6 @@ func (m *Mapper) resolveProject(ctx context.Context, show *Show, opts Options) (
 	return p.ID, nil
 }
 
-// createInstanceChannelsFor copies definition channels to instance channels.
 // applyDenormalizedDefFields copies manufacturer, model, type and channel
 // count from the fixture definition onto a fixture instance. The instance
 // table denormalizes these to avoid a JOIN on every read; without this,
@@ -339,6 +338,7 @@ func applyDenormalizedDefFields(instance *models.FixtureInstance, def *models.Fi
 	instance.Type = &def.Type
 }
 
+// createInstanceChannelsFor copies definition channels to instance channels.
 func createInstanceChannelsFor(defChannels []models.ChannelDefinition) []models.InstanceChannel {
 	out := make([]models.InstanceChannel, 0, len(defChannels))
 	for _, ch := range defChannels {

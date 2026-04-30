@@ -318,7 +318,11 @@ func (r *fixtureInstanceResolver) Manufacturer(ctx context.Context, obj *models.
 	if obj.Manufacturer != nil {
 		return *obj.Manufacturer, nil
 	}
-	if def := r.lookupDefinition(ctx, obj); def != nil {
+	def, err := r.lookupDefinition(ctx, obj)
+	if err != nil {
+		return "", err
+	}
+	if def != nil {
 		return def.Manufacturer, nil
 	}
 	return "", nil
@@ -329,7 +333,11 @@ func (r *fixtureInstanceResolver) Model(ctx context.Context, obj *models.Fixture
 	if obj.Model != nil {
 		return *obj.Model, nil
 	}
-	if def := r.lookupDefinition(ctx, obj); def != nil {
+	def, err := r.lookupDefinition(ctx, obj)
+	if err != nil {
+		return "", err
+	}
+	if def != nil {
 		return def.Model, nil
 	}
 	return "", nil
@@ -339,6 +347,13 @@ func (r *fixtureInstanceResolver) Model(ctx context.Context, obj *models.Fixture
 func (r *fixtureInstanceResolver) Type(ctx context.Context, obj *models.FixtureInstance) (generated.FixtureType, error) {
 	if obj.Type != nil {
 		return generated.FixtureType(*obj.Type), nil
+	}
+	def, err := r.lookupDefinition(ctx, obj)
+	if err != nil {
+		return generated.FixtureTypeOther, err
+	}
+	if def != nil {
+		return generated.FixtureType(def.Type), nil
 	}
 	return generated.FixtureTypeOther, nil
 }
