@@ -560,30 +560,50 @@ func (s *Service) buildSidecar(
 		return SidecarOut{}, fmt.Errorf("export_eos: look boards: %w", err)
 	}
 	sort.SliceStable(boards, func(i, j int) bool { return boards[i].ID < boards[j].ID })
-	// TODO: batch the per-board GetButtons calls when project scale warrants
-	// — currently O(boards) round-trips per export. Acceptable for typical
-	// shows (low single-digit board counts).
+
+	// Pass 1: gather buttons for every board and collect referenced look IDs.
+	buttonsByBoard := make(map[string][]models.LookBoardButton, len(boards))
+	lookIDSet := map[string]struct{}{}
 	for _, b := range boards {
 		buttons, err := s.lookBoardRepo.GetButtons(ctx, b.ID)
 		if err != nil {
 			return SidecarOut{}, fmt.Errorf("export_eos: look board buttons: %w", err)
 		}
 		sort.SliceStable(buttons, func(i, j int) bool { return buttons[i].ID < buttons[j].ID })
-		var sb []importeos.SidecarLookBoardButton
+		buttonsByBoard[b.ID] = buttons
 		for _, btn := range buttons {
+			lookIDSet[btn.LookID] = struct{}{}
+		}
+	}
+	// Pass 2: resolve all referenced look IDs in a single batch query.
+	lookRefByID := map[string]string{}
+	if len(lookIDSet) > 0 {
+		ids := make([]string, 0, len(lookIDSet))
+		for id := range lookIDSet {
+			ids = append(ids, id)
+		}
+		looks, err := s.lookRepo.FindByIDs(ctx, ids)
+		if err != nil {
+			return SidecarOut{}, fmt.Errorf("export_eos: look refs: %w", err)
+		}
+		for i := range looks {
+			lookRefByID[looks[i].ID] = looks[i].RefID
+		}
+	}
+	// Pass 3: emit board records with refIDs resolved.
+	for _, b := range boards {
+		var sb []importeos.SidecarLookBoardButton
+		for _, btn := range buttonsByBoard[b.ID] {
 			color := ""
 			if btn.Color != nil {
 				color = *btn.Color
 			}
-			look, err := s.lookRepo.FindByID(ctx, btn.LookID)
-			if err != nil {
-				return SidecarOut{}, fmt.Errorf("export_eos: look for button: %w", err)
-			}
-			if look == nil {
+			refID, ok := lookRefByID[btn.LookID]
+			if !ok {
 				continue // dangling button reference; skip
 			}
 			sb = append(sb, importeos.SidecarLookBoardButton{
-				LookRefID: look.RefID,
+				LookRefID: refID,
 				X:         btn.LayoutX,
 				Y:         btn.LayoutY,
 				Color:     color,

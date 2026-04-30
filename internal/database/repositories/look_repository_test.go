@@ -136,3 +136,35 @@ func TestLookRepository_FindByRefID(t *testing.T) {
 		t.Errorf("expected nil miss, got %+v", miss)
 	}
 }
+
+func TestLookRepository_FindByIDs(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := NewLookRepository(testDB.DB)
+
+	mk := func(name string) *models.Look {
+		l := &models.Look{ProjectID: "p1", Name: name}
+		if err := repo.Create(ctx, l); err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+		return l
+	}
+	a, b, c := mk("A"), mk("B"), mk("C")
+
+	got, err := repo.FindByIDs(ctx, nil)
+	if err != nil {
+		t.Errorf("empty: %v", err)
+	}
+	if got == nil || len(got) != 0 {
+		t.Errorf("empty: want non-nil empty slice, got %v", got)
+	}
+
+	got, err = repo.FindByIDs(ctx, []string{a.ID, "missing", b.ID, c.ID})
+	if err != nil {
+		t.Fatalf("hits: %v", err)
+	}
+	if len(got) != 3 {
+		t.Errorf("got %d, want 3", len(got))
+	}
+}

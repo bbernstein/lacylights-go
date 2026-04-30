@@ -52,7 +52,7 @@ func (r *FixtureRepository) FindByID(ctx context.Context, id string) (*models.Fi
 // the result by ID. Empty input returns an empty slice without a query.
 func (r *FixtureRepository) FindByIDs(ctx context.Context, ids []string) ([]models.FixtureInstance, error) {
 	if len(ids) == 0 {
-		return nil, nil
+		return []models.FixtureInstance{}, nil
 	}
 	var fixtures []models.FixtureInstance
 	result := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&fixtures)

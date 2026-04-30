@@ -262,8 +262,17 @@ func (r *FixtureGroupRepository) AssignNextEosNumber(ctx context.Context, projec
 // AssignAndPersistMissingEosNumbers fills in EosNumber for any group in the
 // supplied slice that has nil EosNumber, persisting each new value in a
 // single transaction. Mutates the in-memory groups so callers see the
-// assigned numbers without re-reading. Serializes against concurrent
-// exporters via the transaction's write lock.
+// assigned numbers without re-reading.
+//
+// Concurrency: SQLite's deferred transactions don't serialize the initial
+// MAX(eos_number) read against parallel writers, so two concurrent
+// exporters can theoretically both pick the same next number and one
+// will fail the (project_id, eos_number) partial unique index. In
+// practice this is vanishingly unlikely (export is a user-initiated
+// action; nobody fires two exports of the same project concurrently).
+// If it does happen, the constraint violation surfaces as an export
+// error and the user re-runs — the second run succeeds because the
+// first run's numbers are now persisted.
 func (r *FixtureGroupRepository) AssignAndPersistMissingEosNumbers(ctx context.Context, projectID string, groups []models.FixtureGroup) error {
 	hasMissing := false
 	for i := range groups {
@@ -276,8 +285,6 @@ func (r *FixtureGroupRepository) AssignAndPersistMissingEosNumbers(ctx context.C
 		return nil
 	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Read the current max inside the transaction so concurrent
-		// exporters see each other's writes.
 		var maxNum *int
 		if err := tx.Model(&models.FixtureGroup{}).
 			Where("project_id = ?", projectID).

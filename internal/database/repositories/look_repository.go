@@ -42,6 +42,18 @@ func (r *LookRepository) FindByID(ctx context.Context, id string) (*models.Look,
 	return &look, nil
 }
 
+// FindByIDs batches FindByID into a single SELECT … WHERE id IN (…). Returns
+// rows in arbitrary order; callers index by ID. Empty input returns an empty
+// slice without issuing a query.
+func (r *LookRepository) FindByIDs(ctx context.Context, ids []string) ([]models.Look, error) {
+	if len(ids) == 0 {
+		return []models.Look{}, nil
+	}
+	var looks []models.Look
+	result := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&looks)
+	return looks, result.Error
+}
+
 // Create creates a new look.
 func (r *LookRepository) Create(ctx context.Context, look *models.Look) error {
 	if look.ID == "" {

@@ -2,7 +2,6 @@ package repositories
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/bbernstein/lacylights-go/internal/database/migrations"
@@ -236,9 +235,6 @@ func TestFixtureGroupRepository_CascadeDeleteOnFixture(t *testing.T) {
 	}
 }
 
-// (Suppress unused import warning if errors isn't otherwise used)
-var _ = errors.New
-
 func TestFixtureGroupRepository_FindByID(t *testing.T) {
 	repo, _, _ := newFixtureGroupRepoForTest(t)
 	ctx := context.Background()
@@ -446,3 +442,4 @@ func TestFixtureGroupRepository_AssignAndPersistMissingEosNumbers(t *testing.T) 
 		t.Fatalf("re-run: %v", err)
 	}
 }
+
