@@ -470,3 +470,35 @@ $$ LACYLIGHTS:fade_behavior {"instanceRefId":"ch-1","channels":[{"offset":99,"be
 		t.Errorf("expected WarnSidecarUnresolved kind=fade_behavior_offset")
 	}
 }
+
+func TestMapper_SidecarSynthDefAdvisory(t *testing.T) {
+	asc := `Ident 3:0
+$ParamType 1 1 Intens
+$Personality 1
+   $$Manuf Generic
+   $$Model Dimmer
+   $$Footprint 1
+   $$PersChan 1 1 1 0 0
+$Patch 1 1 1
+   Text A
+$$ LACYLIGHTS:version 1
+$$ LACYLIGHTS:synth_def {"defRefId":"def-Other-Thing","manufacturer":"Other","model":"Thing","channelFingerprint":"1"}
+`
+	deps := newTestDeps(t)
+	defer deps.close()
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Import(context.Background(), strings.NewReader(asc), Options{NewProjectName: ptr("T")})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	saw := false
+	for _, w := range res.Warnings {
+		if w.Code == WarnSidecarUnresolved && w.Context["kind"] == "synth_def" {
+			saw = true
+		}
+	}
+	if !saw {
+		t.Errorf("expected WarnSidecarUnresolved kind=synth_def")
+	}
+}

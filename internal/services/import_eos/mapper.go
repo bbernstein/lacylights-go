@@ -703,7 +703,6 @@ func (m *Mapper) applySidecarLookBoards(ctx context.Context, projectID string, b
 	return nil
 }
 
-// applySidecarSynthDefs is a stub filled in by Task 15.
 func (m *Mapper) applySidecarFadeBehaviors(ctx context.Context, projectID string, fbs []SidecarFadeBehavior, warn *Collector) error {
 	validBehaviors := map[string]bool{"FADE": true, "SNAP": true, "SNAP_END": true}
 	for _, fb := range fbs {
@@ -752,6 +751,29 @@ func (m *Mapper) applySidecarFadeBehaviors(ctx context.Context, projectID string
 	return nil
 }
 
-func (m *Mapper) applySidecarSynthDefs(_ context.Context, _ string, _ []SidecarSynthDef, _ *Collector) error {
+// applySidecarSynthDefs treats synth_def records as advisory: if the referenced
+// definition exists, no-op (it was already linked during fixture matching);
+// otherwise emit an informational WarnSidecarUnresolved. The projectID is
+// unused because fixture definitions are global.
+func (m *Mapper) applySidecarSynthDefs(ctx context.Context, _ string, sds []SidecarSynthDef, warn *Collector) error {
+	for _, sd := range sds {
+		def, err := m.fixtureRepo.FindDefinitionByRefID(ctx, sd.DefRefID)
+		if err != nil {
+			return fmt.Errorf("find def: %w", err)
+		}
+		if def == nil {
+			warn.Add(WarnSidecarUnresolved, SeverityInfo,
+				fmt.Sprintf("synth_def references unknown definition %q (%s/%s)",
+					sd.DefRefID, sd.Manufacturer, sd.Model),
+				map[string]string{
+					"kind":         "synth_def",
+					"defRefId":     sd.DefRefID,
+					"manufacturer": sd.Manufacturer,
+					"model":        sd.Model,
+				})
+			continue
+		}
+		// Found — already linked. No-op (informational).
+	}
 	return nil
 }
