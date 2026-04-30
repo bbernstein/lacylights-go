@@ -114,6 +114,9 @@ func main() {
 		{"mode_channels", &models.ModeChannel{}, []string{"id", "mode_id", "channel_id"}},
 		{"fixture_instances", &models.FixtureInstance{}, []string{"id", "project_id"}},
 		{"instance_channels", &models.InstanceChannel{}, []string{"id", "fixture_id"}},
+		// Task 14c: fixture groups + junction
+		{"fixture_groups", &models.FixtureGroup{}, []string{"id", "project_id"}},
+		{"fixture_group_members", &models.FixtureGroupMember{}, []string{"group_id", "fixture_id"}},
 		{"looks", &models.Look{}, []string{"id", "project_id"}},
 		{"cue_lists", &models.CueList{}, []string{"id", "project_id"}},
 		{"cues", &models.Cue{}, []string{"id", "look_id", "cue_list_id"}},

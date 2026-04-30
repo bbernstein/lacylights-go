@@ -15,6 +15,7 @@ var refIDTables = []string{
 	"fixture_definitions",
 	"looks",
 	"look_boards",
+	"fixture_groups",
 }
 
 // BackfillRefIDs copies id → ref_id for every row whose ref_id is empty.
@@ -65,6 +66,17 @@ func CreateRefIDIndexes(db *gorm.DB) error {
 			"idx_look_boards_project_refid",
 			`CREATE UNIQUE INDEX IF NOT EXISTS idx_look_boards_project_refid
 				ON look_boards(project_id, ref_id)`,
+		},
+		{
+			"idx_fixture_groups_project_refid",
+			`CREATE UNIQUE INDEX IF NOT EXISTS idx_fixture_groups_project_refid
+				ON fixture_groups(project_id, ref_id)`,
+		},
+		{
+			"idx_fixture_groups_project_eos_number",
+			`CREATE UNIQUE INDEX IF NOT EXISTS idx_fixture_groups_project_eos_number
+				ON fixture_groups(project_id, eos_number)
+				WHERE eos_number IS NOT NULL`,
 		},
 	}
 	for _, s := range stmts {

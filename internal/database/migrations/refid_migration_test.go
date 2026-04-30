@@ -57,7 +57,13 @@ func TestBackfillRefIDs_SkipsMissingTablesAndColumns(t *testing.T) {
 func TestCreateRefIDIndexes_Idempotent(t *testing.T) {
 	db := openTestDB(t)
 	for _, table := range refIDTables {
-		if err := db.Exec(`CREATE TABLE ` + table + ` (id TEXT PRIMARY KEY, project_id TEXT, ref_id TEXT)`).Error; err != nil {
+		// fixture_groups has an additional eos_number column referenced by
+		// the partial unique index created in CreateRefIDIndexes.
+		schema := `(id TEXT PRIMARY KEY, project_id TEXT, ref_id TEXT)`
+		if table == "fixture_groups" {
+			schema = `(id TEXT PRIMARY KEY, project_id TEXT, ref_id TEXT, eos_number INTEGER)`
+		}
+		if err := db.Exec(`CREATE TABLE ` + table + ` ` + schema).Error; err != nil {
 			t.Fatalf("create %s: %v", table, err)
 		}
 	}
@@ -67,5 +73,37 @@ func TestCreateRefIDIndexes_Idempotent(t *testing.T) {
 	// Run twice — IF NOT EXISTS should make this a no-op.
 	if err := CreateRefIDIndexes(db); err != nil {
 		t.Fatalf("create indexes second run: %v", err)
+	}
+}
+
+func TestCreateRefIDIndexes_EnforcesEosNumberPartialUniqueness(t *testing.T) {
+	db := openTestDB(t)
+	// Create all ref_id tables — CreateRefIDIndexes builds indexes for all of them.
+	for _, table := range refIDTables {
+		schema := `(id TEXT PRIMARY KEY, project_id TEXT, ref_id TEXT)`
+		if table == "fixture_groups" {
+			schema = `(id TEXT PRIMARY KEY, project_id TEXT, ref_id TEXT, eos_number INTEGER)`
+		}
+		if err := db.Exec(`CREATE TABLE ` + table + ` ` + schema).Error; err != nil {
+			t.Fatalf("create %s: %v", table, err)
+		}
+	}
+	if err := CreateRefIDIndexes(db); err != nil {
+		t.Fatalf("create indexes: %v", err)
+	}
+
+	// Two groups in the same project with EosNumber=1 → second insert must fail.
+	if err := db.Exec(`INSERT INTO fixture_groups (id, project_id, ref_id, eos_number) VALUES ('a','p1','a',1)`).Error; err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO fixture_groups (id, project_id, ref_id, eos_number) VALUES ('b','p1','b',1)`).Error; err == nil {
+		t.Errorf("expected unique-constraint failure on duplicate EosNumber")
+	}
+	// Two groups with NULL EosNumber must succeed (partial index ignores NULLs).
+	if err := db.Exec(`INSERT INTO fixture_groups (id, project_id, ref_id, eos_number) VALUES ('c','p1','c',NULL)`).Error; err != nil {
+		t.Fatalf("third: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO fixture_groups (id, project_id, ref_id, eos_number) VALUES ('d','p1','d',NULL)`).Error; err != nil {
+		t.Fatalf("fourth: %v", err)
 	}
 }
