@@ -612,17 +612,103 @@ func (m *Mapper) applyGroups(ctx context.Context, projectID string, show *Show, 
 	return nil
 }
 
-func (m *Mapper) applySidecar(_ context.Context, _ string, sc Sidecar, warn *Collector) error {
-	// Sidecar application is part of Task 14c. As with applyGroups, warn
-	// rather than silently swallow the parsed sidecar contents.
-	if len(sc.LookBoards) > 0 || len(sc.FadeBehaviors) > 0 || len(sc.SynthDefs) > 0 {
-		warn.Add(WarnSidecarUnresolved, SeverityInfo,
-			"sidecar metadata was parsed but is not yet re-applied; will activate in a future release",
-			map[string]string{
-				"lookBoards":    strconv.Itoa(len(sc.LookBoards)),
-				"fadeBehaviors": strconv.Itoa(len(sc.FadeBehaviors)),
-				"synthDefs":     strconv.Itoa(len(sc.SynthDefs)),
-			})
+func (m *Mapper) applySidecar(ctx context.Context, projectID string, sc Sidecar, warn *Collector) error {
+	if err := m.applySidecarLookBoards(ctx, projectID, sc.LookBoards, warn); err != nil {
+		return err
 	}
+	if err := m.applySidecarFadeBehaviors(ctx, projectID, sc.FadeBehaviors, warn); err != nil {
+		return err
+	}
+	if err := m.applySidecarSynthDefs(ctx, projectID, sc.SynthDefs, warn); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *Mapper) applySidecarLookBoards(ctx context.Context, projectID string, boards []SidecarLookBoard, warn *Collector) error {
+	if len(boards) == 0 {
+		return nil
+	}
+	// Collect all referenced look refIDs and resolve in one query.
+	refIDSet := map[string]struct{}{}
+	for _, b := range boards {
+		for _, btn := range b.Buttons {
+			refIDSet[btn.LookRefID] = struct{}{}
+		}
+	}
+	refIDs := make([]string, 0, len(refIDSet))
+	for r := range refIDSet {
+		refIDs = append(refIDs, r)
+	}
+	lookByRef, err := m.lookRepo.MapByRefID(ctx, projectID, refIDs)
+	if err != nil {
+		return fmt.Errorf("resolve look refids: %w", err)
+	}
+
+	for _, b := range boards {
+		buttons := make([]models.LookBoardButton, 0, len(b.Buttons))
+		for _, btn := range b.Buttons {
+			lookID, ok := lookByRef[btn.LookRefID]
+			if !ok {
+				warn.Add(WarnSidecarUnresolved, SeverityWarn,
+					fmt.Sprintf("look board %q references unknown look %q", b.RefID, btn.LookRefID),
+					map[string]string{
+						"kind":       "look_board_button",
+						"boardRefId": b.RefID,
+						"lookRefId":  btn.LookRefID,
+					})
+				continue
+			}
+			color := btn.Color
+			buttons = append(buttons, models.LookBoardButton{
+				LookID:  lookID,
+				LayoutX: btn.X,
+				LayoutY: btn.Y,
+				Color:   &color,
+			})
+		}
+
+		// Idempotent: update existing board with same RefID, else create.
+		existing, err := m.lookBoardRepo.FindByRefID(ctx, projectID, b.RefID)
+		if err != nil {
+			return fmt.Errorf("find look board: %w", err)
+		}
+		if existing != nil {
+			existing.Name = b.Name
+			if err := m.lookBoardRepo.Update(ctx, existing); err != nil {
+				return fmt.Errorf("update look board: %w", err)
+			}
+			if err := m.lookBoardRepo.DeleteButtons(ctx, existing.ID); err != nil {
+				return fmt.Errorf("delete buttons: %w", err)
+			}
+			for i := range buttons {
+				buttons[i].LookBoardID = existing.ID
+			}
+			if len(buttons) > 0 {
+				if err := m.lookBoardRepo.CreateButtons(ctx, buttons); err != nil {
+					return fmt.Errorf("recreate buttons: %w", err)
+				}
+			}
+			continue
+		}
+		board := &models.LookBoard{
+			ProjectID: projectID,
+			Name:      b.Name,
+			RefID:     b.RefID,
+		}
+		if err := m.lookBoardRepo.CreateWithButtons(ctx, board, buttons); err != nil {
+			return fmt.Errorf("create look board: %w", err)
+		}
+	}
+	return nil
+}
+
+// applySidecarFadeBehaviors and applySidecarSynthDefs are stubs filled
+// in by Tasks 14 and 15.
+func (m *Mapper) applySidecarFadeBehaviors(_ context.Context, _ string, _ []SidecarFadeBehavior, _ *Collector) error {
+	return nil
+}
+
+func (m *Mapper) applySidecarSynthDefs(_ context.Context, _ string, _ []SidecarSynthDef, _ *Collector) error {
 	return nil
 }

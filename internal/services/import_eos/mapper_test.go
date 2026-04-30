@@ -326,3 +326,77 @@ $Group 1
 		t.Errorf("expected WarnGroupChannelUnresolved")
 	}
 }
+
+func TestMapper_SidecarLookBoardRebuilt(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+
+	f := openFixtureFile(t, "sidecar_roundtrip.asc")
+	defer f.Close()
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr("T")})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+
+	boards, _ := deps.lookBoardRepo.FindByProjectID(context.Background(), res.ProjectID)
+	if len(boards) != 1 {
+		t.Fatalf("got %d boards, want 1", len(boards))
+	}
+	if boards[0].Name != "Top" {
+		t.Errorf("name = %q", boards[0].Name)
+	}
+	btns, _ := deps.lookBoardRepo.GetButtons(context.Background(), boards[0].ID)
+	if len(btns) != 1 {
+		t.Fatalf("got %d buttons, want 1", len(btns))
+	}
+	if btns[0].Color == nil || *btns[0].Color != "#ff0000" {
+		t.Errorf("color = %v", btns[0].Color)
+	}
+}
+
+func TestMapper_SidecarLookBoardUnresolvedButton(t *testing.T) {
+	asc := `Ident 3:0
+$ParamType 1 1 Intens
+$Personality 1
+$$Manuf Generic
+$$Model Dimmer
+$$Footprint 1
+$$PersChan 1 1 1 0 0
+$Patch 1 1 1
+   Text A
+$CueList 1
+Cue 1 1
+   Text Open
+   Up 5
+   $$ChanMove  1@HFF
+$$ LACYLIGHTS:version 1
+$$ LACYLIGHTS:look_board {"refId":"b1","name":"X","buttons":[{"lookRefId":"cue-1-1","x":0,"y":0,"color":"#ff"},{"lookRefId":"missing","x":1,"y":0,"color":"#00"}]}
+`
+	deps := newTestDeps(t)
+	defer deps.close()
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Import(context.Background(), strings.NewReader(asc), Options{NewProjectName: ptr("T")})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	boards, _ := deps.lookBoardRepo.FindByProjectID(context.Background(), res.ProjectID)
+	if len(boards) != 1 {
+		t.Fatalf("got %d boards", len(boards))
+	}
+	btns, _ := deps.lookBoardRepo.GetButtons(context.Background(), boards[0].ID)
+	if len(btns) != 1 {
+		t.Errorf("got %d buttons (should drop the unresolved one)", len(btns))
+	}
+	saw := false
+	for _, w := range res.Warnings {
+		if w.Code == WarnSidecarUnresolved && w.Context["kind"] == "look_board_button" {
+			saw = true
+		}
+	}
+	if !saw {
+		t.Errorf("expected WarnSidecarUnresolved kind=look_board_button")
+	}
+}
