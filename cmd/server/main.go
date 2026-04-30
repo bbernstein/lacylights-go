@@ -103,6 +103,12 @@ func main() {
 	// parses "FOREIGN" as a column name, causing migration failures.
 	// For tables with FK constraints, we skip AutoMigrate if the table already exists
 	// with the required columns.
+	//
+	// IMPORTANT: when adding a new column to any model below, also add that
+	// column name to the table's keyColumns. Otherwise legacy databases that
+	// already have the table (with the old schema) will skip AutoMigrate and
+	// the new column will never be added — causing later migration steps that
+	// reference the column to fail at startup.
 	tablesWithFK := []struct {
 		table      string
 		model      interface{}

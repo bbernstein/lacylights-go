@@ -42,44 +42,75 @@ func BackfillRefIDs(db *gorm.DB) error {
 // CreateRefIDIndexes creates the unique indexes that enforce ref_id
 // uniqueness. Run after BackfillRefIDs so existing rows can satisfy the
 // constraint. Uses CREATE UNIQUE INDEX IF NOT EXISTS for idempotency.
+//
+// Each index is skipped when its required column is missing so a
+// partially-migrated database surfaces a clear "column missing" error
+// at the AutoMigrate stage rather than as a cryptic SQL failure here.
 func CreateRefIDIndexes(db *gorm.DB) error {
 	stmts := []struct {
-		name string
-		sql  string
+		name      string
+		table     string
+		reqCols   []string
+		sql       string
 	}{
 		{
 			"idx_fixture_instances_project_refid",
+			"fixture_instances",
+			[]string{"project_id", "ref_id"},
 			`CREATE UNIQUE INDEX IF NOT EXISTS idx_fixture_instances_project_refid
 				ON fixture_instances(project_id, ref_id)`,
 		},
 		{
 			"idx_fixture_definitions_refid",
+			"fixture_definitions",
+			[]string{"ref_id"},
 			`CREATE UNIQUE INDEX IF NOT EXISTS idx_fixture_definitions_refid
 				ON fixture_definitions(ref_id)`,
 		},
 		{
 			"idx_looks_project_refid",
+			"looks",
+			[]string{"project_id", "ref_id"},
 			`CREATE UNIQUE INDEX IF NOT EXISTS idx_looks_project_refid
 				ON looks(project_id, ref_id)`,
 		},
 		{
 			"idx_look_boards_project_refid",
+			"look_boards",
+			[]string{"project_id", "ref_id"},
 			`CREATE UNIQUE INDEX IF NOT EXISTS idx_look_boards_project_refid
 				ON look_boards(project_id, ref_id)`,
 		},
 		{
 			"idx_fixture_groups_project_refid",
+			"fixture_groups",
+			[]string{"project_id", "ref_id"},
 			`CREATE UNIQUE INDEX IF NOT EXISTS idx_fixture_groups_project_refid
 				ON fixture_groups(project_id, ref_id)`,
 		},
 		{
 			"idx_fixture_groups_project_eos_number",
+			"fixture_groups",
+			[]string{"project_id", "eos_number"},
 			`CREATE UNIQUE INDEX IF NOT EXISTS idx_fixture_groups_project_eos_number
 				ON fixture_groups(project_id, eos_number)
 				WHERE eos_number IS NOT NULL`,
 		},
 	}
 	for _, s := range stmts {
+		if !db.Migrator().HasTable(s.table) {
+			continue
+		}
+		missing := false
+		for _, c := range s.reqCols {
+			if !db.Migrator().HasColumn(s.table, c) {
+				missing = true
+				break
+			}
+		}
+		if missing {
+			continue
+		}
 		if err := db.Exec(s.sql).Error; err != nil {
 			return fmt.Errorf("create index %s: %w", s.name, err)
 		}

@@ -114,3 +114,42 @@ func TestCreateRefIDIndexes_EnforcesEosNumberPartialUniqueness(t *testing.T) {
 		t.Errorf("same eos_number in different project should be allowed; got: %v", err)
 	}
 }
+
+// TestCreateRefIDIndexes_SkipsTableMissingRefIDColumn guards the defensive
+// HasColumn check: if a legacy DB still lacks the ref_id column on one of
+// the ref_id tables (e.g. AutoMigrate was somehow skipped), index creation
+// must skip rather than fail with a cryptic "no such column" SQL error.
+func TestCreateRefIDIndexes_SkipsTableMissingRefIDColumn(t *testing.T) {
+	db := openTestDB(t)
+	// Create all tables, but omit ref_id from fixture_instances.
+	for _, table := range refIDTables {
+		schema := `(id TEXT PRIMARY KEY, project_id TEXT, ref_id TEXT)`
+		if table == "fixture_instances" {
+			schema = `(id TEXT PRIMARY KEY, project_id TEXT)` // legacy schema, no ref_id
+		}
+		if table == "fixture_groups" {
+			schema = `(id TEXT PRIMARY KEY, project_id TEXT, ref_id TEXT, eos_number INTEGER)`
+		}
+		if err := db.Exec(`CREATE TABLE ` + table + ` ` + schema).Error; err != nil {
+			t.Fatalf("create %s: %v", table, err)
+		}
+	}
+	if err := CreateRefIDIndexes(db); err != nil {
+		t.Fatalf("expected skip on missing ref_id column, got error: %v", err)
+	}
+	// The fixture_instances index must not exist.
+	var n int
+	if err := db.Raw(`SELECT count(*) FROM sqlite_master WHERE type='index' AND name='idx_fixture_instances_project_refid'`).Scan(&n).Error; err != nil {
+		t.Fatalf("query sqlite_master: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expected fixture_instances index to be skipped, found %d", n)
+	}
+	// Indexes on tables that DO have ref_id must still be created.
+	if err := db.Raw(`SELECT count(*) FROM sqlite_master WHERE type='index' AND name='idx_looks_project_refid'`).Scan(&n).Error; err != nil {
+		t.Fatalf("query sqlite_master: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("expected looks index to be created, found %d", n)
+	}
+}
