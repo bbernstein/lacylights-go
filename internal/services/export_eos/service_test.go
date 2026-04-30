@@ -514,3 +514,41 @@ func TestExport_EmptyGroupSkipped(t *testing.T) {
 		t.Errorf("expected WarnExportEmptyGroupSkipped")
 	}
 }
+
+func TestExport_SidecarFadeBehavior(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+	ctx := context.Background()
+
+	proj := &models.Project{Name: "T"}
+	if err := deps.projectRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("project: %v", err)
+	}
+	def := &models.FixtureDefinition{Manufacturer: "Generic", Model: "RGB", Type: "DIMMER"}
+	if err := deps.fixtureRepo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("def: %v", err)
+	}
+
+	one := 1
+	fi := &models.FixtureInstance{ProjectID: proj.ID, DefinitionID: def.ID, Name: "A", Universe: 1, StartChannel: 1, ProjectOrder: &one}
+	channels := []models.InstanceChannel{
+		{Offset: 0, Name: "I", Type: "INTENSITY", FadeBehavior: "FADE"},
+		{Offset: 1, Name: "R", Type: "COLOR_R", FadeBehavior: "SNAP_END"},
+	}
+	if err := deps.fixtureRepo.CreateWithChannels(ctx, fi, channels); err != nil {
+		t.Fatalf("fi: %v", err)
+	}
+
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo, deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Export(ctx, proj.ID)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+
+	if !strings.Contains(res.Content, `"behavior":"SNAP_END"`) {
+		t.Errorf("missing fade_behavior in output:\n%s", res.Content)
+	}
+	if !strings.Contains(res.Content, `"instanceRefId":"`+fi.RefID+`"`) {
+		t.Errorf("instanceRefId not %s in output", fi.RefID)
+	}
+}

@@ -580,17 +580,56 @@ func (s *Service) buildSidecar(
 			if btn.Color != nil {
 				color = *btn.Color
 			}
+			look, err := s.lookRepo.FindByID(ctx, btn.LookID)
+			if err != nil {
+				return SidecarOut{}, fmt.Errorf("export_eos: look for button: %w", err)
+			}
+			if look == nil {
+				continue // dangling button reference; skip
+			}
 			sb = append(sb, importeos.SidecarLookBoardButton{
-				LookRefID: btn.LookID,
+				LookRefID: look.RefID,
 				X:         btn.LayoutX,
 				Y:         btn.LayoutY,
 				Color:     color,
 			})
 		}
 		out.LookBoards = append(out.LookBoards, importeos.SidecarLookBoard{
-			RefID:   b.ID,
+			RefID:   b.RefID,
 			Name:    b.Name,
 			Buttons: sb,
+		})
+	}
+
+	// fade_behavior: any FixtureInstance with non-default channel fade
+	// behaviors gets a record. Sorted by RefID for determinism.
+	instances, err := s.fixtureRepo.FindByProjectID(ctx, projectID)
+	if err != nil {
+		return SidecarOut{}, fmt.Errorf("export_eos: instances for fade_behavior: %w", err)
+	}
+	sort.SliceStable(instances, func(i, j int) bool { return instances[i].RefID < instances[j].RefID })
+	for i := range instances {
+		fi := &instances[i]
+		channels, err := s.fixtureRepo.GetInstanceChannels(ctx, fi.ID)
+		if err != nil {
+			return SidecarOut{}, fmt.Errorf("export_eos: instance channels: %w", err)
+		}
+		var nonDefault []importeos.SidecarFadeBehaviorChannel
+		for _, c := range channels {
+			if c.FadeBehavior != "" && c.FadeBehavior != "FADE" {
+				nonDefault = append(nonDefault, importeos.SidecarFadeBehaviorChannel{
+					Offset:   c.Offset,
+					Behavior: c.FadeBehavior,
+				})
+			}
+		}
+		if len(nonDefault) == 0 {
+			continue
+		}
+		sort.Slice(nonDefault, func(a, b int) bool { return nonDefault[a].Offset < nonDefault[b].Offset })
+		out.FadeBehaviors = append(out.FadeBehaviors, importeos.SidecarFadeBehavior{
+			InstanceRefID: fi.RefID,
+			Channels:      nonDefault,
 		})
 	}
 
@@ -606,7 +645,7 @@ func (s *Service) buildSidecar(
 			continue
 		}
 		out.SynthDefs = append(out.SynthDefs, importeos.SidecarSynthDef{
-			DefRefID:           id,
+			DefRefID:           dm.RefID,
 			Manufacturer:       dm.Manufacturer,
 			Model:              dm.Model,
 			ChannelFingerprint: channelFingerprint(defChannels[id]),
