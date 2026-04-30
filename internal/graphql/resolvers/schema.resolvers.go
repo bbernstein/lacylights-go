@@ -318,6 +318,9 @@ func (r *fixtureInstanceResolver) Manufacturer(ctx context.Context, obj *models.
 	if obj.Manufacturer != nil {
 		return *obj.Manufacturer, nil
 	}
+	if def := r.lookupDefinition(ctx, obj); def != nil {
+		return def.Manufacturer, nil
+	}
 	return "", nil
 }
 
@@ -325,6 +328,9 @@ func (r *fixtureInstanceResolver) Manufacturer(ctx context.Context, obj *models.
 func (r *fixtureInstanceResolver) Model(ctx context.Context, obj *models.FixtureInstance) (string, error) {
 	if obj.Model != nil {
 		return *obj.Model, nil
+	}
+	if def := r.lookupDefinition(ctx, obj); def != nil {
+		return def.Model, nil
 	}
 	return "", nil
 }
