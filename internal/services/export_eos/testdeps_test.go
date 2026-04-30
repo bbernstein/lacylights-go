@@ -3,6 +3,7 @@ package exporteos
 import (
 	"testing"
 
+	"github.com/bbernstein/lacylights-go/internal/database/migrations"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	"github.com/glebarez/sqlite"
@@ -50,6 +51,11 @@ func newTestDeps(t *testing.T) *testDeps {
 		&models.UserGroupMember{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
+	}
+	// Apply RefID unique indexes so tests catch constraint violations the
+	// same way production does.
+	if err := migrations.CreateRefIDIndexes(db); err != nil {
+		t.Fatalf("create ref_id indexes: %v", err)
 	}
 	return &testDeps{
 		db:               db,

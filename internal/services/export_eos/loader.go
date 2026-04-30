@@ -81,7 +81,7 @@ func (s *Service) loadBundle(ctx context.Context, projectID string, collector *i
 	}
 
 	// Sidecar: look boards + synthesized definitions.
-	sidecar, err := s.buildSidecar(ctx, projectID, defModels, defChannels)
+	sidecar, err := s.buildSidecar(ctx, projectID, defModels, defChannels, collector)
 	if err != nil {
 		return nil, err
 	}
@@ -552,6 +552,7 @@ func (s *Service) buildSidecar(
 	projectID string,
 	defs map[string]*models.FixtureDefinition,
 	defChannels map[string][]models.ChannelDefinition,
+	collector *importeos.Collector,
 ) (SidecarOut, error) {
 	out := SidecarOut{Version: 1}
 
@@ -600,7 +601,19 @@ func (s *Service) buildSidecar(
 			}
 			refID, ok := lookRefByID[btn.LookID]
 			if !ok {
-				continue // dangling button reference; skip
+				// Dangling button reference (LookID points at a deleted
+				// Look). Skip it on export and surface a warning so the
+				// drop is visible to the operator.
+				if collector != nil {
+					collector.Add(importeos.WarnSidecarUnresolved, importeos.SeverityWarn,
+						fmt.Sprintf("look board %q button references unknown look %q; dropped on export", b.RefID, btn.LookID),
+						map[string]string{
+							"kind":       "look_board_button",
+							"boardRefId": b.RefID,
+							"lookId":     btn.LookID,
+						})
+				}
+				continue
 			}
 			sb = append(sb, importeos.SidecarLookBoardButton{
 				LookRefID: refID,

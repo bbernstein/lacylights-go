@@ -187,7 +187,10 @@ func (r *Resolver) assertFixturesInProject(ctx context.Context, projectID string
 			return fmt.Errorf("fixture %s not found", id)
 		}
 		if pid != projectID {
-			return fmt.Errorf("fixture %s belongs to project %s, expected %s", id, pid, projectID)
+			// Don't leak the other project's ID: a multi-tenant caller
+			// shouldn't learn that fixture X belongs to a project they
+			// can't access.
+			return fmt.Errorf("fixture %s does not belong to the specified project", id)
 		}
 	}
 	return nil

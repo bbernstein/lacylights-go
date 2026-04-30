@@ -503,6 +503,36 @@ $$ LACYLIGHTS:synth_def {"defRefId":"def-Other-Thing","manufacturer":"Other","mo
 	}
 }
 
+func TestMapper_CuesIdempotentReimport(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+
+	importOnce := func(targetID *string) (*Result, error) {
+		f := openFixtureFile(t, "basic_cues.asc")
+		defer func() { _ = f.Close() }()
+		svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+			deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+		opts := Options{}
+		if targetID != nil {
+			opts.TargetProjectID = targetID
+		} else {
+			opts.NewProjectName = ptr("CueIdem")
+		}
+		return svc.Import(context.Background(), f, opts)
+	}
+
+	res1, err := importOnce(nil)
+	if err != nil {
+		t.Fatalf("first import: %v", err)
+	}
+
+	// Re-import into the same project must not crash on the unique
+	// constraints we apply at server boot (and now in tests).
+	if _, err := importOnce(&res1.ProjectID); err != nil {
+		t.Fatalf("re-import: %v", err)
+	}
+}
+
 func TestMapper_GroupsIdempotentReimport(t *testing.T) {
 	deps := newTestDeps(t)
 	defer deps.close()

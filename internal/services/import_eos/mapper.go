@@ -135,13 +135,28 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 				return nil, fmt.Errorf("load existing def channels: %w", err)
 			}
 		} else {
-			mr.SynthesizedDef.RefID = eosFixtureDefRefID(mr.SynthesizedDef.Manufacturer, mr.SynthesizedDef.Model)
-			if err := m.fixtureRepo.CreateDefinitionWithChannels(ctx, mr.SynthesizedDef, mr.SynthesizedChannels); err != nil {
-				return nil, fmt.Errorf("create synth def: %w", err)
+			refID := eosFixtureDefRefID(mr.SynthesizedDef.Manufacturer, mr.SynthesizedDef.Model)
+			// Re-import idempotency: if a synth def with this refID already
+			// exists (from a prior import of the same file), reuse it.
+			existing, err := m.fixtureRepo.FindDefinitionByRefID(ctx, refID)
+			if err != nil {
+				return nil, fmt.Errorf("find synth def by refID: %w", err)
 			}
-			defID = mr.SynthesizedDef.ID
-			channels = mr.SynthesizedChannels
-			res.SynthesizedDefinitionIDs = append(res.SynthesizedDefinitionIDs, defID)
+			if existing != nil {
+				defID = existing.ID
+				channels, err = m.fixtureRepo.GetDefinitionChannels(ctx, defID)
+				if err != nil {
+					return nil, fmt.Errorf("load existing synth def channels: %w", err)
+				}
+			} else {
+				mr.SynthesizedDef.RefID = refID
+				if err := m.fixtureRepo.CreateDefinitionWithChannels(ctx, mr.SynthesizedDef, mr.SynthesizedChannels); err != nil {
+					return nil, fmt.Errorf("create synth def: %w", err)
+				}
+				defID = mr.SynthesizedDef.ID
+				channels = mr.SynthesizedChannels
+				res.SynthesizedDefinitionIDs = append(res.SynthesizedDefinitionIDs, defID)
+			}
 		}
 		persToDefID[pers.ID] = defID
 		persToChannels[pers.ID] = channels
@@ -195,6 +210,18 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 			label = fmt.Sprintf("Channel %d", pe.Channel)
 		}
 		order := pe.Channel
+		refID := eosFixtureInstanceRefID(pe.Channel)
+		// Re-import idempotency: reuse the existing instance if one with
+		// this refID already exists in the project.
+		existing, err := m.fixtureRepo.FindInstanceByRefID(ctx, projectID, refID)
+		if err != nil {
+			return nil, fmt.Errorf("find instance by refID: %w", err)
+		}
+		if existing != nil {
+			eosChannelToInstanceID[pe.Channel] = existing.ID
+			res.FixtureInstancesCount++
+			continue
+		}
 		instance := &models.FixtureInstance{
 			ProjectID:    projectID,
 			DefinitionID: defID,
@@ -202,7 +229,7 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 			Universe:     universe,
 			StartChannel: address,
 			ProjectOrder: &order,
-			RefID:        eosFixtureInstanceRefID(pe.Channel),
+			RefID:        refID,
 		}
 		instanceChannels := createInstanceChannelsFor(persToChannels[pe.PersonalityID])
 		if err := m.fixtureRepo.CreateWithChannels(ctx, instance, instanceChannels); err != nil {
@@ -457,11 +484,8 @@ func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show
 			if pal.UnicodeText != nil {
 				label = *pal.UnicodeText
 			}
-			look := &models.Look{
-				ProjectID: projectID,
-				Name:      fmt.Sprintf("%s %s - %s", g.name, pal.Number, label),
-				RefID:     eosLookRefIDForPalette(g.kind, pal.Number),
-			}
+			refID := eosLookRefIDForPalette(g.kind, pal.Number)
+			lookName := fmt.Sprintf("%s %s - %s", g.name, pal.Number, label)
 			chanLevels := map[int]int{}
 			for _, mv := range pal.ChanMoves {
 				chanLevels[mv.Channel] = mv.Value
@@ -481,8 +505,9 @@ func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show
 			if err != nil {
 				return err
 			}
-			if err := m.lookRepo.CreateWithFixtureValues(ctx, look, values); err != nil {
-				return fmt.Errorf("create palette look: %w", err)
+			look, err := m.upsertLookByRefID(ctx, projectID, refID, lookName, values)
+			if err != nil {
+				return fmt.Errorf("upsert palette look: %w", err)
 			}
 			*looksCount++
 			cueNum, _ := strconv.ParseFloat(pal.Number, 64)
@@ -535,17 +560,14 @@ func (m *Mapper) applyCues(ctx context.Context, projectID string, show *Show,
 				cueName = cueName + " - " + cueLabel
 			}
 			cueNum, _ := strconv.ParseFloat(snap.CueNumber, 64)
-			look := &models.Look{
-				ProjectID: projectID,
-				Name:      cueName,
-				RefID:     eosLookRefIDForCue(cl.Number, cueNum),
-			}
+			refID := eosLookRefIDForCue(cl.Number, cueNum)
 			values, err := buildLookValues(snap.ChannelLevels, snap.ParamLevels, states, table)
 			if err != nil {
 				return err
 			}
-			if err := m.lookRepo.CreateWithFixtureValues(ctx, look, values); err != nil {
-				return err
+			look, err := m.upsertLookByRefID(ctx, projectID, refID, cueName, values)
+			if err != nil {
+				return fmt.Errorf("upsert cue look: %w", err)
 			}
 			*looksCount++
 
@@ -565,6 +587,43 @@ func (m *Mapper) applyCues(ctx context.Context, projectID string, show *Show,
 		}
 	}
 	return nil
+}
+
+// upsertLookByRefID either creates a Look with the given (projectID, refID)
+// + fixture values, or — if one already exists — updates its name and
+// replaces the fixture values. Returns the resulting Look. Used by
+// applyCues and applyPalettes so re-importing the same EOS file into the
+// same project doesn't trip the unique index on looks(project_id, ref_id).
+func (m *Mapper) upsertLookByRefID(ctx context.Context, projectID, refID, name string, values []models.FixtureValue) (*models.Look, error) {
+	existing, err := m.lookRepo.FindByRefID(ctx, projectID, refID)
+	if err != nil {
+		return nil, fmt.Errorf("find look by refID: %w", err)
+	}
+	if existing != nil {
+		existing.Name = name
+		if err := m.lookRepo.Update(ctx, existing); err != nil {
+			return nil, fmt.Errorf("update look: %w", err)
+		}
+		if err := m.lookRepo.DeleteFixtureValues(ctx, existing.ID); err != nil {
+			return nil, fmt.Errorf("delete fixture values: %w", err)
+		}
+		for i := range values {
+			values[i].LookID = existing.ID
+		}
+		if err := m.lookRepo.CreateFixtureValues(ctx, values); err != nil {
+			return nil, fmt.Errorf("recreate fixture values: %w", err)
+		}
+		return existing, nil
+	}
+	look := &models.Look{
+		ProjectID: projectID,
+		Name:      name,
+		RefID:     refID,
+	}
+	if err := m.lookRepo.CreateWithFixtureValues(ctx, look, values); err != nil {
+		return nil, fmt.Errorf("create look: %w", err)
+	}
+	return look, nil
 }
 
 func (m *Mapper) applyGroups(ctx context.Context, projectID string, show *Show, chToFix map[int]string, groupsCount *int, warn *Collector) error {
