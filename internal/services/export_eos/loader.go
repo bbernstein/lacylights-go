@@ -139,12 +139,16 @@ func (s *Service) loadGroups(
 		return groups[i].ID < groups[j].ID
 	})
 
-	// Auto-assign EosNumbers atomically. NOTE: this mutates DB state during
-	// a nominally read-only export — intentional, since the alternative
-	// (renumber on every export) breaks round-trip stability. The
-	// transaction serializes against concurrent exports of the same project
-	// so two callers cannot both assign the same number and trip the
-	// (project_id, eos_number) partial unique index.
+	// Auto-assign missing EosNumbers and persist them. NOTE: this mutates DB
+	// state during a nominally read-only export — intentional, since the
+	// alternative (renumber on every export) breaks round-trip stability.
+	// This does not guarantee serialization against concurrent exports of
+	// the same project: SQLite's deferred transactions don't lock the MAX
+	// read against parallel writers, so concurrent callers may still race
+	// while deriving the next number, and one may fail on the
+	// (project_id, eos_number) partial unique index. In practice export
+	// is user-initiated and concurrent same-project exports are vanishingly
+	// rare; if a collision does happen the user just re-runs.
 	if err := s.fixtureGroupRepo.AssignAndPersistMissingEosNumbers(ctx, projectID, groups); err != nil {
 		return nil, fmt.Errorf("export_eos: persist auto-assigned eos_number: %w", err)
 	}
@@ -630,20 +634,25 @@ func (s *Service) buildSidecar(
 	}
 
 	// fade_behavior: any FixtureInstance with non-default channel fade
-	// behaviors gets a record. Sorted by RefID for determinism.
+	// behaviors gets a record. Sorted by RefID for determinism. Channels
+	// are fetched in a single batch query to avoid an O(fixtures) loop.
 	instances, err := s.fixtureRepo.FindByProjectID(ctx, projectID)
 	if err != nil {
 		return SidecarOut{}, fmt.Errorf("export_eos: instances for fade_behavior: %w", err)
 	}
 	sort.SliceStable(instances, func(i, j int) bool { return instances[i].RefID < instances[j].RefID })
+	instanceIDs := make([]string, len(instances))
+	for i := range instances {
+		instanceIDs[i] = instances[i].ID
+	}
+	channelsByFixture, err := s.fixtureRepo.GetInstanceChannelsByFixtureIDs(ctx, instanceIDs)
+	if err != nil {
+		return SidecarOut{}, fmt.Errorf("export_eos: instance channels batch: %w", err)
+	}
 	for i := range instances {
 		fi := &instances[i]
-		channels, err := s.fixtureRepo.GetInstanceChannels(ctx, fi.ID)
-		if err != nil {
-			return SidecarOut{}, fmt.Errorf("export_eos: instance channels: %w", err)
-		}
 		var nonDefault []importeos.SidecarFadeBehaviorChannel
-		for _, c := range channels {
+		for _, c := range channelsByFixture[fi.ID] {
 			if c.FadeBehavior != "" && c.FadeBehavior != "FADE" {
 				nonDefault = append(nonDefault, importeos.SidecarFadeBehaviorChannel{
 					Offset:   c.Offset,

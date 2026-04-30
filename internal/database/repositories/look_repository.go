@@ -160,6 +160,31 @@ func (r *LookRepository) DeleteFixtureValuesByFixtureID(ctx context.Context, fix
 	return r.db.WithContext(ctx).Delete(&models.FixtureValue{}, "fixture_id = ?", fixtureID).Error
 }
 
+// UpdateAndReplaceFixtureValues atomically renames a Look and replaces its
+// FixtureValues in a single transaction. If CreateFixtureValues fails after
+// DeleteFixtureValues, the entire change is rolled back so the Look retains
+// its previous values rather than being left empty.
+func (r *LookRepository) UpdateAndReplaceFixtureValues(ctx context.Context, look *models.Look, values []models.FixtureValue) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(look).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&models.FixtureValue{}, "look_id = ?", look.ID).Error; err != nil {
+			return err
+		}
+		if len(values) == 0 {
+			return nil
+		}
+		for i := range values {
+			if values[i].ID == "" {
+				values[i].ID = cuid.New()
+			}
+			values[i].LookID = look.ID
+		}
+		return tx.Create(&values).Error
+	})
+}
+
 // GetFixtureValue returns a specific fixture value by look and fixture ID.
 func (r *LookRepository) GetFixtureValue(ctx context.Context, lookID, fixtureID string) (*models.FixtureValue, error) {
 	var value models.FixtureValue

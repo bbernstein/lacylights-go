@@ -601,17 +601,8 @@ func (m *Mapper) upsertLookByRefID(ctx context.Context, projectID, refID, name s
 	}
 	if existing != nil {
 		existing.Name = name
-		if err := m.lookRepo.Update(ctx, existing); err != nil {
-			return nil, fmt.Errorf("update look: %w", err)
-		}
-		if err := m.lookRepo.DeleteFixtureValues(ctx, existing.ID); err != nil {
-			return nil, fmt.Errorf("delete fixture values: %w", err)
-		}
-		for i := range values {
-			values[i].LookID = existing.ID
-		}
-		if err := m.lookRepo.CreateFixtureValues(ctx, values); err != nil {
-			return nil, fmt.Errorf("recreate fixture values: %w", err)
+		if err := m.lookRepo.UpdateAndReplaceFixtureValues(ctx, existing, values); err != nil {
+			return nil, fmt.Errorf("update look + replace values: %w", err)
 		}
 		return existing, nil
 	}

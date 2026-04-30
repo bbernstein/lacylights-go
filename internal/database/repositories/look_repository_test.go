@@ -168,3 +168,42 @@ func TestLookRepository_FindByIDs(t *testing.T) {
 		t.Errorf("got %d, want 3", len(got))
 	}
 }
+
+func TestLookRepository_UpdateAndReplaceFixtureValues(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := NewLookRepository(testDB.DB)
+
+	look := &models.Look{ProjectID: "p1", Name: "Original", RefID: "L1"}
+	if err := repo.CreateWithFixtureValues(ctx, look, []models.FixtureValue{
+		{FixtureID: "fix-a", Channels: "[]"},
+		{FixtureID: "fix-b", Channels: "[]"},
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	look.Name = "Renamed"
+	if err := repo.UpdateAndReplaceFixtureValues(ctx, look, []models.FixtureValue{
+		{FixtureID: "fix-c", Channels: "[]"},
+	}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	values, err := repo.GetFixtureValues(ctx, look.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if len(values) != 1 || values[0].FixtureID != "fix-c" {
+		t.Errorf("values = %+v", values)
+	}
+
+	// Replace with empty list — leaves zero values.
+	if err := repo.UpdateAndReplaceFixtureValues(ctx, look, nil); err != nil {
+		t.Fatalf("empty: %v", err)
+	}
+	values2, _ := repo.GetFixtureValues(ctx, look.ID)
+	if len(values2) != 0 {
+		t.Errorf("expected 0 values, got %d", len(values2))
+	}
+}

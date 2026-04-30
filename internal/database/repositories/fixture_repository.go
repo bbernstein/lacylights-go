@@ -135,6 +135,29 @@ func (r *FixtureRepository) GetInstanceChannels(ctx context.Context, fixtureID s
 	return channels, result.Error
 }
 
+// GetInstanceChannelsByFixtureIDs batches GetInstanceChannels into a single
+// SELECT … WHERE fixture_id IN (…). Returns a map keyed by fixture ID with
+// each value sorted by Offset ASC. Used by the EOS exporter to avoid an
+// O(fixtures) round-trip pattern when emitting fade_behavior records.
+// Empty input returns an empty map without a query.
+func (r *FixtureRepository) GetInstanceChannelsByFixtureIDs(ctx context.Context, fixtureIDs []string) (map[string][]models.InstanceChannel, error) {
+	out := make(map[string][]models.InstanceChannel, len(fixtureIDs))
+	if len(fixtureIDs) == 0 {
+		return out, nil
+	}
+	var channels []models.InstanceChannel
+	if err := r.db.WithContext(ctx).
+		Where("fixture_id IN ?", fixtureIDs).
+		Order("fixture_id ASC, offset ASC").
+		Find(&channels).Error; err != nil {
+		return nil, err
+	}
+	for _, c := range channels {
+		out[c.FixtureID] = append(out[c.FixtureID], c)
+	}
+	return out, nil
+}
+
 // GetDefinitionChannels returns all channels for a fixture definition.
 func (r *FixtureRepository) GetDefinitionChannels(ctx context.Context, definitionID string) ([]models.ChannelDefinition, error) {
 	var channels []models.ChannelDefinition

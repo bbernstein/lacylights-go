@@ -351,3 +351,51 @@ func TestFixtureRepository_FindByIDs(t *testing.T) {
 		}
 	}
 }
+
+func TestFixtureRepository_GetInstanceChannelsByFixtureIDs(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := NewFixtureRepository(testDB.DB)
+
+	def := &models.FixtureDefinition{Manufacturer: "Generic", Model: "RGB", Type: "DIMMER"}
+	if err := repo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("def: %v", err)
+	}
+	mk := func(name string, ch ...models.InstanceChannel) *models.FixtureInstance {
+		fi := &models.FixtureInstance{ProjectID: "p1", DefinitionID: def.ID, Name: name}
+		if err := repo.CreateWithChannels(ctx, fi, ch); err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+		return fi
+	}
+	a := mk("A",
+		models.InstanceChannel{Offset: 0, Name: "I", Type: "INTENSITY", FadeBehavior: "FADE"},
+		models.InstanceChannel{Offset: 1, Name: "R", Type: "COLOR_R", FadeBehavior: "SNAP"},
+	)
+	b := mk("B",
+		models.InstanceChannel{Offset: 0, Name: "I", Type: "INTENSITY", FadeBehavior: "FADE"},
+	)
+
+	got, err := repo.GetInstanceChannelsByFixtureIDs(ctx, nil)
+	if err != nil {
+		t.Errorf("empty: %v", err)
+	}
+	if got == nil || len(got) != 0 {
+		t.Errorf("empty: want non-nil empty map, got %v", got)
+	}
+
+	got, err = repo.GetInstanceChannelsByFixtureIDs(ctx, []string{a.ID, b.ID, "missing"})
+	if err != nil {
+		t.Fatalf("hits: %v", err)
+	}
+	if len(got[a.ID]) != 2 || got[a.ID][0].Offset != 0 || got[a.ID][1].Offset != 1 {
+		t.Errorf("a channels = %+v", got[a.ID])
+	}
+	if len(got[b.ID]) != 1 {
+		t.Errorf("b channels = %+v", got[b.ID])
+	}
+	if _, ok := got["missing"]; ok {
+		t.Errorf("missing should not be in result")
+	}
+}

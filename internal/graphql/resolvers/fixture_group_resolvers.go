@@ -43,7 +43,10 @@ func (r *Resolver) createFixtureGroup(ctx context.Context, input generated.Creat
 	if err := r.ensureProjectAccess(ctx, input.ProjectID); err != nil {
 		return nil, err
 	}
-	if err := r.assertFixturesInProject(ctx, input.ProjectID, input.FixtureIds); err != nil {
+	// Dedupe fixtureIds while preserving caller-supplied order so the
+	// junction-table composite PK doesn't reject the second insert.
+	fixtureIDs := dedupePreserveOrder(input.FixtureIds)
+	if err := r.assertFixturesInProject(ctx, input.ProjectID, fixtureIDs); err != nil {
 		return nil, err
 	}
 
@@ -62,7 +65,7 @@ func (r *Resolver) createFixtureGroup(ctx context.Context, input generated.Creat
 		Description: description,
 		EosNumber:   eosNumber,
 	}
-	if err := r.FixtureGroupRepo.CreateWithMembers(ctx, g, input.FixtureIds); err != nil {
+	if err := r.FixtureGroupRepo.CreateWithMembers(ctx, g, fixtureIDs); err != nil {
 		return nil, err
 	}
 	return g, nil
@@ -121,10 +124,11 @@ func (r *Resolver) addFixturesToGroup(ctx context.Context, groupID string, fixtu
 	if err != nil {
 		return nil, err
 	}
-	if err := r.assertFixturesInProject(ctx, g.ProjectID, fixtureIDs); err != nil {
+	deduped := dedupePreserveOrder(fixtureIDs)
+	if err := r.assertFixturesInProject(ctx, g.ProjectID, deduped); err != nil {
 		return nil, err
 	}
-	if err := r.FixtureGroupRepo.AddMembers(ctx, groupID, fixtureIDs); err != nil {
+	if err := r.FixtureGroupRepo.AddMembers(ctx, groupID, deduped); err != nil {
 		return nil, err
 	}
 	return g, nil
@@ -264,4 +268,22 @@ func (r *Resolver) fixturesForGroup(ctx context.Context, groupID string) ([]*mod
 		}
 	}
 	return out, nil
+}
+
+// dedupePreserveOrder returns a copy of ids with duplicates removed, keeping
+// the first occurrence's position. Stable on empty/nil input.
+func dedupePreserveOrder(ids []string) []string {
+	if len(ids) == 0 {
+		return ids
+	}
+	seen := make(map[string]bool, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out
 }
