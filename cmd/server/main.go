@@ -30,6 +30,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/auth"
 	"github.com/bbernstein/lacylights-go/internal/config"
 	"github.com/bbernstein/lacylights-go/internal/database"
+	"github.com/bbernstein/lacylights-go/internal/database/migrations"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
@@ -156,6 +157,15 @@ func main() {
 	}
 
 	log.Println("Database migrations complete")
+
+	// Task 14c: backfill ref_id columns and create unique indexes.
+	// Both functions are idempotent so they're safe to run on every boot.
+	if err := migrations.BackfillRefIDs(db); err != nil {
+		log.Fatalf("Failed to backfill ref_ids: %v", err)
+	}
+	if err := migrations.CreateRefIDIndexes(db); err != nil {
+		log.Fatalf("Failed to create ref_id indexes: %v", err)
+	}
 
 	// Migrate scene terminology to look terminology
 	if err := migrateSceneToLook(db); err != nil {
