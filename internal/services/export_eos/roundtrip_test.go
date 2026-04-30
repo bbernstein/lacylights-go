@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bbernstein/lacylights-go/internal/database/models"
 	importeos "github.com/bbernstein/lacylights-go/internal/services/import_eos"
 )
 
@@ -134,5 +135,146 @@ func TestRoundtrip_SyntheticSmall(t *testing.T) {
 	firstCue := show2.CueLists[0].Cues[0]
 	if len(firstCue.ChanMoves) == 0 && len(firstCue.ParamMoves) == 0 {
 		t.Errorf("first cue has no chan/param moves; values were lost on round-trip")
+	}
+}
+
+func TestEosRoundtrip_GroupsPreserved(t *testing.T) {
+	src := newTestDeps(t)
+	defer src.close()
+	ctx := context.Background()
+
+	// Seed src project + 3 fixtures + 1 group with all three.
+	proj := &models.Project{Name: "RT"}
+	if err := src.projectRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("project: %v", err)
+	}
+	def := &models.FixtureDefinition{Manufacturer: "Generic", Model: "Dimmer", Type: "DIMMER"}
+	if err := src.fixtureRepo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("def: %v", err)
+	}
+	mkInst := func(name string, ch int) *models.FixtureInstance {
+		c := ch
+		fi := &models.FixtureInstance{ProjectID: proj.ID, DefinitionID: def.ID, Name: name, Universe: 1, StartChannel: ch, ProjectOrder: &c}
+		if err := src.fixtureRepo.CreateWithChannels(ctx, fi, []models.InstanceChannel{{Offset: 0, Name: "I", Type: "INTENSITY", FadeBehavior: "FADE"}}); err != nil {
+			t.Fatalf("inst %s: %v", name, err)
+		}
+		return fi
+	}
+	a, b, c := mkInst("A", 1), mkInst("B", 2), mkInst("C", 3)
+
+	g := &models.FixtureGroup{ProjectID: proj.ID, Name: "Main"}
+	if err := src.fixtureGroupRepo.CreateWithMembers(ctx, g, []string{a.ID, b.ID, c.ID}); err != nil {
+		t.Fatalf("group: %v", err)
+	}
+
+	// Export.
+	exportSvc := NewServiceWithDeps(src.projectRepo, src.fixtureRepo, src.fixtureGroupRepo, src.lookRepo, src.cueListRepo, src.cueRepo, src.lookBoardRepo)
+	exportRes, err := exportSvc.Export(ctx, proj.ID)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+
+	// Re-import into a fresh deps stack.
+	dst := newTestDeps(t)
+	defer dst.close()
+	importSvc := importeos.NewServiceWithDeps(dst.projectRepo, dst.fixtureRepo, dst.fixtureGroupRepo, dst.lookRepo, dst.cueListRepo, dst.cueRepo, dst.lookBoardRepo)
+	importRes, err := importSvc.Import(ctx, strings.NewReader(exportRes.Content), importeos.Options{NewProjectName: ptr("RT2")})
+	if err != nil {
+		t.Fatalf("re-import: %v", err)
+	}
+
+	groups, _ := dst.fixtureGroupRepo.FindByProjectID(ctx, importRes.ProjectID)
+	if len(groups) != 1 {
+		t.Fatalf("got %d groups", len(groups))
+	}
+	if groups[0].Name != "Main" {
+		t.Errorf("name = %q", groups[0].Name)
+	}
+	ms, _ := dst.fixtureGroupRepo.GetMembers(ctx, groups[0].ID)
+	if len(ms) != 3 {
+		t.Errorf("members = %d, want 3", len(ms))
+	}
+}
+
+func TestEosRoundtrip_FadeBehaviorsPreserved(t *testing.T) {
+	src := newTestDeps(t)
+	defer src.close()
+	ctx := context.Background()
+	proj := &models.Project{Name: "RT"}
+	if err := src.projectRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("project: %v", err)
+	}
+	def := &models.FixtureDefinition{Manufacturer: "Generic", Model: "RGB", Type: "DIMMER"}
+	if err := src.fixtureRepo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("def: %v", err)
+	}
+	one := 1
+	fi := &models.FixtureInstance{ProjectID: proj.ID, DefinitionID: def.ID, Name: "A", Universe: 1, StartChannel: 1, ProjectOrder: &one}
+	if err := src.fixtureRepo.CreateWithChannels(ctx, fi, []models.InstanceChannel{
+		{Offset: 0, Name: "I", Type: "INTENSITY", FadeBehavior: "FADE"},
+		{Offset: 1, Name: "R", Type: "COLOR_R", FadeBehavior: "SNAP_END"},
+	}); err != nil {
+		t.Fatalf("fi: %v", err)
+	}
+
+	exportRes, err := NewServiceWithDeps(src.projectRepo, src.fixtureRepo, src.fixtureGroupRepo, src.lookRepo, src.cueListRepo, src.cueRepo, src.lookBoardRepo).Export(ctx, proj.ID)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+
+	dst := newTestDeps(t)
+	defer dst.close()
+	importRes, err := importeos.NewServiceWithDeps(dst.projectRepo, dst.fixtureRepo, dst.fixtureGroupRepo, dst.lookRepo, dst.cueListRepo, dst.cueRepo, dst.lookBoardRepo).
+		Import(ctx, strings.NewReader(exportRes.Content), importeos.Options{NewProjectName: ptr("RT2")})
+	if err != nil {
+		t.Fatalf("re-import: %v", err)
+	}
+
+	instances, _ := dst.fixtureRepo.FindByProjectID(ctx, importRes.ProjectID)
+	if len(instances) != 1 {
+		t.Fatalf("got %d", len(instances))
+	}
+	channels, _ := dst.fixtureRepo.GetInstanceChannels(ctx, instances[0].ID)
+	want := map[int]string{0: "FADE", 1: "SNAP_END"}
+	for _, c := range channels {
+		if c.FadeBehavior != want[c.Offset] {
+			t.Errorf("offset %d: %q, want %q", c.Offset, c.FadeBehavior, want[c.Offset])
+		}
+	}
+}
+
+func TestExport_DeterministicAfterAutoAssign(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+	ctx := context.Background()
+	proj := &models.Project{Name: "D"}
+	if err := deps.projectRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("proj: %v", err)
+	}
+	def := &models.FixtureDefinition{Manufacturer: "Generic", Model: "Dimmer", Type: "DIMMER"}
+	if err := deps.fixtureRepo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("def: %v", err)
+	}
+	one := 1
+	fi := &models.FixtureInstance{ProjectID: proj.ID, DefinitionID: def.ID, Name: "A", Universe: 1, StartChannel: 1, ProjectOrder: &one}
+	if err := deps.fixtureRepo.CreateWithChannels(ctx, fi, []models.InstanceChannel{{Offset: 0, Name: "I", Type: "INTENSITY", FadeBehavior: "FADE"}}); err != nil {
+		t.Fatalf("fi: %v", err)
+	}
+	g := &models.FixtureGroup{ProjectID: proj.ID, Name: "G"}
+	if err := deps.fixtureGroupRepo.CreateWithMembers(ctx, g, []string{fi.ID}); err != nil {
+		t.Fatalf("group: %v", err)
+	}
+
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo, deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	first, err := svc.Export(ctx, proj.ID)
+	if err != nil {
+		t.Fatalf("export 1: %v", err)
+	}
+	second, err := svc.Export(ctx, proj.ID)
+	if err != nil {
+		t.Fatalf("export 2: %v", err)
+	}
+	if first.Content != second.Content {
+		t.Errorf("non-deterministic output\nFIRST:\n%s\n\nSECOND:\n%s", first.Content, second.Content)
 	}
 }
