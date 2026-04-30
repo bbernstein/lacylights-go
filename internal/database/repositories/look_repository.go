@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"errors"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/lucsky/cuid"
@@ -163,4 +164,45 @@ func (r *LookRepository) GetFixtureValue(ctx context.Context, lookID, fixtureID 
 // UpdateFixtureValue updates a fixture value.
 func (r *LookRepository) UpdateFixtureValue(ctx context.Context, value *models.FixtureValue) error {
 	return r.db.WithContext(ctx).Save(value).Error
+}
+
+// MapByRefID resolves a batch of (projectID, refID) pairs in one query.
+// Returns a map keyed by refID; unresolved refIDs are absent from the map.
+func (r *LookRepository) MapByRefID(ctx context.Context, projectID string, refIDs []string) (map[string]string, error) {
+	out := make(map[string]string, len(refIDs))
+	if len(refIDs) == 0 {
+		return out, nil
+	}
+	type row struct {
+		ID    string
+		RefID string
+	}
+	var rows []row
+	err := r.db.WithContext(ctx).
+		Model(&models.Look{}).
+		Select("id, ref_id").
+		Where("project_id = ? AND ref_id IN ?", projectID, refIDs).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		out[r.RefID] = r.ID
+	}
+	return out, nil
+}
+
+// FindByRefID resolves a single (projectID, refID). (nil, nil) on miss.
+func (r *LookRepository) FindByRefID(ctx context.Context, projectID, refID string) (*models.Look, error) {
+	var look models.Look
+	result := r.db.WithContext(ctx).
+		Where("project_id = ? AND ref_id = ?", projectID, refID).
+		First(&look)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &look, nil
 }

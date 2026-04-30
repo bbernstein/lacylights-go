@@ -157,3 +157,18 @@ func (r *LookBoardRepository) UpdateButton(ctx context.Context, button *models.L
 func (r *LookBoardRepository) DeleteButton(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Delete(&models.LookBoardButton{}, "id = ?", id).Error
 }
+
+// FindByRefID resolves a look board by (projectID, refID). (nil, nil) on miss.
+func (r *LookBoardRepository) FindByRefID(ctx context.Context, projectID, refID string) (*models.LookBoard, error) {
+	var b models.LookBoard
+	result := r.db.WithContext(ctx).
+		Where("project_id = ? AND ref_id = ?", projectID, refID).
+		First(&b)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &b, nil
+}

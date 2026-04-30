@@ -53,3 +53,38 @@ func TestLookBoardRepository_Create_PreservesExplicitRefID(t *testing.T) {
 		t.Errorf("RefID = %q, want %q", board.RefID, "explicit-ref")
 	}
 }
+
+func TestLookBoardRepository_FindByRefID(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	repo := NewLookBoardRepository(testDB.DB)
+	projRepo := NewProjectRepository(testDB.DB)
+
+	proj := &models.Project{Name: "P"}
+	if err := projRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("proj: %v", err)
+	}
+
+	board := &models.LookBoard{ProjectID: proj.ID, Name: "Top", RefID: "lb-1"}
+	if err := repo.Create(ctx, board); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	got, err := repo.FindByRefID(ctx, proj.ID, "lb-1")
+	if err != nil {
+		t.Fatalf("find: %v", err)
+	}
+	if got == nil || got.ID != board.ID {
+		t.Errorf("hit: got %+v, want ID %q", got, board.ID)
+	}
+
+	miss, err := repo.FindByRefID(ctx, proj.ID, "missing")
+	if err != nil {
+		t.Fatalf("miss: %v", err)
+	}
+	if miss != nil {
+		t.Errorf("expected nil miss, got %+v", miss)
+	}
+}

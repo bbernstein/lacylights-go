@@ -2,11 +2,17 @@ package repositories
 
 import (
 	"context"
+	"errors"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/lucsky/cuid"
 	"gorm.io/gorm"
 )
+
+// ErrChannelOffsetNotFound is returned by UpdateInstanceChannelFadeBehavior
+// when the targeted offset doesn't exist on the instance. Mappers convert it
+// to a SIDECAR_UNRESOLVED warning rather than failing the import.
+var ErrChannelOffsetNotFound = errors.New("instance channel offset not found")
 
 // FixtureRepository handles fixture data access.
 type FixtureRepository struct {
@@ -324,6 +330,53 @@ func (r *FixtureRepository) CreateModeChannels(ctx context.Context, modeChannels
 		}
 	}
 	return r.db.WithContext(ctx).Create(&modeChannels).Error
+}
+
+// FindInstanceByRefID resolves a fixture instance by (project, refID).
+// Returns (nil, nil) on miss — convention shared with FindByID.
+func (r *FixtureRepository) FindInstanceByRefID(ctx context.Context, projectID, refID string) (*models.FixtureInstance, error) {
+	var fi models.FixtureInstance
+	result := r.db.WithContext(ctx).
+		Where("project_id = ? AND ref_id = ?", projectID, refID).
+		First(&fi)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &fi, nil
+}
+
+// UpdateInstanceChannelFadeBehavior updates the FadeBehavior on a single
+// (instanceID, offset) row. Returns ErrChannelOffsetNotFound if no matching
+// row exists — callers convert this to a structured warning.
+func (r *FixtureRepository) UpdateInstanceChannelFadeBehavior(ctx context.Context, instanceID string, offset int, behavior string) error {
+	res := r.db.WithContext(ctx).
+		Model(&models.InstanceChannel{}).
+		Where("fixture_id = ? AND `offset` = ?", instanceID, offset).
+		Update("fade_behavior", behavior)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrChannelOffsetNotFound
+	}
+	return nil
+}
+
+// FindDefinitionByRefID resolves a fixture definition by refID.
+// Returns (nil, nil) on miss.
+func (r *FixtureRepository) FindDefinitionByRefID(ctx context.Context, refID string) (*models.FixtureDefinition, error) {
+	var d models.FixtureDefinition
+	result := r.db.WithContext(ctx).Where("ref_id = ?", refID).First(&d)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &d, nil
 }
 
 // DeleteDefinitionModes deletes all modes for a fixture definition.
