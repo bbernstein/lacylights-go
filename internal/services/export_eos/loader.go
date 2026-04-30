@@ -81,7 +81,12 @@ func (s *Service) loadBundle(ctx context.Context, projectID string, collector *i
 	}
 
 	// Sidecar: look boards + synthesized definitions.
-	sidecar, err := s.buildSidecar(ctx, projectID, defModels, defChannels)
+	sidecar, err := s.buildSidecar(ctx, projectID, defModels, defChannels, collector)
+	if err != nil {
+		return nil, err
+	}
+
+	groupsOut, err := s.loadGroups(ctx, projectID, eosChannelByInstance, collector)
 	if err != nil {
 		return nil, err
 	}
@@ -93,9 +98,105 @@ func (s *Service) loadBundle(ctx context.Context, projectID string, collector *i
 		Patch:         patch,
 		Palettes:      palettes,
 		CueLists:      regularLists,
-		Groups:        []GroupOut{}, // FixtureGroup model not yet present (Task 14c)
+		Groups:        groupsOut,
 		Sidecar:       sidecar,
 	}, nil
+}
+
+// loadGroups returns the project's FixtureGroups as writer-shape rows,
+// resolving members to EOS channel numbers. Empty groups (no resolvable
+// members) are skipped with WarnExportEmptyGroupSkipped. Groups missing
+// an EosNumber are auto-assigned the next available number and the
+// updated number is persisted so subsequent exports stay stable.
+func (s *Service) loadGroups(
+	ctx context.Context,
+	projectID string,
+	eosByInstance map[string]int,
+	collector *importeos.Collector,
+) ([]GroupOut, error) {
+	groups, err := s.fixtureGroupRepo.FindByProjectID(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("export_eos: groups: %w", err)
+	}
+	// Sort: assigned EosNumber first (ascending), then nil-EosNumber
+	// (alphabetic), then ID for tie-break. This makes auto-assignment
+	// deterministic.
+	sort.SliceStable(groups, func(i, j int) bool {
+		ai, bi := groups[i].EosNumber, groups[j].EosNumber
+		switch {
+		case ai != nil && bi != nil:
+			if *ai != *bi {
+				return *ai < *bi
+			}
+		case ai != nil:
+			return true
+		case bi != nil:
+			return false
+		}
+		if groups[i].Name != groups[j].Name {
+			return groups[i].Name < groups[j].Name
+		}
+		return groups[i].ID < groups[j].ID
+	})
+
+	// Auto-assign missing EosNumbers and persist them. NOTE: this mutates DB
+	// state during a nominally read-only export — intentional, since the
+	// alternative (renumber on every export) breaks round-trip stability.
+	// This does not guarantee serialization against concurrent exports of
+	// the same project: SQLite's deferred transactions don't lock the MAX
+	// read against parallel writers, so concurrent callers may still race
+	// while deriving the next number, and one may fail on the
+	// (project_id, eos_number) partial unique index. In practice export
+	// is user-initiated and concurrent same-project exports are vanishingly
+	// rare; if a collision does happen the user just re-runs.
+	if err := s.fixtureGroupRepo.AssignAndPersistMissingEosNumbers(ctx, projectID, groups); err != nil {
+		return nil, fmt.Errorf("export_eos: persist auto-assigned eos_number: %w", err)
+	}
+
+	// Batch-load all groups' members in one query to avoid an O(groups)
+	// round-trip pattern.
+	groupIDs := make([]string, len(groups))
+	for i := range groups {
+		groupIDs[i] = groups[i].ID
+	}
+	membersByGroup, err := s.fixtureGroupRepo.GetMembersByGroupIDs(ctx, groupIDs)
+	if err != nil {
+		return nil, fmt.Errorf("export_eos: group members batch: %w", err)
+	}
+
+	out := make([]GroupOut, 0, len(groups))
+	for _, g := range groups {
+		members := membersByGroup[g.ID]
+		channels := make([]int, 0, len(members))
+		for _, m := range members {
+			ch, ok := eosByInstance[m.FixtureID]
+			if !ok {
+				continue // unpatched fixture — silently exclude
+			}
+			channels = append(channels, ch)
+		}
+		if len(channels) == 0 {
+			if collector != nil {
+				collector.Add(importeos.WarnExportEmptyGroupSkipped, importeos.SeverityInfo,
+					fmt.Sprintf("group %s has no patched members; skipped on export", g.Name),
+					map[string]string{"groupId": g.ID, "groupName": g.Name})
+			}
+			continue
+		}
+		// Defensive: AssignAndPersistMissingEosNumbers above guarantees
+		// EosNumber is non-nil here. Skip if the invariant is somehow
+		// violated rather than panicking.
+		if g.EosNumber == nil {
+			continue
+		}
+		number := strconv.Itoa(*g.EosNumber)
+		out = append(out, GroupOut{
+			Number:   number,
+			Label:    g.Name,
+			Channels: channels,
+		})
+	}
+	return out, nil
 }
 
 // eosChannelFor returns the EOS channel number for a fixture instance. We use
@@ -463,6 +564,7 @@ func (s *Service) buildSidecar(
 	projectID string,
 	defs map[string]*models.FixtureDefinition,
 	defChannels map[string][]models.ChannelDefinition,
+	collector *importeos.Collector,
 ) (SidecarOut, error) {
 	out := SidecarOut{Version: 1}
 
@@ -471,32 +573,108 @@ func (s *Service) buildSidecar(
 		return SidecarOut{}, fmt.Errorf("export_eos: look boards: %w", err)
 	}
 	sort.SliceStable(boards, func(i, j int) bool { return boards[i].ID < boards[j].ID })
-	// TODO: batch the per-board GetButtons calls when project scale warrants
-	// — currently O(boards) round-trips per export. Acceptable for typical
-	// shows (low single-digit board counts).
+
+	// Pass 1: gather buttons for every board and collect referenced look IDs.
+	buttonsByBoard := make(map[string][]models.LookBoardButton, len(boards))
+	lookIDSet := map[string]struct{}{}
 	for _, b := range boards {
 		buttons, err := s.lookBoardRepo.GetButtons(ctx, b.ID)
 		if err != nil {
 			return SidecarOut{}, fmt.Errorf("export_eos: look board buttons: %w", err)
 		}
 		sort.SliceStable(buttons, func(i, j int) bool { return buttons[i].ID < buttons[j].ID })
-		var sb []importeos.SidecarLookBoardButton
+		buttonsByBoard[b.ID] = buttons
 		for _, btn := range buttons {
+			lookIDSet[btn.LookID] = struct{}{}
+		}
+	}
+	// Pass 2: resolve all referenced look IDs in a single batch query.
+	lookRefByID := map[string]string{}
+	if len(lookIDSet) > 0 {
+		ids := make([]string, 0, len(lookIDSet))
+		for id := range lookIDSet {
+			ids = append(ids, id)
+		}
+		looks, err := s.lookRepo.FindByIDs(ctx, ids)
+		if err != nil {
+			return SidecarOut{}, fmt.Errorf("export_eos: look refs: %w", err)
+		}
+		for i := range looks {
+			lookRefByID[looks[i].ID] = looks[i].RefID
+		}
+	}
+	// Pass 3: emit board records with refIDs resolved.
+	for _, b := range boards {
+		var sb []importeos.SidecarLookBoardButton
+		for _, btn := range buttonsByBoard[b.ID] {
 			color := ""
 			if btn.Color != nil {
 				color = *btn.Color
 			}
+			refID, ok := lookRefByID[btn.LookID]
+			if !ok {
+				// Dangling button reference (LookID points at a deleted
+				// Look). Skip it on export and surface a warning so the
+				// drop is visible to the operator.
+				if collector != nil {
+					collector.Add(importeos.WarnSidecarUnresolved, importeos.SeverityWarn,
+						fmt.Sprintf("look board %q button references unknown look %q; dropped on export", b.RefID, btn.LookID),
+						map[string]string{
+							"kind":       "look_board_button",
+							"boardRefId": b.RefID,
+							"lookId":     btn.LookID,
+						})
+				}
+				continue
+			}
 			sb = append(sb, importeos.SidecarLookBoardButton{
-				LookRefID: btn.LookID,
+				LookRefID: refID,
 				X:         btn.LayoutX,
 				Y:         btn.LayoutY,
 				Color:     color,
 			})
 		}
 		out.LookBoards = append(out.LookBoards, importeos.SidecarLookBoard{
-			RefID:   b.ID,
+			RefID:   b.RefID,
 			Name:    b.Name,
 			Buttons: sb,
+		})
+	}
+
+	// fade_behavior: any FixtureInstance with non-default channel fade
+	// behaviors gets a record. Sorted by RefID for determinism. Channels
+	// are fetched in a single batch query to avoid an O(fixtures) loop.
+	instances, err := s.fixtureRepo.FindByProjectID(ctx, projectID)
+	if err != nil {
+		return SidecarOut{}, fmt.Errorf("export_eos: instances for fade_behavior: %w", err)
+	}
+	sort.SliceStable(instances, func(i, j int) bool { return instances[i].RefID < instances[j].RefID })
+	instanceIDs := make([]string, len(instances))
+	for i := range instances {
+		instanceIDs[i] = instances[i].ID
+	}
+	channelsByFixture, err := s.fixtureRepo.GetInstanceChannelsByFixtureIDs(ctx, instanceIDs)
+	if err != nil {
+		return SidecarOut{}, fmt.Errorf("export_eos: instance channels batch: %w", err)
+	}
+	for i := range instances {
+		fi := &instances[i]
+		var nonDefault []importeos.SidecarFadeBehaviorChannel
+		for _, c := range channelsByFixture[fi.ID] {
+			if c.FadeBehavior != "" && c.FadeBehavior != "FADE" {
+				nonDefault = append(nonDefault, importeos.SidecarFadeBehaviorChannel{
+					Offset:   c.Offset,
+					Behavior: c.FadeBehavior,
+				})
+			}
+		}
+		if len(nonDefault) == 0 {
+			continue
+		}
+		sort.Slice(nonDefault, func(a, b int) bool { return nonDefault[a].Offset < nonDefault[b].Offset })
+		out.FadeBehaviors = append(out.FadeBehaviors, importeos.SidecarFadeBehavior{
+			InstanceRefID: fi.RefID,
+			Channels:      nonDefault,
 		})
 	}
 
@@ -512,7 +690,7 @@ func (s *Service) buildSidecar(
 			continue
 		}
 		out.SynthDefs = append(out.SynthDefs, importeos.SidecarSynthDef{
-			DefRefID:           id,
+			DefRefID:           dm.RefID,
 			Manufacturer:       dm.Manufacturer,
 			Model:              dm.Model,
 			ChannelFingerprint: channelFingerprint(defChannels[id]),

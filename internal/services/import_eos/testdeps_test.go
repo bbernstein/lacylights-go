@@ -1,8 +1,10 @@
 package importeos
 
 import (
+	"context"
 	"testing"
 
+	"github.com/bbernstein/lacylights-go/internal/database/migrations"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	"github.com/glebarez/sqlite"
@@ -11,13 +13,14 @@ import (
 )
 
 type testDeps struct {
-	db            *gorm.DB
-	projectRepo   *repositories.ProjectRepository
-	fixtureRepo   *repositories.FixtureRepository
-	lookRepo      *repositories.LookRepository
-	cueListRepo   *repositories.CueListRepository
-	cueRepo       *repositories.CueRepository
-	lookBoardRepo *repositories.LookBoardRepository
+	db               *gorm.DB
+	projectRepo      *repositories.ProjectRepository
+	fixtureRepo      *repositories.FixtureRepository
+	fixtureGroupRepo *repositories.FixtureGroupRepository
+	lookRepo         *repositories.LookRepository
+	cueListRepo      *repositories.CueListRepository
+	cueRepo          *repositories.CueRepository
+	lookBoardRepo    *repositories.LookBoardRepository
 }
 
 func newTestDeps(t *testing.T) *testDeps {
@@ -43,19 +46,27 @@ func newTestDeps(t *testing.T) *testDeps {
 		&models.Setting{},
 		&models.LookBoard{},
 		&models.LookBoardButton{},
+		&models.FixtureGroup{},
+		&models.FixtureGroupMember{},
 		&models.UserGroup{},
 		&models.UserGroupMember{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	// Apply RefID unique indexes so tests catch constraint violations the
+	// same way production does (CreateRefIDIndexes runs at server boot).
+	if err := migrations.CreateRefIDIndexes(db); err != nil {
+		t.Fatalf("create ref_id indexes: %v", err)
+	}
 	return &testDeps{
-		db:            db,
-		projectRepo:   repositories.NewProjectRepository(db),
-		fixtureRepo:   repositories.NewFixtureRepository(db),
-		lookRepo:      repositories.NewLookRepository(db),
-		cueListRepo:   repositories.NewCueListRepository(db),
-		cueRepo:       repositories.NewCueRepository(db),
-		lookBoardRepo: repositories.NewLookBoardRepository(db),
+		db:               db,
+		projectRepo:      repositories.NewProjectRepository(db),
+		fixtureRepo:      repositories.NewFixtureRepository(db),
+		fixtureGroupRepo: repositories.NewFixtureGroupRepository(db),
+		lookRepo:         repositories.NewLookRepository(db),
+		cueListRepo:      repositories.NewCueListRepository(db),
+		cueRepo:          repositories.NewCueRepository(db),
+		lookBoardRepo:    repositories.NewLookBoardRepository(db),
 	}
 }
 
@@ -66,3 +77,12 @@ func (d *testDeps) close() {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+func (d *testDeps) MustListGroupsByProject(t *testing.T, projectID string) []models.FixtureGroup {
+	t.Helper()
+	gs, err := d.fixtureGroupRepo.FindByProjectID(context.Background(), projectID)
+	if err != nil {
+		t.Fatalf("list groups: %v", err)
+	}
+	return gs
+}

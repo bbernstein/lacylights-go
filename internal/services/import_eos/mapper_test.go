@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -35,7 +36,7 @@ $Patch 2 2 9001
    Text Back
 `)
 
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Import(context.Background(), src, Options{NewProjectName: ptr("Test Show")})
 	if err != nil {
@@ -64,7 +65,7 @@ func openFixtureFile(t *testing.T, name string) *os.File {
 func TestImport_TargetProjectNotFound(t *testing.T) {
 	deps := newTestDeps(t)
 	defer deps.close()
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	missing := "definitely-not-a-real-project"
 	_, err := svc.Import(context.Background(), strings.NewReader(`Ident 3:0
@@ -94,7 +95,7 @@ func TestImport_AddressConflictEmitsWarning(t *testing.T) {
 	defer deps.close()
 	f := openFixtureFile(t, "conflict_addresses.asc")
 	defer func() { _ = f.Close() }()
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr("X")})
 	if err != nil {
@@ -119,7 +120,7 @@ func TestMapper_PalettesBecomeLooksInDedicatedCueLists(t *testing.T) {
 	f := openFixtureFile(t, "palettes_color_focus.asc")
 	defer func() { _ = f.Close() }()
 
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr("Pal")})
 	if err != nil {
@@ -145,7 +146,7 @@ func TestMapper_CuesProduceTrackedSnapshots(t *testing.T) {
 	f := openFixtureFile(t, "tracking.asc")
 	defer func() { _ = f.Close() }()
 
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr("Track")})
 	if err != nil {
@@ -191,5 +192,392 @@ func TestMapper_CuesProduceTrackedSnapshots(t *testing.T) {
 	}
 	if fullCount != 3 {
 		t.Errorf("expected 3 full intensities in cue 2, got %d", fullCount)
+	}
+}
+
+func TestMapper_RefIDsDeterministicAcrossProjects(t *testing.T) {
+	// Import the same minimal patch into two distinct fresh projects.
+	// Same input file should yield the same RefIDs regardless of project,
+	// which is what makes the $$ LACYLIGHTS: sidecar resolve cleanly on
+	// round-trip.
+	importInto := func(name string) string {
+		deps := newTestDeps(t)
+		t.Cleanup(deps.close)
+		f := openFixtureFile(t, "minimal_patch.asc")
+		t.Cleanup(func() { _ = f.Close() })
+		svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+			deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+		res, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr(name)})
+		if err != nil {
+			t.Fatalf("import %s: %v", name, err)
+		}
+		instances, err := deps.fixtureRepo.FindByProjectID(context.Background(), res.ProjectID)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		sort.Slice(instances, func(i, j int) bool {
+			oi, oj := 0, 0
+			if instances[i].ProjectOrder != nil {
+				oi = *instances[i].ProjectOrder
+			}
+			if instances[j].ProjectOrder != nil {
+				oj = *instances[j].ProjectOrder
+			}
+			return oi < oj
+		})
+		var b strings.Builder
+		for _, fi := range instances {
+			b.WriteString(fi.RefID)
+			b.WriteByte('|')
+		}
+		return b.String()
+	}
+
+	a := importInto("Project A")
+	b := importInto("Project B")
+	if a != b {
+		t.Errorf("non-deterministic RefIDs:\nA: %s\nB: %s", a, b)
+	}
+	if !strings.Contains(a, "ch-") {
+		t.Errorf("expected EOS-derived RefIDs in %q", a)
+	}
+}
+
+func TestMapper_GroupsCreated(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+
+	f := openFixtureFile(t, "groups_only.asc")
+	defer func() { _ = f.Close() }()
+
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr("Test Show")})
+	if err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	if res.GroupsCount != 2 {
+		t.Errorf("GroupsCount = %d, want 2", res.GroupsCount)
+	}
+
+	groups := deps.MustListGroupsByProject(t, res.ProjectID)
+	if len(groups) != 2 {
+		t.Fatalf("got %d groups, want 2", len(groups))
+	}
+
+	byEos := map[int]models.FixtureGroup{}
+	for _, g := range groups {
+		if g.EosNumber == nil {
+			t.Errorf("group %s has nil EosNumber", g.Name)
+			continue
+		}
+		byEos[*g.EosNumber] = g
+	}
+
+	if got := byEos[1].Name; got != "SR Specials" {
+		t.Errorf("group 1 name = %q", got)
+	}
+	if got := byEos[2].Name; got != "All Lights" {
+		t.Errorf("group 2 name = %q", got)
+	}
+
+	// Membership check: group 2 should have 3 fixtures.
+	ms2, err := deps.fixtureGroupRepo.GetMembers(context.Background(), byEos[2].ID)
+	if err != nil {
+		t.Fatalf("members: %v", err)
+	}
+	if len(ms2) != 3 {
+		t.Errorf("group 2 members = %d, want 3", len(ms2))
+	}
+}
+
+func TestMapper_GroupChannelUnresolvedWarn(t *testing.T) {
+	asc := `Ident 3:0
+$ParamType 1 1 Intens
+$Personality 1
+$$Manuf Generic
+$$Model Dimmer
+$$Footprint 1
+$$PersChan 1 1 1 0 0
+$Patch 1 1 1
+   Text A
+$Group 1
+   Text Mostly
+   1 99
+`
+	deps := newTestDeps(t)
+	defer deps.close()
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Import(context.Background(), strings.NewReader(asc), Options{NewProjectName: ptr("T")})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if res.GroupsCount != 1 {
+		t.Errorf("GroupsCount = %d", res.GroupsCount)
+	}
+	saw := false
+	for _, w := range res.Warnings {
+		if w.Code == WarnGroupChannelUnresolved {
+			saw = true
+		}
+	}
+	if !saw {
+		t.Errorf("expected WarnGroupChannelUnresolved")
+	}
+}
+
+func TestMapper_SidecarLookBoardRebuilt(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+
+	f := openFixtureFile(t, "sidecar_roundtrip.asc")
+	defer func() { _ = f.Close() }()
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr("T")})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+
+	boards, _ := deps.lookBoardRepo.FindByProjectID(context.Background(), res.ProjectID)
+	if len(boards) != 1 {
+		t.Fatalf("got %d boards, want 1", len(boards))
+	}
+	if boards[0].Name != "Top" {
+		t.Errorf("name = %q", boards[0].Name)
+	}
+	btns, _ := deps.lookBoardRepo.GetButtons(context.Background(), boards[0].ID)
+	if len(btns) != 1 {
+		t.Fatalf("got %d buttons, want 1", len(btns))
+	}
+	if btns[0].Color == nil || *btns[0].Color != "#ff0000" {
+		t.Errorf("color = %v", btns[0].Color)
+	}
+}
+
+func TestMapper_SidecarLookBoardUnresolvedButton(t *testing.T) {
+	asc := `Ident 3:0
+$ParamType 1 1 Intens
+$Personality 1
+$$Manuf Generic
+$$Model Dimmer
+$$Footprint 1
+$$PersChan 1 1 1 0 0
+$Patch 1 1 1
+   Text A
+$CueList 1
+Cue 1 1
+   Text Open
+   Up 5
+   $$ChanMove  1@HFF
+$$ LACYLIGHTS:version 1
+$$ LACYLIGHTS:look_board {"refId":"b1","name":"X","buttons":[{"lookRefId":"cue-1-1","x":0,"y":0,"color":"#ff"},{"lookRefId":"missing","x":1,"y":0,"color":"#00"}]}
+`
+	deps := newTestDeps(t)
+	defer deps.close()
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Import(context.Background(), strings.NewReader(asc), Options{NewProjectName: ptr("T")})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	boards, _ := deps.lookBoardRepo.FindByProjectID(context.Background(), res.ProjectID)
+	if len(boards) != 1 {
+		t.Fatalf("got %d boards", len(boards))
+	}
+	btns, _ := deps.lookBoardRepo.GetButtons(context.Background(), boards[0].ID)
+	if len(btns) != 1 {
+		t.Errorf("got %d buttons (should drop the unresolved one)", len(btns))
+	}
+	saw := false
+	for _, w := range res.Warnings {
+		if w.Code == WarnSidecarUnresolved && w.Context["kind"] == "look_board_button" {
+			saw = true
+		}
+	}
+	if !saw {
+		t.Errorf("expected WarnSidecarUnresolved kind=look_board_button")
+	}
+}
+
+func TestMapper_SidecarFadeBehaviorApplied(t *testing.T) {
+	asc := `Ident 3:0
+$ParamType 1 1 Intens
+$ParamType 12 3 Red
+$ParamType 13 3 Green
+$Personality 1
+   $$Manuf Generic
+   $$Model RGB
+   $$Footprint 3
+   $$PersChan 1 1 1 0 0
+   $$PersChan 12 1 2 0 0
+   $$PersChan 13 1 3 0 0
+$Patch 1 1 1
+   Text A
+$$ LACYLIGHTS:version 1
+$$ LACYLIGHTS:fade_behavior {"instanceRefId":"ch-1","channels":[{"offset":1,"behavior":"SNAP_END"}]}
+`
+	deps := newTestDeps(t)
+	defer deps.close()
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Import(context.Background(), strings.NewReader(asc), Options{NewProjectName: ptr("T")})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	instances, _ := deps.fixtureRepo.FindByProjectID(context.Background(), res.ProjectID)
+	if len(instances) != 1 {
+		t.Fatalf("got %d instances, want 1", len(instances))
+	}
+	channels, _ := deps.fixtureRepo.GetInstanceChannels(context.Background(), instances[0].ID)
+	want := map[int]string{0: "FADE", 1: "SNAP_END", 2: "FADE"}
+	for _, c := range channels {
+		if c.FadeBehavior != want[c.Offset] {
+			t.Errorf("offset %d: %q, want %q", c.Offset, c.FadeBehavior, want[c.Offset])
+		}
+	}
+}
+
+func TestMapper_SidecarFadeBehaviorOffsetMissing(t *testing.T) {
+	asc := `Ident 3:0
+$ParamType 1 1 Intens
+$Personality 1
+   $$Manuf Generic
+   $$Model Dimmer
+   $$Footprint 1
+   $$PersChan 1 1 1 0 0
+$Patch 1 1 1
+   Text A
+$$ LACYLIGHTS:version 1
+$$ LACYLIGHTS:fade_behavior {"instanceRefId":"ch-1","channels":[{"offset":99,"behavior":"SNAP"}]}
+`
+	deps := newTestDeps(t)
+	defer deps.close()
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Import(context.Background(), strings.NewReader(asc), Options{NewProjectName: ptr("T")})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	saw := false
+	for _, w := range res.Warnings {
+		if w.Code == WarnSidecarUnresolved && w.Context["kind"] == "fade_behavior_offset" {
+			saw = true
+		}
+	}
+	if !saw {
+		t.Errorf("expected WarnSidecarUnresolved kind=fade_behavior_offset")
+	}
+}
+
+func TestMapper_SidecarSynthDefAdvisory(t *testing.T) {
+	asc := `Ident 3:0
+$ParamType 1 1 Intens
+$Personality 1
+   $$Manuf Generic
+   $$Model Dimmer
+   $$Footprint 1
+   $$PersChan 1 1 1 0 0
+$Patch 1 1 1
+   Text A
+$$ LACYLIGHTS:version 1
+$$ LACYLIGHTS:synth_def {"defRefId":"def-Other-Thing","manufacturer":"Other","model":"Thing","channelFingerprint":"1"}
+`
+	deps := newTestDeps(t)
+	defer deps.close()
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Import(context.Background(), strings.NewReader(asc), Options{NewProjectName: ptr("T")})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	saw := false
+	for _, w := range res.Warnings {
+		if w.Code == WarnSidecarUnresolved && w.Context["kind"] == "synth_def" {
+			saw = true
+		}
+	}
+	if !saw {
+		t.Errorf("expected WarnSidecarUnresolved kind=synth_def")
+	}
+}
+
+func TestMapper_CuesIdempotentReimport(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+
+	importOnce := func(targetID *string) (*Result, error) {
+		f := openFixtureFile(t, "basic_cues.asc")
+		defer func() { _ = f.Close() }()
+		svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+			deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+		opts := Options{}
+		if targetID != nil {
+			opts.TargetProjectID = targetID
+		} else {
+			opts.NewProjectName = ptr("CueIdem")
+		}
+		return svc.Import(context.Background(), f, opts)
+	}
+
+	res1, err := importOnce(nil)
+	if err != nil {
+		t.Fatalf("first import: %v", err)
+	}
+
+	// Re-import into the same project must not crash on the unique
+	// constraints we apply at server boot (and now in tests).
+	if _, err := importOnce(&res1.ProjectID); err != nil {
+		t.Fatalf("re-import: %v", err)
+	}
+}
+
+func TestMapper_GroupsIdempotentReimport(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+
+	importOnce := func(targetID *string) (*Result, error) {
+		f := openFixtureFile(t, "groups_only.asc")
+		defer func() { _ = f.Close() }()
+		svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+			deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+		opts := Options{}
+		if targetID != nil {
+			opts.TargetProjectID = targetID
+		} else {
+			opts.NewProjectName = ptr("Idem")
+		}
+		return svc.Import(context.Background(), f, opts)
+	}
+
+	res1, err := importOnce(nil)
+	if err != nil {
+		t.Fatalf("first import: %v", err)
+	}
+	first := deps.MustListGroupsByProject(t, res1.ProjectID)
+	if len(first) != 2 {
+		t.Fatalf("first import: %d groups", len(first))
+	}
+
+	if _, err := importOnce(&res1.ProjectID); err != nil {
+		t.Fatalf("re-import: %v", err)
+	}
+	second := deps.MustListGroupsByProject(t, res1.ProjectID)
+	if len(second) != 2 {
+		t.Errorf("after re-import: %d groups (want 2)", len(second))
+	}
+
+	// Verify the SetMembers update path actually fired by checking the
+	// surviving membership reflects the second import (each group should
+	// have its full set of fixtures re-attached).
+	for _, g := range second {
+		ms, err := deps.fixtureGroupRepo.GetMembers(context.Background(), g.ID)
+		if err != nil {
+			t.Fatalf("members for %s: %v", g.Name, err)
+		}
+		if len(ms) == 0 {
+			t.Errorf("group %s has 0 members after re-import (SetMembers regression?)", g.Name)
+		}
 	}
 }

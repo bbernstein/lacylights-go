@@ -47,6 +47,9 @@ func (r *LookBoardRepository) Create(ctx context.Context, board *models.LookBoar
 	if board.ID == "" {
 		board.ID = cuid.New()
 	}
+	if board.RefID == "" {
+		board.RefID = board.ID
+	}
 	return r.db.WithContext(ctx).Create(board).Error
 }
 
@@ -110,6 +113,9 @@ func (r *LookBoardRepository) CreateWithButtons(ctx context.Context, board *mode
 		if board.ID == "" {
 			board.ID = cuid.New()
 		}
+		if board.RefID == "" {
+			board.RefID = board.ID
+		}
 		if err := tx.Create(board).Error; err != nil {
 			return err
 		}
@@ -150,4 +156,45 @@ func (r *LookBoardRepository) UpdateButton(ctx context.Context, button *models.L
 // DeleteButton deletes a single look board button by ID.
 func (r *LookBoardRepository) DeleteButton(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Delete(&models.LookBoardButton{}, "id = ?", id).Error
+}
+
+// FindByRefID resolves a look board by (projectID, refID). (nil, nil) on miss.
+func (r *LookBoardRepository) FindByRefID(ctx context.Context, projectID, refID string) (*models.LookBoard, error) {
+	var b models.LookBoard
+	result := r.db.WithContext(ctx).
+		Where("project_id = ? AND ref_id = ?", projectID, refID).
+		First(&b)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &b, nil
+}
+
+// ReplaceButtons atomically renames the board (if name != current) and
+// replaces its full button list. If the transaction fails after the buttons
+// are deleted, the board is rolled back to its previous state.
+func (r *LookBoardRepository) ReplaceButtons(ctx context.Context, board *models.LookBoard, buttons []models.LookBoardButton) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.LookBoard{}).
+			Where("id = ?", board.ID).
+			Updates(map[string]interface{}{"name": board.Name}).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&models.LookBoardButton{}, "look_board_id = ?", board.ID).Error; err != nil {
+			return err
+		}
+		if len(buttons) == 0 {
+			return nil
+		}
+		for i := range buttons {
+			if buttons[i].ID == "" {
+				buttons[i].ID = cuid.New()
+			}
+			buttons[i].LookBoardID = board.ID
+		}
+		return tx.Create(&buttons).Error
+	})
 }

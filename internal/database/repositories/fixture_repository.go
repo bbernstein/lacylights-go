@@ -2,11 +2,17 @@ package repositories
 
 import (
 	"context"
+	"errors"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/lucsky/cuid"
 	"gorm.io/gorm"
 )
+
+// ErrChannelOffsetNotFound is returned by UpdateInstanceChannelFadeBehavior
+// when the targeted offset doesn't exist on the instance. Mappers convert it
+// to a SIDECAR_UNRESOLVED warning rather than failing the import.
+var ErrChannelOffsetNotFound = errors.New("instance channel offset not found")
 
 // FixtureRepository handles fixture data access.
 type FixtureRepository struct {
@@ -41,10 +47,25 @@ func (r *FixtureRepository) FindByID(ctx context.Context, id string) (*models.Fi
 	return &fixture, nil
 }
 
+// FindByIDs batches FindByID into a single SELECT … WHERE id IN (…). Returns
+// rows in arbitrary order; callers that need a specific order should index
+// the result by ID. Empty input returns an empty slice without a query.
+func (r *FixtureRepository) FindByIDs(ctx context.Context, ids []string) ([]models.FixtureInstance, error) {
+	if len(ids) == 0 {
+		return []models.FixtureInstance{}, nil
+	}
+	var fixtures []models.FixtureInstance
+	result := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&fixtures)
+	return fixtures, result.Error
+}
+
 // Create creates a new fixture instance.
 func (r *FixtureRepository) Create(ctx context.Context, fixture *models.FixtureInstance) error {
 	if fixture.ID == "" {
 		fixture.ID = cuid.New()
+	}
+	if fixture.RefID == "" {
+		fixture.RefID = fixture.ID
 	}
 	return r.db.WithContext(ctx).Create(fixture).Error
 }
@@ -54,9 +75,17 @@ func (r *FixtureRepository) Update(ctx context.Context, fixture *models.FixtureI
 	return r.db.WithContext(ctx).Save(fixture).Error
 }
 
-// Delete deletes a fixture instance by ID.
+// Delete deletes a fixture instance by ID, also removing any
+// FixtureGroupMember rows that reference it (cascade-on-fixture-delete).
+// GORM's tag-based cascade on a composite-PK junction is unreliable, so
+// we do this explicitly in a transaction.
 func (r *FixtureRepository) Delete(ctx context.Context, id string) error {
-	return r.db.WithContext(ctx).Delete(&models.FixtureInstance{}, "id = ?", id).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&models.FixtureGroupMember{}, "fixture_id = ?", id).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.FixtureInstance{}, "id = ?", id).Error
+	})
 }
 
 // FindDefinitionByID returns a fixture definition by ID.
@@ -104,6 +133,29 @@ func (r *FixtureRepository) GetInstanceChannels(ctx context.Context, fixtureID s
 		Order("offset ASC").
 		Find(&channels)
 	return channels, result.Error
+}
+
+// GetInstanceChannelsByFixtureIDs batches GetInstanceChannels into a single
+// SELECT … WHERE fixture_id IN (…). Returns a map keyed by fixture ID with
+// each value sorted by Offset ASC. Used by the EOS exporter to avoid an
+// O(fixtures) round-trip pattern when emitting fade_behavior records.
+// Empty input returns an empty map without a query.
+func (r *FixtureRepository) GetInstanceChannelsByFixtureIDs(ctx context.Context, fixtureIDs []string) (map[string][]models.InstanceChannel, error) {
+	out := make(map[string][]models.InstanceChannel, len(fixtureIDs))
+	if len(fixtureIDs) == 0 {
+		return out, nil
+	}
+	var channels []models.InstanceChannel
+	if err := r.db.WithContext(ctx).
+		Where("fixture_id IN ?", fixtureIDs).
+		Order("fixture_id ASC, offset ASC").
+		Find(&channels).Error; err != nil {
+		return nil, err
+	}
+	for _, c := range channels {
+		out[c.FixtureID] = append(out[c.FixtureID], c)
+	}
+	return out, nil
 }
 
 // GetDefinitionChannels returns all channels for a fixture definition.
@@ -176,6 +228,9 @@ func (r *FixtureRepository) CreateWithChannels(ctx context.Context, fixture *mod
 		if fixture.ID == "" {
 			fixture.ID = cuid.New()
 		}
+		if fixture.RefID == "" {
+			fixture.RefID = fixture.ID
+		}
 		if err := tx.Create(fixture).Error; err != nil {
 			return err
 		}
@@ -199,6 +254,9 @@ func (r *FixtureRepository) CreateWithChannels(ctx context.Context, fixture *mod
 func (r *FixtureRepository) CreateDefinition(ctx context.Context, definition *models.FixtureDefinition) error {
 	if definition.ID == "" {
 		definition.ID = cuid.New()
+	}
+	if definition.RefID == "" {
+		definition.RefID = definition.ID
 	}
 	return r.db.WithContext(ctx).Create(definition).Error
 }
@@ -244,6 +302,9 @@ func (r *FixtureRepository) CreateDefinitionWithChannels(ctx context.Context, de
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if definition.ID == "" {
 			definition.ID = cuid.New()
+		}
+		if definition.RefID == "" {
+			definition.RefID = definition.ID
 		}
 		if err := tx.Create(definition).Error; err != nil {
 			return err
@@ -312,6 +373,56 @@ func (r *FixtureRepository) CreateModeChannels(ctx context.Context, modeChannels
 		}
 	}
 	return r.db.WithContext(ctx).Create(&modeChannels).Error
+}
+
+// FindInstanceByRefID resolves a fixture instance by (project, refID).
+// Returns (nil, nil) on miss — convention shared with FindByID.
+func (r *FixtureRepository) FindInstanceByRefID(ctx context.Context, projectID, refID string) (*models.FixtureInstance, error) {
+	var fi models.FixtureInstance
+	result := r.db.WithContext(ctx).
+		Where("project_id = ? AND ref_id = ?", projectID, refID).
+		First(&fi)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &fi, nil
+}
+
+// UpdateInstanceChannelFadeBehavior updates the FadeBehavior on a single
+// (instanceID, offset) row. Returns ErrChannelOffsetNotFound if no matching
+// row exists — callers convert this to a structured warning.
+func (r *FixtureRepository) UpdateInstanceChannelFadeBehavior(ctx context.Context, instanceID string, offset int, behavior string) error {
+	// "offset" is a SQL reserved word; quote with double quotes (SQL
+	// standard) so the query works across SQLite/Postgres without the
+	// MySQL-specific backtick syntax.
+	res := r.db.WithContext(ctx).
+		Model(&models.InstanceChannel{}).
+		Where(`fixture_id = ? AND "offset" = ?`, instanceID, offset).
+		Update("fade_behavior", behavior)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrChannelOffsetNotFound
+	}
+	return nil
+}
+
+// FindDefinitionByRefID resolves a fixture definition by refID.
+// Returns (nil, nil) on miss.
+func (r *FixtureRepository) FindDefinitionByRefID(ctx context.Context, refID string) (*models.FixtureDefinition, error) {
+	var d models.FixtureDefinition
+	result := r.db.WithContext(ctx).Where("ref_id = ?", refID).First(&d)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &d, nil
 }
 
 // DeleteDefinitionModes deletes all modes for a fixture definition.

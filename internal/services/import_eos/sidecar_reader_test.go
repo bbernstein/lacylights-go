@@ -14,7 +14,7 @@ func TestReadSidecar_Roundtrip(t *testing.T) {
 	}
 	if len(sc.LookBoards) != 1 || sc.LookBoards[0].RefID != "board-a" ||
 		len(sc.LookBoards[0].Buttons) != 1 ||
-		sc.LookBoards[0].Buttons[0].LookRefID != "L1" {
+		sc.LookBoards[0].Buttons[0].LookRefID != "cue-1-1" {
 		t.Errorf("look board: got %+v", sc.LookBoards)
 	}
 	if len(sc.FadeBehaviors) != 1 || sc.FadeBehaviors[0].InstanceRefID != "fix-1" ||

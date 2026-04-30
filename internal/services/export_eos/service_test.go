@@ -110,7 +110,7 @@ func TestExport_Deterministic(t *testing.T) {
 	deps := newTestDeps(t)
 	defer deps.close()
 	pid := buildSampleProject(t, deps)
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 
 	res1, err := svc.Export(context.Background(), pid)
@@ -130,7 +130,7 @@ func TestExport_StructureBasics(t *testing.T) {
 	deps := newTestDeps(t)
 	defer deps.close()
 	pid := buildSampleProject(t, deps)
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 
 	res, err := svc.Export(context.Background(), pid)
@@ -197,7 +197,7 @@ func TestExport_EmitsWarningForUnpatchedFixture(t *testing.T) {
 		}
 	}
 
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Export(ctx, proj.ID)
 	if err != nil {
@@ -246,7 +246,7 @@ func TestExport_SanitizesNewlinesInLabels(t *testing.T) {
 		t.Fatalf("create instance: %v", err)
 	}
 
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Export(ctx, proj.ID)
 	if err != nil {
@@ -308,7 +308,7 @@ func TestExport_WarnsOnInvalidLookValuesJSON(t *testing.T) {
 		t.Fatalf("create cue: %v", err)
 	}
 
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Export(ctx, proj.ID)
 	if err != nil {
@@ -351,7 +351,7 @@ func TestExport_DottedAddressForMultiUniverse(t *testing.T) {
 		t.Fatalf("create instance: %v", err)
 	}
 
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Export(ctx, proj.ID)
 	if err != nil {
@@ -368,7 +368,7 @@ func TestExport_DottedAddressForMultiUniverse(t *testing.T) {
 func TestExport_FailsWhenProjectMissing(t *testing.T) {
 	deps := newTestDeps(t)
 	defer deps.close()
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	_, err := svc.Export(context.Background(), "definitely-not-a-real-project")
 	if err == nil {
@@ -389,24 +389,32 @@ func TestExport_FailsWhenRepositoriesMissing(t *testing.T) {
 		{name: "only_project", mutate: func(d *testDeps, s *Service) {
 			s.projectRepo = d.projectRepo
 		}, wantSub: "fixture repository"},
+		{name: "missing_fixture_group", mutate: func(d *testDeps, s *Service) {
+			s.projectRepo = d.projectRepo
+			s.fixtureRepo = d.fixtureRepo
+		}, wantSub: "fixture group repository"},
 		{name: "missing_look", mutate: func(d *testDeps, s *Service) {
 			s.projectRepo = d.projectRepo
 			s.fixtureRepo = d.fixtureRepo
+			s.fixtureGroupRepo = d.fixtureGroupRepo
 		}, wantSub: "look repository"},
 		{name: "missing_cue_list", mutate: func(d *testDeps, s *Service) {
 			s.projectRepo = d.projectRepo
 			s.fixtureRepo = d.fixtureRepo
+			s.fixtureGroupRepo = d.fixtureGroupRepo
 			s.lookRepo = d.lookRepo
 		}, wantSub: "cue list repository"},
 		{name: "missing_cue", mutate: func(d *testDeps, s *Service) {
 			s.projectRepo = d.projectRepo
 			s.fixtureRepo = d.fixtureRepo
+			s.fixtureGroupRepo = d.fixtureGroupRepo
 			s.lookRepo = d.lookRepo
 			s.cueListRepo = d.cueListRepo
 		}, wantSub: "cue repository"},
 		{name: "missing_look_board", mutate: func(d *testDeps, s *Service) {
 			s.projectRepo = d.projectRepo
 			s.fixtureRepo = d.fixtureRepo
+			s.fixtureGroupRepo = d.fixtureGroupRepo
 			s.lookRepo = d.lookRepo
 			s.cueListRepo = d.cueListRepo
 			s.cueRepo = d.cueRepo
@@ -423,5 +431,124 @@ func TestExport_FailsWhenRepositoriesMissing(t *testing.T) {
 				t.Errorf("err = %v, want substring %q", err, c.wantSub)
 			}
 		})
+	}
+}
+
+func TestExport_GroupsEmitted(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+	ctx := context.Background()
+
+	proj := &models.Project{Name: "T"}
+	if err := deps.projectRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("project: %v", err)
+	}
+	def := &models.FixtureDefinition{Manufacturer: "Generic", Model: "Dimmer", Type: "DIMMER"}
+	if err := deps.fixtureRepo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("def: %v", err)
+	}
+
+	one, two := 1, 2
+	a := &models.FixtureInstance{ProjectID: proj.ID, DefinitionID: def.ID, Name: "A", Universe: 1, StartChannel: 1, ProjectOrder: &one}
+	b := &models.FixtureInstance{ProjectID: proj.ID, DefinitionID: def.ID, Name: "B", Universe: 1, StartChannel: 2, ProjectOrder: &two}
+	if err := deps.fixtureRepo.CreateWithChannels(ctx, a, []models.InstanceChannel{{Offset: 0, Name: "I", Type: "INTENSITY", FadeBehavior: "FADE"}}); err != nil {
+		t.Fatalf("a: %v", err)
+	}
+	if err := deps.fixtureRepo.CreateWithChannels(ctx, b, []models.InstanceChannel{{Offset: 0, Name: "I", Type: "INTENSITY", FadeBehavior: "FADE"}}); err != nil {
+		t.Fatalf("b: %v", err)
+	}
+
+	g := &models.FixtureGroup{ProjectID: proj.ID, Name: "All"}
+	if err := deps.fixtureGroupRepo.CreateWithMembers(ctx, g, []string{a.ID, b.ID}); err != nil {
+		t.Fatalf("group: %v", err)
+	}
+
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo, deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Export(ctx, proj.ID)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if !strings.Contains(res.Content, "$Group 1") {
+		t.Errorf("missing $Group 1; output:\n%s", res.Content)
+	}
+	if !strings.Contains(res.Content, "Text All") {
+		t.Errorf("missing Text All")
+	}
+
+	// EosNumber should now be persisted.
+	persisted, _ := deps.fixtureGroupRepo.FindByID(ctx, g.ID)
+	if persisted.EosNumber == nil || *persisted.EosNumber != 1 {
+		t.Errorf("expected EosNumber=1 persisted; got %v", persisted.EosNumber)
+	}
+}
+
+func TestExport_EmptyGroupSkipped(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+	ctx := context.Background()
+	proj := &models.Project{Name: "T"}
+	if err := deps.projectRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("project: %v", err)
+	}
+
+	g := &models.FixtureGroup{ProjectID: proj.ID, Name: "Empty"}
+	if err := deps.fixtureGroupRepo.CreateWithMembers(ctx, g, nil); err != nil {
+		t.Fatalf("group: %v", err)
+	}
+
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo, deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Export(ctx, proj.ID)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if strings.Contains(res.Content, "$Group") {
+		t.Errorf("empty group should not be emitted; got:\n%s", res.Content)
+	}
+	saw := false
+	for _, w := range res.Warnings {
+		if w.Code == importeos.WarnExportEmptyGroupSkipped {
+			saw = true
+		}
+	}
+	if !saw {
+		t.Errorf("expected WarnExportEmptyGroupSkipped")
+	}
+}
+
+func TestExport_SidecarFadeBehavior(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+	ctx := context.Background()
+
+	proj := &models.Project{Name: "T"}
+	if err := deps.projectRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("project: %v", err)
+	}
+	def := &models.FixtureDefinition{Manufacturer: "Generic", Model: "RGB", Type: "DIMMER"}
+	if err := deps.fixtureRepo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("def: %v", err)
+	}
+
+	one := 1
+	fi := &models.FixtureInstance{ProjectID: proj.ID, DefinitionID: def.ID, Name: "A", Universe: 1, StartChannel: 1, ProjectOrder: &one}
+	channels := []models.InstanceChannel{
+		{Offset: 0, Name: "I", Type: "INTENSITY", FadeBehavior: "FADE"},
+		{Offset: 1, Name: "R", Type: "COLOR_R", FadeBehavior: "SNAP_END"},
+	}
+	if err := deps.fixtureRepo.CreateWithChannels(ctx, fi, channels); err != nil {
+		t.Fatalf("fi: %v", err)
+	}
+
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo, deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Export(ctx, proj.ID)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+
+	if !strings.Contains(res.Content, `"behavior":"SNAP_END"`) {
+		t.Errorf("missing fade_behavior in output:\n%s", res.Content)
+	}
+	if !strings.Contains(res.Content, `"instanceRefId":"`+fi.RefID+`"`) {
+		t.Errorf("instanceRefId not %s in output", fi.RefID)
 	}
 }

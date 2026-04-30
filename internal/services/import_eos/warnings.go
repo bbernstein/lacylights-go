@@ -49,6 +49,16 @@ const (
 	// in a $Patch line resolve to known personality IDs. The parser falls
 	// through to user-authored ordering as the safe default.
 	WarnPatchAmbiguousFields WarningCode = "PATCH_AMBIGUOUS_FIELDS"
+	// WarnGroupChannelUnresolved fires when a $Group block references an
+	// EOS channel number that wasn't patched in the same file. The group
+	// is created with the resolvable members; missing channels surface as
+	// one warning per miss for review.
+	WarnGroupChannelUnresolved WarningCode = "GROUP_CHANNEL_UNRESOLVED"
+	// WarnExportEmptyGroupSkipped fires during export when a FixtureGroup
+	// has no patched members in the project. The writer skips the group
+	// rather than emitting an empty $Group block; the warning surfaces
+	// the skip for review.
+	WarnExportEmptyGroupSkipped WarningCode = "EXPORT_EMPTY_GROUP_SKIPPED"
 )
 
 // Warning is a structured non-fatal warning emitted during import or export.

@@ -1,0 +1,401 @@
+package repositories
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/bbernstein/lacylights-go/internal/database/models"
+)
+
+func TestFixtureRepository_Create_DefaultsRefIDToID(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	repo := NewFixtureRepository(testDB.DB)
+
+	projRepo := NewProjectRepository(testDB.DB)
+	proj := &models.Project{Name: "T"}
+	if err := projRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("project: %v", err)
+	}
+
+	def := &models.FixtureDefinition{
+		Manufacturer: "Mfg",
+		Model:        "Model",
+		Type:         "test",
+	}
+	if err := repo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("definition: %v", err)
+	}
+
+	fixture := &models.FixtureInstance{
+		Name:         "F1",
+		ProjectID:    proj.ID,
+		DefinitionID: def.ID,
+		Universe:     1,
+		StartChannel: 1,
+	}
+	if err := repo.Create(ctx, fixture); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if fixture.ID == "" {
+		t.Fatalf("expected ID assigned")
+	}
+	if fixture.RefID != fixture.ID {
+		t.Errorf("RefID = %q, want %q", fixture.RefID, fixture.ID)
+	}
+}
+
+func TestFixtureRepository_Create_PreservesExplicitRefID(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	repo := NewFixtureRepository(testDB.DB)
+
+	projRepo := NewProjectRepository(testDB.DB)
+	proj := &models.Project{Name: "T"}
+	if err := projRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("project: %v", err)
+	}
+
+	def := &models.FixtureDefinition{
+		Manufacturer: "Mfg",
+		Model:        "Model",
+		Type:         "test",
+	}
+	if err := repo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("definition: %v", err)
+	}
+
+	fixture := &models.FixtureInstance{
+		Name:         "F1",
+		ProjectID:    proj.ID,
+		DefinitionID: def.ID,
+		Universe:     1,
+		StartChannel: 1,
+		RefID:        "explicit-ref",
+	}
+	if err := repo.Create(ctx, fixture); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if fixture.RefID != "explicit-ref" {
+		t.Errorf("RefID = %q, want %q", fixture.RefID, "explicit-ref")
+	}
+}
+
+func TestFixtureRepository_CreateDefinition_DefaultsRefIDToID(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	repo := NewFixtureRepository(testDB.DB)
+
+	def := &models.FixtureDefinition{
+		Manufacturer: "Mfg",
+		Model:        "Model",
+		Type:         "test",
+	}
+	if err := repo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if def.ID == "" {
+		t.Fatalf("expected ID assigned")
+	}
+	if def.RefID != def.ID {
+		t.Errorf("RefID = %q, want %q", def.RefID, def.ID)
+	}
+}
+
+func TestFixtureRepository_CreateDefinition_PreservesExplicitRefID(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	repo := NewFixtureRepository(testDB.DB)
+
+	def := &models.FixtureDefinition{
+		Manufacturer: "Mfg",
+		Model:        "Model",
+		Type:         "test",
+		RefID:        "explicit-def-ref",
+	}
+	if err := repo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if def.RefID != "explicit-def-ref" {
+		t.Errorf("RefID = %q, want %q", def.RefID, "explicit-def-ref")
+	}
+}
+
+func TestFixtureRepository_FindInstanceByRefID_ResolvesAndDistinguishesProjects(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	repo := NewFixtureRepository(testDB.DB)
+	projRepo := NewProjectRepository(testDB.DB)
+
+	p1 := &models.Project{Name: "P1"}
+	if err := projRepo.Create(ctx, p1); err != nil {
+		t.Fatalf("p1: %v", err)
+	}
+	p2 := &models.Project{Name: "P2"}
+	if err := projRepo.Create(ctx, p2); err != nil {
+		t.Fatalf("p2: %v", err)
+	}
+
+	def := &models.FixtureDefinition{Manufacturer: "Mfg", Model: "Model", Type: "test"}
+	if err := repo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("def: %v", err)
+	}
+
+	fi1 := &models.FixtureInstance{
+		Name: "F1", ProjectID: p1.ID, DefinitionID: def.ID,
+		Universe: 1, StartChannel: 1, RefID: "ch-1",
+	}
+	if err := repo.Create(ctx, fi1); err != nil {
+		t.Fatalf("fi1: %v", err)
+	}
+	fi2 := &models.FixtureInstance{
+		Name: "F2", ProjectID: p2.ID, DefinitionID: def.ID,
+		Universe: 1, StartChannel: 1, RefID: "ch-1",
+	}
+	if err := repo.Create(ctx, fi2); err != nil {
+		t.Fatalf("fi2: %v", err)
+	}
+
+	got, err := repo.FindInstanceByRefID(ctx, p1.ID, "ch-1")
+	if err != nil {
+		t.Fatalf("find: %v", err)
+	}
+	if got == nil {
+		t.Fatalf("expected hit")
+	}
+	if got.ID != fi1.ID {
+		t.Errorf("got ID %q, want %q", got.ID, fi1.ID)
+	}
+
+	miss, err := repo.FindInstanceByRefID(ctx, p1.ID, "missing")
+	if err != nil {
+		t.Fatalf("miss: %v", err)
+	}
+	if miss != nil {
+		t.Errorf("expected nil miss, got %+v", miss)
+	}
+}
+
+func TestFixtureRepository_UpdateInstanceChannelFadeBehavior_OverridesOnlyTargetOffset(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	repo := NewFixtureRepository(testDB.DB)
+	projRepo := NewProjectRepository(testDB.DB)
+
+	proj := &models.Project{Name: "P"}
+	if err := projRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("proj: %v", err)
+	}
+	def := &models.FixtureDefinition{Manufacturer: "Mfg", Model: "Model", Type: "test"}
+	if err := repo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("def: %v", err)
+	}
+	fi := &models.FixtureInstance{
+		Name: "F", ProjectID: proj.ID, DefinitionID: def.ID,
+		Universe: 1, StartChannel: 1,
+	}
+	chans := []models.InstanceChannel{
+		{Offset: 0, Name: "Dim", Type: "INTENSITY", FadeBehavior: "FADE"},
+		{Offset: 1, Name: "R", Type: "RED", FadeBehavior: "FADE"},
+		{Offset: 2, Name: "G", Type: "GREEN", FadeBehavior: "FADE"},
+	}
+	if err := repo.CreateWithChannels(ctx, fi, chans); err != nil {
+		t.Fatalf("create with channels: %v", err)
+	}
+
+	if err := repo.UpdateInstanceChannelFadeBehavior(ctx, fi.ID, 1, "SNAP_END"); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	got, err := repo.GetInstanceChannels(ctx, fi.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("expected 3 channels, got %d", len(got))
+	}
+	want := map[int]string{0: "FADE", 1: "SNAP_END", 2: "FADE"}
+	for _, c := range got {
+		if c.FadeBehavior != want[c.Offset] {
+			t.Errorf("offset %d: got %q, want %q", c.Offset, c.FadeBehavior, want[c.Offset])
+		}
+	}
+}
+
+func TestFixtureRepository_UpdateInstanceChannelFadeBehavior_UnknownOffsetReturnsSentinel(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	repo := NewFixtureRepository(testDB.DB)
+	projRepo := NewProjectRepository(testDB.DB)
+
+	proj := &models.Project{Name: "P"}
+	if err := projRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("proj: %v", err)
+	}
+	def := &models.FixtureDefinition{Manufacturer: "Mfg", Model: "Model", Type: "test"}
+	if err := repo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("def: %v", err)
+	}
+	fi := &models.FixtureInstance{
+		Name: "F", ProjectID: proj.ID, DefinitionID: def.ID,
+		Universe: 1, StartChannel: 1,
+	}
+	chans := []models.InstanceChannel{
+		{Offset: 0, Name: "Dim", Type: "INTENSITY", FadeBehavior: "FADE"},
+	}
+	if err := repo.CreateWithChannels(ctx, fi, chans); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	err := repo.UpdateInstanceChannelFadeBehavior(ctx, fi.ID, 5, "SNAP")
+	if !errors.Is(err, ErrChannelOffsetNotFound) {
+		t.Fatalf("expected ErrChannelOffsetNotFound, got %v", err)
+	}
+}
+
+func TestFixtureRepository_FindDefinitionByRefID_Global(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	repo := NewFixtureRepository(testDB.DB)
+
+	def := &models.FixtureDefinition{
+		Manufacturer: "Generic",
+		Model:        "Dimmer",
+		Type:         "test",
+		RefID:        "def-generic-dimmer",
+	}
+	if err := repo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("def: %v", err)
+	}
+
+	got, err := repo.FindDefinitionByRefID(ctx, "def-generic-dimmer")
+	if err != nil {
+		t.Fatalf("find: %v", err)
+	}
+	if got == nil {
+		t.Fatalf("expected hit")
+	}
+	if got.ID != def.ID {
+		t.Errorf("got ID %q, want %q", got.ID, def.ID)
+	}
+
+	miss, err := repo.FindDefinitionByRefID(ctx, "missing")
+	if err != nil {
+		t.Fatalf("miss: %v", err)
+	}
+	if miss != nil {
+		t.Errorf("expected nil, got %+v", miss)
+	}
+}
+
+func TestFixtureRepository_FindByIDs(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := NewFixtureRepository(testDB.DB)
+
+	def := &models.FixtureDefinition{Manufacturer: "Generic", Model: "Dimmer", Type: "DIMMER"}
+	if err := repo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("def: %v", err)
+	}
+	mk := func(name string) *models.FixtureInstance {
+		fi := &models.FixtureInstance{ProjectID: "p1", DefinitionID: def.ID, Name: name}
+		if err := repo.CreateWithChannels(ctx, fi, nil); err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+		return fi
+	}
+	a, b, c := mk("A"), mk("B"), mk("C")
+
+	// Empty input → empty result, no error.
+	got, err := repo.FindByIDs(ctx, nil)
+	if err != nil {
+		t.Errorf("empty: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("empty: got %d", len(got))
+	}
+
+	// Mixed hits + miss.
+	got, err = repo.FindByIDs(ctx, []string{a.ID, "missing", b.ID, c.ID})
+	if err != nil {
+		t.Fatalf("hits: %v", err)
+	}
+	if len(got) != 3 {
+		t.Errorf("got %d, want 3 (missing should be silently dropped)", len(got))
+	}
+	ids := map[string]bool{}
+	for _, fi := range got {
+		ids[fi.ID] = true
+	}
+	for _, want := range []string{a.ID, b.ID, c.ID} {
+		if !ids[want] {
+			t.Errorf("missing %s in result", want)
+		}
+	}
+}
+
+func TestFixtureRepository_GetInstanceChannelsByFixtureIDs(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := NewFixtureRepository(testDB.DB)
+
+	def := &models.FixtureDefinition{Manufacturer: "Generic", Model: "RGB", Type: "DIMMER"}
+	if err := repo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("def: %v", err)
+	}
+	mk := func(name string, ch ...models.InstanceChannel) *models.FixtureInstance {
+		fi := &models.FixtureInstance{ProjectID: "p1", DefinitionID: def.ID, Name: name}
+		if err := repo.CreateWithChannels(ctx, fi, ch); err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+		return fi
+	}
+	a := mk("A",
+		models.InstanceChannel{Offset: 0, Name: "I", Type: "INTENSITY", FadeBehavior: "FADE"},
+		models.InstanceChannel{Offset: 1, Name: "R", Type: "COLOR_R", FadeBehavior: "SNAP"},
+	)
+	b := mk("B",
+		models.InstanceChannel{Offset: 0, Name: "I", Type: "INTENSITY", FadeBehavior: "FADE"},
+	)
+
+	got, err := repo.GetInstanceChannelsByFixtureIDs(ctx, nil)
+	if err != nil {
+		t.Errorf("empty: %v", err)
+	}
+	if got == nil || len(got) != 0 {
+		t.Errorf("empty: want non-nil empty map, got %v", got)
+	}
+
+	got, err = repo.GetInstanceChannelsByFixtureIDs(ctx, []string{a.ID, b.ID, "missing"})
+	if err != nil {
+		t.Fatalf("hits: %v", err)
+	}
+	if len(got[a.ID]) != 2 || got[a.ID][0].Offset != 0 || got[a.ID][1].Offset != 1 {
+		t.Errorf("a channels = %+v", got[a.ID])
+	}
+	if len(got[b.ID]) != 1 {
+		t.Errorf("b channels = %+v", got[b.ID])
+	}
+	if _, ok := got["missing"]; ok {
+		t.Errorf("missing should not be in result")
+	}
+}

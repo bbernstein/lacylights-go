@@ -30,6 +30,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/auth"
 	"github.com/bbernstein/lacylights-go/internal/config"
 	"github.com/bbernstein/lacylights-go/internal/database"
+	"github.com/bbernstein/lacylights-go/internal/database/migrations"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
@@ -113,6 +114,8 @@ func main() {
 		{"mode_channels", &models.ModeChannel{}, []string{"id", "mode_id", "channel_id"}},
 		{"fixture_instances", &models.FixtureInstance{}, []string{"id", "project_id"}},
 		{"instance_channels", &models.InstanceChannel{}, []string{"id", "fixture_id"}},
+		{"fixture_groups", &models.FixtureGroup{}, []string{"id", "project_id"}},
+		{"fixture_group_members", &models.FixtureGroupMember{}, []string{"group_id", "fixture_id"}},
 		{"looks", &models.Look{}, []string{"id", "project_id"}},
 		{"cue_lists", &models.CueList{}, []string{"id", "project_id"}},
 		{"cues", &models.Cue{}, []string{"id", "look_id", "cue_list_id"}},
@@ -157,7 +160,11 @@ func main() {
 
 	log.Println("Database migrations complete")
 
-	// Migrate scene terminology to look terminology
+	// Migrate scene terminology to look terminology FIRST. This legacy
+	// migration inserts rows into looks/look_boards without setting
+	// ref_id (it relies on the column default '') — we must run it
+	// before CreateRefIDIndexes so those rows exist before BackfillRefIDs
+	// populates them, otherwise the unique index would reject them.
 	if err := migrateSceneToLook(db); err != nil {
 		log.Printf("Warning: scene to look migration failed: %v", err)
 	}
@@ -165,6 +172,18 @@ func main() {
 	// Migrate old channelValues to sparse Channels format
 	if err := migrateChannelValuesToSparse(db); err != nil {
 		log.Printf("Warning: sparse channel migration failed: %v", err)
+	}
+
+	// Backfill ref_id columns then create unique indexes. Order matters:
+	// backfill must populate empty ref_ids (including those just inserted
+	// by migrateSceneToLook above) before the unique index goes up,
+	// otherwise duplicate empty strings would violate the constraint.
+	// Both functions are idempotent.
+	if err := migrations.BackfillRefIDs(db); err != nil {
+		log.Fatalf("Failed to backfill ref_ids: %v", err)
+	}
+	if err := migrations.CreateRefIDIndexes(db); err != nil {
+		log.Fatalf("Failed to create ref_id indexes: %v", err)
 	}
 
 	// Backfill default layout canvas dimensions for existing projects

@@ -293,6 +293,26 @@ func (r *fixtureDefinitionResolver) CreatedAt(ctx context.Context, obj *models.F
 	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
+// Project is the resolver for the project field.
+func (r *fixtureGroupResolver) Project(ctx context.Context, obj *models.FixtureGroup) (*models.Project, error) {
+	return r.ProjectRepo.FindByID(ctx, obj.ProjectID)
+}
+
+// Fixtures is the resolver for the fixtures field.
+func (r *fixtureGroupResolver) Fixtures(ctx context.Context, obj *models.FixtureGroup) ([]*models.FixtureInstance, error) {
+	return r.fixturesForGroup(ctx, obj.ID)
+}
+
+// CreatedAt is the resolver for the createdAt field.
+func (r *fixtureGroupResolver) CreatedAt(ctx context.Context, obj *models.FixtureGroup) (string, error) {
+	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
+}
+
+// UpdatedAt is the resolver for the updatedAt field.
+func (r *fixtureGroupResolver) UpdatedAt(ctx context.Context, obj *models.FixtureGroup) (string, error) {
+	return obj.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
+}
+
 // Manufacturer is the resolver for the manufacturer field.
 func (r *fixtureInstanceResolver) Manufacturer(ctx context.Context, obj *models.FixtureInstance) (string, error) {
 	if obj.Manufacturer != nil {
@@ -3480,6 +3500,51 @@ func (r *mutationResolver) ActivateLookFromBoard(ctx context.Context, lookBoardI
 	return true, nil
 }
 
+// CreateFixtureGroup is the resolver for the createFixtureGroup field.
+func (r *mutationResolver) CreateFixtureGroup(ctx context.Context, input generated.CreateFixtureGroupInput) (*models.FixtureGroup, error) {
+	return r.createFixtureGroup(ctx, input)
+}
+
+// UpdateFixtureGroup is the resolver for the updateFixtureGroup field.
+func (r *mutationResolver) UpdateFixtureGroup(ctx context.Context, input generated.UpdateFixtureGroupInput) (*models.FixtureGroup, error) {
+	return r.updateFixtureGroup(ctx, input)
+}
+
+// DeleteFixtureGroup is the resolver for the deleteFixtureGroup field.
+func (r *mutationResolver) DeleteFixtureGroup(ctx context.Context, id string) (bool, error) {
+	return r.deleteFixtureGroup(ctx, id)
+}
+
+// AddFixturesToGroup is the resolver for the addFixturesToGroup field.
+func (r *mutationResolver) AddFixturesToGroup(ctx context.Context, groupID string, fixtureIds []string) (*models.FixtureGroup, error) {
+	return r.addFixturesToGroup(ctx, groupID, fixtureIds)
+}
+
+// RemoveFixturesFromGroup is the resolver for the removeFixturesFromGroup field.
+func (r *mutationResolver) RemoveFixturesFromGroup(ctx context.Context, groupID string, fixtureIds []string) (*models.FixtureGroup, error) {
+	return r.removeFixturesFromGroup(ctx, groupID, fixtureIds)
+}
+
+// ReorderFixturesInGroup is the resolver for the reorderFixturesInGroup field.
+func (r *mutationResolver) ReorderFixturesInGroup(ctx context.Context, input generated.ReorderFixturesInGroupInput) (*models.FixtureGroup, error) {
+	return r.reorderFixturesInGroup(ctx, input)
+}
+
+// BulkCreateFixtureGroups is the resolver for the bulkCreateFixtureGroups field.
+func (r *mutationResolver) BulkCreateFixtureGroups(ctx context.Context, inputs []*generated.CreateFixtureGroupInput) ([]*models.FixtureGroup, error) {
+	return r.bulkCreateFixtureGroups(ctx, inputs)
+}
+
+// BulkUpdateFixtureGroups is the resolver for the bulkUpdateFixtureGroups field.
+func (r *mutationResolver) BulkUpdateFixtureGroups(ctx context.Context, inputs []*generated.UpdateFixtureGroupInput) ([]*models.FixtureGroup, error) {
+	return r.bulkUpdateFixtureGroups(ctx, inputs)
+}
+
+// BulkDeleteFixtureGroups is the resolver for the bulkDeleteFixtureGroups field.
+func (r *mutationResolver) BulkDeleteFixtureGroups(ctx context.Context, ids []string) (int, error) {
+	return r.bulkDeleteFixtureGroups(ctx, ids)
+}
+
 // CreateCueList is the resolver for the createCueList field.
 func (r *mutationResolver) CreateCueList(ctx context.Context, input generated.CreateCueListInput) (*models.CueList, error) {
 	cueList := &models.CueList{
@@ -6216,6 +6281,16 @@ func (r *queryResolver) LookBoardButton(ctx context.Context, id string) (*models
 	return r.LookBoardRepo.FindButtonByID(ctx, id)
 }
 
+// FixtureGroup is the resolver for the fixtureGroup field.
+func (r *queryResolver) FixtureGroup(ctx context.Context, id string) (*models.FixtureGroup, error) {
+	return r.fixtureGroupQuery(ctx, id)
+}
+
+// FixtureGroups is the resolver for the fixtureGroups field.
+func (r *queryResolver) FixtureGroups(ctx context.Context, projectID string) ([]*models.FixtureGroup, error) {
+	return r.fixtureGroupsQuery(ctx, projectID)
+}
+
 // FixtureUsage is the resolver for the fixtureUsage field.
 func (r *queryResolver) FixtureUsage(ctx context.Context, fixtureID string) (*generated.FixtureUsage, error) {
 	// Get fixture
@@ -8021,6 +8096,9 @@ func (r *Resolver) FixtureDefinition() generated.FixtureDefinitionResolver {
 	return &fixtureDefinitionResolver{r}
 }
 
+// FixtureGroup returns generated.FixtureGroupResolver implementation.
+func (r *Resolver) FixtureGroup() generated.FixtureGroupResolver { return &fixtureGroupResolver{r} }
+
 // FixtureInstance returns generated.FixtureInstanceResolver implementation.
 func (r *Resolver) FixtureInstance() generated.FixtureInstanceResolver {
 	return &fixtureInstanceResolver{r}
@@ -8101,6 +8179,7 @@ type cueListResolver struct{ *Resolver }
 type deviceResolver struct{ *Resolver }
 type effectResolver struct{ *Resolver }
 type fixtureDefinitionResolver struct{ *Resolver }
+type fixtureGroupResolver struct{ *Resolver }
 type fixtureInstanceResolver struct{ *Resolver }
 type fixtureModeResolver struct{ *Resolver }
 type fixtureValueResolver struct{ *Resolver }

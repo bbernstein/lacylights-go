@@ -34,12 +34,13 @@ type Options struct {
 
 // Service handles Eos ASCII import operations.
 type Service struct {
-	projectRepo   *repositories.ProjectRepository
-	fixtureRepo   *repositories.FixtureRepository
-	lookRepo      *repositories.LookRepository
-	cueListRepo   *repositories.CueListRepository
-	cueRepo       *repositories.CueRepository
-	lookBoardRepo *repositories.LookBoardRepository
+	projectRepo      *repositories.ProjectRepository
+	fixtureRepo      *repositories.FixtureRepository
+	fixtureGroupRepo *repositories.FixtureGroupRepository
+	lookRepo         *repositories.LookRepository
+	cueListRepo      *repositories.CueListRepository
+	cueRepo          *repositories.CueRepository
+	lookBoardRepo    *repositories.LookBoardRepository
 }
 
 // NewService constructs an empty Service. Use NewServiceWithDeps in production.
@@ -51,12 +52,13 @@ func NewService() *Service {
 func NewServiceWithDeps(
 	p *repositories.ProjectRepository,
 	f *repositories.FixtureRepository,
+	fg *repositories.FixtureGroupRepository,
 	l *repositories.LookRepository,
 	cl *repositories.CueListRepository,
 	c *repositories.CueRepository,
 	lb *repositories.LookBoardRepository,
 ) *Service {
-	return &Service{p, f, l, cl, c, lb}
+	return &Service{p, f, fg, l, cl, c, lb}
 }
 
 // validateDependencies ensures all required repositories are wired.
@@ -66,6 +68,9 @@ func (s *Service) validateDependencies() error {
 	}
 	if s.fixtureRepo == nil {
 		return fmt.Errorf("import_eos: service not wired with fixture repository")
+	}
+	if s.fixtureGroupRepo == nil {
+		return fmt.Errorf("import_eos: service not wired with fixture group repository")
 	}
 	if s.lookRepo == nil {
 		return fmt.Errorf("import_eos: service not wired with look repository")
@@ -93,6 +98,6 @@ func (s *Service) Import(ctx context.Context, r io.Reader, opts Options) (*Resul
 	}
 	collector := parseWarn
 	sidecar := ReadSidecar(show.SidecarLines, collector)
-	mapper := NewMapper(s.projectRepo, s.fixtureRepo, s.lookRepo, s.cueListRepo, s.cueRepo, s.lookBoardRepo)
+	mapper := NewMapper(s.projectRepo, s.fixtureRepo, s.fixtureGroupRepo, s.lookRepo, s.cueListRepo, s.cueRepo, s.lookBoardRepo)
 	return mapper.Apply(ctx, show, sidecar, opts, collector)
 }

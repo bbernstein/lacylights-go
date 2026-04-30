@@ -43,8 +43,9 @@ type Resolver struct {
 	LookBoardRepo  *repositories.LookBoardRepository
 	EffectRepo     *repositories.EffectRepository
 	OperationRepo  *repositories.OperationRepository
-	GroupRepo      *repositories.GroupRepository
-	InvitationRepo *repositories.InvitationRepository
+	GroupRepo        *repositories.GroupRepository
+	InvitationRepo   *repositories.InvitationRepository
+	FixtureGroupRepo *repositories.FixtureGroupRepository
 
 	// Services
 	DMXService      *dmx.Service
@@ -70,6 +71,7 @@ type Resolver struct {
 func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *modulator.Engine, playbackService *playback.Service, oflCachePath string) *Resolver {
 	projectRepo := repositories.NewProjectRepository(db)
 	fixtureRepo := repositories.NewFixtureRepository(db)
+	fixtureGroupRepo := repositories.NewFixtureGroupRepository(db)
 	lookRepo := repositories.NewLookRepository(db)
 	cueListRepo := repositories.NewCueListRepository(db)
 	cueRepo := repositories.NewCueRepository(db)
@@ -108,13 +110,14 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *modulator.Eng
 		OperationRepo:   operationRepo,
 		GroupRepo:        repositories.NewGroupRepository(db),
 		InvitationRepo:   repositories.NewInvitationRepository(db),
+		FixtureGroupRepo: fixtureGroupRepo,
 		DMXService:      dmxService,
 		FadeEngine:      fadeEngine,
 		PlaybackService: playbackService,
 		ExportService:    export.NewServiceWithLookBoards(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo),
 		ImportService:    importservice.NewServiceWithLookBoards(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo),
-		EosImportService: importeos.NewServiceWithDeps(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo),
-		EosExportService: exporteos.NewServiceWithDeps(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo),
+		EosImportService: importeos.NewServiceWithDeps(projectRepo, fixtureRepo, fixtureGroupRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo),
+		EosExportService: exporteos.NewServiceWithDeps(projectRepo, fixtureRepo, fixtureGroupRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo),
 		OFLService:      ofl.NewService(db, fixtureRepo),
 		OFLManager:      oflManager,
 		PreviewService:  preview.NewService(fixtureRepo, lookRepo, dmxService),

@@ -589,6 +589,7 @@ type Project {
 
 type FixtureDefinition {
   id: ID!
+  refId: String!
   manufacturer: String!
   model: String!
   type: FixtureType!
@@ -626,6 +627,7 @@ type ChannelDefinition {
 
 type FixtureInstance {
   id: ID!
+  refId: String!
   name: String!
   description: String
 
@@ -674,6 +676,7 @@ type InstanceChannel {
 
 type Look {
   id: ID!
+  refId: String!
   name: String!
   description: String
   project: Project!
@@ -696,6 +699,7 @@ type FixtureValue {
 
 type LookBoard {
   id: ID!
+  refId: String!
   name: String!
   description: String
   project: Project!
@@ -718,6 +722,19 @@ type LookBoardButton {
   height: Int
   color: String
   label: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+type FixtureGroup {
+  id: ID!
+  refId: String!
+  name: String!
+  description: String
+  eosNumber: Int
+  projectOrder: Int
+  project: Project!
+  fixtures: [FixtureInstance!]!
   createdAt: String!
   updatedAt: String!
 }
@@ -1786,6 +1803,27 @@ input LookBoardButtonPositionInput {
   layoutY: Int!
 }
 
+input CreateFixtureGroupInput {
+  projectId: ID!
+  name: String!
+  description: String
+  fixtureIds: [ID!]!
+  eosNumber: Int
+}
+
+input UpdateFixtureGroupInput {
+  id: ID!
+  name: String
+  description: String
+  eosNumber: Int
+  projectOrder: Int
+}
+
+input ReorderFixturesInGroupInput {
+  groupId: ID!
+  fixtureIds: [ID!]!
+}
+
 input FixtureDefinitionFilter {
   manufacturer: String
   model: String
@@ -2252,6 +2290,10 @@ type Query {
   lookBoard(id: ID!): LookBoard
   lookBoardButton(id: ID!): LookBoardButton
 
+  # Fixture Groups
+  fixtureGroup(id: ID!): FixtureGroup
+  fixtureGroups(projectId: ID!): [FixtureGroup!]!
+
   # Relationship Queries
   fixtureUsage(fixtureId: ID!): FixtureUsage!
   lookUsage(lookId: ID!): LookUsage!
@@ -2559,6 +2601,19 @@ type Mutation {
     lookId: ID!
     fadeTimeOverride: Float
   ): Boolean!
+
+  # Fixture Groups
+  createFixtureGroup(input: CreateFixtureGroupInput!): FixtureGroup!
+  updateFixtureGroup(input: UpdateFixtureGroupInput!): FixtureGroup!
+  deleteFixtureGroup(id: ID!): Boolean!
+
+  addFixturesToGroup(groupId: ID!, fixtureIds: [ID!]!): FixtureGroup!
+  removeFixturesFromGroup(groupId: ID!, fixtureIds: [ID!]!): FixtureGroup!
+  reorderFixturesInGroup(input: ReorderFixturesInGroupInput!): FixtureGroup!
+
+  bulkCreateFixtureGroups(inputs: [CreateFixtureGroupInput!]!): [FixtureGroup!]!
+  bulkUpdateFixtureGroups(inputs: [UpdateFixtureGroupInput!]!): [FixtureGroup!]!
+  bulkDeleteFixtureGroups(ids: [ID!]!): Int!
 
   # Cue Lists
   createCueList(input: CreateCueListInput!): CueList!

@@ -152,6 +152,8 @@ func TestTableNames(t *testing.T) {
 		{"OFLImportMeta", OFLImportMeta{}, "ofl_import_meta"},
 		{"Operation", Operation{}, "operations"},
 		{"OperationPointer", OperationPointer{}, "operation_pointers"},
+		{"FixtureGroup", FixtureGroup{}, "fixture_groups"},
+		{"FixtureGroupMember", FixtureGroupMember{}, "fixture_group_members"},
 	}
 
 	for _, tt := range tests {

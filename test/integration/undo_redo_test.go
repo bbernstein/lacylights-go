@@ -45,6 +45,8 @@ func setupUndoTestDB(t *testing.T) (*gorm.DB, func()) {
 		&models.EffectFixture{},
 		&models.EffectChannel{},
 		&models.CueEffect{},
+		&models.FixtureGroup{},
+		&models.FixtureGroupMember{},
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)

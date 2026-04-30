@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
@@ -25,21 +26,77 @@ const (
 	PaletteListNamePreset    = "Presets"
 )
 
+// EOS-derived RefID formats. Stable across re-imports: the same input
+// file always yields the same RefIDs regardless of how many times it's
+// imported into how many fresh projects. This is what makes the
+// $$ LACYLIGHTS: sidecar resolve cleanly on round-trip.
+func eosFixtureInstanceRefID(eosChannel int) string {
+	return fmt.Sprintf("ch-%d", eosChannel)
+}
+
+func eosLookRefIDForCue(cueListNumber int, cueNumber float64) string {
+	return fmt.Sprintf("cue-%d-%s", cueListNumber, formatCueNumber(cueNumber))
+}
+
+func eosLookRefIDForPalette(paletteKind, paletteNumber string) string {
+	return fmt.Sprintf("palette-%s-%s", paletteKind, paletteNumber)
+}
+
+func eosFixtureDefRefID(manufacturer, model string) string {
+	return fmt.Sprintf("def-%s-%s", sanitizeRefIDPart(manufacturer), sanitizeRefIDPart(model))
+}
+
+// sanitizeRefIDPart replaces any character outside [A-Za-z0-9_-] with '_'.
+// Keeps RefIDs URL/log/grep safe regardless of what EOS fixture metadata
+// contains (spaces, NUL bytes, slashes, non-ASCII).
+func sanitizeRefIDPart(s string) string {
+	if s == "" {
+		return "_"
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+	}
+	return b.String()
+}
+
+// formatCueNumber strips trailing zeros so 1.5 → "1.5" and 1.0 → "1".
+func formatCueNumber(n float64) string {
+	s := strconv.FormatFloat(n, 'f', -1, 64)
+	if !strings.Contains(s, ".") {
+		return s
+	}
+	s = strings.TrimRight(s, "0")
+	s = strings.TrimRight(s, ".")
+	if s == "" {
+		s = "0"
+	}
+	return s
+}
+
 // Mapper applies a parsed Show + Sidecar to LacyLights repos.
 type Mapper struct {
-	projectRepo   *repositories.ProjectRepository
-	fixtureRepo   *repositories.FixtureRepository
-	lookRepo      *repositories.LookRepository
-	cueListRepo   *repositories.CueListRepository
-	cueRepo       *repositories.CueRepository
-	lookBoardRepo *repositories.LookBoardRepository
+	projectRepo      *repositories.ProjectRepository
+	fixtureRepo      *repositories.FixtureRepository
+	fixtureGroupRepo *repositories.FixtureGroupRepository
+	lookRepo         *repositories.LookRepository
+	cueListRepo      *repositories.CueListRepository
+	cueRepo          *repositories.CueRepository
+	lookBoardRepo    *repositories.LookBoardRepository
 }
 
 // NewMapper constructs a Mapper.
 func NewMapper(p *repositories.ProjectRepository, f *repositories.FixtureRepository,
+	fg *repositories.FixtureGroupRepository,
 	l *repositories.LookRepository, cl *repositories.CueListRepository,
 	c *repositories.CueRepository, lb *repositories.LookBoardRepository) *Mapper {
-	return &Mapper{p, f, l, cl, c, lb}
+	return &Mapper{p, f, fg, l, cl, c, lb}
 }
 
 // Apply maps the parsed show into the database.
@@ -78,12 +135,28 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 				return nil, fmt.Errorf("load existing def channels: %w", err)
 			}
 		} else {
-			if err := m.fixtureRepo.CreateDefinitionWithChannels(ctx, mr.SynthesizedDef, mr.SynthesizedChannels); err != nil {
-				return nil, fmt.Errorf("create synth def: %w", err)
+			refID := eosFixtureDefRefID(mr.SynthesizedDef.Manufacturer, mr.SynthesizedDef.Model)
+			// Re-import idempotency: if a synth def with this refID already
+			// exists (from a prior import of the same file), reuse it.
+			existing, err := m.fixtureRepo.FindDefinitionByRefID(ctx, refID)
+			if err != nil {
+				return nil, fmt.Errorf("find synth def by refID: %w", err)
 			}
-			defID = mr.SynthesizedDef.ID
-			channels = mr.SynthesizedChannels
-			res.SynthesizedDefinitionIDs = append(res.SynthesizedDefinitionIDs, defID)
+			if existing != nil {
+				defID = existing.ID
+				channels, err = m.fixtureRepo.GetDefinitionChannels(ctx, defID)
+				if err != nil {
+					return nil, fmt.Errorf("load existing synth def channels: %w", err)
+				}
+			} else {
+				mr.SynthesizedDef.RefID = refID
+				if err := m.fixtureRepo.CreateDefinitionWithChannels(ctx, mr.SynthesizedDef, mr.SynthesizedChannels); err != nil {
+					return nil, fmt.Errorf("create synth def: %w", err)
+				}
+				defID = mr.SynthesizedDef.ID
+				channels = mr.SynthesizedChannels
+				res.SynthesizedDefinitionIDs = append(res.SynthesizedDefinitionIDs, defID)
+			}
 		}
 		persToDefID[pers.ID] = defID
 		persToChannels[pers.ID] = channels
@@ -137,6 +210,29 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 			label = fmt.Sprintf("Channel %d", pe.Channel)
 		}
 		order := pe.Channel
+		refID := eosFixtureInstanceRefID(pe.Channel)
+		// Re-import idempotency: reuse the existing instance if one with
+		// this refID already exists in the project.
+		existing, err := m.fixtureRepo.FindInstanceByRefID(ctx, projectID, refID)
+		if err != nil {
+			return nil, fmt.Errorf("find instance by refID: %w", err)
+		}
+		if existing != nil {
+			// Re-import: update mutable patch fields (name, universe,
+			// address, definition, order) so changes in the .asc since
+			// the previous import propagate. RefID is frozen.
+			existing.Name = label
+			existing.Universe = universe
+			existing.StartChannel = address
+			existing.DefinitionID = defID
+			existing.ProjectOrder = &order
+			if err := m.fixtureRepo.Update(ctx, existing); err != nil {
+				return nil, fmt.Errorf("update instance on re-import: %w", err)
+			}
+			eosChannelToInstanceID[pe.Channel] = existing.ID
+			res.FixtureInstancesCount++
+			continue
+		}
 		instance := &models.FixtureInstance{
 			ProjectID:    projectID,
 			DefinitionID: defID,
@@ -144,6 +240,7 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 			Universe:     universe,
 			StartChannel: address,
 			ProjectOrder: &order,
+			RefID:        refID,
 		}
 		instanceChannels := createInstanceChannelsFor(persToChannels[pe.PersonalityID])
 		if err := m.fixtureRepo.CreateWithChannels(ctx, instance, instanceChannels); err != nil {
@@ -166,7 +263,7 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 	if err := m.applyCues(ctx, projectID, show, states, table, &res.LooksCount, &res.CueListsCount, &res.CuesCount); err != nil {
 		return nil, err
 	}
-	if err := m.applyGroups(ctx, projectID, show, &res.GroupsCount, warn); err != nil {
+	if err := m.applyGroups(ctx, projectID, show, eosChannelToInstanceID, &res.GroupsCount, warn); err != nil {
 		return nil, err
 	}
 	if err := m.applySidecar(ctx, projectID, sidecar, warn); err != nil {
@@ -375,13 +472,14 @@ func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show
 ) error {
 	groups := []struct {
 		name     string
+		kind     string
 		palettes []Palette
 	}{
-		{PaletteListNameColor, show.ColorPalettes},
-		{PaletteListNameBeam, show.BeamPalettes},
-		{PaletteListNameFocus, show.FocusPalettes},
-		{PaletteListNameIntensity, show.IntensPalettes},
-		{PaletteListNamePreset, show.Presets},
+		{PaletteListNameColor, "color", show.ColorPalettes},
+		{PaletteListNameBeam, "beam", show.BeamPalettes},
+		{PaletteListNameFocus, "focus", show.FocusPalettes},
+		{PaletteListNameIntensity, "intensity", show.IntensPalettes},
+		{PaletteListNamePreset, "preset", show.Presets},
 	}
 	for _, g := range groups {
 		if len(g.palettes) == 0 {
@@ -397,10 +495,8 @@ func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show
 			if pal.UnicodeText != nil {
 				label = *pal.UnicodeText
 			}
-			look := &models.Look{
-				ProjectID: projectID,
-				Name:      fmt.Sprintf("%s %s - %s", g.name, pal.Number, label),
-			}
+			refID := eosLookRefIDForPalette(g.kind, pal.Number)
+			lookName := fmt.Sprintf("%s %s - %s", g.name, pal.Number, label)
 			chanLevels := map[int]int{}
 			for _, mv := range pal.ChanMoves {
 				chanLevels[mv.Channel] = mv.Value
@@ -420,8 +516,9 @@ func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show
 			if err != nil {
 				return err
 			}
-			if err := m.lookRepo.CreateWithFixtureValues(ctx, look, values); err != nil {
-				return fmt.Errorf("create palette look: %w", err)
+			look, err := m.upsertLookByRefID(ctx, projectID, refID, lookName, values)
+			if err != nil {
+				return fmt.Errorf("upsert palette look: %w", err)
 			}
 			*looksCount++
 			cueNum, _ := strconv.ParseFloat(pal.Number, 64)
@@ -473,17 +570,18 @@ func (m *Mapper) applyCues(ctx context.Context, projectID string, show *Show,
 			if cueLabel != "" {
 				cueName = cueName + " - " + cueLabel
 			}
-			look := &models.Look{ProjectID: projectID, Name: cueName}
+			cueNum, _ := strconv.ParseFloat(snap.CueNumber, 64)
+			refID := eosLookRefIDForCue(cl.Number, cueNum)
 			values, err := buildLookValues(snap.ChannelLevels, snap.ParamLevels, states, table)
 			if err != nil {
 				return err
 			}
-			if err := m.lookRepo.CreateWithFixtureValues(ctx, look, values); err != nil {
-				return err
+			look, err := m.upsertLookByRefID(ctx, projectID, refID, cueName, values)
+			if err != nil {
+				return fmt.Errorf("upsert cue look: %w", err)
 			}
 			*looksCount++
 
-			cueNum, _ := strconv.ParseFloat(snap.CueNumber, 64)
 			cue := &models.Cue{
 				CueListID:   dbList.ID,
 				LookID:      look.ID,
@@ -502,30 +600,265 @@ func (m *Mapper) applyCues(ctx context.Context, projectID string, show *Show,
 	return nil
 }
 
-func (m *Mapper) applyGroups(_ context.Context, _ string, show *Show, _ *int, warn *Collector) error {
-	// Group persistence is part of Task 14c. Held back until then — but
-	// surface a warning when the file actually contained groups, so a
-	// caller doesn't silently lose that data.
-	if len(show.Groups) > 0 {
-		warn.Add(WarnGroupsSkipped, SeverityInfo,
-			fmt.Sprintf("dropped %d $Group block(s); group persistence is not yet implemented",
-				len(show.Groups)),
-			map[string]string{"count": strconv.Itoa(len(show.Groups))})
+// upsertLookByRefID either creates a Look with the given (projectID, refID)
+// + fixture values, or — if one already exists — updates its name and
+// replaces the fixture values. Returns the resulting Look. Used by
+// applyCues and applyPalettes so re-importing the same EOS file into the
+// same project doesn't trip the unique index on looks(project_id, ref_id).
+func (m *Mapper) upsertLookByRefID(ctx context.Context, projectID, refID, name string, values []models.FixtureValue) (*models.Look, error) {
+	existing, err := m.lookRepo.FindByRefID(ctx, projectID, refID)
+	if err != nil {
+		return nil, fmt.Errorf("find look by refID: %w", err)
+	}
+	if existing != nil {
+		existing.Name = name
+		if err := m.lookRepo.UpdateAndReplaceFixtureValues(ctx, existing, values); err != nil {
+			return nil, fmt.Errorf("update look + replace values: %w", err)
+		}
+		return existing, nil
+	}
+	look := &models.Look{
+		ProjectID: projectID,
+		Name:      name,
+		RefID:     refID,
+	}
+	if err := m.lookRepo.CreateWithFixtureValues(ctx, look, values); err != nil {
+		return nil, fmt.Errorf("create look: %w", err)
+	}
+	return look, nil
+}
+
+func (m *Mapper) applyGroups(ctx context.Context, projectID string, show *Show, chToFix map[int]string, groupsCount *int, warn *Collector) error {
+	for _, g := range show.Groups {
+		// Resolve group members from EOS channel numbers to fixture IDs.
+		// Dedupe fixture IDs (overlapping ranges or repeated tokens in the
+		// $Group block can name the same channel twice; the junction
+		// table's composite PK rejects duplicates).
+		fixtureIDs := make([]string, 0, len(g.Channels))
+		seenFixture := make(map[string]bool, len(g.Channels))
+		for _, ch := range g.Channels {
+			fid, ok := chToFix[ch]
+			if !ok {
+				warn.Add(WarnGroupChannelUnresolved, SeverityWarn,
+					fmt.Sprintf("group %s references unpatched channel %d", g.Number, ch),
+					map[string]string{
+						"groupNumber": g.Number,
+						"channel":     strconv.Itoa(ch),
+					})
+				continue
+			}
+			if seenFixture[fid] {
+				continue
+			}
+			seenFixture[fid] = true
+			fixtureIDs = append(fixtureIDs, fid)
+		}
+
+		name := g.Label
+		if name == "" && g.UnicodeText != nil {
+			name = *g.UnicodeText
+		}
+		if name == "" {
+			name = fmt.Sprintf("Group %s", g.Number)
+		}
+
+		var eosNumber *int
+		if n, err := strconv.Atoi(g.Number); err == nil {
+			eosNumber = &n
+		}
+
+		// Idempotent re-import: if a group with the same EosNumber already
+		// exists in this project, update its name and members rather than
+		// creating a duplicate.
+		if eosNumber != nil {
+			existing, err := m.fixtureGroupRepo.FindByEosNumber(ctx, projectID, *eosNumber)
+			if err != nil {
+				return fmt.Errorf("find existing group: %w", err)
+			}
+			if existing != nil {
+				existing.Name = name
+				if err := m.fixtureGroupRepo.Update(ctx, existing); err != nil {
+					return fmt.Errorf("update group: %w", err)
+				}
+				if err := m.fixtureGroupRepo.SetMembers(ctx, existing.ID, fixtureIDs); err != nil {
+					return fmt.Errorf("set members: %w", err)
+				}
+				*groupsCount++
+				continue
+			}
+		}
+
+		fg := &models.FixtureGroup{
+			ProjectID: projectID,
+			Name:      name,
+			EosNumber: eosNumber,
+		}
+		if err := m.fixtureGroupRepo.CreateWithMembers(ctx, fg, fixtureIDs); err != nil {
+			return fmt.Errorf("create group: %w", err)
+		}
+		*groupsCount++
 	}
 	return nil
 }
 
-func (m *Mapper) applySidecar(_ context.Context, _ string, sc Sidecar, warn *Collector) error {
-	// Sidecar application is part of Task 14c. As with applyGroups, warn
-	// rather than silently swallow the parsed sidecar contents.
-	if len(sc.LookBoards) > 0 || len(sc.FadeBehaviors) > 0 || len(sc.SynthDefs) > 0 {
-		warn.Add(WarnSidecarUnresolved, SeverityInfo,
-			"sidecar metadata was parsed but is not yet re-applied; will activate in a future release",
-			map[string]string{
-				"lookBoards":    strconv.Itoa(len(sc.LookBoards)),
-				"fadeBehaviors": strconv.Itoa(len(sc.FadeBehaviors)),
-				"synthDefs":     strconv.Itoa(len(sc.SynthDefs)),
+func (m *Mapper) applySidecar(ctx context.Context, projectID string, sc Sidecar, warn *Collector) error {
+	if err := m.applySidecarLookBoards(ctx, projectID, sc.LookBoards, warn); err != nil {
+		return err
+	}
+	if err := m.applySidecarFadeBehaviors(ctx, projectID, sc.FadeBehaviors, warn); err != nil {
+		return err
+	}
+	if err := m.applySidecarSynthDefs(ctx, projectID, sc.SynthDefs, warn); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *Mapper) applySidecarLookBoards(ctx context.Context, projectID string, boards []SidecarLookBoard, warn *Collector) error {
+	if len(boards) == 0 {
+		return nil
+	}
+	// Collect all referenced look refIDs and resolve in one query.
+	refIDSet := map[string]struct{}{}
+	for _, b := range boards {
+		for _, btn := range b.Buttons {
+			refIDSet[btn.LookRefID] = struct{}{}
+		}
+	}
+	refIDs := make([]string, 0, len(refIDSet))
+	for r := range refIDSet {
+		refIDs = append(refIDs, r)
+	}
+	lookByRef, err := m.lookRepo.MapByRefID(ctx, projectID, refIDs)
+	if err != nil {
+		return fmt.Errorf("resolve look refids: %w", err)
+	}
+
+	for _, b := range boards {
+		buttons := make([]models.LookBoardButton, 0, len(b.Buttons))
+		for _, btn := range b.Buttons {
+			lookID, ok := lookByRef[btn.LookRefID]
+			if !ok {
+				warn.Add(WarnSidecarUnresolved, SeverityWarn,
+					fmt.Sprintf("look board %q references unknown look %q", b.RefID, btn.LookRefID),
+					map[string]string{
+						"kind":       "look_board_button",
+						"boardRefId": b.RefID,
+						"lookRefId":  btn.LookRefID,
+					})
+				continue
+			}
+			// Store nil for empty color so GraphQL clients see null
+			// rather than "" (the GraphQL type is `String`, not
+			// `String!`).
+			var colorPtr *string
+			if btn.Color != "" {
+				c := btn.Color
+				colorPtr = &c
+			}
+			buttons = append(buttons, models.LookBoardButton{
+				LookID:  lookID,
+				LayoutX: btn.X,
+				LayoutY: btn.Y,
+				Color:   colorPtr,
 			})
+		}
+
+		// Idempotent: update existing board with same RefID, else create.
+		existing, err := m.lookBoardRepo.FindByRefID(ctx, projectID, b.RefID)
+		if err != nil {
+			return fmt.Errorf("find look board: %w", err)
+		}
+		if existing != nil {
+			existing.Name = b.Name
+			if err := m.lookBoardRepo.ReplaceButtons(ctx, existing, buttons); err != nil {
+				return fmt.Errorf("replace look board buttons: %w", err)
+			}
+			continue
+		}
+		board := &models.LookBoard{
+			ProjectID: projectID,
+			Name:      b.Name,
+			RefID:     b.RefID,
+		}
+		if err := m.lookBoardRepo.CreateWithButtons(ctx, board, buttons); err != nil {
+			return fmt.Errorf("create look board: %w", err)
+		}
+	}
+	return nil
+}
+
+func (m *Mapper) applySidecarFadeBehaviors(ctx context.Context, projectID string, fbs []SidecarFadeBehavior, warn *Collector) error {
+	validBehaviors := map[string]bool{"FADE": true, "SNAP": true, "SNAP_END": true}
+	for _, fb := range fbs {
+		inst, err := m.fixtureRepo.FindInstanceByRefID(ctx, projectID, fb.InstanceRefID)
+		if err != nil {
+			return fmt.Errorf("find instance %s: %w", fb.InstanceRefID, err)
+		}
+		if inst == nil {
+			warn.Add(WarnSidecarUnresolved, SeverityWarn,
+				fmt.Sprintf("fade_behavior references unknown fixture %q", fb.InstanceRefID),
+				map[string]string{
+					"kind":          "fade_behavior",
+					"instanceRefId": fb.InstanceRefID,
+				})
+			continue
+		}
+		for _, c := range fb.Channels {
+			if !validBehaviors[c.Behavior] {
+				warn.Add(WarnSidecarUnresolved, SeverityWarn,
+					fmt.Sprintf("fade_behavior has invalid behavior %q for fixture %q offset %d",
+						c.Behavior, fb.InstanceRefID, c.Offset),
+					map[string]string{
+						"kind":          "fade_behavior_invalid",
+						"instanceRefId": fb.InstanceRefID,
+						"offset":        strconv.Itoa(c.Offset),
+						"behavior":      c.Behavior,
+					})
+				continue
+			}
+			err := m.fixtureRepo.UpdateInstanceChannelFadeBehavior(ctx, inst.ID, c.Offset, c.Behavior)
+			if err != nil {
+				if errors.Is(err, repositories.ErrChannelOffsetNotFound) {
+					warn.Add(WarnSidecarUnresolved, SeverityWarn,
+						fmt.Sprintf("fade_behavior offset %d not found on fixture %q", c.Offset, fb.InstanceRefID),
+						map[string]string{
+							"kind":          "fade_behavior_offset",
+							"instanceRefId": fb.InstanceRefID,
+							"offset":        strconv.Itoa(c.Offset),
+						})
+					continue
+				}
+				return fmt.Errorf("update fade behavior: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+// applySidecarSynthDefs treats synth_def records as advisory: if the referenced
+// definition exists, no-op (it was already linked during fixture matching);
+// otherwise emit an informational WarnSidecarUnresolved. The projectID is
+// unused because fixture definitions are global.
+func (m *Mapper) applySidecarSynthDefs(ctx context.Context, _ string, sds []SidecarSynthDef, warn *Collector) error {
+	for _, sd := range sds {
+		def, err := m.fixtureRepo.FindDefinitionByRefID(ctx, sd.DefRefID)
+		if err != nil {
+			return fmt.Errorf("find def: %w", err)
+		}
+		if def == nil {
+			warn.Add(WarnSidecarUnresolved, SeverityInfo,
+				fmt.Sprintf("synth_def references unknown definition %q (%s/%s)",
+					sd.DefRefID, sd.Manufacturer, sd.Model),
+				map[string]string{
+					"kind":         "synth_def",
+					"defRefId":     sd.DefRefID,
+					"manufacturer": sd.Manufacturer,
+					"model":        sd.Model,
+				})
+			continue
+		}
+		// Found — already linked. No-op (informational).
 	}
 	return nil
 }

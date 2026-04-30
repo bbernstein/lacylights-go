@@ -326,6 +326,14 @@ type CreateFixtureDefinitionInput struct {
 	Modes        graphql.Omittable[[]*CreateModeInput] `json:"modes,omitempty"`
 }
 
+type CreateFixtureGroupInput struct {
+	ProjectID   string                     `json:"projectId"`
+	Name        string                     `json:"name"`
+	Description graphql.Omittable[*string] `json:"description,omitempty"`
+	FixtureIds  []string                   `json:"fixtureIds"`
+	EosNumber   graphql.Omittable[*int]    `json:"eosNumber,omitempty"`
+}
+
 type CreateFixtureInstanceInput struct {
 	Name         string                      `json:"name"`
 	Description  graphql.Omittable[*string]  `json:"description,omitempty"`
@@ -1113,6 +1121,11 @@ type RegisterInput struct {
 	Name     graphql.Omittable[*string] `json:"name,omitempty"`
 }
 
+type ReorderFixturesInGroupInput struct {
+	GroupID    string   `json:"groupId"`
+	FixtureIds []string `json:"fixtureIds"`
+}
+
 type RepositoryVersion struct {
 	Repository      string `json:"repository"`
 	Installed       string `json:"installed"`
@@ -1212,6 +1225,14 @@ type UpdateEffectInput struct {
 	Offset          graphql.Omittable[*float64]            `json:"offset,omitempty"`
 	PhaseOffset     graphql.Omittable[*float64]            `json:"phaseOffset,omitempty"`
 	MasterValue     graphql.Omittable[*float64]            `json:"masterValue,omitempty"`
+}
+
+type UpdateFixtureGroupInput struct {
+	ID           string                     `json:"id"`
+	Name         graphql.Omittable[*string] `json:"name,omitempty"`
+	Description  graphql.Omittable[*string] `json:"description,omitempty"`
+	EosNumber    graphql.Omittable[*int]    `json:"eosNumber,omitempty"`
+	ProjectOrder graphql.Omittable[*int]    `json:"projectOrder,omitempty"`
 }
 
 type UpdateFixtureInstanceInput struct {

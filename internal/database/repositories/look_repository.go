@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"errors"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/lucsky/cuid"
@@ -41,10 +42,25 @@ func (r *LookRepository) FindByID(ctx context.Context, id string) (*models.Look,
 	return &look, nil
 }
 
+// FindByIDs batches FindByID into a single SELECT … WHERE id IN (…). Returns
+// rows in arbitrary order; callers index by ID. Empty input returns an empty
+// slice without issuing a query.
+func (r *LookRepository) FindByIDs(ctx context.Context, ids []string) ([]models.Look, error) {
+	if len(ids) == 0 {
+		return []models.Look{}, nil
+	}
+	var looks []models.Look
+	result := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&looks)
+	return looks, result.Error
+}
+
 // Create creates a new look.
 func (r *LookRepository) Create(ctx context.Context, look *models.Look) error {
 	if look.ID == "" {
 		look.ID = cuid.New()
+	}
+	if look.RefID == "" {
+		look.RefID = look.ID
 	}
 	return r.db.WithContext(ctx).Create(look).Error
 }
@@ -84,6 +100,9 @@ func (r *LookRepository) CreateWithFixtureValues(ctx context.Context, look *mode
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if look.ID == "" {
 			look.ID = cuid.New()
+		}
+		if look.RefID == "" {
+			look.RefID = look.ID
 		}
 		if err := tx.Create(look).Error; err != nil {
 			return err
@@ -141,6 +160,36 @@ func (r *LookRepository) DeleteFixtureValuesByFixtureID(ctx context.Context, fix
 	return r.db.WithContext(ctx).Delete(&models.FixtureValue{}, "fixture_id = ?", fixtureID).Error
 }
 
+// UpdateAndReplaceFixtureValues atomically renames a Look and replaces its
+// FixtureValues in a single transaction. If CreateFixtureValues fails after
+// DeleteFixtureValues, the entire change is rolled back so the Look retains
+// its previous values rather than being left empty.
+//
+// Only the Name field is updated — RefID is intentionally protected from
+// overwrite (it's frozen post-creation per Task 14c contract).
+func (r *LookRepository) UpdateAndReplaceFixtureValues(ctx context.Context, look *models.Look, values []models.FixtureValue) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.Look{}).
+			Where("id = ?", look.ID).
+			Updates(map[string]interface{}{"name": look.Name}).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&models.FixtureValue{}, "look_id = ?", look.ID).Error; err != nil {
+			return err
+		}
+		if len(values) == 0 {
+			return nil
+		}
+		for i := range values {
+			if values[i].ID == "" {
+				values[i].ID = cuid.New()
+			}
+			values[i].LookID = look.ID
+		}
+		return tx.Create(&values).Error
+	})
+}
+
 // GetFixtureValue returns a specific fixture value by look and fixture ID.
 func (r *LookRepository) GetFixtureValue(ctx context.Context, lookID, fixtureID string) (*models.FixtureValue, error) {
 	var value models.FixtureValue
@@ -157,4 +206,45 @@ func (r *LookRepository) GetFixtureValue(ctx context.Context, lookID, fixtureID 
 // UpdateFixtureValue updates a fixture value.
 func (r *LookRepository) UpdateFixtureValue(ctx context.Context, value *models.FixtureValue) error {
 	return r.db.WithContext(ctx).Save(value).Error
+}
+
+// MapByRefID resolves a batch of (projectID, refID) pairs in one query.
+// Returns a map keyed by refID; unresolved refIDs are absent from the map.
+func (r *LookRepository) MapByRefID(ctx context.Context, projectID string, refIDs []string) (map[string]string, error) {
+	out := make(map[string]string, len(refIDs))
+	if len(refIDs) == 0 {
+		return out, nil
+	}
+	type row struct {
+		ID    string
+		RefID string
+	}
+	var rows []row
+	err := r.db.WithContext(ctx).
+		Model(&models.Look{}).
+		Select("id, ref_id").
+		Where("project_id = ? AND ref_id IN ?", projectID, refIDs).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		out[r.RefID] = r.ID
+	}
+	return out, nil
+}
+
+// FindByRefID resolves a single (projectID, refID). (nil, nil) on miss.
+func (r *LookRepository) FindByRefID(ctx context.Context, projectID, refID string) (*models.Look, error) {
+	var look models.Look
+	result := r.db.WithContext(ctx).
+		Where("project_id = ? AND ref_id = ?", projectID, refID).
+		First(&look)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &look, nil
 }
