@@ -286,6 +286,7 @@ type FixtureDefinition struct {
 	Model        string    `gorm:"column:model"`
 	Type         string    `gorm:"column:type"`
 	IsBuiltIn    bool      `gorm:"column:is_built_in;default:false"`
+	RefID        string    `gorm:"column:ref_id;not null;default:''"` // global unique identifier for round-trip definition matching
 	CreatedAt    time.Time `gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt    time.Time `gorm:"column:updated_at;autoUpdateTime"`
 
@@ -359,6 +360,7 @@ type FixtureInstance struct {
 	Universe     int     `gorm:"column:universe"`
 	StartChannel int     `gorm:"column:start_channel"`
 	Tags         *string `gorm:"column:tags;default:[]"` // JSON array
+	RefID        string  `gorm:"column:ref_id;not null;default:''"` // stable cross-roundtrip identifier; project-scoped unique via runtime index
 
 	ProjectOrder   *int     `gorm:"column:project_order"`
 	LayoutX        *float64 `gorm:"column:layout_x"`
@@ -400,6 +402,7 @@ type Look struct {
 	Name        string    `gorm:"column:name"`
 	Description *string   `gorm:"column:description"`
 	ProjectID   string    `gorm:"column:project_id;index"`
+	RefID       string    `gorm:"column:ref_id;not null;default:''"` // project-scoped stable identifier for sidecar references
 	CreatedAt   time.Time `gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt   time.Time `gorm:"column:updated_at;autoUpdateTime"`
 
@@ -500,6 +503,7 @@ type LookBoard struct {
 	Name            string    `gorm:"column:name"`
 	Description     *string   `gorm:"column:description"`
 	ProjectID       string    `gorm:"column:project_id;index"`
+	RefID           string    `gorm:"column:ref_id;not null;default:''"` // project-scoped stable identifier for sidecar references
 	DefaultFadeTime float64   `gorm:"column:default_fade_time;default:3.0"`
 	GridSize        *int      `gorm:"column:grid_size;default:50"`
 	CanvasWidth     int       `gorm:"column:canvas_width;default:2000"`
