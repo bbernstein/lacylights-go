@@ -238,3 +238,162 @@ func TestFixtureGroupRepository_CascadeDeleteOnFixture(t *testing.T) {
 
 // (Suppress unused import warning if errors isn't otherwise used)
 var _ = errors.New
+
+func TestFixtureGroupRepository_FindByID(t *testing.T) {
+	repo, _, _ := newFixtureGroupRepoForTest(t)
+	ctx := context.Background()
+
+	g := &models.FixtureGroup{ProjectID: "p1", Name: "G"}
+	if err := repo.Create(ctx, g); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	got, err := repo.FindByID(ctx, g.ID)
+	if err != nil || got == nil || got.ID != g.ID {
+		t.Errorf("hit: got %v, %v", got, err)
+	}
+
+	miss, err := repo.FindByID(ctx, "missing")
+	if err != nil {
+		t.Errorf("miss err: %v", err)
+	}
+	if miss != nil {
+		t.Errorf("miss should be nil, got %v", miss)
+	}
+}
+
+func TestFixtureGroupRepository_FindByProjectID(t *testing.T) {
+	repo, _, _ := newFixtureGroupRepoForTest(t)
+	ctx := context.Background()
+
+	one, two := 2, 1
+	a := &models.FixtureGroup{ProjectID: "p1", Name: "Beta", ProjectOrder: &one}
+	b := &models.FixtureGroup{ProjectID: "p1", Name: "Alpha", ProjectOrder: &two}
+	c := &models.FixtureGroup{ProjectID: "p1", Name: "NoOrder"}
+	other := &models.FixtureGroup{ProjectID: "p2", Name: "Other"}
+	for _, g := range []*models.FixtureGroup{a, b, c, other} {
+		if err := repo.Create(ctx, g); err != nil {
+			t.Fatalf("create %s: %v", g.Name, err)
+		}
+	}
+
+	got, err := repo.FindByProjectID(ctx, "p1")
+	if err != nil {
+		t.Fatalf("find: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d groups, want 3 (cross-project leak?)", len(got))
+	}
+	if got[0].Name != "Alpha" || got[1].Name != "Beta" || got[2].Name != "NoOrder" {
+		t.Errorf("order: got %s, %s, %s", got[0].Name, got[1].Name, got[2].Name)
+	}
+}
+
+func TestFixtureGroupRepository_FindByRefID(t *testing.T) {
+	repo, _, _ := newFixtureGroupRepoForTest(t)
+	ctx := context.Background()
+
+	a := &models.FixtureGroup{ProjectID: "p1", Name: "A", RefID: "shared"}
+	b := &models.FixtureGroup{ProjectID: "p2", Name: "B", RefID: "shared"}
+	for _, g := range []*models.FixtureGroup{a, b} {
+		if err := repo.Create(ctx, g); err != nil {
+			t.Fatalf("create: %v", err)
+		}
+	}
+
+	got, err := repo.FindByRefID(ctx, "p1", "shared")
+	if err != nil || got == nil || got.ID != a.ID {
+		t.Errorf("hit: got %v, %v", got, err)
+	}
+
+	miss, err := repo.FindByRefID(ctx, "p1", "missing")
+	if err != nil || miss != nil {
+		t.Errorf("miss: got (%v, %v)", miss, err)
+	}
+}
+
+func TestFixtureGroupRepository_Update(t *testing.T) {
+	repo, _, _ := newFixtureGroupRepoForTest(t)
+	ctx := context.Background()
+
+	g := &models.FixtureGroup{ProjectID: "p1", Name: "Original", RefID: "frozen"}
+	if err := repo.Create(ctx, g); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	desc := "updated description"
+	five := 5
+	order := 3
+	g.Name = "Updated"
+	g.Description = &desc
+	g.EosNumber = &five
+	g.ProjectOrder = &order
+	g.RefID = "should-not-change"
+	if err := repo.Update(ctx, g); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	reloaded, err := repo.FindByID(ctx, g.ID)
+	if err != nil || reloaded == nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if reloaded.Name != "Updated" {
+		t.Errorf("Name = %q, want Updated", reloaded.Name)
+	}
+	if reloaded.Description == nil || *reloaded.Description != "updated description" {
+		t.Errorf("Description = %v", reloaded.Description)
+	}
+	if reloaded.EosNumber == nil || *reloaded.EosNumber != 5 {
+		t.Errorf("EosNumber = %v", reloaded.EosNumber)
+	}
+	if reloaded.ProjectOrder == nil || *reloaded.ProjectOrder != 3 {
+		t.Errorf("ProjectOrder = %v", reloaded.ProjectOrder)
+	}
+	if reloaded.RefID != "frozen" {
+		t.Errorf("RefID = %q, want frozen (Update must not touch RefID)", reloaded.RefID)
+	}
+}
+
+func TestFixtureGroupRepository_Delete(t *testing.T) {
+	repo, fr, _ := newFixtureGroupRepoForTest(t)
+	ctx := context.Background()
+
+	a := seedFixtureForGroup(t, fr, "p1", "ch-1")
+	g := &models.FixtureGroup{ProjectID: "p1", Name: "G"}
+	if err := repo.CreateWithMembers(ctx, g, []string{a.ID}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if err := repo.Delete(ctx, g.ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	got, err := repo.FindByID(ctx, g.ID)
+	if err != nil {
+		t.Fatalf("find after delete: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected (nil, nil) after delete, got %v", got)
+	}
+}
+
+func TestFixtureGroupRepository_RemoveMembers_NoOpWhenEmpty(t *testing.T) {
+	repo, _, _ := newFixtureGroupRepoForTest(t)
+	if err := repo.RemoveMembers(context.Background(), "any", nil); err != nil {
+		t.Errorf("expected no-op on empty list, got: %v", err)
+	}
+}
+
+func TestFixtureGroupRepository_ReorderMembers_NoOpWhenEmpty(t *testing.T) {
+	repo, _, _ := newFixtureGroupRepoForTest(t)
+	if err := repo.ReorderMembers(context.Background(), "any", nil); err != nil {
+		t.Errorf("expected no-op on empty list, got: %v", err)
+	}
+}
+
+func TestFixtureGroupRepository_AddMembers_NoOpWhenEmpty(t *testing.T) {
+	repo, _, _ := newFixtureGroupRepoForTest(t)
+	if err := repo.AddMembers(context.Background(), "any", nil); err != nil {
+		t.Errorf("expected no-op on empty list, got: %v", err)
+	}
+}
