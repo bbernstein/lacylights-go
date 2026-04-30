@@ -103,23 +103,29 @@ func main() {
 	// parses "FOREIGN" as a column name, causing migration failures.
 	// For tables with FK constraints, we skip AutoMigrate if the table already exists
 	// with the required columns.
+	//
+	// IMPORTANT: when adding a new column to any model below, also add that
+	// column name to the table's keyColumns. Otherwise legacy databases that
+	// already have the table (with the old schema) will skip AutoMigrate and
+	// the new column will never be added — causing later migration steps that
+	// reference the column to fail at startup.
 	tablesWithFK := []struct {
 		table      string
 		model      interface{}
 		keyColumns []string // columns that must exist for schema to be considered complete
 	}{
-		{"fixture_definitions", &models.FixtureDefinition{}, []string{"id"}},
+		{"fixture_definitions", &models.FixtureDefinition{}, []string{"id", "ref_id"}},
 		{"channel_definitions", &models.ChannelDefinition{}, []string{"id", "definition_id"}},
 		{"fixture_modes", &models.FixtureMode{}, []string{"id", "definition_id"}},
 		{"mode_channels", &models.ModeChannel{}, []string{"id", "mode_id", "channel_id"}},
-		{"fixture_instances", &models.FixtureInstance{}, []string{"id", "project_id"}},
+		{"fixture_instances", &models.FixtureInstance{}, []string{"id", "project_id", "ref_id"}},
 		{"instance_channels", &models.InstanceChannel{}, []string{"id", "fixture_id"}},
-		{"fixture_groups", &models.FixtureGroup{}, []string{"id", "project_id"}},
+		{"fixture_groups", &models.FixtureGroup{}, []string{"id", "project_id", "ref_id"}},
 		{"fixture_group_members", &models.FixtureGroupMember{}, []string{"group_id", "fixture_id"}},
-		{"looks", &models.Look{}, []string{"id", "project_id"}},
+		{"looks", &models.Look{}, []string{"id", "project_id", "ref_id"}},
 		{"cue_lists", &models.CueList{}, []string{"id", "project_id"}},
 		{"cues", &models.Cue{}, []string{"id", "look_id", "cue_list_id"}},
-		{"look_boards", &models.LookBoard{}, []string{"id", "project_id"}},
+		{"look_boards", &models.LookBoard{}, []string{"id", "project_id", "ref_id"}},
 		{"look_board_buttons", &models.LookBoardButton{}, []string{"id", "look_board_id", "look_id"}},
 		{"fixture_values", &models.FixtureValue{}, []string{"id", "look_id", "fixture_id"}},
 		{"effects", &models.Effect{}, []string{"id", "project_id"}},

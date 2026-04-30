@@ -1658,3 +1658,46 @@ func TestMigrateGroupOwnership_TargetGroupIDNotFound(t *testing.T) {
 		t.Errorf("Expected error to mention MIGRATION_TARGET_GROUP_ID, got: %v", err)
 	}
 }
+
+// TestLegacyDB_AutoMigrate_AddsRefIDColumn verifies the contract this PR
+// depends on: when the keyColumns guard detects a missing column on a
+// legacy FK-constrained table, db.AutoMigrate adds the column without
+// triggering the GORM/SQLite "FOREIGN parsed as column" rebuild bug.
+//
+// Regression guard for the startup crash where ref_id was added to models
+// in task 14c but kept missing from keyColumns, so AutoMigrate was skipped
+// on legacy databases and CreateRefIDIndexes failed with "no such column".
+func TestLegacyDB_AutoMigrate_AddsRefIDColumn(t *testing.T) {
+	db := setupInMemoryDB(t)
+
+	// Simulate a legacy schema: fixture_definitions exists, but predates
+	// the ref_id column added in task 14c. No FK constraints to keep the
+	// fixture minimal; AutoMigrate's column-addition path is what we test.
+	if err := db.Exec(`
+		CREATE TABLE fixture_definitions (
+			id TEXT PRIMARY KEY,
+			manufacturer TEXT,
+			model TEXT,
+			type TEXT,
+			is_built_in INTEGER DEFAULT 0,
+			created_at DATETIME,
+			updated_at DATETIME
+		)
+	`).Error; err != nil {
+		t.Fatalf("create legacy fixture_definitions: %v", err)
+	}
+
+	if db.Migrator().HasColumn("fixture_definitions", "ref_id") {
+		t.Fatal("precondition: legacy schema must not have ref_id column")
+	}
+
+	// AutoMigrate the model — this is what the keyColumns guard triggers
+	// when it detects the missing column.
+	if err := db.AutoMigrate(&models.FixtureDefinition{}); err != nil {
+		t.Fatalf("AutoMigrate: %v", err)
+	}
+
+	if !db.Migrator().HasColumn("fixture_definitions", "ref_id") {
+		t.Error("ref_id column must be added by AutoMigrate")
+	}
+}
