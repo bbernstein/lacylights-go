@@ -47,6 +47,18 @@ func (r *FixtureRepository) FindByID(ctx context.Context, id string) (*models.Fi
 	return &fixture, nil
 }
 
+// FindByIDs batches FindByID into a single SELECT … WHERE id IN (…). Returns
+// rows in arbitrary order; callers that need a specific order should index
+// the result by ID. Empty input returns an empty slice without a query.
+func (r *FixtureRepository) FindByIDs(ctx context.Context, ids []string) ([]models.FixtureInstance, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var fixtures []models.FixtureInstance
+	result := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&fixtures)
+	return fixtures, result.Error
+}
+
 // Create creates a new fixture instance.
 func (r *FixtureRepository) Create(ctx context.Context, fixture *models.FixtureInstance) error {
 	if fixture.ID == "" {

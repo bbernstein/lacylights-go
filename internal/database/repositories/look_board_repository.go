@@ -172,3 +172,29 @@ func (r *LookBoardRepository) FindByRefID(ctx context.Context, projectID, refID 
 	}
 	return &b, nil
 }
+
+// ReplaceButtons atomically renames the board (if name != current) and
+// replaces its full button list. If the transaction fails after the buttons
+// are deleted, the board is rolled back to its previous state.
+func (r *LookBoardRepository) ReplaceButtons(ctx context.Context, board *models.LookBoard, buttons []models.LookBoardButton) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.LookBoard{}).
+			Where("id = ?", board.ID).
+			Updates(map[string]interface{}{"name": board.Name}).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&models.LookBoardButton{}, "look_board_id = ?", board.ID).Error; err != nil {
+			return err
+		}
+		if len(buttons) == 0 {
+			return nil
+		}
+		for i := range buttons {
+			if buttons[i].ID == "" {
+				buttons[i].ID = cuid.New()
+			}
+			buttons[i].LookBoardID = board.ID
+		}
+		return tx.Create(&buttons).Error
+	})
+}

@@ -94,7 +94,9 @@ func (r *Resolver) updateFixtureGroup(ctx context.Context, input generated.Updat
 	if err := r.FixtureGroupRepo.Update(ctx, g); err != nil {
 		return nil, err
 	}
-	return g, nil
+	// Re-fetch to return a fresh UpdatedAt (GORM's partial-map Updates does
+	// not populate the autoUpdateTime field back onto the in-memory struct).
+	return r.FixtureGroupRepo.FindByID(ctx, g.ID)
 }
 
 func (r *Resolver) deleteFixtureGroup(ctx context.Context, id string) (bool, error) {
@@ -166,18 +168,26 @@ func (r *Resolver) requireGroup(ctx context.Context, id string) (*models.Fixture
 }
 
 // assertFixturesInProject ensures every supplied fixtureID belongs to the
-// expected project.
+// expected project. Single batch query rather than N+1.
 func (r *Resolver) assertFixturesInProject(ctx context.Context, projectID string, fixtureIDs []string) error {
+	if len(fixtureIDs) == 0 {
+		return nil
+	}
+	fixtures, err := r.FixtureRepo.FindByIDs(ctx, fixtureIDs)
+	if err != nil {
+		return err
+	}
+	byID := make(map[string]string, len(fixtures))
+	for i := range fixtures {
+		byID[fixtures[i].ID] = fixtures[i].ProjectID
+	}
 	for _, id := range fixtureIDs {
-		fi, err := r.FixtureRepo.FindByID(ctx, id)
-		if err != nil {
-			return err
-		}
-		if fi == nil {
+		pid, ok := byID[id]
+		if !ok {
 			return fmt.Errorf("fixture %s not found", id)
 		}
-		if fi.ProjectID != projectID {
-			return fmt.Errorf("fixture %s belongs to project %s, expected %s", id, fi.ProjectID, projectID)
+		if pid != projectID {
+			return fmt.Errorf("fixture %s belongs to project %s, expected %s", id, pid, projectID)
 		}
 	}
 	return nil
@@ -222,22 +232,33 @@ func (r *Resolver) bulkDeleteFixtureGroups(ctx context.Context, ids []string) (i
 	return count, nil
 }
 
-// fixturesForGroup loads members ordered by OrderIndex and resolves to FixtureInstance models.
+// fixturesForGroup loads members ordered by OrderIndex and resolves to
+// FixtureInstance models via a single batch query, preserving member order.
 func (r *Resolver) fixturesForGroup(ctx context.Context, groupID string) ([]*models.FixtureInstance, error) {
 	members, err := r.FixtureGroupRepo.GetMembers(ctx, groupID)
 	if err != nil {
 		return nil, err
 	}
+	if len(members) == 0 {
+		return []*models.FixtureInstance{}, nil
+	}
+	ids := make([]string, len(members))
+	for i, m := range members {
+		ids[i] = m.FixtureID
+	}
+	fixtures, err := r.FixtureRepo.FindByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[string]*models.FixtureInstance, len(fixtures))
+	for i := range fixtures {
+		byID[fixtures[i].ID] = &fixtures[i]
+	}
 	out := make([]*models.FixtureInstance, 0, len(members))
 	for _, m := range members {
-		fi, err := r.FixtureRepo.FindByID(ctx, m.FixtureID)
-		if err != nil {
-			return nil, err
+		if fi, ok := byID[m.FixtureID]; ok {
+			out = append(out, fi)
 		}
-		if fi == nil {
-			continue
-		}
-		out = append(out, fi)
 	}
 	return out, nil
 }

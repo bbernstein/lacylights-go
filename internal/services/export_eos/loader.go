@@ -139,25 +139,14 @@ func (s *Service) loadGroups(
 		return groups[i].ID < groups[j].ID
 	})
 
-	// Auto-assign EosNumbers. NOTE: this mutates DB state during a
-	// nominally read-only export — intentional, since the alternative
-	// (renumber on every export) breaks round-trip stability.
-	maxAssigned := 0
-	for _, g := range groups {
-		if g.EosNumber != nil && *g.EosNumber > maxAssigned {
-			maxAssigned = *g.EosNumber
-		}
-	}
-	for i := range groups {
-		if groups[i].EosNumber != nil {
-			continue
-		}
-		maxAssigned++
-		next := maxAssigned
-		groups[i].EosNumber = &next
-		if err := s.fixtureGroupRepo.Update(ctx, &groups[i]); err != nil {
-			return nil, fmt.Errorf("export_eos: persist auto-assigned eos_number: %w", err)
-		}
+	// Auto-assign EosNumbers atomically. NOTE: this mutates DB state during
+	// a nominally read-only export — intentional, since the alternative
+	// (renumber on every export) breaks round-trip stability. The
+	// transaction serializes against concurrent exports of the same project
+	// so two callers cannot both assign the same number and trip the
+	// (project_id, eos_number) partial unique index.
+	if err := s.fixtureGroupRepo.AssignAndPersistMissingEosNumbers(ctx, projectID, groups); err != nil {
+		return nil, fmt.Errorf("export_eos: persist auto-assigned eos_number: %w", err)
 	}
 
 	out := make([]GroupOut, 0, len(groups))

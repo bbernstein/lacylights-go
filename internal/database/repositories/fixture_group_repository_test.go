@@ -397,3 +397,52 @@ func TestFixtureGroupRepository_AddMembers_NoOpWhenEmpty(t *testing.T) {
 		t.Errorf("expected no-op on empty list, got: %v", err)
 	}
 }
+
+func TestFixtureGroupRepository_AssignAndPersistMissingEosNumbers(t *testing.T) {
+	repo, _, _ := newFixtureGroupRepoForTest(t)
+	ctx := context.Background()
+
+	// Mix of assigned and unassigned. Three pre-existing groups: one with
+	// EosNumber=2, two with nil. After AssignAndPersist, the nils should
+	// receive 3 and 4 (next after max), in order.
+	two := 2
+	a := &models.FixtureGroup{ProjectID: "p1", Name: "A", EosNumber: &two}
+	b := &models.FixtureGroup{ProjectID: "p1", Name: "B"}
+	c := &models.FixtureGroup{ProjectID: "p1", Name: "C"}
+	for _, g := range []*models.FixtureGroup{a, b, c} {
+		if err := repo.Create(ctx, g); err != nil {
+			t.Fatalf("create %s: %v", g.Name, err)
+		}
+	}
+
+	groups := []models.FixtureGroup{*a, *b, *c}
+	if err := repo.AssignAndPersistMissingEosNumbers(ctx, "p1", groups); err != nil {
+		t.Fatalf("assign: %v", err)
+	}
+
+	// In-memory mutation: the slice's nil entries must now have numbers.
+	for i, g := range groups {
+		if g.EosNumber == nil {
+			t.Errorf("groups[%d] (%s) EosNumber still nil", i, g.Name)
+		}
+	}
+	// Persistence: read back and verify both are above 2 and unique.
+	all, _ := repo.FindByProjectID(ctx, "p1")
+	seen := map[int]bool{}
+	for _, g := range all {
+		if g.EosNumber == nil {
+			t.Errorf("group %s still nil after persist", g.Name)
+			continue
+		}
+		if seen[*g.EosNumber] {
+			t.Errorf("duplicate EosNumber %d", *g.EosNumber)
+		}
+		seen[*g.EosNumber] = true
+	}
+
+	// Idempotent: running again with all-assigned slice is a no-op.
+	all2, _ := repo.FindByProjectID(ctx, "p1")
+	if err := repo.AssignAndPersistMissingEosNumbers(ctx, "p1", all2); err != nil {
+		t.Fatalf("re-run: %v", err)
+	}
+}

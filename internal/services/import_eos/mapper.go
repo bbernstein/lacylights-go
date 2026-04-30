@@ -43,7 +43,27 @@ func eosLookRefIDForPalette(paletteKind, paletteNumber string) string {
 }
 
 func eosFixtureDefRefID(manufacturer, model string) string {
-	return fmt.Sprintf("def-%s-%s", strings.ReplaceAll(manufacturer, "/", "_"), strings.ReplaceAll(model, "/", "_"))
+	return fmt.Sprintf("def-%s-%s", sanitizeRefIDPart(manufacturer), sanitizeRefIDPart(model))
+}
+
+// sanitizeRefIDPart replaces any character outside [A-Za-z0-9_-] with '_'.
+// Keeps RefIDs URL/log/grep safe regardless of what EOS fixture metadata
+// contains (spaces, NUL bytes, slashes, non-ASCII).
+func sanitizeRefIDPart(s string) string {
+	if s == "" {
+		return "_"
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
 }
 
 // formatCueNumber strips trailing zeros so 1.5 → "1.5" and 1.0 → "1".
@@ -550,7 +570,11 @@ func (m *Mapper) applyCues(ctx context.Context, projectID string, show *Show,
 func (m *Mapper) applyGroups(ctx context.Context, projectID string, show *Show, chToFix map[int]string, groupsCount *int, warn *Collector) error {
 	for _, g := range show.Groups {
 		// Resolve group members from EOS channel numbers to fixture IDs.
+		// Dedupe fixture IDs (overlapping ranges or repeated tokens in the
+		// $Group block can name the same channel twice; the junction
+		// table's composite PK rejects duplicates).
 		fixtureIDs := make([]string, 0, len(g.Channels))
+		seenFixture := make(map[string]bool, len(g.Channels))
 		for _, ch := range g.Channels {
 			fid, ok := chToFix[ch]
 			if !ok {
@@ -562,6 +586,10 @@ func (m *Mapper) applyGroups(ctx context.Context, projectID string, show *Show, 
 					})
 				continue
 			}
+			if seenFixture[fid] {
+				continue
+			}
+			seenFixture[fid] = true
 			fixtureIDs = append(fixtureIDs, fid)
 		}
 
@@ -675,19 +703,8 @@ func (m *Mapper) applySidecarLookBoards(ctx context.Context, projectID string, b
 		}
 		if existing != nil {
 			existing.Name = b.Name
-			if err := m.lookBoardRepo.Update(ctx, existing); err != nil {
-				return fmt.Errorf("update look board: %w", err)
-			}
-			if err := m.lookBoardRepo.DeleteButtons(ctx, existing.ID); err != nil {
-				return fmt.Errorf("delete buttons: %w", err)
-			}
-			for i := range buttons {
-				buttons[i].LookBoardID = existing.ID
-			}
-			if len(buttons) > 0 {
-				if err := m.lookBoardRepo.CreateButtons(ctx, buttons); err != nil {
-					return fmt.Errorf("recreate buttons: %w", err)
-				}
+			if err := m.lookBoardRepo.ReplaceButtons(ctx, existing, buttons); err != nil {
+				return fmt.Errorf("replace look board buttons: %w", err)
 			}
 			continue
 		}

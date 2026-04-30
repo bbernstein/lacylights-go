@@ -304,3 +304,50 @@ func TestFixtureRepository_FindDefinitionByRefID_Global(t *testing.T) {
 		t.Errorf("expected nil, got %+v", miss)
 	}
 }
+
+func TestFixtureRepository_FindByIDs(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := NewFixtureRepository(testDB.DB)
+
+	def := &models.FixtureDefinition{Manufacturer: "Generic", Model: "Dimmer", Type: "DIMMER"}
+	if err := repo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("def: %v", err)
+	}
+	mk := func(name string) *models.FixtureInstance {
+		fi := &models.FixtureInstance{ProjectID: "p1", DefinitionID: def.ID, Name: name}
+		if err := repo.CreateWithChannels(ctx, fi, nil); err != nil {
+			t.Fatalf("create %s: %v", name, err)
+		}
+		return fi
+	}
+	a, b, c := mk("A"), mk("B"), mk("C")
+
+	// Empty input → empty result, no error.
+	got, err := repo.FindByIDs(ctx, nil)
+	if err != nil {
+		t.Errorf("empty: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("empty: got %d", len(got))
+	}
+
+	// Mixed hits + miss.
+	got, err = repo.FindByIDs(ctx, []string{a.ID, "missing", b.ID, c.ID})
+	if err != nil {
+		t.Fatalf("hits: %v", err)
+	}
+	if len(got) != 3 {
+		t.Errorf("got %d, want 3 (missing should be silently dropped)", len(got))
+	}
+	ids := map[string]bool{}
+	for _, fi := range got {
+		ids[fi.ID] = true
+	}
+	for _, want := range []string{a.ID, b.ID, c.ID} {
+		if !ids[want] {
+			t.Errorf("missing %s in result", want)
+		}
+	}
+}

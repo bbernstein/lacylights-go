@@ -305,12 +305,12 @@ func (r *fixtureGroupResolver) Fixtures(ctx context.Context, obj *models.Fixture
 
 // CreatedAt is the resolver for the createdAt field.
 func (r *fixtureGroupResolver) CreatedAt(ctx context.Context, obj *models.FixtureGroup) (string, error) {
-	return obj.CreatedAt.Format(time.RFC3339), nil
+	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // UpdatedAt is the resolver for the updatedAt field.
 func (r *fixtureGroupResolver) UpdatedAt(ctx context.Context, obj *models.FixtureGroup) (string, error) {
-	return obj.UpdatedAt.Format(time.RFC3339), nil
+	return obj.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 // Manufacturer is the resolver for the manufacturer field.

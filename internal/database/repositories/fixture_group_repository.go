@@ -258,3 +258,50 @@ func (r *FixtureGroupRepository) AssignNextEosNumber(ctx context.Context, projec
 	}
 	return *maxNum + 1, nil
 }
+
+// AssignAndPersistMissingEosNumbers fills in EosNumber for any group in the
+// supplied slice that has nil EosNumber, persisting each new value in a
+// single transaction. Mutates the in-memory groups so callers see the
+// assigned numbers without re-reading. Serializes against concurrent
+// exporters via the transaction's write lock.
+func (r *FixtureGroupRepository) AssignAndPersistMissingEosNumbers(ctx context.Context, projectID string, groups []models.FixtureGroup) error {
+	hasMissing := false
+	for i := range groups {
+		if groups[i].EosNumber == nil {
+			hasMissing = true
+			break
+		}
+	}
+	if !hasMissing {
+		return nil
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Read the current max inside the transaction so concurrent
+		// exporters see each other's writes.
+		var maxNum *int
+		if err := tx.Model(&models.FixtureGroup{}).
+			Where("project_id = ?", projectID).
+			Select("MAX(eos_number)").
+			Scan(&maxNum).Error; err != nil {
+			return fmt.Errorf("max eos_number: %w", err)
+		}
+		next := 1
+		if maxNum != nil {
+			next = *maxNum + 1
+		}
+		for i := range groups {
+			if groups[i].EosNumber != nil {
+				continue
+			}
+			n := next
+			next++
+			if err := tx.Model(&models.FixtureGroup{}).
+				Where("id = ?", groups[i].ID).
+				Update("eos_number", n).Error; err != nil {
+				return fmt.Errorf("persist eos_number for group %s: %w", groups[i].ID, err)
+			}
+			groups[i].EosNumber = &n
+		}
+		return nil
+	})
+}
