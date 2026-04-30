@@ -51,6 +51,8 @@ func setupTestDB(t *testing.T) (*gorm.DB, func()) {
 		&models.CueEffect{},
 		&models.Operation{},
 		&models.OperationPointer{},
+		&models.FixtureGroup{},
+		&models.FixtureGroupMember{},
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)

@@ -63,9 +63,17 @@ func (r *FixtureRepository) Update(ctx context.Context, fixture *models.FixtureI
 	return r.db.WithContext(ctx).Save(fixture).Error
 }
 
-// Delete deletes a fixture instance by ID.
+// Delete deletes a fixture instance by ID, also removing any
+// FixtureGroupMember rows that reference it (cascade-on-fixture-delete).
+// GORM's tag-based cascade on a composite-PK junction is unreliable, so
+// we do this explicitly in a transaction.
 func (r *FixtureRepository) Delete(ctx context.Context, id string) error {
-	return r.db.WithContext(ctx).Delete(&models.FixtureInstance{}, "id = ?", id).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&models.FixtureGroupMember{}, "fixture_id = ?", id).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.FixtureInstance{}, "id = ?", id).Error
+	})
 }
 
 // FindDefinitionByID returns a fixture definition by ID.
