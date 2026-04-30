@@ -433,3 +433,84 @@ func TestExport_FailsWhenRepositoriesMissing(t *testing.T) {
 		})
 	}
 }
+
+func TestExport_GroupsEmitted(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+	ctx := context.Background()
+
+	proj := &models.Project{Name: "T"}
+	if err := deps.projectRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("project: %v", err)
+	}
+	def := &models.FixtureDefinition{Manufacturer: "Generic", Model: "Dimmer", Type: "DIMMER"}
+	if err := deps.fixtureRepo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("def: %v", err)
+	}
+
+	one, two := 1, 2
+	a := &models.FixtureInstance{ProjectID: proj.ID, DefinitionID: def.ID, Name: "A", Universe: 1, StartChannel: 1, ProjectOrder: &one}
+	b := &models.FixtureInstance{ProjectID: proj.ID, DefinitionID: def.ID, Name: "B", Universe: 1, StartChannel: 2, ProjectOrder: &two}
+	if err := deps.fixtureRepo.CreateWithChannels(ctx, a, []models.InstanceChannel{{Offset: 0, Name: "I", Type: "INTENSITY", FadeBehavior: "FADE"}}); err != nil {
+		t.Fatalf("a: %v", err)
+	}
+	if err := deps.fixtureRepo.CreateWithChannels(ctx, b, []models.InstanceChannel{{Offset: 0, Name: "I", Type: "INTENSITY", FadeBehavior: "FADE"}}); err != nil {
+		t.Fatalf("b: %v", err)
+	}
+
+	g := &models.FixtureGroup{ProjectID: proj.ID, Name: "All"}
+	if err := deps.fixtureGroupRepo.CreateWithMembers(ctx, g, []string{a.ID, b.ID}); err != nil {
+		t.Fatalf("group: %v", err)
+	}
+
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo, deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Export(ctx, proj.ID)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if !strings.Contains(res.Content, "$Group 1") {
+		t.Errorf("missing $Group 1; output:\n%s", res.Content)
+	}
+	if !strings.Contains(res.Content, "Text All") {
+		t.Errorf("missing Text All")
+	}
+
+	// EosNumber should now be persisted.
+	persisted, _ := deps.fixtureGroupRepo.FindByID(ctx, g.ID)
+	if persisted.EosNumber == nil || *persisted.EosNumber != 1 {
+		t.Errorf("expected EosNumber=1 persisted; got %v", persisted.EosNumber)
+	}
+}
+
+func TestExport_EmptyGroupSkipped(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+	ctx := context.Background()
+	proj := &models.Project{Name: "T"}
+	if err := deps.projectRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("project: %v", err)
+	}
+
+	g := &models.FixtureGroup{ProjectID: proj.ID, Name: "Empty"}
+	if err := deps.fixtureGroupRepo.CreateWithMembers(ctx, g, nil); err != nil {
+		t.Fatalf("group: %v", err)
+	}
+
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo, deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Export(ctx, proj.ID)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if strings.Contains(res.Content, "$Group") {
+		t.Errorf("empty group should not be emitted; got:\n%s", res.Content)
+	}
+	saw := false
+	for _, w := range res.Warnings {
+		if w.Code == importeos.WarnExportEmptyGroupSkipped {
+			saw = true
+		}
+	}
+	if !saw {
+		t.Errorf("expected WarnExportEmptyGroupSkipped")
+	}
+}

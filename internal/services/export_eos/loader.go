@@ -86,6 +86,11 @@ func (s *Service) loadBundle(ctx context.Context, projectID string, collector *i
 		return nil, err
 	}
 
+	groupsOut, err := s.loadGroups(ctx, projectID, eosChannelByInstance, collector)
+	if err != nil {
+		return nil, err
+	}
+
 	return &bundle{
 		ProjectName:   proj.Name,
 		ParamTypes:    paramTypes,
@@ -93,9 +98,98 @@ func (s *Service) loadBundle(ctx context.Context, projectID string, collector *i
 		Patch:         patch,
 		Palettes:      palettes,
 		CueLists:      regularLists,
-		Groups:        []GroupOut{}, // FixtureGroup model not yet present (Task 14c)
+		Groups:        groupsOut,
 		Sidecar:       sidecar,
 	}, nil
+}
+
+// loadGroups returns the project's FixtureGroups as writer-shape rows,
+// resolving members to EOS channel numbers. Empty groups (no resolvable
+// members) are skipped with WarnExportEmptyGroupSkipped. Groups missing
+// an EosNumber are auto-assigned the next available number and the
+// updated number is persisted so subsequent exports stay stable.
+func (s *Service) loadGroups(
+	ctx context.Context,
+	projectID string,
+	eosByInstance map[string]int,
+	collector *importeos.Collector,
+) ([]GroupOut, error) {
+	groups, err := s.fixtureGroupRepo.FindByProjectID(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("export_eos: groups: %w", err)
+	}
+	// Sort: assigned EosNumber first (ascending), then nil-EosNumber
+	// (alphabetic), then ID for tie-break. This makes auto-assignment
+	// deterministic.
+	sort.SliceStable(groups, func(i, j int) bool {
+		ai, bi := groups[i].EosNumber, groups[j].EosNumber
+		switch {
+		case ai != nil && bi != nil:
+			if *ai != *bi {
+				return *ai < *bi
+			}
+		case ai != nil:
+			return true
+		case bi != nil:
+			return false
+		}
+		if groups[i].Name != groups[j].Name {
+			return groups[i].Name < groups[j].Name
+		}
+		return groups[i].ID < groups[j].ID
+	})
+
+	// Auto-assign EosNumbers. NOTE: this mutates DB state during a
+	// nominally read-only export — intentional, since the alternative
+	// (renumber on every export) breaks round-trip stability.
+	maxAssigned := 0
+	for _, g := range groups {
+		if g.EosNumber != nil && *g.EosNumber > maxAssigned {
+			maxAssigned = *g.EosNumber
+		}
+	}
+	for i := range groups {
+		if groups[i].EosNumber != nil {
+			continue
+		}
+		maxAssigned++
+		next := maxAssigned
+		groups[i].EosNumber = &next
+		if err := s.fixtureGroupRepo.Update(ctx, &groups[i]); err != nil {
+			return nil, fmt.Errorf("export_eos: persist auto-assigned eos_number: %w", err)
+		}
+	}
+
+	out := make([]GroupOut, 0, len(groups))
+	for _, g := range groups {
+		members, err := s.fixtureGroupRepo.GetMembers(ctx, g.ID)
+		if err != nil {
+			return nil, fmt.Errorf("export_eos: group members: %w", err)
+		}
+		channels := make([]int, 0, len(members))
+		for _, m := range members {
+			ch, ok := eosByInstance[m.FixtureID]
+			if !ok {
+				continue // unpatched fixture — silently exclude
+			}
+			channels = append(channels, ch)
+		}
+		if len(channels) == 0 {
+			if collector != nil {
+				collector.Add(importeos.WarnExportEmptyGroupSkipped, importeos.SeverityInfo,
+					fmt.Sprintf("group %s has no patched members; skipped on export", g.Name),
+					map[string]string{"groupId": g.ID, "groupName": g.Name})
+			}
+			continue
+		}
+		number := strconv.Itoa(*g.EosNumber)
+		out = append(out, GroupOut{
+			Number:   number,
+			Label:    g.Name,
+			Channels: channels,
+		})
+	}
+	return out, nil
 }
 
 // eosChannelFor returns the EOS channel number for a fixture instance. We use
