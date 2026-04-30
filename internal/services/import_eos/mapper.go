@@ -218,6 +218,17 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 			return nil, fmt.Errorf("find instance by refID: %w", err)
 		}
 		if existing != nil {
+			// Re-import: update mutable patch fields (name, universe,
+			// address, definition, order) so changes in the .asc since
+			// the previous import propagate. RefID is frozen.
+			existing.Name = label
+			existing.Universe = universe
+			existing.StartChannel = address
+			existing.DefinitionID = defID
+			existing.ProjectOrder = &order
+			if err := m.fixtureRepo.Update(ctx, existing); err != nil {
+				return nil, fmt.Errorf("update instance on re-import: %w", err)
+			}
 			eosChannelToInstanceID[pe.Channel] = existing.ID
 			res.FixtureInstancesCount++
 			continue

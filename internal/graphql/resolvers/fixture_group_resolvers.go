@@ -145,7 +145,10 @@ func (r *Resolver) removeFixturesFromGroup(ctx context.Context, groupID string, 
 	if err != nil {
 		return nil, err
 	}
-	if err := r.FixtureGroupRepo.RemoveMembers(ctx, groupID, fixtureIDs); err != nil {
+	// Dedupe for symmetry with addFixturesToGroup (the underlying DELETE
+	// is duplicate-safe, but normalization keeps the API surface
+	// consistent and simplifies downstream tracing).
+	if err := r.FixtureGroupRepo.RemoveMembers(ctx, groupID, dedupePreserveOrder(fixtureIDs)); err != nil {
 		return nil, err
 	}
 	return g, nil
@@ -156,10 +159,42 @@ func (r *Resolver) reorderFixturesInGroup(ctx context.Context, input generated.R
 	if err != nil {
 		return nil, err
 	}
+	if err := r.validateFixtureGroupReorder(ctx, input.GroupID, input.FixtureIds); err != nil {
+		return nil, err
+	}
 	if err := r.FixtureGroupRepo.ReorderMembers(ctx, input.GroupID, input.FixtureIds); err != nil {
 		return nil, err
 	}
 	return g, nil
+}
+
+// validateFixtureGroupReorder ensures fixtureIDs is exactly a permutation of
+// the group's current membership: same set, no duplicates. Without this, a
+// caller that supplied a partial list or repeats would leave OrderIndex
+// values gapped or duplicated, producing surprising sort order.
+func (r *Resolver) validateFixtureGroupReorder(ctx context.Context, groupID string, fixtureIDs []string) error {
+	members, err := r.FixtureGroupRepo.GetMembers(ctx, groupID)
+	if err != nil {
+		return err
+	}
+	current := make(map[string]struct{}, len(members))
+	for _, m := range members {
+		current[m.FixtureID] = struct{}{}
+	}
+	if len(fixtureIDs) != len(current) {
+		return fmt.Errorf("fixtureIds must contain each fixture in the group exactly once")
+	}
+	seen := make(map[string]struct{}, len(fixtureIDs))
+	for _, id := range fixtureIDs {
+		if _, ok := current[id]; !ok {
+			return fmt.Errorf("fixture %s is not a member of fixture group %s", id, groupID)
+		}
+		if _, dup := seen[id]; dup {
+			return fmt.Errorf("fixtureIds contains duplicate fixture ID %s", id)
+		}
+		seen[id] = struct{}{}
+	}
+	return nil
 }
 
 // requireGroup loads the group and gates project access.
