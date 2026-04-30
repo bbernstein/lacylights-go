@@ -295,22 +295,22 @@ func (r *fixtureDefinitionResolver) CreatedAt(ctx context.Context, obj *models.F
 
 // Project is the resolver for the project field.
 func (r *fixtureGroupResolver) Project(ctx context.Context, obj *models.FixtureGroup) (*models.Project, error) {
-	panic(fmt.Errorf("not implemented: Project - project"))
+	return r.ProjectRepo.FindByID(ctx, obj.ProjectID)
 }
 
 // Fixtures is the resolver for the fixtures field.
 func (r *fixtureGroupResolver) Fixtures(ctx context.Context, obj *models.FixtureGroup) ([]*models.FixtureInstance, error) {
-	panic(fmt.Errorf("not implemented: Fixtures - fixtures"))
+	return r.fixturesForGroup(ctx, obj.ID)
 }
 
 // CreatedAt is the resolver for the createdAt field.
 func (r *fixtureGroupResolver) CreatedAt(ctx context.Context, obj *models.FixtureGroup) (string, error) {
-	panic(fmt.Errorf("not implemented: CreatedAt - createdAt"))
+	return obj.CreatedAt.Format(time.RFC3339), nil
 }
 
 // UpdatedAt is the resolver for the updatedAt field.
 func (r *fixtureGroupResolver) UpdatedAt(ctx context.Context, obj *models.FixtureGroup) (string, error) {
-	panic(fmt.Errorf("not implemented: UpdatedAt - updatedAt"))
+	return obj.UpdatedAt.Format(time.RFC3339), nil
 }
 
 // Manufacturer is the resolver for the manufacturer field.
@@ -3502,47 +3502,47 @@ func (r *mutationResolver) ActivateLookFromBoard(ctx context.Context, lookBoardI
 
 // CreateFixtureGroup is the resolver for the createFixtureGroup field.
 func (r *mutationResolver) CreateFixtureGroup(ctx context.Context, input generated.CreateFixtureGroupInput) (*models.FixtureGroup, error) {
-	panic(fmt.Errorf("not implemented: CreateFixtureGroup - createFixtureGroup"))
+	return r.createFixtureGroup(ctx, input)
 }
 
 // UpdateFixtureGroup is the resolver for the updateFixtureGroup field.
 func (r *mutationResolver) UpdateFixtureGroup(ctx context.Context, input generated.UpdateFixtureGroupInput) (*models.FixtureGroup, error) {
-	panic(fmt.Errorf("not implemented: UpdateFixtureGroup - updateFixtureGroup"))
+	return r.updateFixtureGroup(ctx, input)
 }
 
 // DeleteFixtureGroup is the resolver for the deleteFixtureGroup field.
 func (r *mutationResolver) DeleteFixtureGroup(ctx context.Context, id string) (bool, error) {
-	panic(fmt.Errorf("not implemented: DeleteFixtureGroup - deleteFixtureGroup"))
+	return r.deleteFixtureGroup(ctx, id)
 }
 
 // AddFixturesToGroup is the resolver for the addFixturesToGroup field.
 func (r *mutationResolver) AddFixturesToGroup(ctx context.Context, groupID string, fixtureIds []string) (*models.FixtureGroup, error) {
-	panic(fmt.Errorf("not implemented: AddFixturesToGroup - addFixturesToGroup"))
+	return r.addFixturesToGroup(ctx, groupID, fixtureIds)
 }
 
 // RemoveFixturesFromGroup is the resolver for the removeFixturesFromGroup field.
 func (r *mutationResolver) RemoveFixturesFromGroup(ctx context.Context, groupID string, fixtureIds []string) (*models.FixtureGroup, error) {
-	panic(fmt.Errorf("not implemented: RemoveFixturesFromGroup - removeFixturesFromGroup"))
+	return r.removeFixturesFromGroup(ctx, groupID, fixtureIds)
 }
 
 // ReorderFixturesInGroup is the resolver for the reorderFixturesInGroup field.
 func (r *mutationResolver) ReorderFixturesInGroup(ctx context.Context, input generated.ReorderFixturesInGroupInput) (*models.FixtureGroup, error) {
-	panic(fmt.Errorf("not implemented: ReorderFixturesInGroup - reorderFixturesInGroup"))
+	return r.reorderFixturesInGroup(ctx, input)
 }
 
 // BulkCreateFixtureGroups is the resolver for the bulkCreateFixtureGroups field.
 func (r *mutationResolver) BulkCreateFixtureGroups(ctx context.Context, inputs []*generated.CreateFixtureGroupInput) ([]*models.FixtureGroup, error) {
-	panic(fmt.Errorf("not implemented: BulkCreateFixtureGroups - bulkCreateFixtureGroups"))
+	return r.bulkCreateFixtureGroups(ctx, inputs)
 }
 
 // BulkUpdateFixtureGroups is the resolver for the bulkUpdateFixtureGroups field.
 func (r *mutationResolver) BulkUpdateFixtureGroups(ctx context.Context, inputs []*generated.UpdateFixtureGroupInput) ([]*models.FixtureGroup, error) {
-	panic(fmt.Errorf("not implemented: BulkUpdateFixtureGroups - bulkUpdateFixtureGroups"))
+	return r.bulkUpdateFixtureGroups(ctx, inputs)
 }
 
 // BulkDeleteFixtureGroups is the resolver for the bulkDeleteFixtureGroups field.
 func (r *mutationResolver) BulkDeleteFixtureGroups(ctx context.Context, ids []string) (int, error) {
-	panic(fmt.Errorf("not implemented: BulkDeleteFixtureGroups - bulkDeleteFixtureGroups"))
+	return r.bulkDeleteFixtureGroups(ctx, ids)
 }
 
 // CreateCueList is the resolver for the createCueList field.
@@ -6283,12 +6283,12 @@ func (r *queryResolver) LookBoardButton(ctx context.Context, id string) (*models
 
 // FixtureGroup is the resolver for the fixtureGroup field.
 func (r *queryResolver) FixtureGroup(ctx context.Context, id string) (*models.FixtureGroup, error) {
-	panic(fmt.Errorf("not implemented: FixtureGroup - fixtureGroup"))
+	return r.fixtureGroupQuery(ctx, id)
 }
 
 // FixtureGroups is the resolver for the fixtureGroups field.
 func (r *queryResolver) FixtureGroups(ctx context.Context, projectID string) ([]*models.FixtureGroup, error) {
-	panic(fmt.Errorf("not implemented: FixtureGroups - fixtureGroups"))
+	return r.fixtureGroupsQuery(ctx, projectID)
 }
 
 // FixtureUsage is the resolver for the fixtureUsage field.
