@@ -502,3 +502,39 @@ $$ LACYLIGHTS:synth_def {"defRefId":"def-Other-Thing","manufacturer":"Other","mo
 		t.Errorf("expected WarnSidecarUnresolved kind=synth_def")
 	}
 }
+
+func TestMapper_GroupsIdempotentReimport(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+
+	importOnce := func(targetID *string) (*Result, error) {
+		f := openFixtureFile(t, "groups_only.asc")
+		defer f.Close()
+		svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+			deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+		opts := Options{}
+		if targetID != nil {
+			opts.TargetProjectID = targetID
+		} else {
+			opts.NewProjectName = ptr("Idem")
+		}
+		return svc.Import(context.Background(), f, opts)
+	}
+
+	res1, err := importOnce(nil)
+	if err != nil {
+		t.Fatalf("first import: %v", err)
+	}
+	first := deps.MustListGroupsByProject(t, res1.ProjectID)
+	if len(first) != 2 {
+		t.Fatalf("first import: %d groups", len(first))
+	}
+
+	if _, err := importOnce(&res1.ProjectID); err != nil {
+		t.Fatalf("re-import: %v", err)
+	}
+	second := deps.MustListGroupsByProject(t, res1.ProjectID)
+	if len(second) != 2 {
+		t.Errorf("after re-import: %d groups (want 2)", len(second))
+	}
+}
