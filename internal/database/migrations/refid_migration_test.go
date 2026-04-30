@@ -124,10 +124,13 @@ func TestCreateRefIDIndexes_SkipsTableMissingRefIDColumn(t *testing.T) {
 	// Create all tables, but omit ref_id from fixture_instances.
 	for _, table := range refIDTables {
 		schema := `(id TEXT PRIMARY KEY, project_id TEXT, ref_id TEXT)`
-		if table == "fixture_instances" {
+		switch table {
+		case "fixture_instances":
 			schema = `(id TEXT PRIMARY KEY, project_id TEXT)` // legacy schema, no ref_id
-		}
-		if table == "fixture_groups" {
+		case "fixture_definitions":
+			// fixture_definitions has no project_id in the real model.
+			schema = `(id TEXT PRIMARY KEY, ref_id TEXT)`
+		case "fixture_groups":
 			schema = `(id TEXT PRIMARY KEY, project_id TEXT, ref_id TEXT, eos_number INTEGER)`
 		}
 		if err := db.Exec(`CREATE TABLE ` + table + ` ` + schema).Error; err != nil {

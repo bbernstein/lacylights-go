@@ -43,9 +43,12 @@ func BackfillRefIDs(db *gorm.DB) error {
 // uniqueness. Run after BackfillRefIDs so existing rows can satisfy the
 // constraint. Uses CREATE UNIQUE INDEX IF NOT EXISTS for idempotency.
 //
-// Each index is skipped when its required column is missing so a
-// partially-migrated database surfaces a clear "column missing" error
-// at the AutoMigrate stage rather than as a cryptic SQL failure here.
+// Each index is silently skipped (rather than failing) when its required
+// column is absent. The missing column should have been added by
+// AutoMigrate earlier in startup; if it wasn't, the problem will surface
+// when the column is first used rather than here with a cryptic SQL
+// error. The pre-flight check matches the equivalent guard in
+// BackfillRefIDs and keeps both helpers safe on partially-migrated DBs.
 func CreateRefIDIndexes(db *gorm.DB) error {
 	stmts := []struct {
 		name      string
