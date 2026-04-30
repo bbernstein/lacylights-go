@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
@@ -24,6 +25,40 @@ const (
 	PaletteListNameIntensity = "Intensity Palettes"
 	PaletteListNamePreset    = "Presets"
 )
+
+// EOS-derived RefID formats. Stable across re-imports: the same input
+// file always yields the same RefIDs regardless of how many times it's
+// imported into how many fresh projects. This is what makes the
+// $$ LACYLIGHTS: sidecar resolve cleanly on round-trip.
+func eosFixtureInstanceRefID(eosChannel int) string {
+	return fmt.Sprintf("ch-%d", eosChannel)
+}
+
+func eosLookRefIDForCue(cueListNumber int, cueNumber float64) string {
+	return fmt.Sprintf("cue-%d-%s", cueListNumber, formatCueNumber(cueNumber))
+}
+
+func eosLookRefIDForPalette(paletteKind, paletteNumber string) string {
+	return fmt.Sprintf("palette-%s-%s", paletteKind, paletteNumber)
+}
+
+func eosFixtureDefRefID(manufacturer, model string) string {
+	return fmt.Sprintf("def-%s-%s", strings.ReplaceAll(manufacturer, "/", "_"), strings.ReplaceAll(model, "/", "_"))
+}
+
+// formatCueNumber strips trailing zeros so 1.5 → "1.5" and 1.0 → "1".
+func formatCueNumber(n float64) string {
+	s := strconv.FormatFloat(n, 'f', -1, 64)
+	if !strings.Contains(s, ".") {
+		return s
+	}
+	s = strings.TrimRight(s, "0")
+	s = strings.TrimRight(s, ".")
+	if s == "" {
+		s = "0"
+	}
+	return s
+}
 
 // Mapper applies a parsed Show + Sidecar to LacyLights repos.
 type Mapper struct {
@@ -78,6 +113,7 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 				return nil, fmt.Errorf("load existing def channels: %w", err)
 			}
 		} else {
+			mr.SynthesizedDef.RefID = eosFixtureDefRefID(mr.SynthesizedDef.Manufacturer, mr.SynthesizedDef.Model)
 			if err := m.fixtureRepo.CreateDefinitionWithChannels(ctx, mr.SynthesizedDef, mr.SynthesizedChannels); err != nil {
 				return nil, fmt.Errorf("create synth def: %w", err)
 			}
@@ -144,6 +180,7 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 			Universe:     universe,
 			StartChannel: address,
 			ProjectOrder: &order,
+			RefID:        eosFixtureInstanceRefID(pe.Channel),
 		}
 		instanceChannels := createInstanceChannelsFor(persToChannels[pe.PersonalityID])
 		if err := m.fixtureRepo.CreateWithChannels(ctx, instance, instanceChannels); err != nil {
@@ -375,13 +412,14 @@ func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show
 ) error {
 	groups := []struct {
 		name     string
+		kind     string
 		palettes []Palette
 	}{
-		{PaletteListNameColor, show.ColorPalettes},
-		{PaletteListNameBeam, show.BeamPalettes},
-		{PaletteListNameFocus, show.FocusPalettes},
-		{PaletteListNameIntensity, show.IntensPalettes},
-		{PaletteListNamePreset, show.Presets},
+		{PaletteListNameColor, "color", show.ColorPalettes},
+		{PaletteListNameBeam, "beam", show.BeamPalettes},
+		{PaletteListNameFocus, "focus", show.FocusPalettes},
+		{PaletteListNameIntensity, "intensity", show.IntensPalettes},
+		{PaletteListNamePreset, "preset", show.Presets},
 	}
 	for _, g := range groups {
 		if len(g.palettes) == 0 {
@@ -400,6 +438,7 @@ func (m *Mapper) applyPalettes(ctx context.Context, projectID string, show *Show
 			look := &models.Look{
 				ProjectID: projectID,
 				Name:      fmt.Sprintf("%s %s - %s", g.name, pal.Number, label),
+				RefID:     eosLookRefIDForPalette(g.kind, pal.Number),
 			}
 			chanLevels := map[int]int{}
 			for _, mv := range pal.ChanMoves {
@@ -473,7 +512,12 @@ func (m *Mapper) applyCues(ctx context.Context, projectID string, show *Show,
 			if cueLabel != "" {
 				cueName = cueName + " - " + cueLabel
 			}
-			look := &models.Look{ProjectID: projectID, Name: cueName}
+			cueNum, _ := strconv.ParseFloat(snap.CueNumber, 64)
+			look := &models.Look{
+				ProjectID: projectID,
+				Name:      cueName,
+				RefID:     eosLookRefIDForCue(cl.Number, cueNum),
+			}
 			values, err := buildLookValues(snap.ChannelLevels, snap.ParamLevels, states, table)
 			if err != nil {
 				return err
@@ -483,7 +527,6 @@ func (m *Mapper) applyCues(ctx context.Context, projectID string, show *Show,
 			}
 			*looksCount++
 
-			cueNum, _ := strconv.ParseFloat(snap.CueNumber, 64)
 			cue := &models.Cue{
 				CueListID:   dbList.ID,
 				LookID:      look.ID,

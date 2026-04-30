@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -191,5 +192,53 @@ func TestMapper_CuesProduceTrackedSnapshots(t *testing.T) {
 	}
 	if fullCount != 3 {
 		t.Errorf("expected 3 full intensities in cue 2, got %d", fullCount)
+	}
+}
+
+func TestMapper_RefIDsDeterministicAcrossProjects(t *testing.T) {
+	// Import the same minimal patch into two distinct fresh projects.
+	// Same input file should yield the same RefIDs regardless of project,
+	// which is what makes the $$ LACYLIGHTS: sidecar resolve cleanly on
+	// round-trip.
+	importInto := func(name string) string {
+		deps := newTestDeps(t)
+		t.Cleanup(deps.close)
+		f := openFixtureFile(t, "minimal_patch.asc")
+		t.Cleanup(func() { _ = f.Close() })
+		svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+			deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+		res, err := svc.Import(context.Background(), f, Options{NewProjectName: ptr(name)})
+		if err != nil {
+			t.Fatalf("import %s: %v", name, err)
+		}
+		instances, err := deps.fixtureRepo.FindByProjectID(context.Background(), res.ProjectID)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		sort.Slice(instances, func(i, j int) bool {
+			oi, oj := 0, 0
+			if instances[i].ProjectOrder != nil {
+				oi = *instances[i].ProjectOrder
+			}
+			if instances[j].ProjectOrder != nil {
+				oj = *instances[j].ProjectOrder
+			}
+			return oi < oj
+		})
+		var b strings.Builder
+		for _, fi := range instances {
+			b.WriteString(fi.RefID)
+			b.WriteByte('|')
+		}
+		return b.String()
+	}
+
+	a := importInto("Project A")
+	b := importInto("Project B")
+	if a != b {
+		t.Errorf("non-deterministic RefIDs:\nA: %s\nB: %s", a, b)
+	}
+	if !strings.Contains(a, "ch-") {
+		t.Errorf("expected EOS-derived RefIDs in %q", a)
 	}
 }
