@@ -400,3 +400,73 @@ $$ LACYLIGHTS:look_board {"refId":"b1","name":"X","buttons":[{"lookRefId":"cue-1
 		t.Errorf("expected WarnSidecarUnresolved kind=look_board_button")
 	}
 }
+
+func TestMapper_SidecarFadeBehaviorApplied(t *testing.T) {
+	asc := `Ident 3:0
+$ParamType 1 1 Intens
+$ParamType 12 3 Red
+$ParamType 13 3 Green
+$Personality 1
+   $$Manuf Generic
+   $$Model RGB
+   $$Footprint 3
+   $$PersChan 1 1 1 0 0
+   $$PersChan 12 1 2 0 0
+   $$PersChan 13 1 3 0 0
+$Patch 1 1 1
+   Text A
+$$ LACYLIGHTS:version 1
+$$ LACYLIGHTS:fade_behavior {"instanceRefId":"ch-1","channels":[{"offset":1,"behavior":"SNAP_END"}]}
+`
+	deps := newTestDeps(t)
+	defer deps.close()
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Import(context.Background(), strings.NewReader(asc), Options{NewProjectName: ptr("T")})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	instances, _ := deps.fixtureRepo.FindByProjectID(context.Background(), res.ProjectID)
+	if len(instances) != 1 {
+		t.Fatalf("got %d instances, want 1", len(instances))
+	}
+	channels, _ := deps.fixtureRepo.GetInstanceChannels(context.Background(), instances[0].ID)
+	want := map[int]string{0: "FADE", 1: "SNAP_END", 2: "FADE"}
+	for _, c := range channels {
+		if c.FadeBehavior != want[c.Offset] {
+			t.Errorf("offset %d: %q, want %q", c.Offset, c.FadeBehavior, want[c.Offset])
+		}
+	}
+}
+
+func TestMapper_SidecarFadeBehaviorOffsetMissing(t *testing.T) {
+	asc := `Ident 3:0
+$ParamType 1 1 Intens
+$Personality 1
+   $$Manuf Generic
+   $$Model Dimmer
+   $$Footprint 1
+   $$PersChan 1 1 1 0 0
+$Patch 1 1 1
+   Text A
+$$ LACYLIGHTS:version 1
+$$ LACYLIGHTS:fade_behavior {"instanceRefId":"ch-1","channels":[{"offset":99,"behavior":"SNAP"}]}
+`
+	deps := newTestDeps(t)
+	defer deps.close()
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Import(context.Background(), strings.NewReader(asc), Options{NewProjectName: ptr("T")})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	saw := false
+	for _, w := range res.Warnings {
+		if w.Code == WarnSidecarUnresolved && w.Context["kind"] == "fade_behavior_offset" {
+			saw = true
+		}
+	}
+	if !saw {
+		t.Errorf("expected WarnSidecarUnresolved kind=fade_behavior_offset")
+	}
+}

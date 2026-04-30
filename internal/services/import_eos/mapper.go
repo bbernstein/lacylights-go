@@ -703,9 +703,52 @@ func (m *Mapper) applySidecarLookBoards(ctx context.Context, projectID string, b
 	return nil
 }
 
-// applySidecarFadeBehaviors and applySidecarSynthDefs are stubs filled
-// in by Tasks 14 and 15.
-func (m *Mapper) applySidecarFadeBehaviors(_ context.Context, _ string, _ []SidecarFadeBehavior, _ *Collector) error {
+// applySidecarSynthDefs is a stub filled in by Task 15.
+func (m *Mapper) applySidecarFadeBehaviors(ctx context.Context, projectID string, fbs []SidecarFadeBehavior, warn *Collector) error {
+	validBehaviors := map[string]bool{"FADE": true, "SNAP": true, "SNAP_END": true}
+	for _, fb := range fbs {
+		inst, err := m.fixtureRepo.FindInstanceByRefID(ctx, projectID, fb.InstanceRefID)
+		if err != nil {
+			return fmt.Errorf("find instance %s: %w", fb.InstanceRefID, err)
+		}
+		if inst == nil {
+			warn.Add(WarnSidecarUnresolved, SeverityWarn,
+				fmt.Sprintf("fade_behavior references unknown fixture %q", fb.InstanceRefID),
+				map[string]string{
+					"kind":          "fade_behavior",
+					"instanceRefId": fb.InstanceRefID,
+				})
+			continue
+		}
+		for _, c := range fb.Channels {
+			if !validBehaviors[c.Behavior] {
+				warn.Add(WarnSidecarUnresolved, SeverityWarn,
+					fmt.Sprintf("fade_behavior has invalid behavior %q for fixture %q offset %d",
+						c.Behavior, fb.InstanceRefID, c.Offset),
+					map[string]string{
+						"kind":          "fade_behavior_invalid",
+						"instanceRefId": fb.InstanceRefID,
+						"offset":        strconv.Itoa(c.Offset),
+						"behavior":      c.Behavior,
+					})
+				continue
+			}
+			err := m.fixtureRepo.UpdateInstanceChannelFadeBehavior(ctx, inst.ID, c.Offset, c.Behavior)
+			if err != nil {
+				if errors.Is(err, repositories.ErrChannelOffsetNotFound) {
+					warn.Add(WarnSidecarUnresolved, SeverityWarn,
+						fmt.Sprintf("fade_behavior offset %d not found on fixture %q", c.Offset, fb.InstanceRefID),
+						map[string]string{
+							"kind":          "fade_behavior_offset",
+							"instanceRefId": fb.InstanceRefID,
+							"offset":        strconv.Itoa(c.Offset),
+						})
+					continue
+				}
+				return fmt.Errorf("update fade behavior: %w", err)
+			}
+		}
+	}
 	return nil
 }
 
