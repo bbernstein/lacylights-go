@@ -60,7 +60,7 @@ func TestRoundtrip_GoldenOTBPA(t *testing.T) {
 		t.Errorf("expected UNPATCHED_CHANNEL warnings, got codes=%v", codes)
 	}
 
-	exp := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	exp := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	out, err := exp.Export(context.Background(), res.ProjectID)
 	if err != nil {
@@ -102,7 +102,7 @@ func TestRoundtrip_SyntheticSmall(t *testing.T) {
 		t.Fatal("expected at least one cue")
 	}
 
-	exp := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	exp := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	out, err := exp.Export(context.Background(), res.ProjectID)
 	if err != nil {

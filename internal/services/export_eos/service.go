@@ -23,30 +23,33 @@ type Result struct {
 
 // Service handles Eos ASCII export operations.
 type Service struct {
-	projectRepo   *repositories.ProjectRepository
-	fixtureRepo   *repositories.FixtureRepository
-	lookRepo      *repositories.LookRepository
-	cueListRepo   *repositories.CueListRepository
-	cueRepo       *repositories.CueRepository
-	lookBoardRepo *repositories.LookBoardRepository
+	projectRepo      *repositories.ProjectRepository
+	fixtureRepo      *repositories.FixtureRepository
+	fixtureGroupRepo *repositories.FixtureGroupRepository
+	lookRepo         *repositories.LookRepository
+	cueListRepo      *repositories.CueListRepository
+	cueRepo          *repositories.CueRepository
+	lookBoardRepo    *repositories.LookBoardRepository
 }
 
 // NewServiceWithDeps wires the service to repositories.
 func NewServiceWithDeps(
 	p *repositories.ProjectRepository,
 	f *repositories.FixtureRepository,
+	fg *repositories.FixtureGroupRepository,
 	l *repositories.LookRepository,
 	cl *repositories.CueListRepository,
 	c *repositories.CueRepository,
 	lb *repositories.LookBoardRepository,
 ) *Service {
 	return &Service{
-		projectRepo:   p,
-		fixtureRepo:   f,
-		lookRepo:      l,
-		cueListRepo:   cl,
-		cueRepo:       c,
-		lookBoardRepo: lb,
+		projectRepo:      p,
+		fixtureRepo:      f,
+		fixtureGroupRepo: fg,
+		lookRepo:         l,
+		cueListRepo:      cl,
+		cueRepo:          c,
+		lookBoardRepo:    lb,
 	}
 }
 
@@ -57,6 +60,9 @@ func (s *Service) validateDependencies() error {
 	}
 	if s.fixtureRepo == nil {
 		return fmt.Errorf("export_eos: service not wired with fixture repository")
+	}
+	if s.fixtureGroupRepo == nil {
+		return fmt.Errorf("export_eos: service not wired with fixture group repository")
 	}
 	if s.lookRepo == nil {
 		return fmt.Errorf("export_eos: service not wired with look repository")

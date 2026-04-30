@@ -110,7 +110,7 @@ func TestExport_Deterministic(t *testing.T) {
 	deps := newTestDeps(t)
 	defer deps.close()
 	pid := buildSampleProject(t, deps)
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 
 	res1, err := svc.Export(context.Background(), pid)
@@ -130,7 +130,7 @@ func TestExport_StructureBasics(t *testing.T) {
 	deps := newTestDeps(t)
 	defer deps.close()
 	pid := buildSampleProject(t, deps)
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 
 	res, err := svc.Export(context.Background(), pid)
@@ -197,7 +197,7 @@ func TestExport_EmitsWarningForUnpatchedFixture(t *testing.T) {
 		}
 	}
 
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Export(ctx, proj.ID)
 	if err != nil {
@@ -246,7 +246,7 @@ func TestExport_SanitizesNewlinesInLabels(t *testing.T) {
 		t.Fatalf("create instance: %v", err)
 	}
 
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Export(ctx, proj.ID)
 	if err != nil {
@@ -308,7 +308,7 @@ func TestExport_WarnsOnInvalidLookValuesJSON(t *testing.T) {
 		t.Fatalf("create cue: %v", err)
 	}
 
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Export(ctx, proj.ID)
 	if err != nil {
@@ -351,7 +351,7 @@ func TestExport_DottedAddressForMultiUniverse(t *testing.T) {
 		t.Fatalf("create instance: %v", err)
 	}
 
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	res, err := svc.Export(ctx, proj.ID)
 	if err != nil {
@@ -368,7 +368,7 @@ func TestExport_DottedAddressForMultiUniverse(t *testing.T) {
 func TestExport_FailsWhenProjectMissing(t *testing.T) {
 	deps := newTestDeps(t)
 	defer deps.close()
-	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.lookRepo,
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
 		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
 	_, err := svc.Export(context.Background(), "definitely-not-a-real-project")
 	if err == nil {
@@ -389,24 +389,32 @@ func TestExport_FailsWhenRepositoriesMissing(t *testing.T) {
 		{name: "only_project", mutate: func(d *testDeps, s *Service) {
 			s.projectRepo = d.projectRepo
 		}, wantSub: "fixture repository"},
+		{name: "missing_fixture_group", mutate: func(d *testDeps, s *Service) {
+			s.projectRepo = d.projectRepo
+			s.fixtureRepo = d.fixtureRepo
+		}, wantSub: "fixture group repository"},
 		{name: "missing_look", mutate: func(d *testDeps, s *Service) {
 			s.projectRepo = d.projectRepo
 			s.fixtureRepo = d.fixtureRepo
+			s.fixtureGroupRepo = d.fixtureGroupRepo
 		}, wantSub: "look repository"},
 		{name: "missing_cue_list", mutate: func(d *testDeps, s *Service) {
 			s.projectRepo = d.projectRepo
 			s.fixtureRepo = d.fixtureRepo
+			s.fixtureGroupRepo = d.fixtureGroupRepo
 			s.lookRepo = d.lookRepo
 		}, wantSub: "cue list repository"},
 		{name: "missing_cue", mutate: func(d *testDeps, s *Service) {
 			s.projectRepo = d.projectRepo
 			s.fixtureRepo = d.fixtureRepo
+			s.fixtureGroupRepo = d.fixtureGroupRepo
 			s.lookRepo = d.lookRepo
 			s.cueListRepo = d.cueListRepo
 		}, wantSub: "cue repository"},
 		{name: "missing_look_board", mutate: func(d *testDeps, s *Service) {
 			s.projectRepo = d.projectRepo
 			s.fixtureRepo = d.fixtureRepo
+			s.fixtureGroupRepo = d.fixtureGroupRepo
 			s.lookRepo = d.lookRepo
 			s.cueListRepo = d.cueListRepo
 			s.cueRepo = d.cueRepo
