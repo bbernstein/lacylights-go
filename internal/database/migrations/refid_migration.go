@@ -4,6 +4,7 @@ package migrations
 
 import (
 	"fmt"
+	"log"
 
 	"gorm.io/gorm"
 )
@@ -104,14 +105,17 @@ func CreateRefIDIndexes(db *gorm.DB) error {
 		if !db.Migrator().HasTable(s.table) {
 			continue
 		}
-		missing := false
+		var missing []string
 		for _, c := range s.reqCols {
 			if !db.Migrator().HasColumn(s.table, c) {
-				missing = true
-				break
+				missing = append(missing, c)
 			}
 		}
-		if missing {
+		if len(missing) > 0 {
+			// Log so a partially-migrated DB doesn't fail silently — the
+			// next operator can see which column AutoMigrate didn't add.
+			log.Printf("migrations: skipping index %s on %s: missing column(s) %v",
+				s.name, s.table, missing)
 			continue
 		}
 		if err := db.Exec(s.sql).Error; err != nil {
