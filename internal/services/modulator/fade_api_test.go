@@ -685,7 +685,7 @@ func TestFadeToLook_SnapEndFromZero(t *testing.T) {
 	engine.FadeToLook(channels, 1*time.Second, "snap-end-zero", EasingLinear)
 
 	// Sample repeatedly mid-fade; SNAP_END from 0 must hold EXACTLY 0.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		time.Sleep(100 * time.Millisecond)
 		value := dmxService.GetChannelValue(1, 1)
 		if value != 0 {
@@ -697,6 +697,43 @@ func TestFadeToLook_SnapEndFromZero(t *testing.T) {
 	waitForCondition(t, 2*time.Second,
 		func() bool { return dmxService.GetChannelValue(1, 1) == 255 },
 		func() { t.Fatalf("SNAP_END channel did not reach target 255, last value %d", dmxService.GetChannelValue(1, 1)) },
+	)
+}
+
+// TestFadeToLook_SnapEndDescending tests that a SNAP_END channel going from a
+// HIGH start value to a LOW target holds the start value mid-fade (i.e. does
+// NOT decrease) and only reaches the target after the fade completes.
+// This mirrors TestFadeToLook_SnapEnd but exercises the descending direction to
+// confirm SNAP_END is direction-agnostic: the hold is always "emit fromValue
+// until progress >= 1".
+func TestFadeToLook_SnapEndDescending(t *testing.T) {
+	engine, dmxService := createTestModulatorEngine()
+	_ = engine.Start()
+	defer func() { _ = engine.Stop() }()
+
+	// Set a high start value
+	dmxService.SetChannelValue(1, 1, 200)
+
+	channels := []LookChannel{
+		{Universe: 1, Channel: 1, Value: 10, FadeBehavior: FadeBehaviorSnapEnd},
+	}
+
+	engine.FadeToLook(channels, 200*time.Millisecond, "snap-end-descending", EasingLinear)
+
+	// Mid-fade: SNAP_END must HOLD the start value (200), not decrease toward 10.
+	time.Sleep(100 * time.Millisecond)
+	midValue := dmxService.GetChannelValue(1, 1)
+	if midValue != 200 {
+		t.Errorf("SNAP_END descending channel mid-fade should hold start value 200, got %d", midValue)
+	}
+
+	// After the fade completes the channel must reach the target.
+	waitForCondition(t, 1*time.Second,
+		func() bool { return dmxService.GetChannelValue(1, 1) == 10 },
+		func() {
+			t.Fatalf("SNAP_END descending channel did not reach target 10 within timeout, last value %d",
+				dmxService.GetChannelValue(1, 1))
+		},
 	)
 }
 

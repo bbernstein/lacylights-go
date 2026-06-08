@@ -29,6 +29,9 @@ func CreateCrossfadeEffect(
 }
 
 // CreateCrossfadeActive creates an active crossfade effect with the given values.
+// It intentionally produces FADE-only crossfades and does not carry SNAP_END
+// semantics — SnapEndChannels is left nil so callers (tests) that use this
+// constructor directly must not expect the hold-then-snap behaviour.
 func CreateCrossfadeActive(
 	fromValues map[ChannelKey]int,
 	toValues map[ChannelKey]int,
