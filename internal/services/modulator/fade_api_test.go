@@ -637,7 +637,8 @@ func TestFadeToLook_MidFadeTransition(t *testing.T) {
 	)
 }
 
-// TestFadeToLook_SnapEnd tests that SNAP_END channels hold until fade completes.
+// TestFadeToLook_SnapEnd tests that SNAP_END channels hold the start value for
+// the duration of the fade and only jump to the target when the fade completes.
 func TestFadeToLook_SnapEnd(t *testing.T) {
 	engine, dmxService := createTestModulatorEngine()
 	_ = engine.Start()
@@ -652,18 +653,80 @@ func TestFadeToLook_SnapEnd(t *testing.T) {
 
 	engine.FadeToLook(channels, 200*time.Millisecond, "snap-end-test", EasingLinear)
 
-	// Check immediately - SNAP_END should start at its current value (50) but...
-	// Actually in this implementation, SNAP_END just uses normal fade behavior
-	// since the modulator handles SNAP_END differently than the original fade engine.
-	// The value should remain at the starting position during the fade.
-
-	time.Sleep(50 * time.Millisecond)
+	// Mid-fade: SNAP_END must HOLD the start value (50), not interpolate toward 200.
+	time.Sleep(100 * time.Millisecond)
+	midValue := dmxService.GetChannelValue(1, 1)
+	if midValue != 50 {
+		t.Errorf("SNAP_END channel mid-fade should hold start value 50, got %d", midValue)
+	}
 
 	// Verify the fade eventually reaches the target using bounded poll
 	waitForCondition(t, 1*time.Second,
 		func() bool { return dmxService.GetChannelValue(1, 1) == 200 },
 		func() { t.Fatalf("SNAP_END channel did not reach target 200 within timeout, last value %d", dmxService.GetChannelValue(1, 1)) },
 	)
+}
+
+// TestFadeToLook_SnapEndFromZero reproduces the integration scenario: a SNAP_END
+// channel fading from black (0) to 255. It must emit EXACTLY 0 mid-fade rather
+// than interpolating (which previously made it track FADE channels at 1,2,3,...).
+func TestFadeToLook_SnapEndFromZero(t *testing.T) {
+	engine, dmxService := createTestModulatorEngine()
+	_ = engine.Start()
+	defer func() { _ = engine.Stop() }()
+
+	// Start from black
+	dmxService.SetChannelValue(1, 1, 0)
+
+	channels := []LookChannel{
+		{Universe: 1, Channel: 1, Value: 255, FadeBehavior: FadeBehaviorSnapEnd},
+	}
+
+	engine.FadeToLook(channels, 1*time.Second, "snap-end-zero", EasingLinear)
+
+	// Sample repeatedly mid-fade; SNAP_END from 0 must hold EXACTLY 0.
+	for i := 0; i < 5; i++ {
+		time.Sleep(100 * time.Millisecond)
+		value := dmxService.GetChannelValue(1, 1)
+		if value != 0 {
+			t.Fatalf("SNAP_END channel from 0 (sample %d) should hold exactly 0 mid-fade, got %d", i, value)
+		}
+	}
+
+	// And eventually reach target
+	waitForCondition(t, 2*time.Second,
+		func() bool { return dmxService.GetChannelValue(1, 1) == 255 },
+		func() { t.Fatalf("SNAP_END channel did not reach target 255, last value %d", dmxService.GetChannelValue(1, 1)) },
+	)
+}
+
+// TestFadeToLook_SnapEndMixed verifies SNAP_END holds while a sibling FADE channel
+// interpolates - the exact mismatch the integration test detects.
+func TestFadeToLook_SnapEndMixed(t *testing.T) {
+	engine, dmxService := createTestModulatorEngine()
+	_ = engine.Start()
+	defer func() { _ = engine.Stop() }()
+
+	dmxService.SetChannelValue(1, 1, 0) // FADE
+	dmxService.SetChannelValue(1, 2, 0) // SNAP_END
+
+	channels := []LookChannel{
+		{Universe: 1, Channel: 1, Value: 255, FadeBehavior: FadeBehaviorFade},
+		{Universe: 1, Channel: 2, Value: 255, FadeBehavior: FadeBehaviorSnapEnd},
+	}
+
+	engine.FadeToLook(channels, 500*time.Millisecond, "snap-end-mixed", EasingLinear)
+
+	time.Sleep(150 * time.Millisecond)
+	fadeValue := dmxService.GetChannelValue(1, 1)
+	snapEndValue := dmxService.GetChannelValue(1, 2)
+
+	if fadeValue == 0 {
+		t.Errorf("FADE channel should be interpolating mid-fade, got %d", fadeValue)
+	}
+	if snapEndValue != 0 {
+		t.Errorf("SNAP_END channel should hold 0 while FADE interpolates, got %d", snapEndValue)
+	}
 }
 
 // TestFadeToLook_EmptyChannels tests that FadeToLook handles empty channel list gracefully.

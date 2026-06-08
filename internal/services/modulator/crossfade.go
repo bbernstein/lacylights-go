@@ -68,6 +68,19 @@ func CalculateCrossfadeValues(active *ActiveEffect) map[ChannelKey]int {
 		if v, ok := active.FromValues[key]; ok {
 			fromValue = v
 		}
+
+		// SNAP_END: hold the start value until the fade completes, then jump to
+		// the target. While in progress, output exactly the start value; do not
+		// interpolate (which would make it track FADE channels).
+		if active.SnapEndChannels[key] {
+			if progress >= 1 {
+				values[key] = toValue
+			} else {
+				values[key] = fromValue
+			}
+			continue
+		}
+
 		interpolated := Interpolate(float64(fromValue), float64(toValue), easedProgress, EasingLinear)
 		values[key] = int(interpolated)
 	}
