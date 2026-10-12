@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"strconv"
+	"strings"
 )
 
 // utf8BOM makes Excel open the CSV as UTF-8 instead of the system code page.
@@ -39,7 +40,7 @@ func WriteCSV(w io.Writer, cols []Column, rows [][]any) error {
 	for _, row := range rows {
 		record = record[:0]
 		for _, v := range row {
-			record = append(record, csvCell(v))
+			record = append(record, normalizeNewlines(csvCell(v)))
 		}
 		if err := cw.Write(record); err != nil {
 			return err
@@ -66,6 +67,16 @@ func csvCell(v any) string {
 		return s
 	}
 	return escapeFormula(cellText(v))
+}
+
+// normalizeNewlines turns CRLF and lone CR line breaks into LF. With
+// UseCRLF, encoding/csv drops every '\r' inside a field and writes each
+// '\n' as CRLF, so a lone CR would otherwise be silently deleted.
+func normalizeNewlines(s string) string {
+	if !strings.ContainsRune(s, '\r') {
+		return s
+	}
+	return strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
 }
 
 // escapeFormula neutralises a string that a spreadsheet would treat as a

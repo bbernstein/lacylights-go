@@ -37,7 +37,7 @@ func fixtureTypesTable() *Table {
 		Scope:    ScopeProject,
 		Columns:  cols,
 		build:    buildFixtureTypes,
-		estimate: countInProject(&models.FixtureInstance{}),
+		estimate: countFixtureTypes,
 	}
 }
 
@@ -198,7 +198,7 @@ func lookDetailsTable() *Table {
 		Columns:        append([]Column{}, lookDetailBaseColumns...),
 		DynamicColumns: "Ch 1 … Ch N",
 		build:          buildLookDetails,
-		estimate:       countInScope(&models.FixtureValue{}, "look_id"),
+		estimate:       countLookDetails,
 	}
 }
 
@@ -316,6 +316,12 @@ func buildLookDetails(ctx context.Context, s *Service, projectID, scopeID string
 		}
 		return lessName(a.fixture.Name, b.fixture.Name)
 	})
+
+	// The grid is rows × (base + N) cells, twice over (values and channel
+	// names), so a row cap alone does not bound it.
+	if cells := 2 * len(entries) * (len(lookDetailBaseColumns) + maxChannels); cells > s.MaxCells {
+		return nil, fmt.Errorf("%w: look %s has %d cells (limit %d)", ErrTooManyRows, look.ID, cells, s.MaxCells)
+	}
 
 	cols := append([]Column{}, lookDetailBaseColumns...)
 	for i := 1; i <= maxChannels; i++ {

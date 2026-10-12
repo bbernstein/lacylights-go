@@ -141,3 +141,43 @@ func (c *RowCounter) CountProjectLookBoardButtons(ctx context.Context, projectID
 		Count(&n).Error
 	return int(n), err
 }
+
+// CountProjectFixtureTypes counts the distinct (definition, mode) pairs used
+// by fixtures in a project: exactly the FIXTURE_TYPES rows.
+func (c *RowCounter) CountProjectFixtureTypes(ctx context.Context, projectID string) (int, error) {
+	var n int64
+	sub := c.db.Model(&models.FixtureInstance{}).
+		Select("DISTINCT definition_id, COALESCE(mode_name, '')").
+		Where("project_id = ?", projectID)
+	err := c.db.WithContext(ctx).Table("(?) AS t", sub).Count(&n).Error
+	return int(n), err
+}
+
+// CountLibraryRows counts the FIXTURE_LIBRARY rows: one per mode, plus one
+// for each definition that has no modes.
+func (c *RowCounter) CountLibraryRows(ctx context.Context) (int, error) {
+	var modes, bare int64
+	db := c.db.WithContext(ctx)
+	if err := db.Model(&models.FixtureMode{}).Count(&modes).Error; err != nil {
+		return 0, err
+	}
+	if err := db.Model(&models.FixtureDefinition{}).
+		Where("NOT EXISTS (SELECT 1 FROM fixture_modes WHERE fixture_modes.definition_id = fixture_definitions.id)").
+		Count(&bare).Error; err != nil {
+		return 0, err
+	}
+	return int(modes + bare), nil
+}
+
+// CountLookFixturesInProject counts the fixture values in a look whose
+// fixture belongs to the project: exactly the LOOK_DETAILS rows (dangling
+// and cross-project references are skipped by the export).
+func (c *RowCounter) CountLookFixturesInProject(ctx context.Context, lookID, projectID string) (int, error) {
+	var n int64
+	err := c.db.WithContext(ctx).
+		Model(&models.FixtureValue{}).
+		Joins("JOIN fixture_instances ON fixture_instances.id = fixture_values.fixture_id").
+		Where("fixture_values.look_id = ? AND fixture_instances.project_id = ?", lookID, projectID).
+		Count(&n).Error
+	return int(n), err
+}

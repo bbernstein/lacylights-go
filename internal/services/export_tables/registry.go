@@ -195,6 +195,11 @@ var (
 // 1,048,576-row sheet limit.
 const MaxExportRows = 100_000
 
+// MaxExportCells caps the cells of a dynamic-width table (LOOK_DETAILS),
+// whose width grows with fixture channel counts. 5 million cells is far
+// beyond any real look (1,000 fixtures × 64 channels is ~140k per sheet).
+const MaxExportCells = 5_000_000
+
 // Repos are the repositories a Service reads from.
 type Repos struct {
 	Fixtures      *repositories.FixtureRepository
@@ -219,6 +224,9 @@ type Service struct {
 	Now func() time.Time
 	// MaxRows caps the rows in one export; defaults to MaxExportRows.
 	MaxRows int
+	// MaxCells caps the cells in a dynamic-width grid (LOOK_DETAILS,
+	// counting both of its sheets); defaults to MaxExportCells.
+	MaxCells int
 	// slots bounds how many exports build and encode at once.
 	slots chan struct{}
 }
@@ -242,7 +250,7 @@ func (s *Service) Acquire(ctx context.Context) (func(), error) {
 
 // NewService creates a Service with every registered table.
 func NewService(repos Repos) *Service {
-	s := &Service{repos: repos, Now: time.Now, MaxRows: MaxExportRows, slots: make(chan struct{}, MaxConcurrentExports)}
+	s := &Service{repos: repos, Now: time.Now, MaxRows: MaxExportRows, MaxCells: MaxExportCells, slots: make(chan struct{}, MaxConcurrentExports)}
 	s.tables = registry()
 	s.byID = make(map[TableID]*Table, len(s.tables))
 	for _, t := range s.tables {

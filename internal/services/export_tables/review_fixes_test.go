@@ -1,7 +1,9 @@
 package exporttables
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
 	"errors"
 	"strings"
 	"testing"
@@ -315,5 +317,94 @@ func TestXLSX_LongCellsAndReservedSheetName(t *testing.T) {
 		if got := SanitizeSheetName(in); strings.EqualFold(got, "history") {
 			t.Errorf("SanitizeSheetName(%q) = %q", in, got)
 		}
+	}
+}
+
+// encoding/csv with UseCRLF drops a bare CR inside a field; WriteCSV must
+// keep it as a line break instead of silently joining the text.
+func TestWriteCSV_PreservesCarriageReturns(t *testing.T) {
+	cols := []Column{{"a", "Notes"}}
+	out, err := EncodeCSV(cols, [][]any{{"before\rafter"}, {"one\r\ntwo"}, {"\r=1+1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	recs, err := csv.NewReader(bytes.NewReader(out[len(utf8BOM):])).ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Notes", "before\nafter", "one\ntwo", "'\n=1+1"}
+	for i, w := range want {
+		if recs[i][0] != w {
+			t.Errorf("record %d = %q, want %q", i, recs[i][0], w)
+		}
+	}
+}
+
+func TestLookDetailsTable_CellBudget(t *testing.T) {
+	s := newSeededService(t)
+	ctx := context.Background()
+	// The Warm look has 2 fixtures × (6 base + 3 channels) × 2 sheets = 36 cells.
+	s.svc.MaxCells = 35
+	if _, err := s.svc.Build(ctx, TableLookDetails, s.projectID, s.lookWarm); !errors.Is(err, ErrTooManyRows) {
+		t.Errorf("err = %v", err)
+	}
+	s.svc.MaxCells = 36
+	if _, err := s.svc.Build(ctx, TableLookDetails, s.projectID, s.lookWarm); err != nil {
+		t.Errorf("at budget: %v", err)
+	}
+	if NewService(Repos{}).MaxCells != MaxExportCells {
+		t.Error("default MaxCells")
+	}
+}
+
+// Estimates for FIXTURE_TYPES, FIXTURE_LIBRARY and LOOK_DETAILS are exact,
+// so a cap equal to the real row count never rejects the export.
+func TestEstimateRows_ExactForCollapsedAndFilteredTables(t *testing.T) {
+	s := newSeededService(t)
+	ctx := context.Background()
+
+	// A dangling and a cross-project fixture in a look are not counted.
+	foreign := &models.FixtureInstance{Name: "F", ProjectID: s.otherProjectID, DefinitionID: s.defCustom}
+	if err := s.db.FixtureRepo.CreateWithChannels(ctx, foreign, nil); err != nil {
+		t.Fatal(err)
+	}
+	look := &models.Look{Name: "Refs", ProjectID: s.projectID}
+	if err := s.db.LookRepo.CreateWithFixtureValues(ctx, look, []models.FixtureValue{
+		{FixtureID: s.washA, Channels: `[]`},
+		{FixtureID: foreign.ID, Channels: `[]`},
+		{FixtureID: "gone", Channels: `[]`},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		id    TableID
+		pid   string
+		scope string
+	}{
+		{TableFixtureTypes, s.projectID, ""},
+		{TableFixtureLibrary, "", ""},
+		{TableLookDetails, s.projectID, look.ID},
+		{TableLookDetails, s.projectID, s.lookWarm},
+	}
+	for _, c := range cases {
+		tbl, _ := s.svc.Lookup(c.id)
+		data, err := s.svc.Build(ctx, c.id, c.pid, c.scope)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n, err := s.svc.estimateRows(ctx, tbl, c.pid, c.scope)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != len(data.Rows) {
+			t.Errorf("%s estimate = %d, rows = %d", c.id, n, len(data.Rows))
+		}
+		// A cap equal to the real row count is accepted.
+		s.svc.MaxRows = len(data.Rows)
+		if _, err := s.svc.Build(ctx, c.id, c.pid, c.scope); err != nil {
+			t.Errorf("%s at cap: %v", c.id, err)
+		}
+		s.svc.MaxRows = MaxExportRows
 	}
 }

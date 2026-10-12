@@ -178,3 +178,47 @@ func TestRowCounter(t *testing.T) {
 		t.Errorf("project buttons = %d, %v", n, err)
 	}
 }
+
+func TestRowCounter_ExactExportCounts(t *testing.T) {
+	tdb, cleanup := setupTestDB(t)
+	defer cleanup()
+	db := tdb.DB
+	ctx := context.Background()
+	c := NewRowCounter(db)
+	mode := func(s string) *string { return &s }
+
+	// Fixture types: (d1, A) ×2, (d1, B), (d2, nil) → 3 distinct; other project ignored.
+	if err := db.Create(&[]models.FixtureInstance{
+		{ID: "i1", ProjectID: "p", DefinitionID: "d1", ModeName: mode("A")},
+		{ID: "i2", ProjectID: "p", DefinitionID: "d1", ModeName: mode("A")},
+		{ID: "i3", ProjectID: "p", DefinitionID: "d1", ModeName: mode("B")},
+		{ID: "i4", ProjectID: "p", DefinitionID: "d2"},
+		{ID: "i5", ProjectID: "q", DefinitionID: "d3"},
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if n, err := c.CountProjectFixtureTypes(ctx, "p"); err != nil || n != 3 {
+		t.Errorf("fixture types = %d, %v", n, err)
+	}
+
+	// Library: d1 has 2 modes, d2 has none → 3 rows.
+	if err := db.Create(&[]models.FixtureDefinition{{ID: "d1"}, {ID: "d2"}}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&[]models.FixtureMode{{ID: "m1", DefinitionID: "d1"}, {ID: "m2", DefinitionID: "d1"}}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if n, err := c.CountLibraryRows(ctx); err != nil || n != 3 {
+		t.Errorf("library rows = %d, %v", n, err)
+	}
+
+	// Look fixtures: i1 (p), i5 (q) and a dangling reference → 1 in project p.
+	if err := db.Create(&[]models.FixtureValue{
+		{ID: "v1", LookID: "L", FixtureID: "i1"}, {ID: "v2", LookID: "L", FixtureID: "i5"}, {ID: "v3", LookID: "L", FixtureID: "gone"},
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if n, err := c.CountLookFixturesInProject(ctx, "L", "p"); err != nil || n != 1 {
+		t.Errorf("look fixtures = %d, %v", n, err)
+	}
+}

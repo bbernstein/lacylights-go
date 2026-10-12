@@ -213,18 +213,22 @@ func countInScope(model any, column string) func(context.Context, *repositories.
 	}
 }
 
-// countLibrary bounds the library: at most one row per mode plus one per
+// countLibrary counts the library rows exactly: one per mode plus one per
 // definition without modes.
 func countLibrary(ctx context.Context, c *repositories.RowCounter, _, _ string) (int, error) {
-	defs, err := c.CountAll(ctx, &models.FixtureDefinition{})
-	if err != nil {
-		return 0, err
-	}
-	modes, err := c.CountAll(ctx, &models.FixtureMode{})
-	if err != nil {
-		return 0, err
-	}
-	return defs + modes, nil
+	return c.CountLibraryRows(ctx)
+}
+
+// countFixtureTypes counts the distinct (definition, mode) pairs in the
+// project, which is exactly the FIXTURE_TYPES row count.
+func countFixtureTypes(ctx context.Context, c *repositories.RowCounter, projectID, _ string) (int, error) {
+	return c.CountProjectFixtureTypes(ctx, projectID)
+}
+
+// countLookDetails counts the look's fixtures that belong to the project
+// (dangling and cross-project references are skipped by the builder).
+func countLookDetails(ctx context.Context, c *repositories.RowCounter, projectID, scopeID string) (int, error) {
+	return c.CountLookFixturesInProject(ctx, scopeID, projectID)
 }
 
 // countBoardButtons counts one board's buttons, or every board's in the
