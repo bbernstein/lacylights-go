@@ -54,11 +54,13 @@ func TestImportFixture_MultipleDefinitionsGetUniqueRefIDs(t *testing.T) {
 	}
 }
 
-func TestImportFixture_ReplaceAssignsRefID(t *testing.T) {
+func TestImportFixture_ReplacePreservesRefID(t *testing.T) {
 	service, cleanup := setupTestDBWithRefIDIndexes(t)
 	defer cleanup()
 	ctx := context.Background()
 
+	// Seed an unrelated definition first so that, without the fix, the
+	// next create (with an empty RefID) collides on the global ref_id index.
 	if _, err := service.ImportFixture(ctx, "Generic", renamedFixture("Other"), false); err != nil {
 		t.Fatalf("seed import failed: %v", err)
 	}
