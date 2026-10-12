@@ -279,11 +279,21 @@ func buildLookDetails(ctx context.Context, s *Service, projectID, scopeID string
 			names:    make(map[int]string),
 			channels: fixtureSpan(f, channels[f.ID]),
 		}
+		// When the fixture has instance-channel records, only their offsets
+		// are real channels (offsets can have gaps).
+		var real map[int]bool
+		if chs := channels[f.ID]; len(chs) > 0 {
+			real = make(map[int]bool, len(chs))
+			for _, ch := range chs {
+				real[ch.Offset] = true
+			}
+		}
 		for _, cv := range cvs {
 			// Ignore stored values for channels the fixture does not have.
-			// When the channel count is unknown (0), keep every stored value
-			// so the data is not silently lost.
-			if cv.Offset < 0 || (e.channels > 0 && cv.Offset >= e.channels) {
+			// Without channel records, fall back to the channel count; when
+			// that is unknown (0), keep every stored value so the data is not
+			// silently lost.
+			if cv.Offset < 0 || (real != nil && !real[cv.Offset]) || (e.channels > 0 && cv.Offset >= e.channels) {
 				continue
 			}
 			e.values[cv.Offset] = cv.Value

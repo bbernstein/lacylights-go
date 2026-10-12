@@ -575,7 +575,7 @@ func TestSparseChannelOffsets(t *testing.T) {
 
 	look := &models.Look{Name: "Sparse look", ProjectID: s.projectID}
 	if err := s.db.LookRepo.CreateWithFixtureValues(ctx, look, []models.FixtureValue{
-		{FixtureID: sparse.ID, Channels: `[{"offset":0,"value":10},{"offset":5,"value":200}]`},
+		{FixtureID: sparse.ID, Channels: `[{"offset":0,"value":10},{"offset":3,"value":77},{"offset":5,"value":200}]`},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -586,6 +586,9 @@ func TestSparseChannelOffsets(t *testing.T) {
 	base := len(lookDetailBaseColumns)
 	if len(ld.Columns) != base+6 || ld.Rows[0][base+5] != 200 {
 		t.Errorf("cols = %v row = %v", headers(ld.Columns), ld.Rows[0])
+	}
+	if ld.Rows[0][base+3] != nil {
+		t.Errorf("value in the channel gap must be blank, got %v", ld.Rows[0][base+3])
 	}
 	if ld.Extra[0].Rows[0][base+5] != "Strobe" {
 		t.Errorf("names row = %v", ld.Extra[0].Rows[0])
