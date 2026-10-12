@@ -15,6 +15,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/services/dmx"
 	"github.com/bbernstein/lacylights-go/internal/services/export"
 	exporteos "github.com/bbernstein/lacylights-go/internal/services/export_eos"
+	exporttables "github.com/bbernstein/lacylights-go/internal/services/export_tables"
 	importservice "github.com/bbernstein/lacylights-go/internal/services/import"
 	importeos "github.com/bbernstein/lacylights-go/internal/services/import_eos"
 	"github.com/bbernstein/lacylights-go/internal/services/modulator"
@@ -55,6 +56,7 @@ type Resolver struct {
 	ImportService   *importservice.Service
 	EosImportService *importeos.Service
 	EosExportService *exporteos.Service
+	DataExportService *exporttables.Service
 	OFLService      *ofl.Service
 	OFLManager      *ofl.Manager
 	PreviewService  *preview.Service
@@ -118,6 +120,14 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *modulator.Eng
 		ImportService:    importservice.NewServiceWithLookBoards(projectRepo, fixtureRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo),
 		EosImportService: importeos.NewServiceWithDeps(projectRepo, fixtureRepo, fixtureGroupRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo),
 		EosExportService: exporteos.NewServiceWithDeps(projectRepo, fixtureRepo, fixtureGroupRepo, lookRepo, cueListRepo, cueRepo, lookBoardRepo),
+		DataExportService: exporttables.NewService(exporttables.Repos{
+			Fixtures:      fixtureRepo,
+			FixtureGroups: fixtureGroupRepo,
+			Looks:         lookRepo,
+			CueLists:      cueListRepo,
+			LookBoards:    lookBoardRepo,
+			Effects:       effectRepo,
+		}),
 		OFLService:      ofl.NewService(db, fixtureRepo),
 		OFLManager:      oflManager,
 		PreviewService:  preview.NewService(fixtureRepo, lookRepo, dmxService),

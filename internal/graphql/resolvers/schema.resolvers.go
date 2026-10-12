@@ -7386,6 +7386,21 @@ func (r *queryResolver) Operation(ctx context.Context, operationID string) (*mod
 	return op, nil
 }
 
+// DataExportTables is the resolver for the dataExportTables field.
+func (r *queryResolver) DataExportTables(ctx context.Context) ([]*generated.DataExportTableInfo, error) {
+	return r.dataExportTables()
+}
+
+// ExportDataTable is the resolver for the exportDataTable field.
+func (r *queryResolver) ExportDataTable(ctx context.Context, projectID *string, table generated.DataExportTable, format generated.DataExportFormat, scopeID *string) (*generated.DataExportResult, error) {
+	return r.exportDataTable(ctx, projectID, table, format, scopeID)
+}
+
+// ExportDataWorkbook is the resolver for the exportDataWorkbook field.
+func (r *queryResolver) ExportDataWorkbook(ctx context.Context, projectID string, tables []generated.DataExportTable) (*generated.DataExportResult, error) {
+	return r.exportDataWorkbook(ctx, projectID, tables)
+}
+
 // ExpiresAt is the resolver for the expiresAt field.
 func (r *sessionResolver) ExpiresAt(ctx context.Context, obj *models.Session) (string, error) {
 	return obj.ExpiresAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil

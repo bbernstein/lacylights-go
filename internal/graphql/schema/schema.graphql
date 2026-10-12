@@ -1582,6 +1582,72 @@ input EosImportOptionsInput {
 }
 
 # =============================================================================
+# DATA EXPORT (CSV / XLSX) TYPES
+# =============================================================================
+
+"File format for data-list exports."
+enum DataExportFormat {
+  CSV
+  XLSX
+}
+
+"""
+Exportable data lists. Scope (see DataExportTableInfo.scope):
+- FIXTURE_LIBRARY: none (global; projectId optional)
+- FIXTURE_TYPES, FIXTURES, LOOKS, EFFECTS, CUE_LISTS: project
+- LOOK_DETAILS: look (scopeId = look ID, required)
+- CUE_LIST_DETAILS: cueList (scopeId = cue list ID, required)
+- LOOK_BOARD_ENTRIES: lookBoard (scopeId = look board ID, optional; omit for all boards)
+"""
+enum DataExportTable {
+  FIXTURE_TYPES
+  FIXTURE_LIBRARY
+  FIXTURES
+  LOOKS
+  LOOK_DETAILS
+  EFFECTS
+  LOOK_BOARD_ENTRIES
+  CUE_LISTS
+  CUE_LIST_DETAILS
+}
+
+type DataExportTableInfo {
+  table: DataExportTable!
+  label: String!
+  "One of: none, project, look, cueList, lookBoard"
+  scope: String!
+  "Column headers. LOOK_DETAILS ends with a variable run of channel columns, shown as 'Ch 1 … Ch N'."
+  columns: [String!]!
+}
+
+type DataExportResult {
+  "Server-generated, sanitized filename: <project>-<table>[-<item>]-YYYY-MM-DD.(csv|xlsx)"
+  filename: String!
+  mimeType: String!
+  "File content, base64-encoded"
+  contentBase64: String!
+  "Number of data rows (excluding headers). For workbooks, the total across all tables."
+  rowCount: Int!
+}
+
+# Exports are read-only, so they are Queries.
+extend type Query {
+  "Lists the tables that can be exported as CSV/XLSX"
+  dataExportTables: [DataExportTableInfo!]!
+  """
+  Export one data list as CSV or XLSX. projectId may be null only for
+  FIXTURE_LIBRARY. scopeId selects the look / cue list / look board for
+  scoped tables and must belong to projectId.
+  """
+  exportDataTable(projectId: ID, table: DataExportTable!, format: DataExportFormat!, scopeId: ID): DataExportResult!
+  """
+  Export several project-level tables as one XLSX workbook, one sheet per
+  table. Defaults to every project-level table when tables is omitted.
+  """
+  exportDataWorkbook(projectId: ID!, tables: [DataExportTable!]): DataExportResult!
+}
+
+# =============================================================================
 # INPUT TYPES
 # =============================================================================
 

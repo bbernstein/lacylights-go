@@ -207,3 +207,14 @@ func TestBuildWorkbook(t *testing.T) {
 		t.Errorf("unknown err = %v", err)
 	}
 }
+
+func TestInfoHeaders(t *testing.T) {
+	tbl := &Table{Columns: []Column{{"a", "A"}}, DynamicColumns: "Ch 1 … Ch N"}
+	if got := strings.Join(tbl.InfoHeaders(), "|"); got != "A|Ch 1 … Ch N" {
+		t.Errorf("InfoHeaders = %q", got)
+	}
+	tbl.DynamicColumns = ""
+	if got := strings.Join(tbl.InfoHeaders(), "|"); got != "A" {
+		t.Errorf("InfoHeaders = %q", got)
+	}
+}

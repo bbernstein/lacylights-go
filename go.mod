@@ -16,6 +16,7 @@ require (
 	github.com/rs/cors v1.11.1
 	github.com/stretchr/testify v1.11.1
 	github.com/vektah/gqlparser/v2 v2.5.31
+	github.com/xuri/excelize/v2 v2.9.1
 	golang.org/x/crypto v0.44.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.1
@@ -41,7 +42,6 @@ require (
 	github.com/tiendc/go-deepcopy v1.6.0 // indirect
 	github.com/urfave/cli/v3 v3.6.1 // indirect
 	github.com/xuri/efp v0.0.1 // indirect
-	github.com/xuri/excelize/v2 v2.9.1 // indirect
 	github.com/xuri/nfp v0.0.1 // indirect
 	golang.org/x/mod v0.30.0 // indirect
 	golang.org/x/net v0.47.0 // indirect

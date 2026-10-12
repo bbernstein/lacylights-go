@@ -103,6 +103,9 @@ type Table struct {
 	// Columns are the static column definitions. LOOK_DETAILS adds a
 	// variable number of channel columns at build time.
 	Columns []Column
+	// DynamicColumns, when set, describes columns appended at build time
+	// (e.g. "Ch 1 … Ch N"). It is shown by InfoHeaders.
+	DynamicColumns string
 
 	build func(ctx context.Context, s *Service, projectID, scopeID string) (*TableData, error)
 }
@@ -135,6 +138,16 @@ func (t *Table) RequiresProject() bool {
 // Headers returns the column headers.
 func (t *Table) Headers() []string {
 	return headers(t.Columns)
+}
+
+// InfoHeaders returns the column headers for display in a table picker:
+// the static headers followed by the DynamicColumns description, if any.
+func (t *Table) InfoHeaders() []string {
+	h := t.Headers()
+	if t.DynamicColumns != "" {
+		h = append(h, t.DynamicColumns)
+	}
+	return h
 }
 
 func headers(cols []Column) []string {
