@@ -55,9 +55,12 @@ jobs:
           cache: true
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          # golangci-lint v2, built with Go 1.25 (the v1 "latest" was built
+          # with Go 1.24 and refuses to lint a go 1.25 module). Pinned to
+          # match the version used locally.
+          version: v2.6.2
           # Package loading (gqlgen generated code + excelize) can exceed
           # golangci-lint's 1m default on cold caches.
           args: --timeout=5m
