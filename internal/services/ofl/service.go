@@ -73,6 +73,7 @@ func (s *Service) ImportFixture(ctx context.Context, manufacturer, oflFixtureJSO
 		fixtureID := cuid.New()
 		definition := &models.FixtureDefinition{
 			ID:           fixtureID,
+			RefID:        refIDForImport(existing, fixtureID),
 			Manufacturer: manufacturer,
 			Model:        model,
 			Type:         fixtureType,
@@ -419,6 +420,18 @@ func getDefaultValue(capability *OFLCapability) int {
 	return 0
 }
 
+// refIDForImport returns the RefID for a newly created OFL definition.
+// fixture_definitions.ref_id is globally unique, so it must never be empty.
+// When replacing an existing definition (deleted earlier in the same
+// transaction) its RefID is preserved so round-trip references stay stable;
+// otherwise it defaults to the new ID, matching the repository convention.
+func refIDForImport(existing *models.FixtureDefinition, newID string) string {
+	if existing != nil && existing.RefID != "" {
+		return existing.RefID
+	}
+	return newID
+}
+
 // stringPtr returns a pointer to a string, or nil if empty
 func stringPtr(s string) *string {
 	if s == "" {
@@ -483,6 +496,7 @@ func (s *Service) ImportFixtureWithHash(ctx context.Context, manufacturer, oflFi
 		fixtureID := cuid.New()
 		definition := &models.FixtureDefinition{
 			ID:            fixtureID,
+			RefID:         refIDForImport(existing, fixtureID),
 			Manufacturer:  manufacturer,
 			Model:         model,
 			Type:          fixtureType,
