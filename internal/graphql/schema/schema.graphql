@@ -2430,6 +2430,19 @@ type Query {
   # QLC+ Fixture Mapping Suggestions (read-only)
   getQLCFixtureMappingSuggestions(projectId: ID!): QLCFixtureMappingResult!
 
+  # Project export (read-only). Replace the deprecated export Mutations
+  # (exportProject, exportProjectToQLC, exportProjectToEos) and share
+  # their implementation.
+  "Export a project as LacyLights JSON"
+  projectExport(projectId: ID!, options: ExportOptionsInput): ExportResult!
+  "Export a project as a QLC+ workspace"
+  projectExportQLC(
+    projectId: ID!
+    fixtureMappings: [FixtureMappingInput!]
+  ): QLCExportResult!
+  "Export a project as ETC Eos ASCII"
+  projectExportEos(projectId: ID!): EosExportResult!
+
   # Version Management
   systemVersions: SystemVersionInfo!
   availableVersions(repository: String!): [String!]!
@@ -2741,6 +2754,7 @@ type Mutation {
 
   # Native LacyLights Import/Export
   exportProject(projectId: ID!, options: ExportOptionsInput): ExportResult!
+    @deprecated(reason: "Use Query.projectExport*")
   importProject(jsonContent: String!, options: ImportOptionsInput!): ImportResult!
 
   # QLC+ Import/Export (data-modifying operations)
@@ -2751,7 +2765,7 @@ type Mutation {
   exportProjectToQLC(
     projectId: ID!
     fixtureMappings: [FixtureMappingInput!]
-  ): QLCExportResult!
+  ): QLCExportResult! @deprecated(reason: "Use Query.projectExport*")
 
   # ETC Eos ASCII Import/Export
   importProjectFromEos(
@@ -2759,6 +2773,7 @@ type Mutation {
     options: EosImportOptionsInput
   ): EosImportResult!
   exportProjectToEos(projectId: ID!): EosExportResult!
+    @deprecated(reason: "Use Query.projectExport*")
 
   # Settings
   updateSetting(input: UpdateSettingInput!): Setting!

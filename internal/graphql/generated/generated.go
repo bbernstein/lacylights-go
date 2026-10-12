@@ -1136,6 +1136,9 @@ type ComplexityRoot struct {
 		PendingDevices                  func(childComplexity int) int
 		PreviewSession                  func(childComplexity int, sessionID string) int
 		Project                         func(childComplexity int, id string) int
+		ProjectExport                   func(childComplexity int, projectID string, options *ExportOptionsInput) int
+		ProjectExportEos                func(childComplexity int, projectID string) int
+		ProjectExportQlc                func(childComplexity int, projectID string, fixtureMappings []*FixtureMappingInput) int
 		Projects                        func(childComplexity int) int
 		ProjectsByIds                   func(childComplexity int, ids []string) int
 		SavedWifiNetworks               func(childComplexity int) int
@@ -1699,6 +1702,9 @@ type QueryResolver interface {
 	ApConfig(ctx context.Context) (*APConfig, error)
 	ApClients(ctx context.Context) ([]*APClient, error)
 	GetQLCFixtureMappingSuggestions(ctx context.Context, projectID string) (*QLCFixtureMappingResult, error)
+	ProjectExport(ctx context.Context, projectID string, options *ExportOptionsInput) (*ExportResult, error)
+	ProjectExportQlc(ctx context.Context, projectID string, fixtureMappings []*FixtureMappingInput) (*QLCExportResult, error)
+	ProjectExportEos(ctx context.Context, projectID string) (*EosExportResult, error)
 	SystemVersions(ctx context.Context) (*SystemVersionInfo, error)
 	AvailableVersions(ctx context.Context, repository string) ([]string, error)
 	BuildInfo(ctx context.Context) (*BuildInfo, error)
@@ -7603,6 +7609,39 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.Project(childComplexity, args["id"].(string)), true
+	case "Query.projectExport":
+		if e.complexity.Query.ProjectExport == nil {
+			break
+		}
+
+		args, err := ec.field_Query_projectExport_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.ProjectExport(childComplexity, args["projectId"].(string), args["options"].(*ExportOptionsInput)), true
+	case "Query.projectExportEos":
+		if e.complexity.Query.ProjectExportEos == nil {
+			break
+		}
+
+		args, err := ec.field_Query_projectExportEos_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.ProjectExportEos(childComplexity, args["projectId"].(string)), true
+	case "Query.projectExportQLC":
+		if e.complexity.Query.ProjectExportQlc == nil {
+			break
+		}
+
+		args, err := ec.field_Query_projectExportQLC_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.ProjectExportQlc(childComplexity, args["projectId"].(string), args["fixtureMappings"].([]*FixtureMappingInput)), true
 	case "Query.projects":
 		if e.complexity.Query.Projects == nil {
 			break
@@ -11071,6 +11110,19 @@ type Query {
   # QLC+ Fixture Mapping Suggestions (read-only)
   getQLCFixtureMappingSuggestions(projectId: ID!): QLCFixtureMappingResult!
 
+  # Project export (read-only). Replace the deprecated export Mutations
+  # (exportProject, exportProjectToQLC, exportProjectToEos) and share
+  # their implementation.
+  "Export a project as LacyLights JSON"
+  projectExport(projectId: ID!, options: ExportOptionsInput): ExportResult!
+  "Export a project as a QLC+ workspace"
+  projectExportQLC(
+    projectId: ID!
+    fixtureMappings: [FixtureMappingInput!]
+  ): QLCExportResult!
+  "Export a project as ETC Eos ASCII"
+  projectExportEos(projectId: ID!): EosExportResult!
+
   # Version Management
   systemVersions: SystemVersionInfo!
   availableVersions(repository: String!): [String!]!
@@ -11382,6 +11434,7 @@ type Mutation {
 
   # Native LacyLights Import/Export
   exportProject(projectId: ID!, options: ExportOptionsInput): ExportResult!
+    @deprecated(reason: "Use Query.projectExport*")
   importProject(jsonContent: String!, options: ImportOptionsInput!): ImportResult!
 
   # QLC+ Import/Export (data-modifying operations)
@@ -11392,7 +11445,7 @@ type Mutation {
   exportProjectToQLC(
     projectId: ID!
     fixtureMappings: [FixtureMappingInput!]
-  ): QLCExportResult!
+  ): QLCExportResult! @deprecated(reason: "Use Query.projectExport*")
 
   # ETC Eos ASCII Import/Export
   importProjectFromEos(
@@ -11400,6 +11453,7 @@ type Mutation {
     options: EosImportOptionsInput
   ): EosImportResult!
   exportProjectToEos(projectId: ID!): EosExportResult!
+    @deprecated(reason: "Use Query.projectExport*")
 
   # Settings
   updateSetting(input: UpdateSettingInput!): Setting!
@@ -14232,6 +14286,49 @@ func (ec *executionContext) field_Query_previewSession_args(ctx context.Context,
 		return nil, err
 	}
 	args["sessionId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_projectExportEos_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_projectExportQLC_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "fixtureMappings", ec.unmarshalOFixtureMappingInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureMappingInputᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["fixtureMappings"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_projectExport_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "options", ec.unmarshalOExportOptionsInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐExportOptionsInput)
+	if err != nil {
+		return nil, err
+	}
+	args["options"] = arg1
 	return args, nil
 }
 
@@ -44417,6 +44514,163 @@ func (ec *executionContext) fieldContext_Query_getQLCFixtureMappingSuggestions(c
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_projectExport(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_projectExport,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().ProjectExport(ctx, fc.Args["projectId"].(string), fc.Args["options"].(*ExportOptionsInput))
+		},
+		nil,
+		ec.marshalNExportResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐExportResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_projectExport(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "projectId":
+				return ec.fieldContext_ExportResult_projectId(ctx, field)
+			case "projectName":
+				return ec.fieldContext_ExportResult_projectName(ctx, field)
+			case "jsonContent":
+				return ec.fieldContext_ExportResult_jsonContent(ctx, field)
+			case "stats":
+				return ec.fieldContext_ExportResult_stats(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ExportResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_projectExport_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_projectExportQLC(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_projectExportQLC,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().ProjectExportQlc(ctx, fc.Args["projectId"].(string), fc.Args["fixtureMappings"].([]*FixtureMappingInput))
+		},
+		nil,
+		ec.marshalNQLCExportResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐQLCExportResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_projectExportQLC(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "projectName":
+				return ec.fieldContext_QLCExportResult_projectName(ctx, field)
+			case "xmlContent":
+				return ec.fieldContext_QLCExportResult_xmlContent(ctx, field)
+			case "fixtureCount":
+				return ec.fieldContext_QLCExportResult_fixtureCount(ctx, field)
+			case "lookCount":
+				return ec.fieldContext_QLCExportResult_lookCount(ctx, field)
+			case "cueListCount":
+				return ec.fieldContext_QLCExportResult_cueListCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type QLCExportResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_projectExportQLC_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_projectExportEos(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_projectExportEos,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().ProjectExportEos(ctx, fc.Args["projectId"].(string))
+		},
+		nil,
+		ec.marshalNEosExportResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosExportResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_projectExportEos(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "projectId":
+				return ec.fieldContext_EosExportResult_projectId(ctx, field)
+			case "projectName":
+				return ec.fieldContext_EosExportResult_projectName(ctx, field)
+			case "asciiContent":
+				return ec.fieldContext_EosExportResult_asciiContent(ctx, field)
+			case "filenameSuffix":
+				return ec.fieldContext_EosExportResult_filenameSuffix(ctx, field)
+			case "warnings":
+				return ec.fieldContext_EosExportResult_warnings(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type EosExportResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_projectExportEos_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_systemVersions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -65445,6 +65699,72 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_getQLCFixtureMappingSuggestions(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "projectExport":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_projectExport(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "projectExportQLC":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_projectExportQLC(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "projectExportEos":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_projectExportEos(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
