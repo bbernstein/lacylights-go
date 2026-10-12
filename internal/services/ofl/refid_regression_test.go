@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/bbernstein/lacylights-go/internal/database/migrations"
+	"github.com/bbernstein/lacylights-go/internal/database/models"
 )
 
 // setupTestDBWithRefIDIndexes mirrors production startup, which creates the
@@ -61,15 +62,20 @@ func TestImportFixture_ReplaceAssignsRefID(t *testing.T) {
 	if _, err := service.ImportFixture(ctx, "Generic", renamedFixture("Other"), false); err != nil {
 		t.Fatalf("seed import failed: %v", err)
 	}
-	if _, err := service.ImportFixture(ctx, "Generic", minimalOFLFixture, false); err != nil {
+	first, err := service.ImportFixture(ctx, "Generic", minimalOFLFixture, false)
+	if err != nil {
 		t.Fatalf("first import failed: %v", err)
 	}
 	def, err := service.ImportFixture(ctx, "Generic", minimalOFLFixture, true)
 	if err != nil {
 		t.Fatalf("replace import failed: %v", err)
 	}
-	if def.RefID == "" || def.RefID != def.ID {
-		t.Errorf("RefID = %q, want ID %q", def.RefID, def.ID)
+	if def.ID == first.ID {
+		t.Fatalf("replace should create a new definition ID")
+	}
+	// RefID is preserved across replace so round-trip references stay stable.
+	if def.RefID != first.RefID {
+		t.Errorf("replace RefID = %q, want preserved %q", def.RefID, first.RefID)
 	}
 }
 
@@ -79,6 +85,7 @@ func TestImportFixtureWithHash_MultipleDefinitionsGetUniqueRefIDs(t *testing.T) 
 	ctx := context.Background()
 
 	seen := map[string]bool{}
+	refByName := map[string]string{}
 	for _, name := range []string{"Fixture A", "Fixture B", "Fixture C"} {
 		def, err := service.ImportFixtureWithHash(ctx, "Generic", renamedFixture(name), "hash-"+name, "1.0.0", false)
 		if err != nil {
@@ -91,14 +98,27 @@ func TestImportFixtureWithHash_MultipleDefinitionsGetUniqueRefIDs(t *testing.T) 
 			t.Errorf("duplicate RefID %q", def.RefID)
 		}
 		seen[def.RefID] = true
+		refByName[name] = def.RefID
 	}
 
-	// Update path (update=true) re-creates the definition and must also set RefID.
+	// Update path (update=true) re-creates the definition and must preserve RefID.
 	def, err := service.ImportFixtureWithHash(ctx, "Generic", renamedFixture("Fixture A"), "hash-new", "1.0.1", true)
 	if err != nil {
 		t.Fatalf("ImportFixtureWithHash update failed: %v", err)
 	}
-	if def.RefID == "" || def.RefID != def.ID {
-		t.Errorf("update RefID = %q, want ID %q", def.RefID, def.ID)
+	if def.RefID != refByName["Fixture A"] {
+		t.Errorf("update RefID = %q, want preserved %q", def.RefID, refByName["Fixture A"])
+	}
+}
+
+func TestRefIDForImport(t *testing.T) {
+	if got := refIDForImport(nil, "new"); got != "new" {
+		t.Errorf("nil existing: got %q, want %q", got, "new")
+	}
+	if got := refIDForImport(&models.FixtureDefinition{ID: "old"}, "new"); got != "new" {
+		t.Errorf("existing with empty RefID: got %q, want %q", got, "new")
+	}
+	if got := refIDForImport(&models.FixtureDefinition{ID: "old", RefID: "keep"}, "new"); got != "keep" {
+		t.Errorf("existing with RefID: got %q, want %q", got, "keep")
 	}
 }
