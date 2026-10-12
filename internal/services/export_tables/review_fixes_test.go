@@ -456,6 +456,11 @@ func TestGridFits(t *testing.T) {
 		{math.MaxInt / 2, 6, 10, 5_000_000, false},
 		{1, 6, -1, 100, false},
 		{1, 6, 1, 0, false},
+		// Budget near MaxInt: base + channels and 2 × width must not wrap.
+		{1, 6, math.MaxInt - 3, math.MaxInt, false},
+		{1, 6, math.MaxInt/2 - 6, math.MaxInt, true},
+		{2, 6, math.MaxInt/2 - 6, math.MaxInt, false},
+		{1, 0, 0, 10, true},
 	}
 	for _, c := range cases {
 		if got := gridFits(c.rows, c.base, c.channels, c.max); got != c.want {

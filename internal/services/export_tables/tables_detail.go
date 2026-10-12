@@ -636,9 +636,19 @@ func gridFits(rows, base, channels, maxCells int) bool {
 	if rows == 0 {
 		return true
 	}
-	if channels < 0 || maxCells <= 0 || channels > maxCells {
+	if rows < 0 || base < 0 || channels < 0 || maxCells <= 0 {
 		return false
 	}
-	width := base + channels // cannot overflow: channels <= maxCells
-	return rows <= maxCells/(2*width)
+	// Each sheet may use at most half the budget. Bound the width against
+	// that half before adding, and divide rather than multiply, so no
+	// intermediate value can overflow.
+	half := maxCells / 2
+	if base > half || channels > half-base {
+		return false
+	}
+	width := base + channels // <= half, cannot overflow
+	if width == 0 {
+		return true
+	}
+	return rows <= half/width
 }
