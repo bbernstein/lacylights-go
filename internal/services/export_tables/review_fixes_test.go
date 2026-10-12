@@ -8,9 +8,11 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"unicode/utf16"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
+	"github.com/xuri/excelize/v2"
 )
 
 // A look in this project may reference a fixture from another project
@@ -611,5 +613,34 @@ func TestEncodeXLSX_ColumnLimit(t *testing.T) {
 	// CSV has no column limit.
 	if _, err := EncodeCSV(cols, nil); err != nil {
 		t.Errorf("csv: %v", err)
+	}
+}
+
+// Excel limits sheet names to 31 UTF-16 code units, and emoji take two.
+func TestSanitizeSheetName_UTF16Length(t *testing.T) {
+	name := strings.Repeat("\U0001F3AD", 20) // 20 emoji = 40 UTF-16 units
+	got := SanitizeSheetName(name)
+	if n := len(utf16.Encode([]rune(got))); n > MaxSheetNameLength {
+		t.Errorf("sanitized name is %d UTF-16 units", n)
+	}
+	out := UniqueSheetNames([]Sheet{{Name: name}, {Name: name}})
+	for _, sh := range out {
+		if n := len(utf16.Encode([]rune(sh.Name))); n > MaxSheetNameLength {
+			t.Errorf("unique name %q is %d UTF-16 units", sh.Name, n)
+		}
+	}
+	// excelize accepts the result.
+	if _, err := EncodeXLSX([]Sheet{{Name: name, Columns: []Column{{"a", "A"}}}, {Name: name, Columns: []Column{{"a", "A"}}}}); err != nil {
+		t.Errorf("encode: %v", err)
+	}
+	if got := truncateUTF16("ab", 5); got != "ab" {
+		t.Errorf("short = %q", got)
+	}
+}
+
+func TestEncodeXLSX_RowLimit(t *testing.T) {
+	rows := make([][]any, excelize.TotalRows) // one more data row than fits
+	if _, err := EncodeXLSX([]Sheet{{Name: "Tall", Columns: []Column{{"a", "A"}}, Rows: rows}}); !errors.Is(err, ErrTooLarge) {
+		t.Errorf("err = %v", err)
 	}
 }

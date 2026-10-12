@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"unicode/utf16"
 	"unicode/utf8"
 
 	"github.com/xuri/excelize/v2"
@@ -49,6 +50,10 @@ func encodeXLSX(sheets []Sheet, maxBytes int) ([]byte, error) {
 	for _, sh := range sheets {
 		if len(sh.Columns) > MaxXLSXColumns {
 			return nil, fmt.Errorf("%w: sheet %q has %d columns; Excel supports at most %d (export as CSV instead)", ErrTooLarge, sh.Name, len(sh.Columns), MaxXLSXColumns)
+		}
+		// Row 1 is the header, so a sheet holds TotalRows-1 data rows.
+		if len(sh.Rows) > excelize.TotalRows-1 {
+			return nil, fmt.Errorf("%w: sheet %q has %d rows; Excel supports at most %d (export as CSV instead)", ErrTooLarge, sh.Name, len(sh.Rows), excelize.TotalRows-1)
 		}
 	}
 
@@ -181,7 +186,7 @@ func SanitizeSheetName(name string) string {
 	name = strings.Trim(strings.TrimSpace(name), "'")
 	// Truncation can expose an interior apostrophe or space at the end, so
 	// trim again afterwards.
-	name = strings.Trim(strings.TrimSpace(truncateRunes(name, MaxSheetNameLength)), "' ")
+	name = strings.Trim(strings.TrimSpace(truncateUTF16(name, MaxSheetNameLength)), "' ")
 	if name == "" {
 		return "Sheet"
 	}
@@ -202,13 +207,31 @@ func UniqueSheetNames(sheets []Sheet) []Sheet {
 		name := base
 		for n := 2; used[strings.ToLower(name)]; n++ {
 			suffix := fmt.Sprintf(" (%d)", n)
-			name = strings.Trim(strings.TrimSpace(truncateRunes(base, MaxSheetNameLength-len(suffix))), "' ") + suffix
+			name = strings.Trim(strings.TrimSpace(truncateUTF16(base, MaxSheetNameLength-len(suffix))), "' ") + suffix
 		}
 		used[strings.ToLower(name)] = true
 		sh.Name = name
 		out[i] = sh
 	}
 	return out
+}
+
+// truncateUTF16 shortens s to at most n UTF-16 code units, the unit Excel
+// (and excelize) use for worksheet-name length; characters outside the
+// Basic Multilingual Plane, such as emoji, count as two.
+func truncateUTF16(s string, n int) string {
+	units := 0
+	for i, r := range s {
+		w := utf16.RuneLen(r)
+		if w < 0 {
+			w = 1 // invalid rune: encoded as U+FFFD, one unit
+		}
+		if units+w > n {
+			return s[:i]
+		}
+		units += w
+	}
+	return s
 }
 
 func truncateRunes(s string, n int) string {
