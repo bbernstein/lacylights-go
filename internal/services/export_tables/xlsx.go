@@ -1,0 +1,191 @@
+package exporttables
+
+import (
+	"bytes"
+	"fmt"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/xuri/excelize/v2"
+)
+
+// MaxSheetNameLength is Excel's limit on worksheet name length.
+const MaxSheetNameLength = 31
+
+const (
+	minColWidth = 8
+	maxColWidth = 60
+)
+
+// invalidSheetNameChars may not appear in an Excel worksheet name.
+const invalidSheetNameChars = `[]:*?/\`
+
+// EncodeXLSX encodes sheets as an .xlsx workbook. Each sheet gets a bold,
+// frozen header row and column widths sized to their content. Numeric
+// values are stored as numbers, everything else as text (never as
+// formulas). Sheet names must already be valid and unique (see
+// UniqueSheetNames); EncodeXLSX applies UniqueSheetNames defensively.
+func EncodeXLSX(sheets []Sheet) ([]byte, error) {
+	if len(sheets) == 0 {
+		return nil, fmt.Errorf("xlsx: at least one sheet is required")
+	}
+	sheets = UniqueSheetNames(sheets)
+
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+
+	bold, err := f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}})
+	if err != nil {
+		return nil, fmt.Errorf("xlsx: header style: %w", err)
+	}
+
+	for i, sh := range sheets {
+		if i == 0 {
+			if err := f.SetSheetName(f.GetSheetName(0), sh.Name); err != nil {
+				return nil, fmt.Errorf("xlsx: rename sheet: %w", err)
+			}
+		} else if _, err := f.NewSheet(sh.Name); err != nil {
+			return nil, fmt.Errorf("xlsx: new sheet %q: %w", sh.Name, err)
+		}
+		if err := writeSheet(f, sh, bold); err != nil {
+			return nil, fmt.Errorf("xlsx: sheet %q: %w", sh.Name, err)
+		}
+	}
+	f.SetActiveSheet(0)
+
+	var buf bytes.Buffer
+	if err := f.Write(&buf); err != nil {
+		return nil, fmt.Errorf("xlsx: write: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+func writeSheet(f *excelize.File, sh Sheet, headerStyle int) error {
+	sw, err := f.NewStreamWriter(sh.Name)
+	if err != nil {
+		return err
+	}
+	for i, w := range columnWidths(sh) {
+		if err := sw.SetColWidth(i+1, i+1, w); err != nil {
+			return err
+		}
+	}
+	if err := sw.SetPanes(&excelize.Panes{
+		Freeze:      true,
+		YSplit:      1,
+		TopLeftCell: "A2",
+		ActivePane:  "bottomLeft",
+	}); err != nil {
+		return err
+	}
+
+	header := make([]any, len(sh.Columns))
+	for i, c := range sh.Columns {
+		header[i] = excelize.Cell{StyleID: headerStyle, Value: c.Header}
+	}
+	if err := sw.SetRow("A1", header); err != nil {
+		return err
+	}
+	for r, row := range sh.Rows {
+		cell, err := excelize.CoordinatesToCellName(1, r+2)
+		if err != nil {
+			return err
+		}
+		values := make([]any, len(row))
+		for i, v := range row {
+			values[i] = xlsxValue(v)
+		}
+		if err := sw.SetRow(cell, values); err != nil {
+			return err
+		}
+	}
+	return sw.Flush()
+}
+
+// xlsxValue converts a cell value to what excelize should store. Numbers
+// stay numeric; booleans become Yes/No text to match the CSV output; nil
+// stays nil (an empty cell).
+func xlsxValue(v any) any {
+	switch x := v.(type) {
+	case nil, int, int64, float64, string:
+		return x
+	default:
+		return cellText(v)
+	}
+}
+
+// columnWidths approximates a good width for each column from the header
+// and the longest value, clamped to a sensible range.
+func columnWidths(sh Sheet) []float64 {
+	widths := make([]float64, len(sh.Columns))
+	for i, c := range sh.Columns {
+		widths[i] = float64(utf8.RuneCountInString(c.Header))
+	}
+	for _, row := range sh.Rows {
+		for i, v := range row {
+			if i >= len(widths) {
+				break
+			}
+			if n := float64(utf8.RuneCountInString(cellText(v))); n > widths[i] {
+				widths[i] = n
+			}
+		}
+	}
+	for i, w := range widths {
+		w += 2 // padding
+		if w < minColWidth {
+			w = minColWidth
+		}
+		if w > maxColWidth {
+			w = maxColWidth
+		}
+		widths[i] = w
+	}
+	return widths
+}
+
+// SanitizeSheetName makes name a valid Excel worksheet name: no
+// `[]:*?/\` characters, no leading/trailing apostrophes, at most 31
+// characters and not empty.
+func SanitizeSheetName(name string) string {
+	name = strings.Map(func(r rune) rune {
+		if strings.ContainsRune(invalidSheetNameChars, r) || r < 0x20 {
+			return ' '
+		}
+		return r
+	}, name)
+	name = strings.Trim(strings.TrimSpace(name), "'")
+	name = strings.TrimSpace(truncateRunes(name, MaxSheetNameLength))
+	if name == "" {
+		return "Sheet"
+	}
+	return name
+}
+
+// UniqueSheetNames sanitises every sheet name and de-duplicates them
+// (case-insensitively, as Excel does) by appending " (2)", " (3)", ...
+// while staying within the 31-character limit. The input is not modified.
+func UniqueSheetNames(sheets []Sheet) []Sheet {
+	out := make([]Sheet, len(sheets))
+	used := make(map[string]bool, len(sheets))
+	for i, sh := range sheets {
+		base := SanitizeSheetName(sh.Name)
+		name := base
+		for n := 2; used[strings.ToLower(name)]; n++ {
+			suffix := fmt.Sprintf(" (%d)", n)
+			name = strings.TrimSpace(truncateRunes(base, MaxSheetNameLength-len(suffix))) + suffix
+		}
+		used[strings.ToLower(name)] = true
+		sh.Name = name
+		out[i] = sh
+	}
+	return out
+}
+
+func truncateRunes(s string, n int) string {
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	r := []rune(s)
+	return string(r[:n])
+}

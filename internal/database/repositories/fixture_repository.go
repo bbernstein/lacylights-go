@@ -354,6 +354,40 @@ func (r *FixtureRepository) GetDefinitionModes(ctx context.Context, definitionID
 	return modes, result.Error
 }
 
+// FindAllModes returns every fixture mode across all definitions, ordered by
+// definition then mode name. Used by bulk exports (e.g. the fixture library
+// spreadsheet) to avoid one query per definition.
+func (r *FixtureRepository) FindAllModes(ctx context.Context) ([]models.FixtureMode, error) {
+	var modes []models.FixtureMode
+	result := r.db.WithContext(ctx).
+		Order("definition_id ASC, name ASC").
+		Find(&modes)
+	return modes, result.Error
+}
+
+// CountChannelsByDefinition returns the number of channel definitions for
+// every fixture definition, keyed by definition ID. Definitions with no
+// channels are absent from the map.
+func (r *FixtureRepository) CountChannelsByDefinition(ctx context.Context) (map[string]int, error) {
+	type row struct {
+		DefinitionID string
+		Count        int
+	}
+	var rows []row
+	if err := r.db.WithContext(ctx).
+		Model(&models.ChannelDefinition{}).
+		Select("definition_id, COUNT(*) AS count").
+		Group("definition_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[string]int, len(rows))
+	for _, rw := range rows {
+		out[rw.DefinitionID] = rw.Count
+	}
+	return out, nil
+}
+
 // CreateMode creates a new fixture mode.
 func (r *FixtureRepository) CreateMode(ctx context.Context, mode *models.FixtureMode) error {
 	if mode.ID == "" {
