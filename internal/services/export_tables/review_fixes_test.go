@@ -477,3 +477,31 @@ func TestLookNames_OnlyReferencedProjectLooks(t *testing.T) {
 		t.Errorf("names = %v", names)
 	}
 }
+
+// An already-cancelled request never takes a free slot (select would
+// otherwise pick randomly between the ready cases).
+func TestAcquire_CancelledContextWithFreeSlot(t *testing.T) {
+	svc := NewService(Repos{})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for i := 0; i < 50; i++ {
+		if rel, err := svc.Acquire(ctx); err == nil {
+			rel()
+			t.Fatal("acquired a slot with a cancelled context")
+		}
+	}
+}
+
+func TestCheckEncodedSize(t *testing.T) {
+	svc := NewService(Repos{})
+	if svc.MaxBytes != MaxExportBytes {
+		t.Error("default MaxBytes")
+	}
+	svc.MaxBytes = 10
+	if err := svc.CheckEncodedSize(10); err != nil {
+		t.Errorf("at limit: %v", err)
+	}
+	if err := svc.CheckEncodedSize(11); !errors.Is(err, ErrTooManyRows) {
+		t.Errorf("over limit: %v", err)
+	}
+}

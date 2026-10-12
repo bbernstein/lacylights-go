@@ -110,6 +110,9 @@ func (r *Resolver) exportDataTable(ctx context.Context, projectID *string, table
 	if err != nil {
 		return nil, err
 	}
+	if err := r.DataExportService.CheckEncodedSize(len(content)); err != nil {
+		return nil, err
+	}
 
 	return &generated.DataExportResult{
 		Filename:      exporttables.Filename(projectName, t.Slug, data.ItemName, r.DataExportService.Now(), ext),
@@ -153,6 +156,9 @@ func (r *Resolver) exportDataWorkbook(ctx context.Context, projectID string, tab
 	}
 	content, err := exporttables.EncodeXLSX(sheets)
 	if err != nil {
+		return nil, err
+	}
+	if err := r.DataExportService.CheckEncodedSize(len(content)); err != nil {
 		return nil, err
 	}
 	return &generated.DataExportResult{

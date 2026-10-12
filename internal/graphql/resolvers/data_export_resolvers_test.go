@@ -492,3 +492,15 @@ func TestExportData_StopsBeforeEncodingWhenCancelled(t *testing.T) {
 	_, err = q.ExportDataWorkbook(ctx, s.projectID, nil)
 	require.ErrorIs(t, err, context.Canceled)
 }
+
+func TestExportData_EncodedSizeCap(t *testing.T) {
+	_, r, cleanup := testSetup(t)
+	defer cleanup()
+	s := seedDataExport(t, r, nil, nil)
+	q := r.Query().(*queryResolver)
+	r.DataExportService.MaxBytes = 10
+	_, err := q.ExportDataTable(context.Background(), &s.projectID, generated.DataExportTableFixtures, generated.DataExportFormatCSV, nil)
+	require.ErrorIs(t, err, exporttables.ErrTooManyRows)
+	_, err = q.ExportDataWorkbook(context.Background(), s.projectID, nil)
+	require.ErrorIs(t, err, exporttables.ErrTooManyRows)
+}

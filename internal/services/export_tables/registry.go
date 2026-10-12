@@ -195,6 +195,21 @@ var (
 // 1,048,576-row sheet limit.
 const MaxExportRows = 100_000
 
+// MaxExportBytes caps the size of an encoded export file (before base64,
+// which adds about a third). Rows bound the count of values but not their
+// length, since text fields such as descriptions are unbounded, so the
+// encoded size is checked too.
+const MaxExportBytes = 50 << 20 // 50 MiB
+
+// CheckEncodedSize returns ErrTooManyRows when an encoded export exceeds
+// MaxBytes.
+func (s *Service) CheckEncodedSize(n int) error {
+	if n > s.MaxBytes {
+		return fmt.Errorf("%w: file is %d bytes (limit %d)", ErrTooManyRows, n, s.MaxBytes)
+	}
+	return nil
+}
+
 // MaxExportCells caps the cells of a dynamic-width table (LOOK_DETAILS),
 // whose width grows with fixture channel counts. 5 million cells is far
 // beyond any real look (1,000 fixtures × 64 channels is ~140k per sheet).
@@ -224,6 +239,8 @@ type Service struct {
 	Now func() time.Time
 	// MaxRows caps the rows in one export; defaults to MaxExportRows.
 	MaxRows int
+	// MaxBytes caps an encoded export's size; defaults to MaxExportBytes.
+	MaxBytes int
 	// MaxCells caps the cells in a dynamic-width grid (LOOK_DETAILS,
 	// counting both of its sheets); defaults to MaxExportCells.
 	MaxCells int
@@ -240,6 +257,11 @@ const MaxConcurrentExports = 2
 // when the export (including encoding) is finished. It returns ctx.Err()
 // if the context ends first.
 func (s *Service) Acquire(ctx context.Context) (func(), error) {
+	// select picks randomly among ready cases, so check cancellation
+	// first: an already-cancelled request must not take a free slot.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	select {
 	case s.slots <- struct{}{}:
 		return func() { <-s.slots }, nil
@@ -250,7 +272,7 @@ func (s *Service) Acquire(ctx context.Context) (func(), error) {
 
 // NewService creates a Service with every registered table.
 func NewService(repos Repos) *Service {
-	s := &Service{repos: repos, Now: time.Now, MaxRows: MaxExportRows, MaxCells: MaxExportCells, slots: make(chan struct{}, MaxConcurrentExports)}
+	s := &Service{repos: repos, Now: time.Now, MaxRows: MaxExportRows, MaxCells: MaxExportCells, MaxBytes: MaxExportBytes, slots: make(chan struct{}, MaxConcurrentExports)}
 	s.tables = registry()
 	s.byID = make(map[TableID]*Table, len(s.tables))
 	for _, t := range s.tables {

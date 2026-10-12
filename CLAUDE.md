@@ -135,6 +135,7 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 - Before building, each table's `estimate` (exact COUNT queries via `repositories.RowCounter`) is
   checked against the cap, so over-limit exports are rejected without loading data.
 - LOOK_DETAILS also enforces `Service.MaxCells` (default `MaxExportCells` = 5,000,000) before allocating its grid.
+- Encoded files are capped at `Service.MaxBytes` (default `MaxExportBytes` = 50 MiB) before base64.
 - At most `MaxConcurrentExports` exports build/encode at once (`Service.Acquire`).
 - Batch `IN ?` lookups are chunked (`chunkIDs`, 500 IDs) to stay under SQLite's bind-variable limit.
 - Row builders must batch lookups (`CountFixturesByLookIDs`, `FindDefinitionsByIDs`, ...)
