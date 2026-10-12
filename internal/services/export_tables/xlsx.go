@@ -12,6 +12,13 @@ import (
 // MaxSheetNameLength is Excel's limit on worksheet name length.
 const MaxSheetNameLength = 31
 
+// MaxCellLength is the most characters Excel stores in one cell. Longer
+// strings make excelize reject the row, so they are truncated.
+const MaxCellLength = 32767
+
+// reservedSheetName is a worksheet name Excel reserves (case-insensitive).
+const reservedSheetName = "history"
+
 const (
 	minColWidth = 8
 	maxColWidth = 60
@@ -104,10 +111,13 @@ func writeSheet(f *excelize.File, sh Sheet, headerStyle int) error {
 
 // xlsxValue converts a cell value to what excelize should store. Numbers
 // stay numeric; booleans become Yes/No text to match the CSV output; nil
-// stays nil (an empty cell), as do NaN and ±Inf.
+// stays nil (an empty cell), as do NaN and ±Inf. Strings longer than
+// MaxCellLength are truncated.
 func xlsxValue(v any) any {
 	switch x := finiteOrNil(v).(type) {
-	case nil, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, string:
+	case string:
+		return truncateRunes(x, MaxCellLength)
+	case nil, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
 		return x
 	default:
 		return cellText(v)
@@ -146,7 +156,7 @@ func columnWidths(sh Sheet) []float64 {
 
 // SanitizeSheetName makes name a valid Excel worksheet name: no
 // `[]:*?/\` characters, no leading/trailing apostrophes, at most 31
-// characters and not empty.
+// characters, not empty and not Excel's reserved name "History".
 func SanitizeSheetName(name string) string {
 	name = strings.Map(func(r rune) rune {
 		if strings.ContainsRune(invalidSheetNameChars, r) || r < 0x20 {
@@ -160,6 +170,9 @@ func SanitizeSheetName(name string) string {
 	name = strings.Trim(strings.TrimSpace(truncateRunes(name, MaxSheetNameLength)), "' ")
 	if name == "" {
 		return "Sheet"
+	}
+	if strings.EqualFold(name, reservedSheetName) {
+		return name + " (1)"
 	}
 	return name
 }

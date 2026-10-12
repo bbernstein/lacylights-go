@@ -131,7 +131,7 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
   `exportDataWorkbook` in `internal/graphql/resolvers/data_export_resolvers.go`.
 - Workbooks contain project tables only (scoped tables and `FIXTURE_LIBRARY` are rejected).
 - Exports are built in memory and returned inline as base64, so `Service.MaxRows`
-  (default `MaxExportRows` = 250,000) caps rows per export; over the cap returns `ErrTooManyRows`.
+  (default `MaxExportRows` = 100,000) caps rows per export; over the cap returns `ErrTooManyRows`.
 - Before building, each table's `estimate` (COUNT queries via `repositories.RowCounter`) is
   checked against the cap, so over-limit exports are rejected without loading data.
 - At most `MaxConcurrentExports` exports build/encode at once (`Service.Acquire`).

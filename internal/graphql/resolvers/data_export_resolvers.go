@@ -81,6 +81,10 @@ func (r *Resolver) exportDataTable(ctx context.Context, projectID *string, table
 	if err != nil {
 		return nil, err
 	}
+	// Don't encode for a client that has gone away; free the slot now.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	if t.Scope == exporttables.ScopeNone {
 		// Global tables (the fixture library) are not project content, so
@@ -142,6 +146,9 @@ func (r *Resolver) exportDataWorkbook(ctx context.Context, projectID string, tab
 	defer release()
 	sheets, rowCount, err := r.DataExportService.BuildWorkbook(ctx, projectID, ids)
 	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	content, err := exporttables.EncodeXLSX(sheets)

@@ -1637,7 +1637,9 @@ extend type Query {
   """
   Export one data list as CSV or XLSX. projectId may be null only for
   FIXTURE_LIBRARY. scopeId selects the look / cue list / look board for
-  scoped tables and must belong to projectId.
+  scoped tables and must belong to projectId. CSV is not a lossless
+  round-trip format: text cells starting with = + - @ tab, CR or LF get a
+  leading ' to prevent formula injection. XLSX stores text unchanged.
   """
   exportDataTable(projectId: ID, table: DataExportTable!, format: DataExportFormat!, scopeId: ID): DataExportResult!
   """

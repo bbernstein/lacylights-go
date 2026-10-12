@@ -277,3 +277,43 @@ func TestAcquire_BoundsConcurrency(t *testing.T) {
 		rel()
 	}
 }
+
+// Every builder must emit exactly one value per column in every sheet.
+func TestAllTables_RowWidthsMatchColumns(t *testing.T) {
+	s := newSeededService(t)
+	ctx := context.Background()
+	scopes := map[TableID]string{TableLookDetails: s.lookWarm, TableCueListDetails: s.cueList}
+	for _, tbl := range s.svc.Tables() {
+		pid := s.projectID
+		if tbl.Scope == ScopeNone {
+			pid = ""
+		}
+		data, err := s.svc.Build(ctx, tbl.ID, pid, scopes[tbl.ID])
+		if err != nil {
+			t.Fatalf("%s: %v", tbl.ID, err)
+		}
+		for _, sh := range data.Sheets(tbl.Label) {
+			for i, row := range sh.Rows {
+				if len(row) != len(sh.Columns) {
+					t.Errorf("%s/%s row %d has %d cells, want %d", tbl.ID, sh.Name, i, len(row), len(sh.Columns))
+				}
+			}
+		}
+	}
+}
+
+func TestXLSX_LongCellsAndReservedSheetName(t *testing.T) {
+	long := strings.Repeat("x", MaxCellLength+10)
+	if got, _ := xlsxValue(long).(string); len(got) != MaxCellLength {
+		t.Errorf("long cell length = %d", len(got))
+	}
+	// A whole sheet with an over-long cell still encodes.
+	if _, err := EncodeXLSX([]Sheet{{Name: "History", Columns: []Column{{"a", "A"}}, Rows: [][]any{{long}}}}); err != nil {
+		t.Errorf("encode: %v", err)
+	}
+	for _, in := range []string{"History", "history", " HISTORY "} {
+		if got := SanitizeSheetName(in); strings.EqualFold(got, "history") {
+			t.Errorf("SanitizeSheetName(%q) = %q", in, got)
+		}
+	}
+}

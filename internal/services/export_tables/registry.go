@@ -190,9 +190,10 @@ var (
 // MaxExportRows is the default cap on the number of data rows in one export (a table, or
 // the total across a workbook's sheets). Exports are built in memory and
 // returned inline as base64, so the cap bounds server memory and response
-// size. It is well above any realistic show (and the full OFL library) and
-// below Excel's 1,048,576-row sheet limit.
-const MaxExportRows = 250_000
+// size on small hosts such as a Raspberry Pi. It is well above any
+// realistic show and the full OFL library, and below Excel's
+// 1,048,576-row sheet limit.
+const MaxExportRows = 100_000
 
 // Repos are the repositories a Service reads from.
 type Repos struct {

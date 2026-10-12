@@ -472,3 +472,23 @@ func TestExportData_WaitsForSlot(t *testing.T) {
 		rel()
 	}
 }
+
+// errAfterBuildCtx never signals Done (so slot acquisition and the DB reads
+// proceed) but reports Canceled from Err, as a client that disconnected
+// mid-build would by the time the build finishes.
+type errAfterBuildCtx struct{ context.Context }
+
+func (errAfterBuildCtx) Err() error { return context.Canceled }
+
+func TestExportData_StopsBeforeEncodingWhenCancelled(t *testing.T) {
+	_, r, cleanup := testSetup(t)
+	defer cleanup()
+	s := seedDataExport(t, r, nil, nil)
+	q := r.Query().(*queryResolver)
+	ctx := errAfterBuildCtx{context.Background()}
+
+	_, err := q.ExportDataTable(ctx, &s.projectID, generated.DataExportTableFixtures, generated.DataExportFormatCSV, nil)
+	require.ErrorIs(t, err, context.Canceled)
+	_, err = q.ExportDataWorkbook(ctx, s.projectID, nil)
+	require.ErrorIs(t, err, context.Canceled)
+}
