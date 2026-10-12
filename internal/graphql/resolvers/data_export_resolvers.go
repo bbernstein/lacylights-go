@@ -3,8 +3,10 @@ package resolvers
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 
+	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 	"github.com/bbernstein/lacylights-go/internal/middleware"
 	exporttables "github.com/bbernstein/lacylights-go/internal/services/export_tables"
@@ -15,8 +17,8 @@ const workbookFilenameSlug = "data"
 
 // dataExportTables lists the registered export tables for the UI picker.
 func (r *Resolver) dataExportTables() ([]*generated.DataExportTableInfo, error) {
-	if r.DataExportService == nil {
-		return nil, fmt.Errorf("data export not available on this platform")
+	if err := r.requireDataExport(); err != nil {
+		return nil, err
 	}
 	tables := r.DataExportService.Tables()
 	out := make([]*generated.DataExportTableInfo, 0, len(tables))
@@ -42,8 +44,8 @@ func (r *Resolver) dataExportTables() ([]*generated.DataExportTableInfo, error) 
 //     fixtureDefinitions query).
 //   - scopeId must belong to projectId (enforced by the export service).
 func (r *Resolver) exportDataTable(ctx context.Context, projectID *string, table generated.DataExportTable, format generated.DataExportFormat, scopeID *string) (*generated.DataExportResult, error) {
-	if r.DataExportService == nil {
-		return nil, fmt.Errorf("data export not available on this platform")
+	if err := r.requireDataExport(); err != nil {
+		return nil, err
 	}
 	t, ok := r.DataExportService.Lookup(exporttables.TableID(table))
 	if !ok {
@@ -62,15 +64,9 @@ func (r *Resolver) exportDataTable(ctx context.Context, projectID *string, table
 			return nil, err
 		}
 	} else {
-		if err := r.ensureProjectAccess(ctx, pid); err != nil {
-			return nil, err
-		}
-		project, err := r.ProjectRepo.FindByID(ctx, pid)
+		project, err := r.loadAccessibleProject(ctx, pid)
 		if err != nil {
 			return nil, err
-		}
-		if project == nil {
-			return nil, fmt.Errorf("project not found: %s", pid)
 		}
 		projectName = project.Name
 	}
@@ -116,18 +112,12 @@ func (r *Resolver) exportDataTable(ctx context.Context, projectID *string, table
 // exportDataWorkbook exports several project-level tables into one XLSX
 // workbook, one sheet per table.
 func (r *Resolver) exportDataWorkbook(ctx context.Context, projectID string, tables []generated.DataExportTable) (*generated.DataExportResult, error) {
-	if r.DataExportService == nil {
-		return nil, fmt.Errorf("data export not available on this platform")
-	}
-	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+	if err := r.requireDataExport(); err != nil {
 		return nil, err
 	}
-	project, err := r.ProjectRepo.FindByID(ctx, projectID)
+	project, err := r.loadAccessibleProject(ctx, projectID)
 	if err != nil {
 		return nil, err
-	}
-	if project == nil {
-		return nil, fmt.Errorf("project not found: %s", projectID)
 	}
 
 	ids := make([]exporttables.TableID, len(tables))
@@ -148,6 +138,33 @@ func (r *Resolver) exportDataWorkbook(ctx context.Context, projectID string, tab
 		ContentBase64: base64.StdEncoding.EncodeToString(content),
 		RowCount:      rowCount,
 	}, nil
+}
+
+// errDataExportUnavailable is returned when the server was built without
+// a data export service.
+var errDataExportUnavailable = errors.New("data export not available on this platform")
+
+func (r *Resolver) requireDataExport() error {
+	if r.DataExportService == nil {
+		return errDataExportUnavailable
+	}
+	return nil
+}
+
+// loadAccessibleProject checks that the caller can access the project
+// (ensureProjectAccess) and that it exists.
+func (r *Resolver) loadAccessibleProject(ctx context.Context, projectID string) (*models.Project, error) {
+	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
+		return nil, err
+	}
+	project, err := r.ProjectRepo.FindByID(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if project == nil {
+		return nil, fmt.Errorf("project not found: %s", projectID)
+	}
+	return project, nil
 }
 
 // requireAuthenticated returns ErrNotAuthenticated when auth is enabled and

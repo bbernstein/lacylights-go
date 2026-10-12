@@ -104,9 +104,9 @@ func writeSheet(f *excelize.File, sh Sheet, headerStyle int) error {
 
 // xlsxValue converts a cell value to what excelize should store. Numbers
 // stay numeric; booleans become Yes/No text to match the CSV output; nil
-// stays nil (an empty cell).
+// stays nil (an empty cell), as do NaN and ±Inf.
 func xlsxValue(v any) any {
-	switch x := v.(type) {
+	switch x := finiteOrNil(v).(type) {
 	case nil, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, string:
 		return x
 	default:

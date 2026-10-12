@@ -410,3 +410,26 @@ func TestExportDataTable_FixtureLibraryAuth(t *testing.T) {
 	_, err = q.ExportDataTable(outsider, &s.projectID, generated.DataExportTableLookDetails, generated.DataExportFormatCSV, &s.lookID)
 	require.ErrorIs(t, err, ErrNotAuthorized)
 }
+
+func TestExportDataTable_LibraryRejectsScopeAndRowCap(t *testing.T) {
+	_, r, cleanup := testSetup(t)
+	defer cleanup()
+	s := seedDataExport(t, r, nil, nil)
+	q := r.Query().(*queryResolver)
+	ctx := context.Background()
+
+	// The global library takes no scope, with or without a project.
+	_, err := q.ExportDataTable(ctx, nil, generated.DataExportTableFixtureLibrary, generated.DataExportFormatCSV, &s.lookID)
+	require.ErrorIs(t, err, exporttables.ErrScopeNotAllowed)
+
+	// Workbooks contain project tables only.
+	_, err = q.ExportDataWorkbook(ctx, s.projectID, []generated.DataExportTable{generated.DataExportTableFixtureLibrary})
+	require.ErrorIs(t, err, exporttables.ErrNotWorkbookTable)
+
+	// Exports over the row cap fail with a clear error.
+	r.DataExportService.MaxRows = 0
+	_, err = q.ExportDataTable(ctx, &s.projectID, generated.DataExportTableFixtures, generated.DataExportFormatCSV, nil)
+	require.ErrorIs(t, err, exporttables.ErrTooManyRows)
+	_, err = q.ExportDataWorkbook(ctx, s.projectID, nil)
+	require.ErrorIs(t, err, exporttables.ErrTooManyRows)
+}

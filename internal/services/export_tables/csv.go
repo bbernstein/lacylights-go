@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 )
 
@@ -12,8 +13,10 @@ import (
 const utf8BOM = "\uFEFF"
 
 // formulaPrefixes are the leading characters that make spreadsheet apps
-// interpret a cell as a formula (CSV/formula injection, OWASP).
-const formulaPrefixes = "=+-@\t\r"
+// interpret a cell as a formula (CSV/formula injection): OWASP's
+// = + - @ TAB CR, plus LF, which some importers also treat as a line
+// break before a formula.
+const formulaPrefixes = "=+-@\t\r\n"
 
 // WriteCSV writes a header row and data rows as RFC 4180 CSV with a UTF-8
 // BOM. String cells that would be interpreted as formulas are prefixed with
@@ -56,7 +59,9 @@ func EncodeCSV(cols []Column, rows [][]any) ([]byte, error) {
 }
 
 // csvCell formats a cell value. Only string values are formula-escaped.
+// Non-finite floats (NaN, ±Inf) are written as blank cells.
 func csvCell(v any) string {
+	v = finiteOrNil(v)
 	if s, ok := formatNumber(v); ok {
 		return s
 	}
@@ -80,6 +85,25 @@ func escapeFormula(s string) string {
 		}
 	}
 	return s
+}
+
+// finiteOrNil returns nil for NaN and ±Inf floats (which are not
+// meaningful spreadsheet values and, as "+Inf", would bypass formula
+// escaping) and v unchanged otherwise.
+func finiteOrNil(v any) any {
+	var f float64
+	switch n := v.(type) {
+	case float64:
+		f = n
+	case float32:
+		f = float64(n)
+	default:
+		return v
+	}
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return nil
+	}
+	return v
 }
 
 // formatNumber renders numeric cell values. ok is false for non-numbers.

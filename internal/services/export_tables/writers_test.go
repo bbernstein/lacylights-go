@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 
@@ -269,5 +270,22 @@ func TestSanitizeAndUniqueSheetNames(t *testing.T) {
 	}
 	if in[1].Name != "looks" {
 		t.Error("input must not be modified")
+	}
+}
+
+func TestNonFiniteFloatsAreBlank(t *testing.T) {
+	for _, v := range []any{math.NaN(), math.Inf(1), math.Inf(-1), float32(math.Inf(1))} {
+		if got := csvCell(v); got != "" {
+			t.Errorf("csvCell(%v) = %q, want blank", v, got)
+		}
+		if got := xlsxValue(v); got != nil {
+			t.Errorf("xlsxValue(%v) = %v, want nil", v, got)
+		}
+	}
+	if csvCell(1.5) != "1.5" || xlsxValue(1.5) != 1.5 {
+		t.Error("finite floats must be unchanged")
+	}
+	if got := csvCell("\n=1+1"); got != "'\n=1+1" {
+		t.Errorf("LF-prefixed formula = %q", got)
 	}
 }
