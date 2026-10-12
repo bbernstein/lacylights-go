@@ -122,16 +122,20 @@ func buildLooks(ctx context.Context, s *Service, projectID, _ string) (*TableDat
 		return nil, err
 	}
 	sort.SliceStable(looks, func(i, j int) bool { return lessName(looks[i].Name, looks[j].Name) })
+	ids := make([]string, len(looks))
+	for i, l := range looks {
+		ids[i] = l.ID
+	}
+	counts, err := s.repos.Looks.CountFixturesByLookIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
 	rows := make([][]any, 0, len(looks))
 	for _, l := range looks {
-		count, err := s.repos.Looks.CountFixtures(ctx, l.ID)
-		if err != nil {
-			return nil, err
-		}
 		rows = append(rows, []any{
 			l.Name,
 			strOrNil(l.Description),
-			int(count),
+			counts[l.ID],
 			timestamp(l.CreatedAt),
 			timestamp(l.UpdatedAt),
 		})
@@ -165,16 +169,20 @@ func buildCueLists(ctx context.Context, s *Service, projectID, _ string) (*Table
 		return nil, err
 	}
 	sort.SliceStable(lists, func(i, j int) bool { return lessName(lists[i].Name, lists[j].Name) })
+	ids := make([]string, len(lists))
+	for i, cl := range lists {
+		ids[i] = cl.ID
+	}
+	counts, err := s.repos.CueLists.CountCuesByCueListIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
 	rows := make([][]any, 0, len(lists))
 	for _, cl := range lists {
-		count, err := s.repos.CueLists.CountCues(ctx, cl.ID)
-		if err != nil {
-			return nil, err
-		}
 		rows = append(rows, []any{
 			cl.Name,
 			strOrNil(cl.Description),
-			int(count),
+			counts[cl.ID],
 			cl.Loop,
 			timestamp(cl.CreatedAt),
 			timestamp(cl.UpdatedAt),
@@ -185,25 +193,20 @@ func buildCueLists(ctx context.Context, s *Service, projectID, _ string) (*Table
 
 // --- shared helpers ---------------------------------------------------------
 
-// definitionsFor loads the fixture definitions referenced by fixtures,
-// keyed by definition ID. Missing definitions are simply absent.
+// definitionsFor loads the fixture definitions referenced by fixtures in
+// one query, keyed by definition ID. Missing definitions are simply absent.
 func (s *Service) definitionsFor(ctx context.Context, fixtures []models.FixtureInstance) (map[string]*models.FixtureDefinition, error) {
-	out := make(map[string]*models.FixtureDefinition)
+	seen := make(map[string]bool)
+	var ids []string
 	for i := range fixtures {
 		id := fixtures[i].DefinitionID
-		if id == "" {
+		if id == "" || seen[id] {
 			continue
 		}
-		if _, done := out[id]; done {
-			continue
-		}
-		def, err := s.repos.Fixtures.FindDefinitionByID(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		out[id] = def // may be nil
+		seen[id] = true
+		ids = append(ids, id)
 	}
-	return out, nil
+	return s.repos.Fixtures.FindDefinitionsByIDs(ctx, ids)
 }
 
 // fixtureGroupNames maps fixture ID to the names of the fixture groups it

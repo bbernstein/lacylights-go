@@ -64,7 +64,12 @@ func csvCell(v any) string {
 }
 
 // escapeFormula neutralises a string that a spreadsheet would treat as a
-// formula by prefixing it with a single quote.
+// formula by prefixing it with a single quote (the OWASP mitigation).
+//
+// This changes the data: a legitimate value such as "-5 dB" or "+1" is
+// written as "'-5 dB" / "'+1", so CSV exports are not a lossless round-trip
+// format. XLSX output never needs this because strings are stored as text
+// cells, never as formulas.
 func escapeFormula(s string) string {
 	if s == "" {
 		return s
@@ -82,8 +87,26 @@ func formatNumber(v any) (string, bool) {
 	switch n := v.(type) {
 	case int:
 		return strconv.Itoa(n), true
+	case int8:
+		return strconv.FormatInt(int64(n), 10), true
+	case int16:
+		return strconv.FormatInt(int64(n), 10), true
+	case int32:
+		return strconv.FormatInt(int64(n), 10), true
 	case int64:
 		return strconv.FormatInt(n, 10), true
+	case uint:
+		return strconv.FormatUint(uint64(n), 10), true
+	case uint8:
+		return strconv.FormatUint(uint64(n), 10), true
+	case uint16:
+		return strconv.FormatUint(uint64(n), 10), true
+	case uint32:
+		return strconv.FormatUint(uint64(n), 10), true
+	case uint64:
+		return strconv.FormatUint(n, 10), true
+	case float32:
+		return strconv.FormatFloat(float64(n), 'f', -1, 32), true
 	case float64:
 		return strconv.FormatFloat(n, 'f', -1, 64), true
 	default:

@@ -174,7 +174,19 @@ var (
 	// ErrProjectRequired is returned when a project-bound table is
 	// requested without a project ID.
 	ErrProjectRequired = errors.New("projectId is required for this table")
+	// ErrNotWorkbookTable is returned when a global (non-project) table is
+	// requested in a workbook; workbooks only contain project tables.
+	ErrNotWorkbookTable = errors.New("table is not a project table and cannot be included in a workbook")
+	// ErrTooManyRows is returned when an export exceeds MaxExportRows.
+	ErrTooManyRows = errors.New("export is too large")
 )
+
+// MaxExportRows is the default cap on the number of data rows in one export (a table, or
+// the total across a workbook's sheets). Exports are built in memory and
+// returned inline as base64, so the cap bounds server memory and response
+// size. It is well above any realistic show (and the full OFL library) and
+// below Excel's 1,048,576-row sheet limit.
+const MaxExportRows = 250_000
 
 // Repos are the repositories a Service reads from.
 type Repos struct {
@@ -191,13 +203,16 @@ type Service struct {
 	repos  Repos
 	tables []*Table
 	byID   map[TableID]*Table
-	// Now returns the current time; overridable in tests.
+	// Now returns the current time (server local time; it supplies the
+	// date in generated filenames). Overridable in tests.
 	Now func() time.Time
+	// MaxRows caps the rows in one export; defaults to MaxExportRows.
+	MaxRows int
 }
 
 // NewService creates a Service with every registered table.
 func NewService(repos Repos) *Service {
-	s := &Service{repos: repos, Now: time.Now}
+	s := &Service{repos: repos, Now: time.Now, MaxRows: MaxExportRows}
 	s.tables = registry()
 	s.byID = make(map[TableID]*Table, len(s.tables))
 	for _, t := range s.tables {
@@ -233,7 +248,14 @@ func (s *Service) Build(ctx context.Context, id TableID, projectID, scopeID stri
 	if scopeID != "" && !t.AcceptsScopeID() {
 		return nil, fmt.Errorf("%w: %s", ErrScopeNotAllowed, id)
 	}
-	return t.build(ctx, s, projectID, scopeID)
+	data, err := t.build(ctx, s, projectID, scopeID)
+	if err != nil {
+		return nil, err
+	}
+	if len(data.Rows) > s.MaxRows {
+		return nil, fmt.Errorf("%w: %s has %d rows", ErrTooManyRows, id, len(data.Rows))
+	}
+	return data, nil
 }
 
 // WorkbookTables returns the tables included in a workbook export when the
@@ -252,7 +274,8 @@ func (s *Service) WorkbookTables() []TableID {
 
 // BuildWorkbook builds one sheet per table (plus any extra sheets) for a
 // project. When ids is empty WorkbookTables is used. Tables that need a
-// scope ID cannot be part of a workbook. Sheet names are made valid and
+// scope ID, and global tables such as FIXTURE_LIBRARY, cannot be part of a
+// workbook. Sheet names are made valid and
 // unique. The returned row count is the total number of data rows across
 // the primary sheets.
 func (s *Service) BuildWorkbook(ctx context.Context, projectID string, ids []TableID) ([]Sheet, int, error) {
@@ -277,11 +300,17 @@ func (s *Service) BuildWorkbook(ctx context.Context, projectID string, ids []Tab
 		if t.RequiresScopeID() {
 			return nil, 0, fmt.Errorf("%w: %s cannot be included in a workbook", ErrScopeRequired, id)
 		}
+		if t.Scope == ScopeNone {
+			return nil, 0, fmt.Errorf("%w: %s", ErrNotWorkbookTable, id)
+		}
 		data, err := t.build(ctx, s, projectID, "")
 		if err != nil {
 			return nil, 0, fmt.Errorf("build %s: %w", id, err)
 		}
 		total += len(data.Rows)
+		if total > s.MaxRows {
+			return nil, 0, fmt.Errorf("%w: workbook has more than %d rows", ErrTooManyRows, s.MaxRows)
+		}
 		sheets = append(sheets, data.Sheets(t.Label)...)
 	}
 	return UniqueSheetNames(sheets), total, nil

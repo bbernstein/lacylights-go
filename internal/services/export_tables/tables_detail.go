@@ -202,8 +202,10 @@ func lookDetailsTable() *Table {
 // buildLookDetails produces the wide look format: one row per fixture,
 // then "Ch 1" … "Ch N" where N is the largest channel count among the
 // look's fixtures. Channels a fixture does not have, or that the look does
-// not set, are blank; a stored 0 is written as 0. An extra "Channel names"
-// sheet has the same grid with each channel's name.
+// not set, are blank; a stored 0 is written as 0. Stored values beyond a
+// fixture's channel count are ignored. Fixtures from other projects are
+// skipped. An extra "Channel names" sheet has the same grid with each
+// channel's name.
 func buildLookDetails(ctx context.Context, s *Service, projectID, scopeID string) (*TableData, error) {
 	look, err := s.repos.Looks.FindByID(ctx, scopeID)
 	if err != nil {
@@ -224,6 +226,16 @@ func buildLookDetails(ctx context.Context, s *Service, projectID, scopeID string
 	if err != nil {
 		return nil, err
 	}
+	// Only export fixtures that belong to the look's project. Look writes do
+	// not validate fixture ownership, so a look could reference a fixture
+	// from another project; exporting it would disclose that project's data.
+	owned := fixtures[:0]
+	for i := range fixtures {
+		if fixtures[i].ProjectID == projectID {
+			owned = append(owned, fixtures[i])
+		}
+	}
+	fixtures = owned
 	byID := make(map[string]*models.FixtureInstance, len(fixtures))
 	for i := range fixtures {
 		byID[fixtures[i].ID] = &fixtures[i]
@@ -265,7 +277,10 @@ func buildLookDetails(ctx context.Context, s *Service, projectID, scopeID string
 			channels: fixtureChannelCount(f, channels[f.ID]),
 		}
 		for _, cv := range cvs {
-			if cv.Offset < 0 {
+			// Ignore stored values for channels the fixture does not have.
+			// When the channel count is unknown (0), keep every stored value
+			// so the data is not silently lost.
+			if cv.Offset < 0 || (e.channels > 0 && cv.Offset >= e.channels) {
 				continue
 			}
 			e.values[cv.Offset] = cv.Value
@@ -373,12 +388,16 @@ func buildEffects(ctx context.Context, s *Service, projectID, _ string) (*TableD
 		return nil, err
 	}
 	sort.SliceStable(effects, func(i, j int) bool { return lessName(effects[i].Name, effects[j].Name) })
+	ids := make([]string, len(effects))
+	for i, e := range effects {
+		ids[i] = e.ID
+	}
+	counts, err := s.repos.Effects.CountFixturesByEffectIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
 	rows := make([][]any, 0, len(effects))
 	for _, e := range effects {
-		count, err := s.repos.Effects.CountFixtures(ctx, e.ID)
-		if err != nil {
-			return nil, err
-		}
 		rows = append(rows, []any{
 			e.Name,
 			strOrNil(e.Description),
@@ -395,7 +414,7 @@ func buildEffects(ctx context.Context, s *Service, projectID, _ string) (*TableD
 			e.OnCueChange,
 			floatOrNil(e.FadeDuration),
 			floatOrNil(e.MasterValue),
-			int(count),
+			counts[e.ID],
 		})
 	}
 	return &TableData{Columns: effectsTable().Columns, Rows: rows}, nil
@@ -455,13 +474,18 @@ func buildLookBoardEntries(ctx context.Context, s *Service, projectID, scopeID s
 		return nil, err
 	}
 
+	boardIDs := make([]string, len(boards))
+	for i, b := range boards {
+		boardIDs[i] = b.ID
+	}
+	buttonsByBoard, err := s.repos.LookBoards.GetButtonsByBoardIDs(ctx, boardIDs)
+	if err != nil {
+		return nil, err
+	}
+
 	var rows [][]any
 	for _, b := range boards {
-		buttons, err := s.repos.LookBoards.GetButtons(ctx, b.ID)
-		if err != nil {
-			return nil, err
-		}
-		for _, btn := range buttons {
+		for _, btn := range buttonsByBoard[b.ID] {
 			rows = append(rows, []any{
 				b.Name,
 				strOrNil(btn.Label),

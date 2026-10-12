@@ -1,0 +1,156 @@
+package exporttables
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/bbernstein/lacylights-go/internal/database/models"
+)
+
+// A look in this project may reference a fixture from another project
+// (look writes do not validate ownership); the export must skip it.
+func TestLookDetailsTable_SkipsFixturesFromOtherProjects(t *testing.T) {
+	s := newSeededService(t)
+	ctx := context.Background()
+
+	foreign := &models.FixtureInstance{
+		Name: "Secret", ProjectID: s.otherProjectID, DefinitionID: s.defCustom,
+		ChannelCount: ptr(8), Universe: 9, StartChannel: 100,
+	}
+	if err := s.db.FixtureRepo.CreateWithChannels(ctx, foreign, nil); err != nil {
+		t.Fatal(err)
+	}
+	look := &models.Look{Name: "Mixed", ProjectID: s.projectID}
+	if err := s.db.LookRepo.CreateWithFixtureValues(ctx, look, []models.FixtureValue{
+		{FixtureID: s.washA, Channels: `[{"offset":0,"value":1}]`},
+		{FixtureID: foreign.ID, Channels: `[{"offset":7,"value":42}]`},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := s.svc.Build(ctx, TableLookDetails, s.projectID, look.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data.Rows) != 1 || data.Rows[0][0] != "Wash 1" {
+		t.Fatalf("rows = %v", data.Rows)
+	}
+	// The foreign fixture's 8 channels must not widen the grid either.
+	if len(data.Columns) != len(lookDetailBaseColumns)+3 {
+		t.Errorf("columns = %v", headers(data.Columns))
+	}
+}
+
+// When a fixture's channel count is unknown, stored values are kept rather
+// than silently dropped.
+func TestLookDetailsTable_UnknownChannelCountKeepsValues(t *testing.T) {
+	s := newSeededService(t)
+	ctx := context.Background()
+
+	bare := &models.FixtureInstance{Name: "Bare", ProjectID: s.projectID, DefinitionID: s.defCustom, Universe: 3, StartChannel: 1}
+	if err := s.db.FixtureRepo.CreateWithChannels(ctx, bare, nil); err != nil {
+		t.Fatal(err)
+	}
+	look := &models.Look{Name: "Bare look", ProjectID: s.projectID}
+	if err := s.db.LookRepo.CreateWithFixtureValues(ctx, look, []models.FixtureValue{
+		{FixtureID: bare.ID, Channels: `[{"offset":1,"value":7}]`},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := s.svc.Build(ctx, TableLookDetails, s.projectID, look.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := len(lookDetailBaseColumns)
+	if len(data.Columns) != base+2 || data.Rows[0][base] != nil || data.Rows[0][base+1] != 7 {
+		t.Errorf("columns = %v rows = %v", headers(data.Columns), data.Rows)
+	}
+}
+
+func TestBuild_RowCap(t *testing.T) {
+	s := newSeededService(t)
+	ctx := context.Background()
+	s.svc.MaxRows = 2 // the seeded project has 3 fixtures
+
+	if _, err := s.svc.Build(ctx, TableFixtures, s.projectID, ""); !errors.Is(err, ErrTooManyRows) {
+		t.Errorf("table err = %v", err)
+	}
+	if _, _, err := s.svc.BuildWorkbook(ctx, s.projectID, nil); !errors.Is(err, ErrTooManyRows) {
+		t.Errorf("workbook err = %v", err)
+	}
+	if NewService(Repos{}).MaxRows != MaxExportRows {
+		t.Error("default MaxRows")
+	}
+}
+
+func TestBatchedCounts(t *testing.T) {
+	s := newSeededService(t)
+	ctx := context.Background()
+
+	looks, err := s.svc.Build(ctx, TableLooks, s.projectID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[any]any{}
+	for _, r := range looks.Rows {
+		got[r[0]] = r[2]
+	}
+	// An empty look has no fixture_values rows, so its count must be 0
+	// (not missing).
+	if got["Warm"] != 2 || got["Empty"] != 0 {
+		t.Errorf("look fixture counts = %v", got)
+	}
+
+	lists, err := s.svc.Build(ctx, TableCueLists, s.projectID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range lists.Rows {
+		if _, ok := r[2].(int); !ok {
+			t.Errorf("cue count for %v is %T, want int", r[0], r[2])
+		}
+	}
+}
+
+func TestSanitizeSheetName_TrailingApostropheAfterTruncation(t *testing.T) {
+	// Rune 31 is an interior apostrophe: truncation would leave it last.
+	in := strings.Repeat("a", 30) + "'s sheet"
+	got := SanitizeSheetName(in)
+	if strings.HasSuffix(got, "'") || got != strings.Repeat("a", 30) {
+		t.Errorf("got %q", got)
+	}
+	// The same applies to de-duplicated names.
+	out := UniqueSheetNames([]Sheet{{Name: in}, {Name: in}})
+	for _, sh := range out {
+		if strings.Contains(sh.Name, "' (") || strings.HasSuffix(sh.Name, "'") {
+			t.Errorf("unique name %q", sh.Name)
+		}
+	}
+}
+
+func TestNumericCellTypes(t *testing.T) {
+	cases := []struct {
+		v    any
+		want string
+	}{
+		{int8(-8), "-8"}, {int16(16), "16"}, {int32(-32), "-32"}, {int64(64), "64"},
+		{uint(1), "1"}, {uint8(8), "8"}, {uint16(16), "16"}, {uint32(32), "32"}, {uint64(64), "64"},
+		{float32(1.5), "1.5"}, {2.25, "2.25"},
+	}
+	for _, c := range cases {
+		got, ok := formatNumber(c.v)
+		if !ok || got != c.want {
+			t.Errorf("formatNumber(%T %v) = %q, %v", c.v, c.v, got, ok)
+		}
+		// Negative numbers are not formula-escaped in CSV.
+		if csvCell(c.v) != c.want {
+			t.Errorf("csvCell(%T) = %q", c.v, csvCell(c.v))
+		}
+		// XLSX keeps them numeric (not text).
+		if _, isString := xlsxValue(c.v).(string); isString {
+			t.Errorf("xlsxValue(%T) became text", c.v)
+		}
+	}
+}

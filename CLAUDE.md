@@ -129,6 +129,11 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
   `EncodeXLSX` (excelize; bold frozen header, typed numbers, unique ≤31-char sheet names).
 - GraphQL surface (Queries, read-only): `dataExportTables`, `exportDataTable`,
   `exportDataWorkbook` in `internal/graphql/resolvers/data_export_resolvers.go`.
+- Workbooks contain project tables only (scoped tables and `FIXTURE_LIBRARY` are rejected).
+- Exports are built in memory and returned inline as base64, so `Service.MaxRows`
+  (default `MaxExportRows` = 250,000) caps rows per export; over the cap returns `ErrTooManyRows`.
+- Row builders must batch lookups (`CountFixturesByLookIDs`, `FindDefinitionsByIDs`, ...)
+  rather than querying once per row.
 
 ## Testing Guidelines
 

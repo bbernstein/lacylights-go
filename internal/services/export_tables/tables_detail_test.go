@@ -199,9 +199,10 @@ func TestLookDetailsTable_EmptyLookAndEdgeCases(t *testing.T) {
 		t.Errorf("empty look = %d rows, %d cols", len(data.Rows), len(data.Columns))
 	}
 
-	// A value beyond the fixture's channel count widens the grid; a
-	// dangling fixture value is skipped; unordered values sort after
-	// ordered ones by address.
+	// A value beyond the fixture's channel count is ignored (N stays the
+	// largest real channel count); a negative offset and a dangling
+	// fixture value are skipped; unordered values sort after ordered ones
+	// by address.
 	look := &models.Look{Name: "Odd", ProjectID: s.projectID}
 	if err := s.db.LookRepo.CreateWithFixtureValues(ctx, look, []models.FixtureValue{
 		{FixtureID: s.washB, Channels: `[{"offset":4,"value":9},{"offset":-1,"value":1}]`},
@@ -215,7 +216,7 @@ func TestLookDetailsTable_EmptyLookAndEdgeCases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(data.Columns) != len(lookDetailBaseColumns)+5 {
+	if len(data.Columns) != len(lookDetailBaseColumns)+3 {
 		t.Errorf("columns = %v", headers(data.Columns))
 	}
 	if len(data.Rows) != 3 {
@@ -225,8 +226,10 @@ func TestLookDetailsTable_EmptyLookAndEdgeCases(t *testing.T) {
 	if order[0] != "Wash 1" || order[1] != "Dimmer 1" || order[2] != "Wash 2" {
 		t.Errorf("order = %v", order)
 	}
-	if data.Rows[2][10] != 9 {
-		t.Errorf("wash 2 ch5 = %v", data.Rows[2][10])
+	for _, v := range data.Rows[2][len(lookDetailBaseColumns):] {
+		if v != nil {
+			t.Errorf("wash 2 should have no values, got %v", data.Rows[2])
+		}
 	}
 
 	// Invalid JSON is reported.
@@ -402,9 +405,10 @@ func TestBuildWorkbook_AllTables(t *testing.T) {
 		t.Errorf("sheets = %q", got)
 	}
 
-	// The library may be requested explicitly; scoped tables may not.
-	if _, _, err := s.svc.BuildWorkbook(ctx, s.projectID, []TableID{TableFixtureLibrary}); err != nil {
-		t.Errorf("library in workbook: %v", err)
+	// Workbooks hold project tables only: neither the global library nor
+	// scoped tables may be requested.
+	if _, _, err := s.svc.BuildWorkbook(ctx, s.projectID, []TableID{TableFixtureLibrary}); !errors.Is(err, ErrNotWorkbookTable) {
+		t.Errorf("library in workbook err = %v", err)
 	}
 	if _, _, err := s.svc.BuildWorkbook(ctx, s.projectID, []TableID{TableLookDetails}); !errors.Is(err, ErrScopeRequired) {
 		t.Errorf("look details in workbook err = %v", err)

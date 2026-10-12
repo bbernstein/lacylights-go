@@ -107,7 +107,7 @@ func writeSheet(f *excelize.File, sh Sheet, headerStyle int) error {
 // stays nil (an empty cell).
 func xlsxValue(v any) any {
 	switch x := v.(type) {
-	case nil, int, int64, float64, string:
+	case nil, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, string:
 		return x
 	default:
 		return cellText(v)
@@ -155,7 +155,9 @@ func SanitizeSheetName(name string) string {
 		return r
 	}, name)
 	name = strings.Trim(strings.TrimSpace(name), "'")
-	name = strings.TrimSpace(truncateRunes(name, MaxSheetNameLength))
+	// Truncation can expose an interior apostrophe or space at the end, so
+	// trim again afterwards.
+	name = strings.Trim(strings.TrimSpace(truncateRunes(name, MaxSheetNameLength)), "' ")
 	if name == "" {
 		return "Sheet"
 	}
@@ -173,7 +175,7 @@ func UniqueSheetNames(sheets []Sheet) []Sheet {
 		name := base
 		for n := 2; used[strings.ToLower(name)]; n++ {
 			suffix := fmt.Sprintf(" (%d)", n)
-			name = strings.TrimSpace(truncateRunes(base, MaxSheetNameLength-len(suffix))) + suffix
+			name = strings.Trim(strings.TrimSpace(truncateRunes(base, MaxSheetNameLength-len(suffix))), "' ") + suffix
 		}
 		used[strings.ToLower(name)] = true
 		sh.Name = name
