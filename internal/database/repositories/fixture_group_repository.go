@@ -293,14 +293,12 @@ func (r *FixtureGroupRepository) AssignNextEosNumber(ctx context.Context, projec
 // assigned numbers without re-reading.
 //
 // Concurrency: SQLite's deferred transactions don't serialize the initial
-// MAX(eos_number) read against parallel writers, so two concurrent
-// exporters can theoretically both pick the same next number and one
-// will fail the (project_id, eos_number) partial unique index. In
-// practice this is vanishingly unlikely (export is a user-initiated
-// action; nobody fires two exports of the same project concurrently).
-// If it does happen, the constraint violation surfaces as an export
-// error and the user re-runs — the second run succeeds because the
-// first run's numbers are now persisted.
+// MAX(eos_number) read against parallel writers, so this method alone
+// does not protect concurrent callers. The Eos exporter serializes its
+// calls with a mutex (export_eos.Service.groupNumberMu). Any other
+// caller must do the same, or a collision on the (project_id,
+// eos_number) partial unique index surfaces as an error and the caller
+// re-runs.
 func (r *FixtureGroupRepository) AssignAndPersistMissingEosNumbers(ctx context.Context, projectID string, groups []models.FixtureGroup) error {
 	hasMissing := false
 	for i := range groups {

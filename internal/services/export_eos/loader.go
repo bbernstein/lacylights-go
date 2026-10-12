@@ -114,43 +114,9 @@ func (s *Service) loadGroups(
 	eosByInstance map[string]int,
 	collector *importeos.Collector,
 ) ([]GroupOut, error) {
-	groups, err := s.fixtureGroupRepo.FindByProjectID(ctx, projectID)
+	groups, err := s.loadGroupsAssigningNumbers(ctx, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("export_eos: groups: %w", err)
-	}
-	// Sort: assigned EosNumber first (ascending), then nil-EosNumber
-	// (alphabetic), then ID for tie-break. This makes auto-assignment
-	// deterministic.
-	sort.SliceStable(groups, func(i, j int) bool {
-		ai, bi := groups[i].EosNumber, groups[j].EosNumber
-		switch {
-		case ai != nil && bi != nil:
-			if *ai != *bi {
-				return *ai < *bi
-			}
-		case ai != nil:
-			return true
-		case bi != nil:
-			return false
-		}
-		if groups[i].Name != groups[j].Name {
-			return groups[i].Name < groups[j].Name
-		}
-		return groups[i].ID < groups[j].ID
-	})
-
-	// Auto-assign missing EosNumbers and persist them. NOTE: this mutates DB
-	// state during a nominally read-only export — intentional, since the
-	// alternative (renumber on every export) breaks round-trip stability.
-	// This does not guarantee serialization against concurrent exports of
-	// the same project: SQLite's deferred transactions don't lock the MAX
-	// read against parallel writers, so concurrent callers may still race
-	// while deriving the next number, and one may fail on the
-	// (project_id, eos_number) partial unique index. In practice export
-	// is user-initiated and concurrent same-project exports are vanishingly
-	// rare; if a collision does happen the user just re-runs.
-	if err := s.fixtureGroupRepo.AssignAndPersistMissingEosNumbers(ctx, projectID, groups); err != nil {
-		return nil, fmt.Errorf("export_eos: persist auto-assigned eos_number: %w", err)
+		return nil, err
 	}
 
 	// Batch-load all groups' members in one query to avoid an O(groups)
@@ -716,4 +682,51 @@ func channelFingerprint(channels []models.ChannelDefinition) string {
 		parts[i] = strconv.Itoa(meta.paramID)
 	}
 	return strings.Join(parts, ",")
+}
+
+// loadGroupsAssigningNumbers loads the project's groups in deterministic
+// order and persists an EosNumber for any group missing one. It holds
+// groupNumberMu for the whole find-then-assign sequence so concurrent
+// exports (e.g. aliased projectExportEos Query fields) cannot assign
+// different numbers to the same group.
+func (s *Service) loadGroupsAssigningNumbers(ctx context.Context, projectID string) ([]models.FixtureGroup, error) {
+	s.groupNumberMu.Lock()
+	defer s.groupNumberMu.Unlock()
+
+	groups, err := s.fixtureGroupRepo.FindByProjectID(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("export_eos: groups: %w", err)
+	}
+	// Sort: assigned EosNumber first (ascending), then nil-EosNumber
+	// (alphabetic), then ID for tie-break. This makes auto-assignment
+	// deterministic.
+	sort.SliceStable(groups, func(i, j int) bool {
+		ai, bi := groups[i].EosNumber, groups[j].EosNumber
+		switch {
+		case ai != nil && bi != nil:
+			if *ai != *bi {
+				return *ai < *bi
+			}
+		case ai != nil:
+			return true
+		case bi != nil:
+			return false
+		}
+		if groups[i].Name != groups[j].Name {
+			return groups[i].Name < groups[j].Name
+		}
+		return groups[i].ID < groups[j].ID
+	})
+
+	// Auto-assign missing EosNumbers and persist them. NOTE: this mutates DB
+	// state during a nominally read-only export — intentional, since the
+	// alternative (renumber on every export) breaks round-trip stability.
+	// Concurrent exports in this process are serialized by groupNumberMu
+	// (held above), so the find-then-assign sequence is atomic with
+	// respect to other exports. The assignment is idempotent: once every
+	// group has a number, later exports write nothing.
+	if err := s.fixtureGroupRepo.AssignAndPersistMissingEosNumbers(ctx, projectID, groups); err != nil {
+		return nil, fmt.Errorf("export_eos: persist auto-assigned eos_number: %w", err)
+	}
+	return groups, nil
 }

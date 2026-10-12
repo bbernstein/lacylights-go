@@ -4,6 +4,7 @@ package exporteos
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	importeos "github.com/bbernstein/lacylights-go/internal/services/import_eos"
@@ -30,6 +31,13 @@ type Service struct {
 	cueListRepo      *repositories.CueListRepository
 	cueRepo          *repositories.CueRepository
 	lookBoardRepo    *repositories.LookBoardRepository
+
+	// groupNumberMu serializes loading groups and persisting auto-assigned
+	// EosNumbers. Export is exposed as a GraphQL Query, and gqlgen resolves
+	// aliased Query fields concurrently, so without this two exports of the
+	// same project could both see a group as unnumbered and assign it
+	// different numbers (or collide on the unique index).
+	groupNumberMu sync.Mutex
 }
 
 // NewServiceWithDeps wires the service to repositories.

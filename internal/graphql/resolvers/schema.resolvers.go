@@ -4537,63 +4537,7 @@ func (r *mutationResolver) ResumeCueList(ctx context.Context, cueListID string) 
 
 // ExportProject is the resolver for the exportProject field.
 func (r *mutationResolver) ExportProject(ctx context.Context, projectID string, options *generated.ExportOptionsInput) (*generated.ExportResult, error) {
-	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
-		return nil, err
-	}
-	// Get project first to get name
-	project, err := r.ProjectRepo.FindByID(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-	if project == nil {
-		return nil, fmt.Errorf("project not found: %s", projectID)
-	}
-
-	// Parse options
-	includeFixtures := true
-	includeLooks := true
-	includeCueLists := true
-
-	if options != nil {
-		if options.IncludeFixtures.IsSet() && options.IncludeFixtures.Value() != nil {
-			includeFixtures = *options.IncludeFixtures.Value()
-		}
-		if options.IncludeLooks.IsSet() && options.IncludeLooks.Value() != nil {
-			includeLooks = *options.IncludeLooks.Value()
-		}
-		if options.IncludeCueLists.IsSet() && options.IncludeCueLists.Value() != nil {
-			includeCueLists = *options.IncludeCueLists.Value()
-		}
-	}
-
-	// Export project
-	exported, stats, err := r.ExportService.ExportProject(ctx, projectID, includeFixtures, includeLooks, includeCueLists)
-	if err != nil {
-		return nil, err
-	}
-	if exported == nil {
-		return nil, fmt.Errorf("project not found: %s", projectID)
-	}
-
-	// Convert to JSON
-	jsonContent, err := exported.ToJSON()
-	if err != nil {
-		return nil, err
-	}
-
-	return &generated.ExportResult{
-		ProjectID:   projectID,
-		ProjectName: project.Name,
-		JSONContent: jsonContent,
-		Stats: generated.ExportStats{
-			FixtureDefinitionsCount: stats.FixtureDefinitionsCount,
-			FixtureInstancesCount:   stats.FixtureInstancesCount,
-			LooksCount:              stats.LooksCount,
-			CueListsCount:           stats.CueListsCount,
-			CuesCount:               stats.CuesCount,
-			LookBoardsCount:         stats.LookBoardsCount,
-		},
-	}, nil
+	return r.exportProjectJSON(ctx, projectID, options)
 }
 
 // ImportProject is the resolver for the importProject field.
@@ -4662,10 +4606,7 @@ func (r *mutationResolver) ImportProjectFromQlc(ctx context.Context, xmlContent 
 // ExportProjectToQlc is the resolver for the exportProjectToQLC field.
 // Returns error - QLC+ export not available on this platform
 func (r *mutationResolver) ExportProjectToQlc(ctx context.Context, projectID string, fixtureMappings []*generated.FixtureMappingInput) (*generated.QLCExportResult, error) {
-	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
-		return nil, err
-	}
-	return nil, fmt.Errorf("QLC+ export not available on this platform")
+	return r.exportProjectQLC(ctx, projectID, fixtureMappings)
 }
 
 // ImportProjectFromEos is the resolver for the importProjectFromEos field.
@@ -4752,23 +4693,7 @@ func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiConten
 
 // ExportProjectToEos is the resolver for the exportProjectToEos field.
 func (r *mutationResolver) ExportProjectToEos(ctx context.Context, projectID string) (*generated.EosExportResult, error) {
-	if r.EosExportService == nil {
-		return nil, fmt.Errorf("eos export not available on this platform")
-	}
-	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
-		return nil, err
-	}
-	res, err := r.EosExportService.Export(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-	return &generated.EosExportResult{
-		ProjectID:      projectID,
-		ProjectName:    res.ProjectName,
-		ASCIIContent:   res.Content,
-		FilenameSuffix: res.FilenameSuffix,
-		Warnings:       toEosWarnings(res.Warnings),
-	}, nil
+	return r.exportProjectEos(ctx, projectID)
 }
 
 // UpdateSetting is the resolver for the updateSetting field.
@@ -6972,6 +6897,21 @@ func (r *queryResolver) GetQLCFixtureMappingSuggestions(ctx context.Context, pro
 		Suggestions:        []*generated.FixtureMappingSuggestion{},
 		DefaultMappings:    []*generated.FixtureMapping{},
 	}, nil
+}
+
+// ProjectExport is the resolver for the projectExport field.
+func (r *queryResolver) ProjectExport(ctx context.Context, projectID string, options *generated.ExportOptionsInput) (*generated.ExportResult, error) {
+	return r.exportProjectJSON(ctx, projectID, options)
+}
+
+// ProjectExportQlc is the resolver for the projectExportQLC field.
+func (r *queryResolver) ProjectExportQlc(ctx context.Context, projectID string, fixtureMappings []*generated.FixtureMappingInput) (*generated.QLCExportResult, error) {
+	return r.exportProjectQLC(ctx, projectID, fixtureMappings)
+}
+
+// ProjectExportEos is the resolver for the projectExportEos field.
+func (r *queryResolver) ProjectExportEos(ctx context.Context, projectID string) (*generated.EosExportResult, error) {
+	return r.exportProjectEos(ctx, projectID)
 }
 
 // SystemVersions is the resolver for the systemVersions field.
