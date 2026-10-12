@@ -433,3 +433,42 @@ func TestExportDataTable_LibraryRejectsScopeAndRowCap(t *testing.T) {
 	_, err = q.ExportDataWorkbook(ctx, s.projectID, nil)
 	require.ErrorIs(t, err, exporttables.ErrTooManyRows)
 }
+
+func TestExportDataWorkbook_EmptyTableListRejected(t *testing.T) {
+	_, r, cleanup := testSetup(t)
+	defer cleanup()
+	s := seedDataExport(t, r, nil, nil)
+	q := r.Query().(*queryResolver)
+	ctx := context.Background()
+
+	_, err := q.ExportDataWorkbook(ctx, s.projectID, []generated.DataExportTable{})
+	require.ErrorIs(t, err, exporttables.ErrNoTables)
+
+	res, err := q.ExportDataWorkbook(ctx, s.projectID, nil)
+	require.NoError(t, err)
+	require.Positive(t, res.RowCount)
+}
+
+func TestExportData_WaitsForSlot(t *testing.T) {
+	_, r, cleanup := testSetup(t)
+	defer cleanup()
+	s := seedDataExport(t, r, nil, nil)
+	q := r.Query().(*queryResolver)
+
+	// Hold every slot; a request whose context is already done gives up.
+	var releases []func()
+	for i := 0; i < exporttables.MaxConcurrentExports; i++ {
+		rel, err := r.DataExportService.Acquire(context.Background())
+		require.NoError(t, err)
+		releases = append(releases, rel)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := q.ExportDataTable(ctx, &s.projectID, generated.DataExportTableFixtures, generated.DataExportFormatCSV, nil)
+	require.ErrorIs(t, err, context.Canceled)
+	_, err = q.ExportDataWorkbook(ctx, s.projectID, nil)
+	require.ErrorIs(t, err, context.Canceled)
+	for _, rel := range releases {
+		rel()
+	}
+}

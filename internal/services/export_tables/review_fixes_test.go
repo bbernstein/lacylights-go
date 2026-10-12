@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
+	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 )
 
 // A look in this project may reference a fixture from another project
@@ -152,5 +153,127 @@ func TestNumericCellTypes(t *testing.T) {
 		if _, isString := xlsxValue(c.v).(string); isString {
 			t.Errorf("xlsxValue(%T) became text", c.v)
 		}
+	}
+}
+
+// Every table's COUNT-based estimate must be an upper bound on the rows
+// actually built, so the pre-build cap never rejects an export that fits.
+func TestEstimateRows_UpperBound(t *testing.T) {
+	s := newSeededService(t)
+	ctx := context.Background()
+	scopes := map[TableID]string{
+		TableLookDetails:      s.lookWarm,
+		TableCueListDetails:   s.cueList,
+		TableLookBoardEntries: "",
+	}
+	for _, tbl := range s.svc.Tables() {
+		if tbl.estimate == nil {
+			t.Errorf("%s has no estimate", tbl.ID)
+			continue
+		}
+		pid := s.projectID
+		if tbl.Scope == ScopeNone {
+			pid = ""
+		}
+		scope := scopes[tbl.ID]
+		data, err := s.svc.Build(ctx, tbl.ID, pid, scope)
+		if err != nil {
+			t.Fatalf("%s: %v", tbl.ID, err)
+		}
+		n, err := s.svc.estimateRows(ctx, tbl, pid, scope)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n < len(data.Rows) || (len(data.Rows) > 0 && n == 0) {
+			t.Errorf("%s estimate %d < rows %d", tbl.ID, n, len(data.Rows))
+		}
+	}
+	// One board only.
+	n, err := s.svc.estimateRows(ctx, lookBoardEntriesTable(), s.projectID, s.boardMain)
+	if err != nil || n == 0 {
+		t.Errorf("board estimate = %d, %v", n, err)
+	}
+}
+
+// The cap is enforced from COUNT queries before any rows are loaded.
+func TestBuild_RowCapCheckedBeforeBuilding(t *testing.T) {
+	s := newSeededService(t)
+	ctx := context.Background()
+	s.svc.MaxRows = 0
+	built := false
+	tbl := &Table{
+		ID: "PROBE", Scope: ScopeProject,
+		build: func(context.Context, *Service, string, string) (*TableData, error) {
+			built = true
+			return &TableData{}, nil
+		},
+		estimate: func(context.Context, *repositories.RowCounter, string, string) (int, error) { return 1, nil },
+	}
+	s.svc.byID[tbl.ID] = tbl
+	if _, err := s.svc.Build(ctx, tbl.ID, s.projectID, ""); !errors.Is(err, ErrTooManyRows) {
+		t.Errorf("err = %v", err)
+	}
+	if _, _, err := s.svc.BuildWorkbook(ctx, s.projectID, []TableID{tbl.ID}); !errors.Is(err, ErrTooManyRows) {
+		t.Errorf("workbook err = %v", err)
+	}
+	if built {
+		t.Error("table was built despite exceeding the cap")
+	}
+
+	// Estimate errors are reported; with no counter, only the post-build
+	// check applies.
+	tbl.estimate = func(context.Context, *repositories.RowCounter, string, string) (int, error) {
+		return 0, errors.New("boom")
+	}
+	if _, err := s.svc.Build(ctx, tbl.ID, s.projectID, ""); err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Errorf("estimate err = %v", err)
+	}
+	if _, _, err := s.svc.BuildWorkbook(ctx, s.projectID, []TableID{tbl.ID}); err == nil {
+		t.Error("expected workbook estimate error")
+	}
+	s.svc.repos.Counts = nil
+	if n, err := s.svc.estimateRows(ctx, tbl, s.projectID, ""); n != 0 || err != nil {
+		t.Errorf("no counter = %d, %v", n, err)
+	}
+}
+
+func TestBuildWorkbook_ExplicitEmptyListRejected(t *testing.T) {
+	s := newSeededService(t)
+	ctx := context.Background()
+	if _, _, err := s.svc.BuildWorkbook(ctx, s.projectID, []TableID{}); !errors.Is(err, ErrNoTables) {
+		t.Errorf("empty list err = %v", err)
+	}
+	sheets, _, err := s.svc.BuildWorkbook(ctx, s.projectID, nil)
+	if err != nil || len(sheets) != len(s.svc.WorkbookTables()) {
+		t.Errorf("nil list = %d sheets, %v", len(sheets), err)
+	}
+}
+
+func TestAcquire_BoundsConcurrency(t *testing.T) {
+	svc := NewService(Repos{})
+	ctx := context.Background()
+	var releases []func()
+	for i := 0; i < MaxConcurrentExports; i++ {
+		r, err := svc.Acquire(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		releases = append(releases, r)
+	}
+	// All slots taken: a request whose context ends gives up.
+	cctx, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := svc.Acquire(cctx); !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v", err)
+	}
+	// Releasing a slot lets the next export in.
+	releases[0]()
+	r, err := svc.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r()
+	for _, rel := range releases[1:] {
+		rel()
 	}
 }

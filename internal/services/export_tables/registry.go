@@ -108,6 +108,9 @@ type Table struct {
 	DynamicColumns string
 
 	build func(ctx context.Context, s *Service, projectID, scopeID string) (*TableData, error)
+	// estimate returns an upper bound on the table's row count using
+	// COUNT queries only. Used to enforce MaxRows before building.
+	estimate func(ctx context.Context, c *repositories.RowCounter, projectID, scopeID string) (int, error)
 }
 
 // RequiresScopeID reports whether a scope ID must be supplied.
@@ -177,6 +180,9 @@ var (
 	// ErrNotWorkbookTable is returned when a global (non-project) table is
 	// requested in a workbook; workbooks only contain project tables.
 	ErrNotWorkbookTable = errors.New("table is not a project table and cannot be included in a workbook")
+	// ErrNoTables is returned when a workbook is requested with an
+	// explicitly empty table list (omit the list to get the defaults).
+	ErrNoTables = errors.New("at least one table is required; omit tables to export the default set")
 	// ErrTooManyRows is returned when an export exceeds MaxExportRows.
 	ErrTooManyRows = errors.New("export is too large")
 )
@@ -196,6 +202,10 @@ type Repos struct {
 	CueLists      *repositories.CueListRepository
 	LookBoards    *repositories.LookBoardRepository
 	Effects       *repositories.EffectRepository
+	// Counts sizes an export with COUNT queries before its data is loaded,
+	// so over-limit exports are rejected without materialising them.
+	// When nil the row cap is only checked after building.
+	Counts *repositories.RowCounter
 }
 
 // Service builds export tables.
@@ -208,11 +218,30 @@ type Service struct {
 	Now func() time.Time
 	// MaxRows caps the rows in one export; defaults to MaxExportRows.
 	MaxRows int
+	// slots bounds how many exports build and encode at once.
+	slots chan struct{}
+}
+
+// MaxConcurrentExports is how many exports may build and encode at the
+// same time. gqlgen resolves aliased root fields concurrently, so without
+// a bound one request could start many large exports in parallel.
+const MaxConcurrentExports = 2
+
+// Acquire waits for an export slot. Call the returned release function
+// when the export (including encoding) is finished. It returns ctx.Err()
+// if the context ends first.
+func (s *Service) Acquire(ctx context.Context) (func(), error) {
+	select {
+	case s.slots <- struct{}{}:
+		return func() { <-s.slots }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 // NewService creates a Service with every registered table.
 func NewService(repos Repos) *Service {
-	s := &Service{repos: repos, Now: time.Now, MaxRows: MaxExportRows}
+	s := &Service{repos: repos, Now: time.Now, MaxRows: MaxExportRows, slots: make(chan struct{}, MaxConcurrentExports)}
 	s.tables = registry()
 	s.byID = make(map[TableID]*Table, len(s.tables))
 	for _, t := range s.tables {
@@ -248,6 +277,13 @@ func (s *Service) Build(ctx context.Context, id TableID, projectID, scopeID stri
 	if scopeID != "" && !t.AcceptsScopeID() {
 		return nil, fmt.Errorf("%w: %s", ErrScopeNotAllowed, id)
 	}
+	n, err := s.estimateRows(ctx, t, projectID, scopeID)
+	if err != nil {
+		return nil, err
+	}
+	if n > s.MaxRows {
+		return nil, fmt.Errorf("%w: %s has about %d rows", ErrTooManyRows, id, n)
+	}
 	data, err := t.build(ctx, s, projectID, scopeID)
 	if err != nil {
 		return nil, err
@@ -256,6 +292,19 @@ func (s *Service) Build(ctx context.Context, id TableID, projectID, scopeID stri
 		return nil, fmt.Errorf("%w: %s has %d rows", ErrTooManyRows, id, len(data.Rows))
 	}
 	return data, nil
+}
+
+// estimateRows returns an upper bound on t's row count, or 0 when no
+// counter or estimate is available (the post-build check still applies).
+func (s *Service) estimateRows(ctx context.Context, t *Table, projectID, scopeID string) (int, error) {
+	if s.repos.Counts == nil || t.estimate == nil {
+		return 0, nil
+	}
+	n, err := t.estimate(ctx, s.repos.Counts, projectID, scopeID)
+	if err != nil {
+		return 0, fmt.Errorf("size %s: %w", t.ID, err)
+	}
+	return n, nil
 }
 
 // WorkbookTables returns the tables included in a workbook export when the
@@ -273,7 +322,8 @@ func (s *Service) WorkbookTables() []TableID {
 }
 
 // BuildWorkbook builds one sheet per table (plus any extra sheets) for a
-// project. When ids is empty WorkbookTables is used. Tables that need a
+// project. When ids is nil WorkbookTables is used; an empty, non-nil ids
+// is rejected with ErrNoTables. Tables that need a
 // scope ID, and global tables such as FIXTURE_LIBRARY, cannot be part of a
 // workbook. Sheet names are made valid and unique. The returned row count
 // is the total number of data rows across the primary sheets.
@@ -281,12 +331,17 @@ func (s *Service) BuildWorkbook(ctx context.Context, projectID string, ids []Tab
 	if projectID == "" {
 		return nil, 0, ErrProjectRequired
 	}
-	if len(ids) == 0 {
+	if ids == nil {
 		ids = s.WorkbookTables()
+	} else if len(ids) == 0 {
+		return nil, 0, ErrNoTables
 	}
-	var sheets []Sheet
-	total := 0
+
+	// Validate every table and size the whole workbook before building any
+	// sheet.
+	var tables []*Table
 	seen := make(map[TableID]bool, len(ids))
+	estimated := 0
 	for _, id := range ids {
 		if seen[id] {
 			continue
@@ -302,6 +357,21 @@ func (s *Service) BuildWorkbook(ctx context.Context, projectID string, ids []Tab
 		if t.Scope == ScopeNone {
 			return nil, 0, fmt.Errorf("%w: %s", ErrNotWorkbookTable, id)
 		}
+		n, err := s.estimateRows(ctx, t, projectID, "")
+		if err != nil {
+			return nil, 0, err
+		}
+		estimated += n
+		if estimated > s.MaxRows {
+			return nil, 0, fmt.Errorf("%w: workbook has about %d rows", ErrTooManyRows, estimated)
+		}
+		tables = append(tables, t)
+	}
+
+	var sheets []Sheet
+	total := 0
+	for _, t := range tables {
+		id := t.ID
 		data, err := t.build(ctx, s, projectID, "")
 		if err != nil {
 			return nil, 0, fmt.Errorf("build %s: %w", id, err)

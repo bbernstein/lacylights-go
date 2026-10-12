@@ -132,6 +132,10 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 - Workbooks contain project tables only (scoped tables and `FIXTURE_LIBRARY` are rejected).
 - Exports are built in memory and returned inline as base64, so `Service.MaxRows`
   (default `MaxExportRows` = 250,000) caps rows per export; over the cap returns `ErrTooManyRows`.
+- Before building, each table's `estimate` (COUNT queries via `repositories.RowCounter`) is
+  checked against the cap, so over-limit exports are rejected without loading data.
+- At most `MaxConcurrentExports` exports build/encode at once (`Service.Acquire`).
+- Batch `IN ?` lookups are chunked (`chunkIDs`, 500 IDs) to stay under SQLite's bind-variable limit.
 - Row builders must batch lookups (`CountFixturesByLookIDs`, `FindDefinitionsByIDs`, ...)
   rather than querying once per row.
 

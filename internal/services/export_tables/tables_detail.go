@@ -31,23 +31,25 @@ var fixtureTypeColumns = []Column{
 func fixtureTypesTable() *Table {
 	cols := append(append([]Column{}, fixtureTypeColumns...), Column{"fixtureCount", "Fixtures in project using it"})
 	return &Table{
-		ID:      TableFixtureTypes,
-		Label:   "Fixture Types",
-		Slug:    "fixture-types",
-		Scope:   ScopeProject,
-		Columns: cols,
-		build:   buildFixtureTypes,
+		ID:       TableFixtureTypes,
+		Label:    "Fixture Types",
+		Slug:     "fixture-types",
+		Scope:    ScopeProject,
+		Columns:  cols,
+		build:    buildFixtureTypes,
+		estimate: countInProject(&models.FixtureInstance{}),
 	}
 }
 
 func fixtureLibraryTable() *Table {
 	return &Table{
-		ID:      TableFixtureLibrary,
-		Label:   "Fixture Library",
-		Slug:    "fixture-library",
-		Scope:   ScopeNone,
-		Columns: append([]Column{}, fixtureTypeColumns...),
-		build:   buildFixtureLibrary,
+		ID:       TableFixtureLibrary,
+		Label:    "Fixture Library",
+		Slug:     "fixture-library",
+		Scope:    ScopeNone,
+		Columns:  append([]Column{}, fixtureTypeColumns...),
+		build:    buildFixtureLibrary,
+		estimate: countLibrary,
 	}
 }
 
@@ -196,6 +198,7 @@ func lookDetailsTable() *Table {
 		Columns:        append([]Column{}, lookDetailBaseColumns...),
 		DynamicColumns: "Ch 1 … Ch N",
 		build:          buildLookDetails,
+		estimate:       countInScope(&models.FixtureValue{}, "look_id"),
 	}
 }
 
@@ -378,7 +381,8 @@ func effectsTable() *Table {
 			{"masterValue", "Master value"},
 			{"fixtureCount", "Fixture count"},
 		},
-		build: buildEffects,
+		build:    buildEffects,
+		estimate: countInProject(&models.Effect{}),
 	}
 }
 
@@ -440,7 +444,8 @@ func lookBoardEntriesTable() *Table {
 			{"color", "Color"},
 			{"fadeTime", "Board fade time (s)"},
 		},
-		build: buildLookBoardEntries,
+		build:    buildLookBoardEntries,
+		estimate: countBoardButtons,
 	}
 }
 
@@ -521,7 +526,8 @@ func cueListDetailsTable() *Table {
 			{"skip", "Skip"},
 			{"notes", "Notes"},
 		},
-		build: buildCueListDetails,
+		build:    buildCueListDetails,
+		estimate: countInScope(&models.Cue{}, "cue_list_id"),
 	}
 }
 

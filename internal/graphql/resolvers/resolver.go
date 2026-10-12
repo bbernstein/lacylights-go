@@ -127,6 +127,7 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *modulator.Eng
 			CueLists:      cueListRepo,
 			LookBoards:    lookBoardRepo,
 			Effects:       effectRepo,
+			Counts:        repositories.NewRowCounter(db),
 		}),
 		OFLService:      ofl.NewService(db, fixtureRepo),
 		OFLManager:      oflManager,

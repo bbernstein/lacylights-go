@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
+	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 )
 
 // registry returns every exportable table in display order (the order of
@@ -48,7 +49,8 @@ func fixturesTable() *Table {
 			{"groups", "Groups"},
 			{"description", "Description"},
 		},
-		build: buildFixtures,
+		build:    buildFixtures,
+		estimate: countInProject(&models.FixtureInstance{}),
 	}
 }
 
@@ -112,7 +114,8 @@ func looksTable() *Table {
 			{"createdAt", "Created (UTC)"},
 			{"updatedAt", "Updated (UTC)"},
 		},
-		build: buildLooks,
+		build:    buildLooks,
+		estimate: countInProject(&models.Look{}),
 	}
 }
 
@@ -159,7 +162,8 @@ func cueListsTable() *Table {
 			{"createdAt", "Created (UTC)"},
 			{"updatedAt", "Updated (UTC)"},
 		},
-		build: buildCueLists,
+		build:    buildCueLists,
+		estimate: countInProject(&models.CueList{}),
 	}
 }
 
@@ -189,6 +193,47 @@ func buildCueLists(ctx context.Context, s *Service, projectID, _ string) (*Table
 		})
 	}
 	return &TableData{Columns: cueListsTable().Columns, Rows: rows}, nil
+}
+
+// --- row estimates ----------------------------------------------------------
+
+// countInProject estimates a project table as the number of model rows in
+// the project.
+func countInProject(model any) func(context.Context, *repositories.RowCounter, string, string) (int, error) {
+	return func(ctx context.Context, c *repositories.RowCounter, projectID, _ string) (int, error) {
+		return c.CountWhere(ctx, model, "project_id", projectID)
+	}
+}
+
+// countInScope estimates a scoped table as the number of model rows whose
+// column equals the scope ID.
+func countInScope(model any, column string) func(context.Context, *repositories.RowCounter, string, string) (int, error) {
+	return func(ctx context.Context, c *repositories.RowCounter, _, scopeID string) (int, error) {
+		return c.CountWhere(ctx, model, column, scopeID)
+	}
+}
+
+// countLibrary bounds the library: at most one row per mode plus one per
+// definition without modes.
+func countLibrary(ctx context.Context, c *repositories.RowCounter, _, _ string) (int, error) {
+	defs, err := c.CountAll(ctx, &models.FixtureDefinition{})
+	if err != nil {
+		return 0, err
+	}
+	modes, err := c.CountAll(ctx, &models.FixtureMode{})
+	if err != nil {
+		return 0, err
+	}
+	return defs + modes, nil
+}
+
+// countBoardButtons counts one board's buttons, or every board's in the
+// project when no scope ID is given.
+func countBoardButtons(ctx context.Context, c *repositories.RowCounter, projectID, scopeID string) (int, error) {
+	if scopeID != "" {
+		return c.CountWhere(ctx, &models.LookBoardButton{}, "look_board_id", scopeID)
+	}
+	return c.CountProjectLookBoardButtons(ctx, projectID)
 }
 
 // --- shared helpers ---------------------------------------------------------

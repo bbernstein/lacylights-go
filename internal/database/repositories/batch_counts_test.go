@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
@@ -105,5 +106,75 @@ func TestBatchedCounts_DBError(t *testing.T) {
 	}
 	if _, err := NewLookBoardRepository(db).GetButtonsByBoardIDs(ctx, []string{"a"}); err == nil {
 		t.Error("expected buttons error")
+	}
+}
+
+func TestChunkIDs(t *testing.T) {
+	if got := chunkIDs(nil); len(got) != 0 {
+		t.Errorf("nil = %v", got)
+	}
+	ids := make([]string, 2*maxInVars+1)
+	got := chunkIDs(ids)
+	if len(got) != 3 || len(got[0]) != maxInVars || len(got[2]) != 1 {
+		t.Errorf("chunks = %d", len(got))
+	}
+}
+
+// Lookups with more IDs than one IN clause takes are split into chunks and
+// still return every match.
+func TestBatchedLookups_ManyIDs(t *testing.T) {
+	tdb, cleanup := setupTestDB(t)
+	defer cleanup()
+	db := tdb.DB
+	ctx := context.Background()
+
+	n := 2*maxInVars + 3
+	defs := make([]models.FixtureDefinition, n)
+	values := make([]models.FixtureValue, n)
+	ids := make([]string, n)
+	for i := range defs {
+		ids[i] = fmt.Sprintf("id%04d", i)
+		defs[i] = models.FixtureDefinition{ID: ids[i], Manufacturer: "M", Model: ids[i]}
+		values[i] = models.FixtureValue{ID: "v" + ids[i], LookID: ids[i], FixtureID: "f"}
+	}
+	if err := db.CreateInBatches(&defs, 200).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateInBatches(&values, 200).Error; err != nil {
+		t.Fatal(err)
+	}
+	got, err := NewFixtureRepository(db).FindDefinitionsByIDs(ctx, ids)
+	if err != nil || len(got) != n {
+		t.Errorf("definitions = %d, %v", len(got), err)
+	}
+	counts, err := NewLookRepository(db).CountFixturesByLookIDs(ctx, ids)
+	if err != nil || len(counts) != n {
+		t.Errorf("counts = %d, %v", len(counts), err)
+	}
+}
+
+func TestRowCounter(t *testing.T) {
+	tdb, cleanup := setupTestDB(t)
+	defer cleanup()
+	db := tdb.DB
+	ctx := context.Background()
+	c := NewRowCounter(db)
+
+	if err := db.Create(&[]models.LookBoard{{ID: "b1", ProjectID: "p"}, {ID: "b2", ProjectID: "p"}, {ID: "b3", ProjectID: "q"}}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&[]models.LookBoardButton{
+		{ID: "x1", LookBoardID: "b1"}, {ID: "x2", LookBoardID: "b1"}, {ID: "x3", LookBoardID: "b2"}, {ID: "x4", LookBoardID: "b3"},
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if n, err := c.CountWhere(ctx, &models.LookBoardButton{}, "look_board_id", "b1"); err != nil || n != 2 {
+		t.Errorf("CountWhere = %d, %v", n, err)
+	}
+	if n, err := c.CountAll(ctx, &models.LookBoard{}); err != nil || n != 3 {
+		t.Errorf("CountAll = %d, %v", n, err)
+	}
+	if n, err := c.CountProjectLookBoardButtons(ctx, "p"); err != nil || n != 3 {
+		t.Errorf("project buttons = %d, %v", n, err)
 	}
 }

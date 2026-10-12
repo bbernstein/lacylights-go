@@ -66,6 +66,7 @@ func newSeededService(t *testing.T) *seed {
 		CueLists:      db.CueListRepo,
 		LookBoards:    boardRepo,
 		Effects:       effectRepo,
+		Counts:        repositories.NewRowCounter(db.DB),
 	})
 	s.svc.Now = func() time.Time { return time.Date(2026, 10, 12, 9, 0, 0, 0, time.UTC) }
 

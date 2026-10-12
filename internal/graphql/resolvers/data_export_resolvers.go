@@ -71,6 +71,12 @@ func (r *Resolver) exportDataTable(ctx context.Context, projectID *string, table
 		projectName = project.Name
 	}
 
+	release, err := r.DataExportService.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
 	data, err := r.DataExportService.Build(ctx, t.ID, pid, sid)
 	if err != nil {
 		return nil, err
@@ -120,10 +126,20 @@ func (r *Resolver) exportDataWorkbook(ctx context.Context, projectID string, tab
 		return nil, err
 	}
 
-	ids := make([]exporttables.TableID, len(tables))
-	for i, t := range tables {
-		ids[i] = exporttables.TableID(t)
+	// Keep nil (tables omitted → default set) distinct from an explicit
+	// empty list, which BuildWorkbook rejects.
+	var ids []exporttables.TableID
+	if tables != nil {
+		ids = make([]exporttables.TableID, len(tables))
+		for i, t := range tables {
+			ids[i] = exporttables.TableID(t)
+		}
 	}
+	release, err := r.DataExportService.Acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	sheets, rowCount, err := r.DataExportService.BuildWorkbook(ctx, projectID, ids)
 	if err != nil {
 		return nil, err

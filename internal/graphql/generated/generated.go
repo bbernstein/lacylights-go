@@ -10283,7 +10283,9 @@ extend type Query {
   exportDataTable(projectId: ID, table: DataExportTable!, format: DataExportFormat!, scopeId: ID): DataExportResult!
   """
   Export several project-level tables as one XLSX workbook, one sheet per
-  table. Defaults to every project-level table when tables is omitted.
+  table. Defaults to every project-level table when tables is omitted; an
+    explicit empty list is an error. FIXTURE_LIBRARY and scoped tables
+    cannot be included.
   """
   exportDataWorkbook(projectId: ID!, tables: [DataExportTable!]): DataExportResult!
 }

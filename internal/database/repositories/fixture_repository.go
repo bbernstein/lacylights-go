@@ -55,8 +55,14 @@ func (r *FixtureRepository) FindByIDs(ctx context.Context, ids []string) ([]mode
 		return []models.FixtureInstance{}, nil
 	}
 	var fixtures []models.FixtureInstance
-	result := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&fixtures)
-	return fixtures, result.Error
+	for _, chunk := range chunkIDs(ids) {
+		var part []models.FixtureInstance
+		if err := r.db.WithContext(ctx).Where("id IN ?", chunk).Find(&part).Error; err != nil {
+			return nil, err
+		}
+		fixtures = append(fixtures, part...)
+	}
+	return fixtures, nil
 }
 
 // Create creates a new fixture instance.
@@ -145,15 +151,17 @@ func (r *FixtureRepository) GetInstanceChannelsByFixtureIDs(ctx context.Context,
 	if len(fixtureIDs) == 0 {
 		return out, nil
 	}
-	var channels []models.InstanceChannel
-	if err := r.db.WithContext(ctx).
-		Where("fixture_id IN ?", fixtureIDs).
-		Order("fixture_id ASC, offset ASC").
-		Find(&channels).Error; err != nil {
-		return nil, err
-	}
-	for _, c := range channels {
-		out[c.FixtureID] = append(out[c.FixtureID], c)
+	for _, chunk := range chunkIDs(fixtureIDs) {
+		var channels []models.InstanceChannel
+		if err := r.db.WithContext(ctx).
+			Where("fixture_id IN ?", chunk).
+			Order("fixture_id ASC, offset ASC").
+			Find(&channels).Error; err != nil {
+			return nil, err
+		}
+		for _, c := range channels {
+			out[c.FixtureID] = append(out[c.FixtureID], c)
+		}
 	}
 	return out, nil
 }
