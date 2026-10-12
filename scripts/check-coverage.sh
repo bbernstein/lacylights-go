@@ -23,6 +23,7 @@ get_threshold() {
         "internal/services/preview") echo 91 ;;  # Integration tests provide good coverage
         "internal/services/dmx") echo 88 ;;  # Network retry loop tested with configurable intervals
         "internal/services/export") echo 88 ;;  # Integration tests provide good coverage
+        "internal/services/export_tables") echo 85 ;;  # CSV/XLSX data export tables and writers
         "internal/database/repositories") echo 88 ;;  # Integration tests, error handling branches require mocking
         "internal/database") echo 86 ;;  # Connect/Close functions
         "internal/services/import") echo 83 ;;  # Integration tests provide good coverage

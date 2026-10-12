@@ -130,15 +130,17 @@ func (r *FixtureGroupRepository) GetMembersByGroupIDs(ctx context.Context, group
 	if len(groupIDs) == 0 {
 		return out, nil
 	}
-	var members []models.FixtureGroupMember
-	if err := r.db.WithContext(ctx).
-		Where("group_id IN ?", groupIDs).
-		Order("group_id ASC, order_index ASC, fixture_id ASC").
-		Find(&members).Error; err != nil {
-		return nil, err
-	}
-	for _, m := range members {
-		out[m.GroupID] = append(out[m.GroupID], m)
+	for _, chunk := range chunkIDs(groupIDs) {
+		var members []models.FixtureGroupMember
+		if err := r.db.WithContext(ctx).
+			Where("group_id IN ?", chunk).
+			Order("group_id ASC, order_index ASC, fixture_id ASC").
+			Find(&members).Error; err != nil {
+			return nil, err
+		}
+		for _, m := range members {
+			out[m.GroupID] = append(out[m.GroupID], m)
+		}
 	}
 	return out, nil
 }

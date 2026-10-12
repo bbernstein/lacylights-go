@@ -55,8 +55,14 @@ func (r *FixtureRepository) FindByIDs(ctx context.Context, ids []string) ([]mode
 		return []models.FixtureInstance{}, nil
 	}
 	var fixtures []models.FixtureInstance
-	result := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&fixtures)
-	return fixtures, result.Error
+	for _, chunk := range chunkIDs(ids) {
+		var part []models.FixtureInstance
+		if err := r.db.WithContext(ctx).Where("id IN ?", chunk).Find(&part).Error; err != nil {
+			return nil, err
+		}
+		fixtures = append(fixtures, part...)
+	}
+	return fixtures, nil
 }
 
 // Create creates a new fixture instance.
@@ -145,15 +151,17 @@ func (r *FixtureRepository) GetInstanceChannelsByFixtureIDs(ctx context.Context,
 	if len(fixtureIDs) == 0 {
 		return out, nil
 	}
-	var channels []models.InstanceChannel
-	if err := r.db.WithContext(ctx).
-		Where("fixture_id IN ?", fixtureIDs).
-		Order("fixture_id ASC, offset ASC").
-		Find(&channels).Error; err != nil {
-		return nil, err
-	}
-	for _, c := range channels {
-		out[c.FixtureID] = append(out[c.FixtureID], c)
+	for _, chunk := range chunkIDs(fixtureIDs) {
+		var channels []models.InstanceChannel
+		if err := r.db.WithContext(ctx).
+			Where("fixture_id IN ?", chunk).
+			Order("fixture_id ASC, offset ASC").
+			Find(&channels).Error; err != nil {
+			return nil, err
+		}
+		for _, c := range channels {
+			out[c.FixtureID] = append(out[c.FixtureID], c)
+		}
 	}
 	return out, nil
 }
@@ -352,6 +360,43 @@ func (r *FixtureRepository) GetDefinitionModes(ctx context.Context, definitionID
 		Order("name ASC").
 		Find(&modes)
 	return modes, result.Error
+}
+
+// FindAllModes returns every fixture mode of an existing definition,
+// ordered by definition then mode name. Orphaned modes (deleting a
+// definition does not delete its modes) are skipped, matching
+// RowCounter.CountLibraryRows. Used by bulk exports (e.g. the fixture
+// library spreadsheet) to avoid one query per definition.
+func (r *FixtureRepository) FindAllModes(ctx context.Context) ([]models.FixtureMode, error) {
+	var modes []models.FixtureMode
+	result := r.db.WithContext(ctx).
+		Where("EXISTS (SELECT 1 FROM fixture_definitions WHERE fixture_definitions.id = fixture_modes.definition_id)").
+		Order("definition_id ASC, name ASC").
+		Find(&modes)
+	return modes, result.Error
+}
+
+// CountChannelsByDefinition returns the number of channel definitions for
+// every fixture definition, keyed by definition ID. Definitions with no
+// channels are absent from the map.
+func (r *FixtureRepository) CountChannelsByDefinition(ctx context.Context) (map[string]int, error) {
+	type row struct {
+		DefinitionID string
+		Count        int
+	}
+	var rows []row
+	if err := r.db.WithContext(ctx).
+		Model(&models.ChannelDefinition{}).
+		Select("definition_id, COUNT(*) AS count").
+		Group("definition_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[string]int, len(rows))
+	for _, rw := range rows {
+		out[rw.DefinitionID] = rw.Count
+	}
+	return out, nil
 }
 
 // CreateMode creates a new fixture mode.

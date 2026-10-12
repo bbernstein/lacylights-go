@@ -399,3 +399,60 @@ func TestFixtureRepository_GetInstanceChannelsByFixtureIDs(t *testing.T) {
 		t.Errorf("missing should not be in result")
 	}
 }
+
+func TestFixtureRepository_FindAllModesAndCountChannels(t *testing.T) {
+	testDB, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := NewFixtureRepository(testDB.DB)
+
+	withChannels := &models.FixtureDefinition{Manufacturer: "M", Model: "A", Type: "LED_PAR"}
+	if err := repo.CreateDefinitionWithChannels(ctx, withChannels, []models.ChannelDefinition{
+		{Name: "Red", Type: "RED", Offset: 0},
+		{Name: "Green", Type: "GREEN", Offset: 1},
+	}); err != nil {
+		t.Fatalf("def A: %v", err)
+	}
+	noChannels := &models.FixtureDefinition{Manufacturer: "M", Model: "B", Type: "OTHER"}
+	if err := repo.CreateDefinition(ctx, noChannels); err != nil {
+		t.Fatalf("def B: %v", err)
+	}
+	for _, m := range []*models.FixtureMode{
+		{Name: "8ch", ChannelCount: 8, DefinitionID: withChannels.ID},
+		{Name: "2ch", ChannelCount: 2, DefinitionID: withChannels.ID},
+		{Name: "1ch", ChannelCount: 1, DefinitionID: noChannels.ID},
+	} {
+		if err := repo.CreateMode(ctx, m); err != nil {
+			t.Fatalf("mode: %v", err)
+		}
+	}
+
+	modes, err := repo.FindAllModes(ctx)
+	if err != nil {
+		t.Fatalf("FindAllModes: %v", err)
+	}
+	if len(modes) != 3 {
+		t.Fatalf("modes = %d, want 3", len(modes))
+	}
+	// Within a definition, modes are ordered by name.
+	var aModes []string
+	for _, m := range modes {
+		if m.DefinitionID == withChannels.ID {
+			aModes = append(aModes, m.Name)
+		}
+	}
+	if len(aModes) != 2 || aModes[0] != "2ch" || aModes[1] != "8ch" {
+		t.Errorf("A modes = %v, want [2ch 8ch]", aModes)
+	}
+
+	counts, err := repo.CountChannelsByDefinition(ctx)
+	if err != nil {
+		t.Fatalf("CountChannelsByDefinition: %v", err)
+	}
+	if counts[withChannels.ID] != 2 {
+		t.Errorf("A channel count = %d, want 2", counts[withChannels.ID])
+	}
+	if _, ok := counts[noChannels.ID]; ok {
+		t.Errorf("B should be absent from counts")
+	}
+}

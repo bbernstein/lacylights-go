@@ -295,6 +295,20 @@ type ComplexityRoot struct {
 		OrphanLooks func(childComplexity int) int
 	}
 
+	DataExportResult struct {
+		ContentBase64 func(childComplexity int) int
+		Filename      func(childComplexity int) int
+		MimeType      func(childComplexity int) int
+		RowCount      func(childComplexity int) int
+	}
+
+	DataExportTableInfo struct {
+		Columns func(childComplexity int) int
+		Label   func(childComplexity int) int
+		Scope   func(childComplexity int) int
+		Table   func(childComplexity int) int
+	}
+
 	Device struct {
 		ApprovedAt    func(childComplexity int) int
 		ApprovedBy    func(childComplexity int) int
@@ -1080,12 +1094,15 @@ type ComplexityRoot struct {
 		CuesByIds                       func(childComplexity int, ids []string) int
 		CuesWithLookInfo                func(childComplexity int, cueListID string) int
 		CurrentActiveLook               func(childComplexity int) int
+		DataExportTables                func(childComplexity int) int
 		DeletedProjects                 func(childComplexity int) int
 		Device                          func(childComplexity int, id string) int
 		Devices                         func(childComplexity int, status *DeviceStatus) int
 		DmxOutput                       func(childComplexity int, universe int) int
 		Effect                          func(childComplexity int, id string) int
 		Effects                         func(childComplexity int, projectID string) int
+		ExportDataTable                 func(childComplexity int, projectID *string, table DataExportTable, format DataExportFormat, scopeID *string) int
+		ExportDataWorkbook              func(childComplexity int, projectID string, tables []DataExportTable) int
 		FixtureDefinition               func(childComplexity int, id string) int
 		FixtureDefinitions              func(childComplexity int, filter *FixtureDefinitionFilter) int
 		FixtureDefinitionsByIds         func(childComplexity int, ids []string) int
@@ -1700,6 +1717,9 @@ type QueryResolver interface {
 	UndoRedoStatus(ctx context.Context, projectID string) (*UndoRedoStatus, error)
 	OperationHistory(ctx context.Context, projectID string, page *int, perPage *int) (*OperationHistoryPage, error)
 	Operation(ctx context.Context, operationID string) (*models.Operation, error)
+	DataExportTables(ctx context.Context) ([]*DataExportTableInfo, error)
+	ExportDataTable(ctx context.Context, projectID *string, table DataExportTable, format DataExportFormat, scopeID *string) (*DataExportResult, error)
+	ExportDataWorkbook(ctx context.Context, projectID string, tables []DataExportTable) (*DataExportResult, error)
 }
 type SessionResolver interface {
 	ExpiresAt(ctx context.Context, obj *models.Session) (string, error)
@@ -2649,6 +2669,56 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.CuesWithLookInfoResponse.OrphanLooks(childComplexity), true
+
+	case "DataExportResult.contentBase64":
+		if e.complexity.DataExportResult.ContentBase64 == nil {
+			break
+		}
+
+		return e.complexity.DataExportResult.ContentBase64(childComplexity), true
+	case "DataExportResult.filename":
+		if e.complexity.DataExportResult.Filename == nil {
+			break
+		}
+
+		return e.complexity.DataExportResult.Filename(childComplexity), true
+	case "DataExportResult.mimeType":
+		if e.complexity.DataExportResult.MimeType == nil {
+			break
+		}
+
+		return e.complexity.DataExportResult.MimeType(childComplexity), true
+	case "DataExportResult.rowCount":
+		if e.complexity.DataExportResult.RowCount == nil {
+			break
+		}
+
+		return e.complexity.DataExportResult.RowCount(childComplexity), true
+
+	case "DataExportTableInfo.columns":
+		if e.complexity.DataExportTableInfo.Columns == nil {
+			break
+		}
+
+		return e.complexity.DataExportTableInfo.Columns(childComplexity), true
+	case "DataExportTableInfo.label":
+		if e.complexity.DataExportTableInfo.Label == nil {
+			break
+		}
+
+		return e.complexity.DataExportTableInfo.Label(childComplexity), true
+	case "DataExportTableInfo.scope":
+		if e.complexity.DataExportTableInfo.Scope == nil {
+			break
+		}
+
+		return e.complexity.DataExportTableInfo.Scope(childComplexity), true
+	case "DataExportTableInfo.table":
+		if e.complexity.DataExportTableInfo.Table == nil {
+			break
+		}
+
+		return e.complexity.DataExportTableInfo.Table(childComplexity), true
 
 	case "Device.approvedAt":
 		if e.complexity.Device.ApprovedAt == nil {
@@ -7126,6 +7196,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.CurrentActiveLook(childComplexity), true
+	case "Query.dataExportTables":
+		if e.complexity.Query.DataExportTables == nil {
+			break
+		}
+
+		return e.complexity.Query.DataExportTables(childComplexity), true
 	case "Query.deletedProjects":
 		if e.complexity.Query.DeletedProjects == nil {
 			break
@@ -7187,6 +7263,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.Effects(childComplexity, args["projectId"].(string)), true
+	case "Query.exportDataTable":
+		if e.complexity.Query.ExportDataTable == nil {
+			break
+		}
+
+		args, err := ec.field_Query_exportDataTable_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.ExportDataTable(childComplexity, args["projectId"].(*string), args["table"].(DataExportTable), args["format"].(DataExportFormat), args["scopeId"].(*string)), true
+	case "Query.exportDataWorkbook":
+		if e.complexity.Query.ExportDataWorkbook == nil {
+			break
+		}
+
+		args, err := ec.field_Query_exportDataWorkbook_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.ExportDataWorkbook(childComplexity, args["projectId"].(string), args["tables"].([]DataExportTable)), true
 	case "Query.fixtureDefinition":
 		if e.complexity.Query.FixtureDefinition == nil {
 			break
@@ -10122,6 +10220,80 @@ Exactly one of ` + "`" + `newProjectName` + "`" + ` or ` + "`" + `targetProjectI
 input EosImportOptionsInput {
   newProjectName: String
   targetProjectId: ID
+}
+
+# =============================================================================
+# DATA EXPORT (CSV / XLSX) TYPES
+# =============================================================================
+
+"File format for data-list exports."
+enum DataExportFormat {
+  CSV
+  XLSX
+}
+
+"""
+Exportable data lists. Scope (see DataExportTableInfo.scope):
+- FIXTURE_LIBRARY: none (global; projectId optional)
+- FIXTURE_TYPES, FIXTURES, LOOKS, EFFECTS, CUE_LISTS: project
+- LOOK_DETAILS: look (scopeId = look ID, required)
+- CUE_LIST_DETAILS: cueList (scopeId = cue list ID, required)
+- LOOK_BOARD_ENTRIES: lookBoard (scopeId = look board ID, optional; omit for all boards)
+"""
+enum DataExportTable {
+  FIXTURE_TYPES
+  FIXTURE_LIBRARY
+  FIXTURES
+  LOOKS
+  LOOK_DETAILS
+  EFFECTS
+  LOOK_BOARD_ENTRIES
+  CUE_LISTS
+  CUE_LIST_DETAILS
+}
+
+type DataExportTableInfo {
+  table: DataExportTable!
+  label: String!
+  "One of: none, project, look, cueList, lookBoard"
+  scope: String!
+  "Column headers. LOOK_DETAILS ends with a variable run of channel columns, shown as 'Ch 1 … Ch N'."
+  columns: [String!]!
+}
+
+type DataExportResult {
+  "Server-generated, sanitized filename: <project>-<table>[-<item>]-YYYY-MM-DD.(csv|xlsx)"
+  filename: String!
+  mimeType: String!
+  "File content, base64-encoded"
+  contentBase64: String!
+  "Number of data rows (excluding headers). For workbooks, the total across all tables."
+  rowCount: Int!
+}
+
+# Exports are read-only, so they are Queries.
+extend type Query {
+  "Lists the tables that can be exported as CSV/XLSX"
+  dataExportTables: [DataExportTableInfo!]!
+  """
+  Export one data list as CSV or XLSX. projectId may be null only for
+  FIXTURE_LIBRARY. scopeId selects the look / cue list / look board for
+  scoped tables and must belong to projectId. For FIXTURE_LIBRARY a
+  projectId, if given, is only access-checked; the library is global.
+  CSV is not a lossless round-trip format: text cells starting with
+  = + - @ tab, CR or LF get a leading ' to prevent formula injection.
+  XLSX stores text unchanged. Exports have no size limit by default; a
+  server configured with limits, or an XLSX sheet wider than Excel's
+  16,384 columns, fails with a "too large" error.
+  """
+  exportDataTable(projectId: ID, table: DataExportTable!, format: DataExportFormat!, scopeId: ID): DataExportResult!
+  """
+  Export several project-level tables as one XLSX workbook, one sheet per
+  table. Defaults to every project-level table when tables is omitted; an
+  explicit empty list is an error. Repeated tables are included once.
+  FIXTURE_LIBRARY and scoped tables cannot be included.
+  """
+  exportDataWorkbook(projectId: ID!, tables: [DataExportTable!]): DataExportResult!
 }
 
 # =============================================================================
@@ -13715,6 +13887,48 @@ func (ec *executionContext) field_Query_effects_args(ctx context.Context, rawArg
 		return nil, err
 	}
 	args["projectId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_exportDataTable_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "table", ec.unmarshalNDataExportTable2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportTable)
+	if err != nil {
+		return nil, err
+	}
+	args["table"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "format", ec.unmarshalNDataExportFormat2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportFormat)
+	if err != nil {
+		return nil, err
+	}
+	args["format"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "scopeId", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["scopeId"] = arg3
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_exportDataWorkbook_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "tables", ec.unmarshalODataExportTable2ᚕgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportTableᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["tables"] = arg1
 	return args, nil
 }
 
@@ -18928,6 +19142,238 @@ func (ec *executionContext) fieldContext_CuesWithLookInfoResponse_orphanLooks(_ 
 				return ec.fieldContext_LookSummary_updatedAt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type LookSummary", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DataExportResult_filename(ctx context.Context, field graphql.CollectedField, obj *DataExportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DataExportResult_filename,
+		func(ctx context.Context) (any, error) {
+			return obj.Filename, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DataExportResult_filename(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DataExportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DataExportResult_mimeType(ctx context.Context, field graphql.CollectedField, obj *DataExportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DataExportResult_mimeType,
+		func(ctx context.Context) (any, error) {
+			return obj.MimeType, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DataExportResult_mimeType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DataExportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DataExportResult_contentBase64(ctx context.Context, field graphql.CollectedField, obj *DataExportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DataExportResult_contentBase64,
+		func(ctx context.Context) (any, error) {
+			return obj.ContentBase64, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DataExportResult_contentBase64(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DataExportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DataExportResult_rowCount(ctx context.Context, field graphql.CollectedField, obj *DataExportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DataExportResult_rowCount,
+		func(ctx context.Context) (any, error) {
+			return obj.RowCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DataExportResult_rowCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DataExportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DataExportTableInfo_table(ctx context.Context, field graphql.CollectedField, obj *DataExportTableInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DataExportTableInfo_table,
+		func(ctx context.Context) (any, error) {
+			return obj.Table, nil
+		},
+		nil,
+		ec.marshalNDataExportTable2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportTable,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DataExportTableInfo_table(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DataExportTableInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type DataExportTable does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DataExportTableInfo_label(ctx context.Context, field graphql.CollectedField, obj *DataExportTableInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DataExportTableInfo_label,
+		func(ctx context.Context) (any, error) {
+			return obj.Label, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DataExportTableInfo_label(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DataExportTableInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DataExportTableInfo_scope(ctx context.Context, field graphql.CollectedField, obj *DataExportTableInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DataExportTableInfo_scope,
+		func(ctx context.Context) (any, error) {
+			return obj.Scope, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DataExportTableInfo_scope(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DataExportTableInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DataExportTableInfo_columns(ctx context.Context, field graphql.CollectedField, obj *DataExportTableInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DataExportTableInfo_columns,
+		func(ctx context.Context) (any, error) {
+			return obj.Columns, nil
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DataExportTableInfo_columns(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DataExportTableInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -45051,6 +45497,147 @@ func (ec *executionContext) fieldContext_Query_operation(ctx context.Context, fi
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_dataExportTables(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_dataExportTables,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().DataExportTables(ctx)
+		},
+		nil,
+		ec.marshalNDataExportTableInfo2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportTableInfoᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_dataExportTables(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "table":
+				return ec.fieldContext_DataExportTableInfo_table(ctx, field)
+			case "label":
+				return ec.fieldContext_DataExportTableInfo_label(ctx, field)
+			case "scope":
+				return ec.fieldContext_DataExportTableInfo_scope(ctx, field)
+			case "columns":
+				return ec.fieldContext_DataExportTableInfo_columns(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type DataExportTableInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_exportDataTable(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_exportDataTable,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().ExportDataTable(ctx, fc.Args["projectId"].(*string), fc.Args["table"].(DataExportTable), fc.Args["format"].(DataExportFormat), fc.Args["scopeId"].(*string))
+		},
+		nil,
+		ec.marshalNDataExportResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_exportDataTable(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "filename":
+				return ec.fieldContext_DataExportResult_filename(ctx, field)
+			case "mimeType":
+				return ec.fieldContext_DataExportResult_mimeType(ctx, field)
+			case "contentBase64":
+				return ec.fieldContext_DataExportResult_contentBase64(ctx, field)
+			case "rowCount":
+				return ec.fieldContext_DataExportResult_rowCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type DataExportResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_exportDataTable_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_exportDataWorkbook(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_exportDataWorkbook,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().ExportDataWorkbook(ctx, fc.Args["projectId"].(string), fc.Args["tables"].([]DataExportTable))
+		},
+		nil,
+		ec.marshalNDataExportResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_exportDataWorkbook(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "filename":
+				return ec.fieldContext_DataExportResult_filename(ctx, field)
+			case "mimeType":
+				return ec.fieldContext_DataExportResult_mimeType(ctx, field)
+			case "contentBase64":
+				return ec.fieldContext_DataExportResult_contentBase64(ctx, field)
+			case "rowCount":
+				return ec.fieldContext_DataExportResult_rowCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type DataExportResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_exportDataWorkbook_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query___type(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -55798,6 +56385,114 @@ func (ec *executionContext) _CuesWithLookInfoResponse(ctx context.Context, sel a
 	return out
 }
 
+var dataExportResultImplementors = []string{"DataExportResult"}
+
+func (ec *executionContext) _DataExportResult(ctx context.Context, sel ast.SelectionSet, obj *DataExportResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, dataExportResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DataExportResult")
+		case "filename":
+			out.Values[i] = ec._DataExportResult_filename(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "mimeType":
+			out.Values[i] = ec._DataExportResult_mimeType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "contentBase64":
+			out.Values[i] = ec._DataExportResult_contentBase64(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "rowCount":
+			out.Values[i] = ec._DataExportResult_rowCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var dataExportTableInfoImplementors = []string{"DataExportTableInfo"}
+
+func (ec *executionContext) _DataExportTableInfo(ctx context.Context, sel ast.SelectionSet, obj *DataExportTableInfo) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, dataExportTableInfoImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DataExportTableInfo")
+		case "table":
+			out.Values[i] = ec._DataExportTableInfo_table(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "label":
+			out.Values[i] = ec._DataExportTableInfo_label(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "scope":
+			out.Values[i] = ec._DataExportTableInfo_scope(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "columns":
+			out.Values[i] = ec._DataExportTableInfo_columns(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var deviceImplementors = []string{"Device"}
 
 func (ec *executionContext) _Device(ctx context.Context, sel ast.SelectionSet, obj *models.Device) graphql.Marshaler {
@@ -65152,6 +65847,72 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "dataExportTables":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_dataExportTables(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "exportDataTable":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_exportDataTable(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "exportDataWorkbook":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_exportDataWorkbook(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "__type":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___type(ctx, field)
@@ -68221,6 +68982,94 @@ func (ec *executionContext) marshalNCuesWithLookInfoResponse2ᚖgithubᚗcomᚋb
 		return graphql.Null
 	}
 	return ec._CuesWithLookInfoResponse(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNDataExportFormat2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportFormat(ctx context.Context, v any) (DataExportFormat, error) {
+	var res DataExportFormat
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNDataExportFormat2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportFormat(ctx context.Context, sel ast.SelectionSet, v DataExportFormat) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNDataExportResult2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportResult(ctx context.Context, sel ast.SelectionSet, v DataExportResult) graphql.Marshaler {
+	return ec._DataExportResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNDataExportResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportResult(ctx context.Context, sel ast.SelectionSet, v *DataExportResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._DataExportResult(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNDataExportTable2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportTable(ctx context.Context, v any) (DataExportTable, error) {
+	var res DataExportTable
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNDataExportTable2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportTable(ctx context.Context, sel ast.SelectionSet, v DataExportTable) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNDataExportTableInfo2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportTableInfoᚄ(ctx context.Context, sel ast.SelectionSet, v []*DataExportTableInfo) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNDataExportTableInfo2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportTableInfo(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNDataExportTableInfo2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportTableInfo(ctx context.Context, sel ast.SelectionSet, v *DataExportTableInfo) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._DataExportTableInfo(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNDevice2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐDevice(ctx context.Context, sel ast.SelectionSet, v models.Device) graphql.Marshaler {
@@ -72298,6 +73147,71 @@ func (ec *executionContext) marshalOCueListPlaybackStatus2ᚖgithubᚗcomᚋbber
 		return graphql.Null
 	}
 	return ec._CueListPlaybackStatus(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalODataExportTable2ᚕgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportTableᚄ(ctx context.Context, v any) ([]DataExportTable, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]DataExportTable, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNDataExportTable2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportTable(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalODataExportTable2ᚕgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportTableᚄ(ctx context.Context, sel ast.SelectionSet, v []DataExportTable) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNDataExportTable2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐDataExportTable(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) marshalODevice2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐDevice(ctx context.Context, sel ast.SelectionSet, v *models.Device) graphql.Marshaler {

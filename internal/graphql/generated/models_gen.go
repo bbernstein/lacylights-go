@@ -485,6 +485,25 @@ type CuesWithLookInfoResponse struct {
 	OrphanLooks []*LookSummary `json:"orphanLooks"`
 }
 
+type DataExportResult struct {
+	// Server-generated, sanitized filename: <project>-<table>[-<item>]-YYYY-MM-DD.(csv|xlsx)
+	Filename string `json:"filename"`
+	MimeType string `json:"mimeType"`
+	// File content, base64-encoded
+	ContentBase64 string `json:"contentBase64"`
+	// Number of data rows (excluding headers). For workbooks, the total across all tables.
+	RowCount int `json:"rowCount"`
+}
+
+type DataExportTableInfo struct {
+	Table DataExportTable `json:"table"`
+	Label string          `json:"label"`
+	// One of: none, project, look, cueList, lookBoard
+	Scope string `json:"scope"`
+	// Column headers. LOOK_DETAILS ends with a variable run of channel columns, shown as 'Ch 1 … Ch N'.
+	Columns []string `json:"columns"`
+}
+
 // Device authorization code for pre-authorizing devices.
 type DeviceAuthCode struct {
 	// The authorization code (6 digits)
@@ -1556,6 +1575,137 @@ func (e *CueListDataChangeType) UnmarshalJSON(b []byte) error {
 }
 
 func (e CueListDataChangeType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// File format for data-list exports.
+type DataExportFormat string
+
+const (
+	DataExportFormatCSV  DataExportFormat = "CSV"
+	DataExportFormatXlsx DataExportFormat = "XLSX"
+)
+
+var AllDataExportFormat = []DataExportFormat{
+	DataExportFormatCSV,
+	DataExportFormatXlsx,
+}
+
+func (e DataExportFormat) IsValid() bool {
+	switch e {
+	case DataExportFormatCSV, DataExportFormatXlsx:
+		return true
+	}
+	return false
+}
+
+func (e DataExportFormat) String() string {
+	return string(e)
+}
+
+func (e *DataExportFormat) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = DataExportFormat(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid DataExportFormat", str)
+	}
+	return nil
+}
+
+func (e DataExportFormat) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *DataExportFormat) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e DataExportFormat) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Exportable data lists. Scope (see DataExportTableInfo.scope):
+// - FIXTURE_LIBRARY: none (global; projectId optional)
+// - FIXTURE_TYPES, FIXTURES, LOOKS, EFFECTS, CUE_LISTS: project
+// - LOOK_DETAILS: look (scopeId = look ID, required)
+// - CUE_LIST_DETAILS: cueList (scopeId = cue list ID, required)
+// - LOOK_BOARD_ENTRIES: lookBoard (scopeId = look board ID, optional; omit for all boards)
+type DataExportTable string
+
+const (
+	DataExportTableFixtureTypes     DataExportTable = "FIXTURE_TYPES"
+	DataExportTableFixtureLibrary   DataExportTable = "FIXTURE_LIBRARY"
+	DataExportTableFixtures         DataExportTable = "FIXTURES"
+	DataExportTableLooks            DataExportTable = "LOOKS"
+	DataExportTableLookDetails      DataExportTable = "LOOK_DETAILS"
+	DataExportTableEffects          DataExportTable = "EFFECTS"
+	DataExportTableLookBoardEntries DataExportTable = "LOOK_BOARD_ENTRIES"
+	DataExportTableCueLists         DataExportTable = "CUE_LISTS"
+	DataExportTableCueListDetails   DataExportTable = "CUE_LIST_DETAILS"
+)
+
+var AllDataExportTable = []DataExportTable{
+	DataExportTableFixtureTypes,
+	DataExportTableFixtureLibrary,
+	DataExportTableFixtures,
+	DataExportTableLooks,
+	DataExportTableLookDetails,
+	DataExportTableEffects,
+	DataExportTableLookBoardEntries,
+	DataExportTableCueLists,
+	DataExportTableCueListDetails,
+}
+
+func (e DataExportTable) IsValid() bool {
+	switch e {
+	case DataExportTableFixtureTypes, DataExportTableFixtureLibrary, DataExportTableFixtures, DataExportTableLooks, DataExportTableLookDetails, DataExportTableEffects, DataExportTableLookBoardEntries, DataExportTableCueLists, DataExportTableCueListDetails:
+		return true
+	}
+	return false
+}
+
+func (e DataExportTable) String() string {
+	return string(e)
+}
+
+func (e *DataExportTable) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = DataExportTable(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid DataExportTable", str)
+	}
+	return nil
+}
+
+func (e DataExportTable) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *DataExportTable) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e DataExportTable) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

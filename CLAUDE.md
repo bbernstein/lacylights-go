@@ -118,6 +118,29 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
   `targetProjectId` (append) — they are mutually exclusive and the resolver
   returns an error if both are set.
 
+### Data Export (CSV / XLSX)
+- Package: `internal/services/export_tables/` (Go package `exporttables`)
+- Table registry (`tables.go`, `tables_detail.go`): each table has an ID matching
+  the `DataExportTable` GraphQL enum, a label, filename slug, scope
+  (`none | project | look | cueList | lookBoard`) and columns. Add new list
+  exports by registering a table there.
+- `Service.Build` validates scope and checks that `scopeId` belongs to the project.
+- Writers: `EncodeCSV` (UTF-8 BOM, formula-injection escaping of string cells) and
+  `EncodeXLSX` (excelize; bold frozen header, typed numbers, unique ≤31-char sheet names).
+- GraphQL surface (Queries, read-only): `dataExportTables`, `exportDataTable`,
+  `exportDataWorkbook` in `internal/graphql/resolvers/data_export_resolvers.go`.
+- Workbooks contain project tables only (scoped tables and `FIXTURE_LIBRARY` are rejected).
+- Size limits are **opt-in** (LacyLights is mainly in-house; large projects must export, fast).
+  `Service.MaxRows`, `MaxCells` and `MaxBytes` default to 0 = unlimited, and the pre-build COUNT
+  estimates (`RowCounter`) only run when `MaxRows` is set. `MaxExport*` constants are suggested
+  values for a restricted deployment such as a public demo. Over a configured limit returns
+  `ErrTooManyRows` / `ErrTooLarge`.
+- XLSX sheets wider than 16,384 columns (Excel's limit) return `ErrTooLarge`; CSV has no such limit.
+- At most `MaxConcurrentExports` exports build/encode at once (`Service.Acquire`).
+- Batch `IN ?` lookups are chunked (`chunkIDs`, 500 IDs) to stay under SQLite's bind-variable limit.
+- Row builders must batch lookups (`CountFixturesByLookIDs`, `FindDefinitionsByIDs`, ...)
+  rather than querying once per row.
+
 ## Testing Guidelines
 
 - Unit tests alongside code: `foo_test.go` next to `foo.go`

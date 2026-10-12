@@ -50,8 +50,14 @@ func (r *LookRepository) FindByIDs(ctx context.Context, ids []string) ([]models.
 		return []models.Look{}, nil
 	}
 	var looks []models.Look
-	result := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&looks)
-	return looks, result.Error
+	for _, chunk := range chunkIDs(ids) {
+		var part []models.Look
+		if err := r.db.WithContext(ctx).Where("id IN ?", chunk).Find(&part).Error; err != nil {
+			return nil, err
+		}
+		looks = append(looks, part...)
+	}
+	return looks, nil
 }
 
 // Create creates a new look.
