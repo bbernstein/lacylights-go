@@ -275,9 +275,8 @@ func (s *Service) WorkbookTables() []TableID {
 // BuildWorkbook builds one sheet per table (plus any extra sheets) for a
 // project. When ids is empty WorkbookTables is used. Tables that need a
 // scope ID, and global tables such as FIXTURE_LIBRARY, cannot be part of a
-// workbook. Sheet names are made valid and
-// unique. The returned row count is the total number of data rows across
-// the primary sheets.
+// workbook. Sheet names are made valid and unique. The returned row count
+// is the total number of data rows across the primary sheets.
 func (s *Service) BuildWorkbook(ctx context.Context, projectID string, ids []TableID) ([]Sheet, int, error) {
 	if projectID == "" {
 		return nil, 0, ErrProjectRequired
