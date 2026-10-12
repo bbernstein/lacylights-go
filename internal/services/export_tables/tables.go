@@ -63,7 +63,7 @@ func buildFixtures(ctx context.Context, s *Service, projectID, _ string) (*Table
 	if err != nil {
 		return nil, err
 	}
-	channels, err := s.repos.Fixtures.GetInstanceChannelsByFixtureIDs(ctx, fixtureIDs(fixtures))
+	channels, err := s.repos.Fixtures.GetInstanceChannelsByFixtureIDs(ctx, idsNeedingChannelFallback(fixtures))
 	if err != nil {
 		return nil, err
 	}
@@ -285,10 +285,15 @@ func (s *Service) fixtureGroupNames(ctx context.Context, projectID string) (map[
 	return out, nil
 }
 
-func fixtureIDs(fixtures []models.FixtureInstance) []string {
-	ids := make([]string, len(fixtures))
+// idsNeedingChannelFallback returns the IDs of fixtures without a positive
+// denormalised channel count: the only ones whose instance channels
+// fixtureChannelCount needs.
+func idsNeedingChannelFallback(fixtures []models.FixtureInstance) []string {
+	var ids []string
 	for i := range fixtures {
-		ids[i] = fixtures[i].ID
+		if c := fixtures[i].ChannelCount; c == nil || *c <= 0 {
+			ids = append(ids, fixtures[i].ID)
+		}
 	}
 	return ids
 }

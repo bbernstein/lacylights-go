@@ -408,3 +408,37 @@ func TestEstimateRows_ExactForCollapsedAndFilteredTables(t *testing.T) {
 		s.svc.MaxRows = MaxExportRows
 	}
 }
+
+// A foreign scope ID gets ErrScopeNotFound even when its table would be
+// over the cap: the error must not reveal the foreign item's row count.
+func TestBuild_ForeignScopeCheckedBeforeSizing(t *testing.T) {
+	s := newSeededService(t)
+	ctx := context.Background()
+	s.svc.MaxRows = 0
+	cases := map[TableID]string{
+		TableLookDetails:      s.otherLook,
+		TableCueListDetails:   s.otherCueList,
+		TableLookBoardEntries: s.otherBoard,
+	}
+	for id, scope := range cases {
+		_, err := s.svc.Build(ctx, id, s.projectID, scope)
+		if !errors.Is(err, ErrScopeNotFound) {
+			t.Errorf("%s err = %v", id, err)
+		}
+		if _, err := s.svc.Build(ctx, id, s.projectID, "missing"); !errors.Is(err, ErrScopeNotFound) {
+			t.Errorf("%s missing err = %v", id, err)
+		}
+	}
+}
+
+func TestIDsNeedingChannelFallback(t *testing.T) {
+	fixtures := []models.FixtureInstance{
+		{ID: "a", ChannelCount: ptr(3)},
+		{ID: "b"},
+		{ID: "c", ChannelCount: ptr(0)},
+	}
+	got := idsNeedingChannelFallback(fixtures)
+	if strings.Join(got, ",") != "b,c" {
+		t.Errorf("got %v", got)
+	}
+}

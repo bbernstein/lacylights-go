@@ -158,7 +158,11 @@ func (c *RowCounter) CountProjectFixtureTypes(ctx context.Context, projectID str
 func (c *RowCounter) CountLibraryRows(ctx context.Context) (int, error) {
 	var modes, bare int64
 	db := c.db.WithContext(ctx)
-	if err := db.Model(&models.FixtureMode{}).Count(&modes).Error; err != nil {
+	// Only modes of existing definitions are exported; deleting a
+	// definition does not delete its modes.
+	if err := db.Model(&models.FixtureMode{}).
+		Where("EXISTS (SELECT 1 FROM fixture_definitions WHERE fixture_definitions.id = fixture_modes.definition_id)").
+		Count(&modes).Error; err != nil {
 		return 0, err
 	}
 	if err := db.Model(&models.FixtureDefinition{}).
@@ -180,4 +184,18 @@ func (c *RowCounter) CountLookFixturesInProject(ctx context.Context, lookID, pro
 		Where("fixture_values.look_id = ? AND fixture_instances.project_id = ?", lookID, projectID).
 		Count(&n).Error
 	return int(n), err
+}
+
+// GetFixtureValuesInProject returns a look's fixture values whose fixture
+// belongs to the project, ordered by look order. Dangling and
+// cross-project references are never loaded.
+func (r *LookRepository) GetFixtureValuesInProject(ctx context.Context, lookID, projectID string) ([]models.FixtureValue, error) {
+	var values []models.FixtureValue
+	err := r.db.WithContext(ctx).
+		Select("fixture_values.*").
+		Joins("JOIN fixture_instances ON fixture_instances.id = fixture_values.fixture_id").
+		Where("fixture_values.look_id = ? AND fixture_instances.project_id = ?", lookID, projectID).
+		Order("fixture_values.look_order ASC").
+		Find(&values).Error
+	return values, err
 }

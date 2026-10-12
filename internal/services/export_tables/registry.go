@@ -286,6 +286,11 @@ func (s *Service) Build(ctx context.Context, id TableID, projectID, scopeID stri
 	if scopeID != "" && !t.AcceptsScopeID() {
 		return nil, fmt.Errorf("%w: %s", ErrScopeNotAllowed, id)
 	}
+	// Check scope ownership before sizing, so a foreign scope ID gets
+	// ErrScopeNotFound rather than an error revealing its row count.
+	if err := s.checkScope(ctx, t, projectID, scopeID); err != nil {
+		return nil, err
+	}
 	n, err := s.estimateRows(ctx, t, projectID, scopeID)
 	if err != nil {
 		return nil, err
@@ -301,6 +306,47 @@ func (s *Service) Build(ctx context.Context, id TableID, projectID, scopeID stri
 		return nil, fmt.Errorf("%w: %s has %d rows", ErrTooManyRows, id, len(data.Rows))
 	}
 	return data, nil
+}
+
+// checkScope verifies that scopeID (when given) names an item of t's
+// scope type in the project. Builders re-check this when loading the item.
+func (s *Service) checkScope(ctx context.Context, t *Table, projectID, scopeID string) error {
+	if scopeID == "" {
+		return nil
+	}
+	var owner string
+	switch t.Scope {
+	case ScopeLook:
+		l, err := s.repos.Looks.FindByID(ctx, scopeID)
+		if err != nil {
+			return err
+		}
+		if l != nil {
+			owner = l.ProjectID
+		}
+	case ScopeCueList:
+		cl, err := s.repos.CueLists.FindByID(ctx, scopeID)
+		if err != nil {
+			return err
+		}
+		if cl != nil {
+			owner = cl.ProjectID
+		}
+	case ScopeLookBoard:
+		b, err := s.repos.LookBoards.FindByID(ctx, scopeID)
+		if err != nil {
+			return err
+		}
+		if b != nil {
+			owner = b.ProjectID
+		}
+	default:
+		return nil
+	}
+	if owner == "" || owner != projectID {
+		return fmt.Errorf("%w: %s", ErrScopeNotFound, scopeID)
+	}
+	return nil
 }
 
 // estimateRows returns an upper bound on t's row count, or 0 when no

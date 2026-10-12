@@ -222,3 +222,40 @@ func TestRowCounter_ExactExportCounts(t *testing.T) {
 		t.Errorf("look fixtures = %d, %v", n, err)
 	}
 }
+
+func TestOrphanModesAndProjectFixtureValues(t *testing.T) {
+	tdb, cleanup := setupTestDB(t)
+	defer cleanup()
+	db := tdb.DB
+	ctx := context.Background()
+
+	// An orphaned mode (its definition was deleted) is not a library row.
+	if err := db.Create(&models.FixtureDefinition{ID: "d1"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&[]models.FixtureMode{{ID: "m1", DefinitionID: "d1"}, {ID: "m2", DefinitionID: "deleted"}}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if n, err := NewRowCounter(db).CountLibraryRows(ctx); err != nil || n != 1 {
+		t.Errorf("library rows = %d, %v", n, err)
+	}
+
+	// Only fixture values whose fixture is in the project are loaded, in
+	// look order.
+	if err := db.Create(&[]models.FixtureInstance{{ID: "a", ProjectID: "p"}, {ID: "b", ProjectID: "p"}, {ID: "x", ProjectID: "q"}}).Error; err != nil {
+		t.Fatal(err)
+	}
+	one, two := 1, 2
+	if err := db.Create(&[]models.FixtureValue{
+		{ID: "v1", LookID: "L", FixtureID: "b", LookOrder: &two},
+		{ID: "v2", LookID: "L", FixtureID: "a", LookOrder: &one},
+		{ID: "v3", LookID: "L", FixtureID: "x"},
+		{ID: "v4", LookID: "L", FixtureID: "gone"},
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	vals, err := NewLookRepository(db).GetFixtureValuesInProject(ctx, "L", "p")
+	if err != nil || len(vals) != 2 || vals[0].FixtureID != "a" || vals[1].FixtureID != "b" {
+		t.Errorf("values = %+v, %v", vals, err)
+	}
+}

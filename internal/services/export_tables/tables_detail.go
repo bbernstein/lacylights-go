@@ -64,7 +64,7 @@ func buildFixtureTypes(ctx context.Context, s *Service, projectID, _ string) (*T
 	if err != nil {
 		return nil, err
 	}
-	channels, err := s.repos.Fixtures.GetInstanceChannelsByFixtureIDs(ctx, fixtureIDs(fixtures))
+	channels, err := s.repos.Fixtures.GetInstanceChannelsByFixtureIDs(ctx, idsNeedingChannelFallback(fixtures))
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +217,7 @@ func buildLookDetails(ctx context.Context, s *Service, projectID, scopeID string
 	if look == nil || look.ProjectID != projectID {
 		return nil, fmt.Errorf("%w: look %s", ErrScopeNotFound, scopeID)
 	}
-	values, err := s.repos.Looks.GetFixtureValues(ctx, look.ID)
+	values, err := s.repos.Looks.GetFixtureValuesInProject(ctx, look.ID, projectID)
 	if err != nil {
 		return nil, err
 	}
