@@ -52,11 +52,31 @@ func WriteCSV(w io.Writer, cols []Column, rows [][]any) error {
 
 // EncodeCSV returns the CSV encoding of a table's primary sheet.
 func EncodeCSV(cols []Column, rows [][]any) ([]byte, error) {
-	var buf bytes.Buffer
-	if err := WriteCSV(&buf, cols, rows); err != nil {
+	return encodeCSV(cols, rows, math.MaxInt)
+}
+
+// encodeCSV is EncodeCSV with the output capped at maxBytes (ErrTooLarge).
+func encodeCSV(cols []Column, rows [][]any, maxBytes int) ([]byte, error) {
+	buf := &cappedBuffer{max: maxBytes}
+	if err := WriteCSV(buf, cols, rows); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// cappedBuffer is a bytes.Buffer that fails with ErrTooLarge once a write
+// would take it past max bytes, so an oversized export stops encoding
+// early instead of being built in full and rejected afterwards.
+type cappedBuffer struct {
+	bytes.Buffer
+	max int
+}
+
+func (b *cappedBuffer) Write(p []byte) (int, error) {
+	if len(p) > b.max-b.Len() {
+		return 0, fmt.Errorf("%w: file exceeds %d bytes", ErrTooLarge, b.max)
+	}
+	return b.Buffer.Write(p)
 }
 
 // csvCell formats a cell value. Only string values are formula-escaped.

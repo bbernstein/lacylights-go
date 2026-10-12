@@ -183,6 +183,8 @@ var (
 	// ErrNoTables is returned when a workbook is requested with an
 	// explicitly empty table list (omit the list to get the defaults).
 	ErrNoTables = errors.New("at least one table is required; omit tables to export the default set")
+	// ErrTooLarge is returned when an encoded export exceeds MaxBytes.
+	ErrTooLarge = errors.New("export file is too large")
 	// ErrTooManyRows is returned when an export exceeds MaxExportRows.
 	ErrTooManyRows = errors.New("export is too large")
 )
@@ -195,19 +197,23 @@ var (
 // 1,048,576-row sheet limit.
 const MaxExportRows = 100_000
 
-// MaxExportBytes caps the size of an encoded export file (before base64,
-// which adds about a third). Rows bound the count of values but not their
-// length, since text fields such as descriptions are unbounded, so the
-// encoded size is checked too.
-const MaxExportBytes = 50 << 20 // 50 MiB
+// MaxExportBytes caps the size of an encoded export file. Base64 in the
+// GraphQL response adds about a third, so the response stays under ~27 MB.
+// Rows bound the count of values but not their length (text fields such as
+// descriptions are unbounded), so the encoded size is capped too, while
+// encoding.
+const MaxExportBytes = 20 << 20 // 20 MiB
 
-// CheckEncodedSize returns ErrTooManyRows when an encoded export exceeds
-// MaxBytes.
-func (s *Service) CheckEncodedSize(n int) error {
-	if n > s.MaxBytes {
-		return fmt.Errorf("%w: file is %d bytes (limit %d)", ErrTooManyRows, n, s.MaxBytes)
-	}
-	return nil
+// EncodeCSV encodes a table as CSV, failing with ErrTooLarge as soon as
+// the output would exceed MaxBytes.
+func (s *Service) EncodeCSV(cols []Column, rows [][]any) ([]byte, error) {
+	return encodeCSV(cols, rows, s.MaxBytes)
+}
+
+// EncodeXLSX encodes sheets as XLSX, failing with ErrTooLarge when the
+// output would exceed MaxBytes.
+func (s *Service) EncodeXLSX(sheets []Sheet) ([]byte, error) {
+	return encodeXLSX(sheets, s.MaxBytes)
 }
 
 // MaxExportCells caps the cells of a dynamic-width table (LOOK_DETAILS),

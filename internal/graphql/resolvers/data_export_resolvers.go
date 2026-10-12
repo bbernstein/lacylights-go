@@ -99,18 +99,15 @@ func (r *Resolver) exportDataTable(ctx context.Context, projectID *string, table
 	)
 	switch format {
 	case generated.DataExportFormatCSV:
-		content, err = exporttables.EncodeCSV(data.Columns, data.Rows)
+		content, err = r.DataExportService.EncodeCSV(data.Columns, data.Rows)
 		ext, mimeType = exporttables.ExtCSV, exporttables.MimeCSV
 	case generated.DataExportFormatXlsx:
-		content, err = exporttables.EncodeXLSX(data.Sheets(t.Label))
+		content, err = r.DataExportService.EncodeXLSX(data.Sheets(t.Label))
 		ext, mimeType = exporttables.ExtXLSX, exporttables.MimeXLSX
 	default:
 		return nil, fmt.Errorf("unsupported export format: %s", format)
 	}
 	if err != nil {
-		return nil, err
-	}
-	if err := r.DataExportService.CheckEncodedSize(len(content)); err != nil {
 		return nil, err
 	}
 
@@ -154,11 +151,8 @@ func (r *Resolver) exportDataWorkbook(ctx context.Context, projectID string, tab
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	content, err := exporttables.EncodeXLSX(sheets)
+	content, err := r.DataExportService.EncodeXLSX(sheets)
 	if err != nil {
-		return nil, err
-	}
-	if err := r.DataExportService.CheckEncodedSize(len(content)); err != nil {
 		return nil, err
 	}
 	return &generated.DataExportResult{

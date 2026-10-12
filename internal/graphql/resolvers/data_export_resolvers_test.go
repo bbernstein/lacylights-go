@@ -500,7 +500,7 @@ func TestExportData_EncodedSizeCap(t *testing.T) {
 	q := r.Query().(*queryResolver)
 	r.DataExportService.MaxBytes = 10
 	_, err := q.ExportDataTable(context.Background(), &s.projectID, generated.DataExportTableFixtures, generated.DataExportFormatCSV, nil)
-	require.ErrorIs(t, err, exporttables.ErrTooManyRows)
+	require.ErrorIs(t, err, exporttables.ErrTooLarge)
 	_, err = q.ExportDataWorkbook(context.Background(), s.projectID, nil)
-	require.ErrorIs(t, err, exporttables.ErrTooManyRows)
+	require.ErrorIs(t, err, exporttables.ErrTooLarge)
 }

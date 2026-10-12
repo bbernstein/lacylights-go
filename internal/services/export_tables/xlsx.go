@@ -1,8 +1,8 @@
 package exporttables
 
 import (
-	"bytes"
 	"fmt"
+	"math"
 	"strings"
 	"unicode/utf8"
 
@@ -33,6 +33,12 @@ const invalidSheetNameChars = `[]:*?/\`
 // formulas). Sheet names must already be valid and unique (see
 // UniqueSheetNames); EncodeXLSX applies UniqueSheetNames defensively.
 func EncodeXLSX(sheets []Sheet) ([]byte, error) {
+	return encodeXLSX(sheets, math.MaxInt)
+}
+
+// encodeXLSX is EncodeXLSX with the output capped at maxBytes
+// (ErrTooLarge).
+func encodeXLSX(sheets []Sheet, maxBytes int) ([]byte, error) {
 	if len(sheets) == 0 {
 		return nil, fmt.Errorf("xlsx: at least one sheet is required")
 	}
@@ -60,8 +66,8 @@ func EncodeXLSX(sheets []Sheet) ([]byte, error) {
 	}
 	f.SetActiveSheet(0)
 
-	var buf bytes.Buffer
-	if err := f.Write(&buf); err != nil {
+	buf := &cappedBuffer{max: maxBytes}
+	if err := f.Write(buf); err != nil {
 		return nil, fmt.Errorf("xlsx: write: %w", err)
 	}
 	return buf.Bytes(), nil

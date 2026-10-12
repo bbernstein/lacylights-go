@@ -492,16 +492,31 @@ func TestAcquire_CancelledContextWithFreeSlot(t *testing.T) {
 	}
 }
 
-func TestCheckEncodedSize(t *testing.T) {
+func TestEncode_ByteCap(t *testing.T) {
 	svc := NewService(Repos{})
 	if svc.MaxBytes != MaxExportBytes {
 		t.Error("default MaxBytes")
 	}
-	svc.MaxBytes = 10
-	if err := svc.CheckEncodedSize(10); err != nil {
-		t.Errorf("at limit: %v", err)
+	cols := []Column{{"a", "Name"}}
+	rows := [][]any{{strings.Repeat("x", 100)}}
+	svc.MaxBytes = 50
+	if _, err := svc.EncodeCSV(cols, rows); !errors.Is(err, ErrTooLarge) {
+		t.Errorf("csv err = %v", err)
 	}
-	if err := svc.CheckEncodedSize(11); !errors.Is(err, ErrTooManyRows) {
-		t.Errorf("over limit: %v", err)
+	if _, err := svc.EncodeXLSX([]Sheet{{Name: "S", Columns: cols, Rows: rows}}); !errors.Is(err, ErrTooLarge) {
+		t.Errorf("xlsx err = %v", err)
+	}
+	svc.MaxBytes = MaxExportBytes
+	if _, err := svc.EncodeCSV(cols, rows); err != nil {
+		t.Errorf("csv under cap: %v", err)
+	}
+	if _, err := svc.EncodeXLSX([]Sheet{{Name: "S", Columns: cols, Rows: rows}}); err != nil {
+		t.Errorf("xlsx under cap: %v", err)
+	}
+	// Exactly at the cap is allowed.
+	full, _ := EncodeCSV(cols, rows)
+	svc.MaxBytes = len(full)
+	if _, err := svc.EncodeCSV(cols, rows); err != nil {
+		t.Errorf("at cap: %v", err)
 	}
 }
