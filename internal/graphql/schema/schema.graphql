@@ -2435,7 +2435,7 @@ type Query {
   # their implementation.
   "Export a project as LacyLights JSON"
   projectExport(projectId: ID!, options: ExportOptionsInput): ExportResult!
-  "Export a project as a QLC+ workspace"
+  "Export a project as a QLC+ workspace (not available on all platforms; currently always returns an error)"
   projectExportQLC(
     projectId: ID!
     fixtureMappings: [FixtureMappingInput!]
@@ -2754,7 +2754,7 @@ type Mutation {
 
   # Native LacyLights Import/Export
   exportProject(projectId: ID!, options: ExportOptionsInput): ExportResult!
-    @deprecated(reason: "Use Query.projectExport*")
+    @deprecated(reason: "Use Query.projectExport")
   importProject(jsonContent: String!, options: ImportOptionsInput!): ImportResult!
 
   # QLC+ Import/Export (data-modifying operations)
@@ -2765,7 +2765,7 @@ type Mutation {
   exportProjectToQLC(
     projectId: ID!
     fixtureMappings: [FixtureMappingInput!]
-  ): QLCExportResult! @deprecated(reason: "Use Query.projectExport*")
+  ): QLCExportResult! @deprecated(reason: "Use Query.projectExportQLC")
 
   # ETC Eos ASCII Import/Export
   importProjectFromEos(
@@ -2773,7 +2773,7 @@ type Mutation {
     options: EosImportOptionsInput
   ): EosImportResult!
   exportProjectToEos(projectId: ID!): EosExportResult!
-    @deprecated(reason: "Use Query.projectExport*")
+    @deprecated(reason: "Use Query.projectExportEos")
 
   # Settings
   updateSetting(input: UpdateSettingInput!): Setting!

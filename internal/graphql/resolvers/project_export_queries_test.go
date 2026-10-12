@@ -136,7 +136,12 @@ func TestProjectExportQueries_AccessControl(t *testing.T) {
 	_, err = q.ProjectExportEos(outsider, project.ID)
 	require.ErrorIs(t, err, ErrNotAuthorized)
 
-	_, err = q.ProjectExport(context.Background(), project.ID, nil)
+	anon := context.Background()
+	_, err = q.ProjectExport(anon, project.ID, nil)
+	require.ErrorIs(t, err, ErrNotAuthenticated)
+	_, err = q.ProjectExportQlc(anon, project.ID, nil)
+	require.ErrorIs(t, err, ErrNotAuthenticated)
+	_, err = q.ProjectExportEos(anon, project.ID)
 	require.ErrorIs(t, err, ErrNotAuthenticated)
 
 	member := createMemberContext("member", "m@test.com", groupID)
@@ -170,8 +175,12 @@ func TestExportMutations_Deprecated(t *testing.T) {
 			deprecated[f.Name] = *f.DeprecationReason
 		}
 	}
-	for _, name := range []string{"exportProject", "exportProjectToQLC", "exportProjectToEos"} {
-		require.Equal(t, "Use Query.projectExport*", deprecated[name], name)
+	for name, reason := range map[string]string{
+		"exportProject":      "Use Query.projectExport",
+		"exportProjectToQLC": "Use Query.projectExportQLC",
+		"exportProjectToEos": "Use Query.projectExportEos",
+	} {
+		require.Equal(t, reason, deprecated[name], name)
 	}
 	require.NotContains(t, deprecated, "importProject")
 }

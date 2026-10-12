@@ -76,6 +76,7 @@ func (r *Resolver) exportProjectJSON(ctx context.Context, projectID string, opti
 // exportProjectQLC exports a project as a QLC+ workspace. QLC+ export is
 // not available on this platform; access is still checked first so the
 // error does not leak project existence to unauthorized callers.
+// TODO: wire fixtureMappings through once a QLC+ exporter exists.
 func (r *Resolver) exportProjectQLC(ctx context.Context, projectID string, _ []*generated.FixtureMappingInput) (*generated.QLCExportResult, error) {
 	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
 		return nil, err
@@ -85,11 +86,13 @@ func (r *Resolver) exportProjectQLC(ctx context.Context, projectID string, _ []*
 
 // exportProjectEos exports a project as ETC Eos ASCII.
 func (r *Resolver) exportProjectEos(ctx context.Context, projectID string) (*generated.EosExportResult, error) {
-	if r.EosExportService == nil {
-		return nil, fmt.Errorf("eos export not available on this platform")
-	}
+	// Check access first, matching exportProjectQLC, so unauthorized callers
+	// learn nothing about the server's capabilities.
 	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
 		return nil, err
+	}
+	if r.EosExportService == nil {
+		return nil, fmt.Errorf("eos export not available on this platform")
 	}
 	res, err := r.EosExportService.Export(ctx, projectID)
 	if err != nil {
