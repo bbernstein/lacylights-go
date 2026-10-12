@@ -3,6 +3,7 @@ package resolvers
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/99designs/gqlgen/client"
 	"github.com/lucsky/cuid"
@@ -183,4 +184,52 @@ func TestExportMutations_Deprecated(t *testing.T) {
 		require.Equal(t, reason, deprecated[name], name)
 	}
 	require.NotContains(t, deprecated, "importProject")
+}
+
+// TestAcquireProjectExportSlot checks the shared project export bound:
+// at most MaxConcurrentProjectExports run at once, JSON and Eos exports
+// wait for a slot while their context lives, and releasing frees a slot.
+func TestAcquireProjectExportSlot(t *testing.T) {
+	r, cleanup := setupGroupAdminTestResolver(t, false)
+	defer cleanup()
+	project := &models.Project{ID: cuid.New(), Name: "Busy"}
+	require.NoError(t, r.ProjectRepo.Create(context.Background(), project))
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := acquireProjectExportSlot(cancelled)
+	require.ErrorIs(t, err, context.Canceled)
+
+	releases := make([]func(), 0, MaxConcurrentProjectExports)
+	for range MaxConcurrentProjectExports {
+		release, err := acquireProjectExportSlot(context.Background())
+		require.NoError(t, err)
+		releases = append(releases, release)
+	}
+
+	short := func() context.Context {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		t.Cleanup(cancel)
+		return ctx
+	}
+	_, err = acquireProjectExportSlot(short())
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	_, err = r.exportProjectJSON(short(), project.ID, nil)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	_, err = r.exportProjectEos(short(), project.ID)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+
+	releases[0]()
+	res, err := r.exportProjectJSON(context.Background(), project.ID, nil)
+	require.NoError(t, err)
+	require.Equal(t, "Busy", res.ProjectName)
+	for _, rel := range releases[1:] {
+		rel()
+	}
+	// Every slot is free again.
+	for range MaxConcurrentProjectExports {
+		release, err := acquireProjectExportSlot(context.Background())
+		require.NoError(t, err)
+		defer release()
+	}
 }

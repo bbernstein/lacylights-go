@@ -12,11 +12,44 @@ import (
 // projectExportEos) and as the deprecated Mutation fields (exportProject,
 // exportProjectToQLC, exportProjectToEos) kept for older clients.
 
+// MaxConcurrentProjectExports is how many whole-project exports (JSON or
+// Eos) may run at once. As Queries, aliased root fields are resolved
+// concurrently by gqlgen (Mutation root fields are serialized), so without
+// a bound one request could start many full-project scans in parallel.
+// This bounds concurrency only; it is not a size limit.
+const MaxConcurrentProjectExports = 2
+
+// projectExportSlots is shared by every Resolver in the process, so the
+// bound holds across requests as well as across aliases in one request.
+var projectExportSlots = make(chan struct{}, MaxConcurrentProjectExports)
+
+// acquireProjectExportSlot waits for a project export slot. It returns
+// ctx.Err() if the context ends first. Call the returned release function
+// when the export is finished.
+func acquireProjectExportSlot(ctx context.Context) (func(), error) {
+	// select picks randomly among ready cases, so check cancellation
+	// first: an already-cancelled request must not take a free slot.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	select {
+	case projectExportSlots <- struct{}{}:
+		return func() { <-projectExportSlots }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
 // exportProjectJSON exports a project as LacyLights JSON.
 func (r *Resolver) exportProjectJSON(ctx context.Context, projectID string, options *generated.ExportOptionsInput) (*generated.ExportResult, error) {
 	if err := r.ensureProjectAccess(ctx, projectID); err != nil {
 		return nil, err
 	}
+	release, err := acquireProjectExportSlot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	// Get project first to get name
 	project, err := r.ProjectRepo.FindByID(ctx, projectID)
 	if err != nil {
@@ -94,6 +127,11 @@ func (r *Resolver) exportProjectEos(ctx context.Context, projectID string) (*gen
 	if r.EosExportService == nil {
 		return nil, fmt.Errorf("eos export not available on this platform")
 	}
+	release, err := acquireProjectExportSlot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	res, err := r.EosExportService.Export(ctx, projectID)
 	if err != nil {
 		return nil, err

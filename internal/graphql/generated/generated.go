@@ -11120,7 +11120,11 @@ type Query {
     projectId: ID!
     fixtureMappings: [FixtureMappingInput!]
   ): QLCExportResult!
-  "Export a project as ETC Eos ASCII"
+  """
+  Export a project as ETC Eos ASCII. On first export, fixture groups without
+  an Eos group number are assigned one and it is saved, so later exports stay
+  stable. This is idempotent: once every group has a number, nothing is written.
+  """
   projectExportEos(projectId: ID!): EosExportResult!
 
   # Version Management

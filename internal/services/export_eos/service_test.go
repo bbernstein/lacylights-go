@@ -3,7 +3,9 @@ package exporteos
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
@@ -550,5 +552,80 @@ func TestExport_SidecarFadeBehavior(t *testing.T) {
 	}
 	if !strings.Contains(res.Content, `"instanceRefId":"`+fi.RefID+`"`) {
 		t.Errorf("instanceRefId not %s in output", fi.RefID)
+	}
+}
+
+// TestExport_ConcurrentAutoAssignIsStable checks that concurrent exports of
+// a project with unnumbered groups (e.g. aliased projectExportEos Query
+// fields, which gqlgen resolves in parallel) all succeed, produce the same
+// output, and assign each group exactly one number.
+func TestExport_ConcurrentAutoAssignIsStable(t *testing.T) {
+	deps := newTestDeps(t)
+	defer deps.close()
+	// One connection keeps every goroutine on the same in-memory database.
+	sqlDB, err := deps.db.DB()
+	if err != nil {
+		t.Fatalf("db: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+	ctx := context.Background()
+
+	proj := &models.Project{Name: "C"}
+	if err := deps.projectRepo.Create(ctx, proj); err != nil {
+		t.Fatalf("project: %v", err)
+	}
+	def := &models.FixtureDefinition{Manufacturer: "Generic", Model: "Dimmer", Type: "DIMMER"}
+	if err := deps.fixtureRepo.CreateDefinition(ctx, def); err != nil {
+		t.Fatalf("def: %v", err)
+	}
+	groupIDs := make([]string, 0, 4)
+	for i := 1; i <= 4; i++ {
+		order := i
+		fi := &models.FixtureInstance{ProjectID: proj.ID, DefinitionID: def.ID, Name: fmt.Sprintf("F%d", i), Universe: 1, StartChannel: i, ProjectOrder: &order}
+		if err := deps.fixtureRepo.CreateWithChannels(ctx, fi, []models.InstanceChannel{{Offset: 0, Name: "I", Type: "INTENSITY", FadeBehavior: "FADE"}}); err != nil {
+			t.Fatalf("fixture %d: %v", i, err)
+		}
+		g := &models.FixtureGroup{ProjectID: proj.ID, Name: fmt.Sprintf("G%d", i)}
+		if err := deps.fixtureGroupRepo.CreateWithMembers(ctx, g, []string{fi.ID}); err != nil {
+			t.Fatalf("group %d: %v", i, err)
+		}
+		groupIDs = append(groupIDs, g.ID)
+	}
+
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo, deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	const n = 8
+	contents := make([]string, n)
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			res, err := svc.Export(ctx, proj.ID)
+			errs[i] = err
+			if res != nil {
+				contents[i] = res.Content
+			}
+		}()
+	}
+	wg.Wait()
+	for i := range n {
+		if errs[i] != nil {
+			t.Fatalf("export %d: %v", i, errs[i])
+		}
+		if contents[i] != contents[0] {
+			t.Errorf("export %d differs from export 0", i)
+		}
+	}
+	for i, id := range groupIDs {
+		g, err := deps.fixtureGroupRepo.FindByID(ctx, id)
+		if err != nil {
+			t.Fatalf("find group: %v", err)
+		}
+		if g.EosNumber == nil {
+			t.Errorf("group G%d: want EosNumber %d, got nil", i+1, i+1)
+		} else if *g.EosNumber != i+1 {
+			t.Errorf("group G%d: want EosNumber %d, got %d", i+1, i+1, *g.EosNumber)
+		}
 	}
 }
