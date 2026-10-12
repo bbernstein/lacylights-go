@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/csv"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 
@@ -440,5 +441,39 @@ func TestIDsNeedingChannelFallback(t *testing.T) {
 	got := idsNeedingChannelFallback(fixtures)
 	if strings.Join(got, ",") != "b,c" {
 		t.Errorf("got %v", got)
+	}
+}
+
+func TestGridFits(t *testing.T) {
+	cases := []struct {
+		rows, base, channels, max int
+		want                      bool
+	}{
+		{0, 6, 1 << 62, 10, true},
+		{2, 6, 3, 36, true},
+		{2, 6, 3, 35, false},
+		{1, 6, math.MaxInt - 3, 5_000_000, false}, // would overflow if multiplied
+		{math.MaxInt / 2, 6, 10, 5_000_000, false},
+		{1, 6, -1, 100, false},
+		{1, 6, 1, 0, false},
+	}
+	for _, c := range cases {
+		if got := gridFits(c.rows, c.base, c.channels, c.max); got != c.want {
+			t.Errorf("gridFits(%d, %d, %d, %d) = %v", c.rows, c.base, c.channels, c.max, got)
+		}
+	}
+}
+
+// Look names come only from looks referenced by the exported rows and in
+// the project.
+func TestLookNames_OnlyReferencedProjectLooks(t *testing.T) {
+	s := newSeededService(t)
+	ctx := context.Background()
+	names, err := s.svc.lookNames(ctx, s.projectID, []string{s.lookWarm, s.otherLook, "missing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(names) != 1 || names[s.lookWarm] != "Warm" {
+		t.Errorf("names = %v", names)
 	}
 }

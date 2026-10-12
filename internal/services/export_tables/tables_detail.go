@@ -319,8 +319,10 @@ func buildLookDetails(ctx context.Context, s *Service, projectID, scopeID string
 
 	// The grid is rows × (base + N) cells, twice over (values and channel
 	// names), so a row cap alone does not bound it.
-	if cells := 2 * len(entries) * (len(lookDetailBaseColumns) + maxChannels); cells > s.MaxCells {
-		return nil, fmt.Errorf("%w: look %s has %d cells (limit %d)", ErrTooManyRows, look.ID, cells, s.MaxCells)
+	// Checked by division so a huge stored channel count cannot overflow
+	// the product and slip past the limit.
+	if !gridFits(len(entries), len(lookDetailBaseColumns), maxChannels, s.MaxCells) {
+		return nil, fmt.Errorf("%w: look %s grid of %d rows × %d channels exceeds %d cells", ErrTooManyRows, look.ID, len(entries), maxChannels, s.MaxCells)
 	}
 
 	cols := append([]Column{}, lookDetailBaseColumns...)
@@ -480,16 +482,21 @@ func buildLookBoardEntries(ctx context.Context, s *Service, projectID, scopeID s
 		sort.SliceStable(boards, func(i, j int) bool { return lessName(boards[i].Name, boards[j].Name) })
 	}
 
-	lookNames, err := s.lookNames(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-
 	boardIDs := make([]string, len(boards))
 	for i, b := range boards {
 		boardIDs[i] = b.ID
 	}
 	buttonsByBoard, err := s.repos.LookBoards.GetButtonsByBoardIDs(ctx, boardIDs)
+	if err != nil {
+		return nil, err
+	}
+	var lookIDs []string
+	for _, bs := range buttonsByBoard {
+		for _, btn := range bs {
+			lookIDs = append(lookIDs, btn.LookID)
+		}
+	}
+	lookNames, err := s.lookNames(ctx, projectID, lookIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -549,7 +556,11 @@ func buildCueListDetails(ctx context.Context, s *Service, projectID, scopeID str
 	if err != nil {
 		return nil, err
 	}
-	lookNames, err := s.lookNames(ctx, projectID)
+	lookIDs := make([]string, len(cues))
+	for i, c := range cues {
+		lookIDs[i] = c.LookID
+	}
+	lookNames, err := s.lookNames(ctx, projectID, lookIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -572,15 +583,18 @@ func buildCueListDetails(ctx context.Context, s *Service, projectID, scopeID str
 
 // --- helpers ---------------------------------------------------------------
 
-// lookNames maps look ID to name for every look in the project.
-func (s *Service) lookNames(ctx context.Context, projectID string) (map[string]string, error) {
-	looks, err := s.repos.Looks.FindByProjectID(ctx, projectID)
+// lookNames maps each referenced look ID to its name, loading only those
+// looks. Looks from other projects are left out (shown as a blank name).
+func (s *Service) lookNames(ctx context.Context, projectID string, lookIDs []string) (map[string]string, error) {
+	looks, err := s.repos.Looks.FindByIDs(ctx, lookIDs)
 	if err != nil {
 		return nil, err
 	}
 	out := make(map[string]string, len(looks))
 	for _, l := range looks {
-		out[l.ID] = l.Name
+		if l.ProjectID == projectID {
+			out[l.ID] = l.Name
+		}
 	}
 	return out, nil
 }
@@ -604,4 +618,17 @@ func blankIfEmpty(s string) any {
 		return nil
 	}
 	return s
+}
+
+// gridFits reports whether a two-sheet grid of rows × (base + channels)
+// cells stays within maxCells, without risking integer overflow.
+func gridFits(rows, base, channels, maxCells int) bool {
+	if rows == 0 {
+		return true
+	}
+	if channels < 0 || maxCells <= 0 || channels > maxCells {
+		return false
+	}
+	width := base + channels // cannot overflow: channels <= maxCells
+	return rows <= maxCells/(2*width)
 }
