@@ -58,6 +58,9 @@ jobs:
         uses: golangci/golangci-lint-action@v4
         with:
           version: latest
+          # Package loading (gqlgen generated code + excelize) can exceed
+          # golangci-lint's 1m default on cold caches.
+          args: --timeout=5m
 
   build:
     name: Build
