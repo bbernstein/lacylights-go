@@ -4,10 +4,16 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 // maxFilenamePartLength bounds each sanitised filename component (in runes).
 const maxFilenamePartLength = 60
+
+// maxFilenameBaseBytes bounds the joined name parts in bytes, so the whole
+// filename (plus "-YYYY-MM-DD.xlsx") stays under the common 255-byte
+// filesystem limit even when the parts use multi-byte letters.
+const maxFilenameBaseBytes = 200
 
 // File extensions and MIME types for the supported formats.
 const (
@@ -61,6 +67,20 @@ func Filename(projectName, table, item string, date time.Time, ext string) strin
 	if len(parts) == 0 {
 		parts = append(parts, "export")
 	}
-	parts = append(parts, date.Format("2006-01-02"))
-	return strings.Join(parts, "-") + "." + ext
+	base := truncateBytes(strings.Join(parts, "-"), maxFilenameBaseBytes)
+	base = strings.Trim(base, "-.")
+	return base + "-" + date.Format("2006-01-02") + "." + ext
+}
+
+// truncateBytes shortens s to at most n bytes without splitting a UTF-8
+// character.
+func truncateBytes(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	// Back up to the start of the character that would be cut.
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }

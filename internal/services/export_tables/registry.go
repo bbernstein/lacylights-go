@@ -389,6 +389,22 @@ func (s *Service) checkScope(ctx context.Context, t *Table, projectID, scopeID s
 	return nil
 }
 
+type extraSheetsKey struct{}
+
+// WithoutExtraSheets returns a context telling builders to skip sheets that
+// only XLSX output includes (such as LOOK_DETAILS' "Channel names"). Use it
+// for CSV exports, which encode just the primary sheet.
+func WithoutExtraSheets(ctx context.Context) context.Context {
+	return context.WithValue(ctx, extraSheetsKey{}, false)
+}
+
+// wantExtraSheets reports whether builders should produce extra sheets
+// (the default).
+func wantExtraSheets(ctx context.Context) bool {
+	v, ok := ctx.Value(extraSheetsKey{}).(bool)
+	return !ok || v
+}
+
 // estimateRows returns an upper bound on t's row count, or 0 when no
 // counter or estimate is available (the post-build check still applies).
 func (s *Service) estimateRows(ctx context.Context, t *Table, projectID, scopeID string) (int, error) {

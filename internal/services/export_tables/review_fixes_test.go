@@ -8,7 +8,9 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
@@ -465,7 +467,7 @@ func TestGridFits(t *testing.T) {
 		{1, 0, 0, 10, true},
 	}
 	for _, c := range cases {
-		if got := gridFits(c.rows, c.base, c.channels, c.max); got != c.want {
+		if got := gridFits(c.rows, c.base, c.channels, 2, c.max); got != c.want {
 			t.Errorf("gridFits(%d, %d, %d, %d) = %v", c.rows, c.base, c.channels, c.max, got)
 		}
 	}
@@ -669,5 +671,47 @@ func TestLookDetails_SpanCappedAtUniverse(t *testing.T) {
 	}
 	if _, err := EncodeXLSX(data.Sheets("Look Details")); err != nil {
 		t.Errorf("xlsx: %v", err)
+	}
+}
+
+// CSV exports skip the XLSX-only "Channel names" sheet, and a cell cap
+// then counts only the one grid that is emitted.
+func TestLookDetails_CSVSkipsChannelNames(t *testing.T) {
+	s := newSeededService(t)
+	ctx := WithoutExtraSheets(context.Background())
+	data, err := s.svc.Build(ctx, TableLookDetails, s.projectID, s.lookWarm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data.Extra) != 0 || len(data.Rows) != 2 {
+		t.Errorf("extra = %d sheets, rows = %d", len(data.Extra), len(data.Rows))
+	}
+	// 2 fixtures × (6 + 3) = 18 cells for one grid; 36 with both.
+	s.svc.MaxCells = 18
+	if _, err := s.svc.Build(ctx, TableLookDetails, s.projectID, s.lookWarm); err != nil {
+		t.Errorf("csv at one-grid budget: %v", err)
+	}
+	if _, err := s.svc.Build(context.Background(), TableLookDetails, s.projectID, s.lookWarm); !errors.Is(err, ErrTooManyRows) {
+		t.Errorf("xlsx needs both grids: %v", err)
+	}
+	if gridFits(1, 1, 1, 0, 10) {
+		t.Error("zero sheets must not fit")
+	}
+}
+
+func TestFilename_ByteCap(t *testing.T) {
+	cjk := strings.Repeat("劇", 60) // 60 runes, 180 bytes
+	name := Filename(cjk, "look-details", cjk, time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC), ExtXLSX)
+	if len(name) > 255 {
+		t.Errorf("filename is %d bytes", len(name))
+	}
+	if !utf8.ValidString(name) || !strings.HasSuffix(name, "-2026-10-12.xlsx") {
+		t.Errorf("name = %q", name)
+	}
+	if got := truncateBytes("ab", 5); got != "ab" {
+		t.Errorf("short = %q", got)
+	}
+	if got := truncateBytes("a劇", 2); got != "a" {
+		t.Errorf("mid-rune cut = %q", got)
 	}
 }

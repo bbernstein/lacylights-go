@@ -331,7 +331,14 @@ func buildLookDetails(ctx context.Context, s *Service, projectID, scopeID string
 	// over (values and channel names), so a row cap alone does not bound
 	// it. Checked by division so a huge stored channel count cannot overflow
 	// the product and slip past the limit.
-	if s.MaxCells > 0 && !gridFits(len(entries), len(lookDetailBaseColumns), maxChannels, s.MaxCells) {
+	// The "Channel names" sheet is only built when the output keeps extra
+	// sheets (XLSX); CSV gets just the values grid.
+	withNames := wantExtraSheets(ctx)
+	sheets := 1
+	if withNames {
+		sheets = 2
+	}
+	if s.MaxCells > 0 && !gridFits(len(entries), len(lookDetailBaseColumns), maxChannels, sheets, s.MaxCells) {
 		return nil, fmt.Errorf("%w: look %s grid of %d rows × %d channels exceeds %d cells", ErrTooManyRows, look.ID, len(entries), maxChannels, s.MaxCells)
 	}
 
@@ -342,35 +349,42 @@ func buildLookDetails(ctx context.Context, s *Service, projectID, scopeID string
 	}
 
 	rows := make([][]any, 0, len(entries))
-	nameRows := make([][]any, 0, len(entries))
+	var nameRows [][]any
+	if withNames {
+		nameRows = make([][]any, 0, len(entries))
+	}
 	for _, e := range entries {
 		f := e.fixture
 		def := defs[f.DefinitionID]
 		base := []any{f.Name, fixtureManufacturer(f, def), fixtureModel(f, def), strOrNil(f.ModeName), f.Universe, f.StartChannel}
 		row := append(make([]any, 0, len(cols)), base...)
-		nameRow := append(make([]any, 0, len(cols)), base...)
 		for off := 0; off < maxChannels; off++ {
 			if v, ok := e.values[off]; ok {
 				row = append(row, v)
 			} else {
 				row = append(row, nil)
 			}
+		}
+		rows = append(rows, row)
+		if !withNames {
+			continue
+		}
+		nameRow := append(make([]any, 0, len(cols)), base...)
+		for off := 0; off < maxChannels; off++ {
 			if name, ok := e.names[off]; ok && off < e.channels {
 				nameRow = append(nameRow, name)
 			} else {
 				nameRow = append(nameRow, nil)
 			}
 		}
-		rows = append(rows, row)
 		nameRows = append(nameRows, nameRow)
 	}
 
-	return &TableData{
-		Columns:  cols,
-		Rows:     rows,
-		ItemName: look.Name,
-		Extra:    []Sheet{{Name: ChannelNamesSheet, Columns: cols, Rows: nameRows}},
-	}, nil
+	data := &TableData{Columns: cols, Rows: rows, ItemName: look.Name}
+	if withNames {
+		data.Extra = []Sheet{{Name: ChannelNamesSheet, Columns: cols, Rows: nameRows}}
+	}
+	return data, nil
 }
 
 // --- EFFECTS ---------------------------------------------------------------
@@ -630,19 +644,19 @@ func blankIfEmpty(s string) any {
 	return s
 }
 
-// gridFits reports whether a two-sheet grid of rows × (base + channels)
-// cells stays within maxCells, without risking integer overflow.
-func gridFits(rows, base, channels, maxCells int) bool {
+// gridFits reports whether `sheets` grids of rows × (base + channels)
+// cells stay within maxCells, without risking integer overflow.
+func gridFits(rows, base, channels, sheets, maxCells int) bool {
 	if rows == 0 {
 		return true
 	}
-	if rows < 0 || base < 0 || channels < 0 || maxCells <= 0 {
+	if rows < 0 || base < 0 || channels < 0 || sheets <= 0 || maxCells <= 0 {
 		return false
 	}
-	// Each sheet may use at most half the budget. Bound the width against
-	// that half before adding, and divide rather than multiply, so no
-	// intermediate value can overflow.
-	half := maxCells / 2
+	// Each sheet may use an equal share of the budget. Bound the width
+	// against that share before adding, and divide rather than multiply,
+	// so no intermediate value can overflow.
+	half := maxCells / sheets
 	if base > half || channels > half-base {
 		return false
 	}

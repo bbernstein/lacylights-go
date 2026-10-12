@@ -503,3 +503,24 @@ func TestExportData_EncodedSizeCap(t *testing.T) {
 	_, err = q.ExportDataWorkbook(context.Background(), s.projectID, nil)
 	require.ErrorIs(t, err, exporttables.ErrTooLarge)
 }
+
+// CSV look-detail exports don't build the XLSX-only channel-names sheet;
+// XLSX still includes it.
+func TestExportDataTable_LookDetailsCSVvsXLSX(t *testing.T) {
+	_, r, cleanup := testSetup(t)
+	defer cleanup()
+	s := seedDataExport(t, r, nil, nil)
+	q := r.Query().(*queryResolver)
+	ctx := context.Background()
+	csvRes, err := q.ExportDataTable(ctx, &s.projectID, generated.DataExportTableLookDetails, generated.DataExportFormatCSV, &s.lookID)
+	require.NoError(t, err)
+	require.Equal(t, 1, csvRes.RowCount)
+	xlRes, err := q.ExportDataTable(ctx, &s.projectID, generated.DataExportTableLookDetails, generated.DataExportFormatXlsx, &s.lookID)
+	require.NoError(t, err)
+	raw, err := base64.StdEncoding.DecodeString(xlRes.ContentBase64)
+	require.NoError(t, err)
+	f, err := excelize.OpenReader(bytes.NewReader(raw))
+	require.NoError(t, err)
+	defer func() { _ = f.Close() }()
+	require.Contains(t, f.GetSheetList(), exporttables.ChannelNamesSheet)
+}

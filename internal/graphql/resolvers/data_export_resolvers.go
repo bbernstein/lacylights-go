@@ -77,7 +77,12 @@ func (r *Resolver) exportDataTable(ctx context.Context, projectID *string, table
 	}
 	defer release()
 
-	data, err := r.DataExportService.Build(ctx, t.ID, pid, sid)
+	buildCtx := ctx
+	if format == generated.DataExportFormatCSV {
+		// CSV encodes only the primary sheet; skip XLSX-only extra sheets.
+		buildCtx = exporttables.WithoutExtraSheets(ctx)
+	}
+	data, err := r.DataExportService.Build(buildCtx, t.ID, pid, sid)
 	if err != nil {
 		return nil, err
 	}
