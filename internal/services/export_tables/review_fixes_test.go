@@ -644,3 +644,30 @@ func TestEncodeXLSX_RowLimit(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+// A corrupt stored channel count (imports persist it as given) is capped at
+// one DMX universe, so LOOK_DETAILS never builds an absurdly wide grid.
+func TestLookDetails_SpanCappedAtUniverse(t *testing.T) {
+	s := newSeededService(t)
+	ctx := context.Background()
+	huge := &models.FixtureInstance{Name: "Corrupt", ProjectID: s.projectID, DefinitionID: s.defCustom, ChannelCount: ptr(1 << 30)}
+	if err := s.db.FixtureRepo.CreateWithChannels(ctx, huge, nil); err != nil {
+		t.Fatal(err)
+	}
+	look := &models.Look{Name: "Corrupt look", ProjectID: s.projectID}
+	if err := s.db.LookRepo.CreateWithFixtureValues(ctx, look, []models.FixtureValue{
+		{FixtureID: huge.ID, Channels: `[{"offset":0,"value":1},{"offset":600,"value":2}]`},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := s.svc.Build(ctx, TableLookDetails, s.projectID, look.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(data.Columns) - len(lookDetailBaseColumns); got != dmxUniverseSize {
+		t.Errorf("channel columns = %d, want %d", got, dmxUniverseSize)
+	}
+	if _, err := EncodeXLSX(data.Sheets("Look Details")); err != nil {
+		t.Errorf("xlsx: %v", err)
+	}
+}

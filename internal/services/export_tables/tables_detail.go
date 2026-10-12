@@ -293,7 +293,7 @@ func buildLookDetails(ctx context.Context, s *Service, projectID, scopeID string
 			// Without channel records, fall back to the channel count; when
 			// that is unknown (0), keep every stored value so the data is not
 			// silently lost.
-			if cv.Offset < 0 || (real != nil && !real[cv.Offset]) || (e.channels > 0 && cv.Offset >= e.channels) {
+			if cv.Offset < 0 || cv.Offset >= dmxUniverseSize || (real != nil && !real[cv.Offset]) || (e.channels > 0 && cv.Offset >= e.channels) {
 				continue
 			}
 			e.values[cv.Offset] = cv.Value

@@ -316,10 +316,16 @@ func idsNeedingChannelFallback(fixtures []models.FixtureInstance) []string {
 	return ids
 }
 
+// dmxUniverseSize is the number of channels in one DMX universe; no
+// fixture can span more.
+const dmxUniverseSize = 512
+
 // fixtureSpan is the number of DMX addresses a fixture occupies: the
-// highest instance-channel offset + 1, or the channel count if larger.
-// Custom definitions may leave gaps between offsets (e.g. 0 and 5), so the
-// span can exceed the channel count.
+// highest instance-channel offset + 1, or the channel count if larger,
+// capped at one DMX universe. Custom definitions may leave gaps between
+// offsets (e.g. 0 and 5), so the span can exceed the channel count. The
+// cap keeps a corrupt stored count (imports persist it as given) from
+// producing an absurdly wide LOOK_DETAILS grid.
 func fixtureSpan(f *models.FixtureInstance, channels []models.InstanceChannel) int {
 	span := fixtureChannelCount(f, channels)
 	for _, ch := range channels {
@@ -327,7 +333,7 @@ func fixtureSpan(f *models.FixtureInstance, channels []models.InstanceChannel) i
 			span = ch.Offset + 1
 		}
 	}
-	return span
+	return min(span, dmxUniverseSize)
 }
 
 // fixtureChannelCount prefers the denormalised channel count and falls back
