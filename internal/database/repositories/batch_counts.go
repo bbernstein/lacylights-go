@@ -12,8 +12,20 @@ import (
 // ones), so batch lookups split larger ID lists into chunks of this size.
 const maxInVars = 500
 
-// chunkIDs splits ids into slices of at most maxInVars elements.
+// chunkIDs de-duplicates ids (keeping first occurrences) and splits them
+// into slices of at most maxInVars elements. De-duplication matters: a
+// single IN query ignores repeats, but an ID repeated across two chunks
+// would make append-based callers return its rows twice.
 func chunkIDs(ids []string) [][]string {
+	seen := make(map[string]bool, len(ids))
+	unique := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if !seen[id] {
+			seen[id] = true
+			unique = append(unique, id)
+		}
+	}
+	ids = unique
 	var out [][]string
 	for len(ids) > maxInVars {
 		out = append(out, ids[:maxInVars])

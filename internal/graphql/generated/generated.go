@@ -10278,7 +10278,9 @@ extend type Query {
   """
   Export one data list as CSV or XLSX. projectId may be null only for
   FIXTURE_LIBRARY. scopeId selects the look / cue list / look board for
-  scoped tables and must belong to projectId. CSV is not a lossless
+  scoped tables and must belong to projectId. For FIXTURE_LIBRARY a
+  projectId, if given, is only access-checked; the library is global. CSV is
+  not a lossless
   round-trip format: text cells starting with = + - @ tab, CR or LF get a
   leading ' to prevent formula injection. XLSX stores text unchanged.
   """
@@ -10286,8 +10288,8 @@ extend type Query {
   """
   Export several project-level tables as one XLSX workbook, one sheet per
   table. Defaults to every project-level table when tables is omitted; an
-    explicit empty list is an error. FIXTURE_LIBRARY and scoped tables
-    cannot be included.
+    explicit empty list is an error. Repeated tables are included once.
+    FIXTURE_LIBRARY and scoped tables cannot be included.
   """
   exportDataWorkbook(projectId: ID!, tables: [DataExportTable!]): DataExportResult!
 }

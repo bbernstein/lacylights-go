@@ -114,6 +114,9 @@ func TestChunkIDs(t *testing.T) {
 		t.Errorf("nil = %v", got)
 	}
 	ids := make([]string, 2*maxInVars+1)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("id%d", i)
+	}
 	got := chunkIDs(ids)
 	if len(got) != 3 || len(got[0]) != maxInVars || len(got[2]) != 1 {
 		t.Errorf("chunks = %d", len(got))
@@ -257,5 +260,33 @@ func TestOrphanModesAndProjectFixtureValues(t *testing.T) {
 	vals, err := NewLookRepository(db).GetFixtureValuesInProject(ctx, "L", "p")
 	if err != nil || len(vals) != 2 || vals[0].FixtureID != "a" || vals[1].FixtureID != "b" {
 		t.Errorf("values = %+v, %v", vals, err)
+	}
+}
+
+// An ID repeated across chunk boundaries must not duplicate results.
+func TestChunkIDs_DeduplicatesAcrossChunks(t *testing.T) {
+	ids := make([]string, 0, maxInVars+2)
+	ids = append(ids, "dup")
+	for i := 0; i < maxInVars; i++ {
+		ids = append(ids, fmt.Sprintf("x%d", i))
+	}
+	ids = append(ids, "dup")
+	chunks := chunkIDs(ids)
+	total := 0
+	for _, c := range chunks {
+		total += len(c)
+	}
+	if total != maxInVars+1 {
+		t.Errorf("total ids = %d, want %d", total, maxInVars+1)
+	}
+
+	tdb, cleanup := setupTestDB(t)
+	defer cleanup()
+	if err := tdb.DB.Create(&[]models.InstanceChannel{{ID: "c1", FixtureID: "dup", Offset: 0}, {ID: "c2", FixtureID: "dup", Offset: 1}}).Error; err != nil {
+		t.Fatal(err)
+	}
+	got, err := NewFixtureRepository(tdb.DB).GetInstanceChannelsByFixtureIDs(context.Background(), ids)
+	if err != nil || len(got["dup"]) != 2 {
+		t.Errorf("channels = %v, %v", got["dup"], err)
 	}
 }
