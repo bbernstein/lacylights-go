@@ -118,6 +118,18 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
   `targetProjectId` (append) — they are mutually exclusive and the resolver
   returns an error if both are set.
 
+### Data Export (CSV / XLSX)
+- Package: `internal/services/export_tables/` (Go package `exporttables`)
+- Table registry (`tables.go`, `tables_detail.go`): each table has an ID matching
+  the `DataExportTable` GraphQL enum, a label, filename slug, scope
+  (`none | project | look | cueList | lookBoard`) and columns. Add new list
+  exports by registering a table there.
+- `Service.Build` validates scope and checks that `scopeId` belongs to the project.
+- Writers: `EncodeCSV` (UTF-8 BOM, formula-injection escaping of string cells) and
+  `EncodeXLSX` (excelize; bold frozen header, typed numbers, unique ≤31-char sheet names).
+- GraphQL surface (Queries, read-only): `dataExportTables`, `exportDataTable`,
+  `exportDataWorkbook` in `internal/graphql/resolvers/data_export_resolvers.go`.
+
 ## Testing Guidelines
 
 - Unit tests alongside code: `foo_test.go` next to `foo.go`

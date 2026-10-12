@@ -14,9 +14,15 @@ import (
 // the GraphQL DataExportTable enum).
 func registry() []*Table {
 	return []*Table{
+		fixtureTypesTable(),
+		fixtureLibraryTable(),
 		fixturesTable(),
 		looksTable(),
+		lookDetailsTable(),
+		effectsTable(),
+		lookBoardEntriesTable(),
 		cueListsTable(),
+		cueListDetailsTable(),
 	}
 }
 

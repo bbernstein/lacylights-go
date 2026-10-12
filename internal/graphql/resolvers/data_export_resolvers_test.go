@@ -145,6 +145,12 @@ func TestDataExportTables_Query(t *testing.T) {
 	fx := resp.DataExportTables[byID["FIXTURES"]]
 	require.Equal(t, "project", fx.Scope)
 	require.Equal(t, "Name", fx.Columns[0])
+	ld := resp.DataExportTables[byID["LOOK_DETAILS"]]
+	require.Equal(t, "look", ld.Scope)
+	require.Equal(t, "Ch 1 … Ch N", ld.Columns[len(ld.Columns)-1])
+	require.Equal(t, "none", resp.DataExportTables[byID["FIXTURE_LIBRARY"]].Scope)
+	require.Equal(t, "lookBoard", resp.DataExportTables[byID["LOOK_BOARD_ENTRIES"]].Scope)
+	require.Len(t, resp.DataExportTables, 9)
 }
 
 var filenamePattern = regexp.MustCompile(`^[\p{L}\p{N}._-]+-\d{4}-\d{2}-\d{2}\.(csv|xlsx)$`)
@@ -301,4 +307,106 @@ func TestRequireAuthenticated(t *testing.T) {
 	require.ErrorIs(t, ra.requireAuthenticated(context.Background()), ErrNotAuthenticated)
 	require.NoError(t, ra.requireAuthenticated(createMemberContext("u", "u@test.com", "g")))
 	require.Equal(t, "", derefString(nil))
+}
+
+func TestExportDataTable_ScopedTables(t *testing.T) {
+	c, r, cleanup := testSetup(t)
+	defer cleanup()
+	s := seedDataExport(t, r, nil, nil)
+
+	var resp struct{ ExportDataTable dataExportResp }
+	require.NoError(t, c.Post(`query($p: ID, $s: ID) {
+		exportDataTable(projectId: $p, table: LOOK_DETAILS, format: XLSX, scopeId: $s) { filename contentBase64 rowCount }
+	}`, &resp, client.Var("p", s.projectID), client.Var("s", s.lookID)))
+	require.Equal(t, "Export-Show-look-details-Blue-Wash-2026-10-12.xlsx", resp.ExportDataTable.Filename)
+	require.Equal(t, 1, resp.ExportDataTable.RowCount)
+	f := openXLSX(t, resp.ExportDataTable.ContentBase64)
+	require.Equal(t, []string{"Look Details", "Channel names"}, f.GetSheetList())
+
+	var cl struct{ ExportDataTable dataExportResp }
+	require.NoError(t, c.Post(`query($p: ID, $s: ID) {
+		exportDataTable(projectId: $p, table: CUE_LIST_DETAILS, format: CSV, scopeId: $s) { filename contentBase64 rowCount }
+	}`, &cl, client.Var("p", s.projectID), client.Var("s", s.cueListID)))
+	require.Equal(t, "Export-Show-cue-list-details-Main-2026-10-12.csv", cl.ExportDataTable.Filename)
+	recs := decodeCSV(t, cl.ExportDataTable.ContentBase64)
+	require.Equal(t, []string{"1", "Go", "Blue Wash", "2", "0", "", "", "No", ""}, recs[1])
+
+	// Board scope is optional.
+	var lb struct{ ExportDataTable dataExportResp }
+	require.NoError(t, c.Post(`query($p: ID) {
+		exportDataTable(projectId: $p, table: LOOK_BOARD_ENTRIES, format: CSV) { filename rowCount }
+	}`, &lb, client.Var("p", s.projectID)))
+	require.Equal(t, "Export-Show-look-board-entries-2026-10-12.csv", lb.ExportDataTable.Filename)
+	require.Equal(t, 1, lb.ExportDataTable.RowCount)
+
+	q := r.Query().(*queryResolver)
+	ctx := context.Background()
+	// scopeId belonging to another project is rejected for every scoped table.
+	for table, other := range map[generated.DataExportTable]string{
+		generated.DataExportTableLookDetails:      s.otherLookID,
+		generated.DataExportTableCueListDetails:   s.otherCueListID,
+		generated.DataExportTableLookBoardEntries: s.otherBoardID,
+	} {
+		_, err := q.ExportDataTable(ctx, &s.projectID, table, generated.DataExportFormatCSV, &other)
+		require.ErrorIs(t, err, exporttables.ErrScopeNotFound, "table %s", table)
+	}
+	// Scoped tables need a scopeId and a projectId.
+	_, err := q.ExportDataTable(ctx, &s.projectID, generated.DataExportTableLookDetails, generated.DataExportFormatCSV, nil)
+	require.ErrorIs(t, err, exporttables.ErrScopeRequired)
+	_, err = q.ExportDataTable(ctx, nil, generated.DataExportTableLookDetails, generated.DataExportFormatCSV, &s.lookID)
+	require.ErrorContains(t, err, "projectId is required")
+	// Workbooks cannot include scoped tables.
+	_, err = q.ExportDataWorkbook(ctx, s.projectID, []generated.DataExportTable{generated.DataExportTableCueListDetails})
+	require.ErrorIs(t, err, exporttables.ErrScopeRequired)
+}
+
+func TestExportDataTable_FixtureLibrary(t *testing.T) {
+	c, r, cleanup := testSetup(t)
+	defer cleanup()
+	s := seedDataExport(t, r, nil, nil)
+
+	var resp struct{ ExportDataTable dataExportResp }
+	require.NoError(t, c.Post(`query {
+		exportDataTable(table: FIXTURE_LIBRARY, format: CSV) { filename rowCount contentBase64 }
+	}`, &resp))
+	require.Equal(t, "fixture-library-2026-10-12.csv", resp.ExportDataTable.Filename)
+	require.Equal(t, 1, resp.ExportDataTable.RowCount)
+	recs := decodeCSV(t, resp.ExportDataTable.ContentBase64)
+	require.Equal(t, []string{"Manufacturer", "Model", "Mode", "Channel count", "Type", "Source"}, recs[0])
+
+	// With a projectId the access check still runs, but the library
+	// filename is not project-specific.
+	q := r.Query().(*queryResolver)
+	res, err := q.ExportDataTable(context.Background(), &s.projectID, generated.DataExportTableFixtureLibrary, generated.DataExportFormatCSV, nil)
+	require.NoError(t, err)
+	require.Equal(t, "fixture-library-2026-10-12.csv", res.Filename)
+}
+
+func TestExportDataTable_FixtureLibraryAuth(t *testing.T) {
+	r, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+	groupID := cuid.New()
+	otherGroupID := cuid.New()
+	s := seedDataExport(t, r, &groupID, &otherGroupID)
+	q := r.Query().(*queryResolver)
+
+	_, err := q.ExportDataTable(context.Background(), nil, generated.DataExportTableFixtureLibrary, generated.DataExportFormatCSV, nil)
+	require.ErrorIs(t, err, ErrNotAuthenticated)
+
+	member := createMemberContext("member", "m@test.com", groupID)
+	res, err := q.ExportDataTable(member, nil, generated.DataExportTableFixtureLibrary, generated.DataExportFormatXlsx, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, res.RowCount)
+
+	// Passing a project the caller cannot access is still rejected.
+	_, err = q.ExportDataTable(member, &s.otherProjectID, generated.DataExportTableFixtureLibrary, generated.DataExportFormatCSV, nil)
+	require.ErrorIs(t, err, ErrNotAuthorized)
+
+	// An outsider cannot use their own project to reach another
+	// project's scoped data either.
+	outsider := createMemberContext("outsider", "o@test.com", otherGroupID)
+	_, err = q.ExportDataTable(outsider, &s.otherProjectID, generated.DataExportTableLookDetails, generated.DataExportFormatCSV, &s.lookID)
+	require.ErrorIs(t, err, exporttables.ErrScopeNotFound)
+	_, err = q.ExportDataTable(outsider, &s.projectID, generated.DataExportTableLookDetails, generated.DataExportFormatCSV, &s.lookID)
+	require.ErrorIs(t, err, ErrNotAuthorized)
 }
