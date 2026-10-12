@@ -73,6 +73,7 @@ func (s *Service) ImportFixture(ctx context.Context, manufacturer, oflFixtureJSO
 		fixtureID := cuid.New()
 		definition := &models.FixtureDefinition{
 			ID:           fixtureID,
+			RefID:        fixtureID, // must be set: fixture_definitions.ref_id is globally unique
 			Manufacturer: manufacturer,
 			Model:        model,
 			Type:         fixtureType,
@@ -483,6 +484,7 @@ func (s *Service) ImportFixtureWithHash(ctx context.Context, manufacturer, oflFi
 		fixtureID := cuid.New()
 		definition := &models.FixtureDefinition{
 			ID:            fixtureID,
+			RefID:         fixtureID, // must be set: fixture_definitions.ref_id is globally unique
 			Manufacturer:  manufacturer,
 			Model:         model,
 			Type:          fixtureType,
