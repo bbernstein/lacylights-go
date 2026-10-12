@@ -242,6 +242,12 @@ func TestOrphanModesAndProjectFixtureValues(t *testing.T) {
 	if n, err := NewRowCounter(db).CountLibraryRows(ctx); err != nil || n != 1 {
 		t.Errorf("library rows = %d, %v", n, err)
 	}
+	// The builder's mode query skips the same orphans, so the work matches
+	// the estimate.
+	modes, err := NewFixtureRepository(db).FindAllModes(ctx)
+	if err != nil || len(modes) != 1 || modes[0].ID != "m1" {
+		t.Errorf("modes = %+v, %v", modes, err)
+	}
 
 	// Only fixture values whose fixture is in the project are loaded, in
 	// look order.

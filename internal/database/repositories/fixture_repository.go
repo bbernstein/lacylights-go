@@ -362,12 +362,15 @@ func (r *FixtureRepository) GetDefinitionModes(ctx context.Context, definitionID
 	return modes, result.Error
 }
 
-// FindAllModes returns every fixture mode across all definitions, ordered by
-// definition then mode name. Used by bulk exports (e.g. the fixture library
-// spreadsheet) to avoid one query per definition.
+// FindAllModes returns every fixture mode of an existing definition,
+// ordered by definition then mode name. Orphaned modes (deleting a
+// definition does not delete its modes) are skipped, matching
+// RowCounter.CountLibraryRows. Used by bulk exports (e.g. the fixture
+// library spreadsheet) to avoid one query per definition.
 func (r *FixtureRepository) FindAllModes(ctx context.Context) ([]models.FixtureMode, error) {
 	var modes []models.FixtureMode
 	result := r.db.WithContext(ctx).
+		Where("EXISTS (SELECT 1 FROM fixture_definitions WHERE fixture_definitions.id = fixture_modes.definition_id)").
 		Order("definition_id ASC, name ASC").
 		Find(&modes)
 	return modes, result.Error

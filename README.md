@@ -14,7 +14,7 @@ A high-performance Go implementation of the LacyLights lighting control system b
 
 ### Prerequisites
 
-- Go 1.21 or later
+- Go 1.25 or later
 - Make (optional, for convenience commands)
 
 ### Build and Run
