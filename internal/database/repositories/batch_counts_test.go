@@ -296,3 +296,17 @@ func TestChunkIDs_DeduplicatesAcrossChunks(t *testing.T) {
 		t.Errorf("channels = %v, %v", got["dup"], err)
 	}
 }
+
+func TestMaxChannelOffsetByFixtureIDs(t *testing.T) {
+	tdb, cleanup := setupTestDB(t)
+	defer cleanup()
+	if err := tdb.DB.Create(&[]models.InstanceChannel{
+		{ID: "a0", FixtureID: "a", Offset: 0}, {ID: "a5", FixtureID: "a", Offset: 5}, {ID: "b0", FixtureID: "b", Offset: 0},
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	got, err := NewFixtureRepository(tdb.DB).MaxChannelOffsetByFixtureIDs(context.Background(), []string{"a", "b", "none"})
+	if err != nil || got["a"] != 5 || got["b"] != 0 || len(got) != 2 {
+		t.Errorf("got %v, %v", got, err)
+	}
+}

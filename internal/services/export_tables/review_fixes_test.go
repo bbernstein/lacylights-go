@@ -84,8 +84,8 @@ func TestBuild_RowCap(t *testing.T) {
 	if _, _, err := s.svc.BuildWorkbook(ctx, s.projectID, nil); !errors.Is(err, ErrTooManyRows) {
 		t.Errorf("workbook err = %v", err)
 	}
-	if NewService(Repos{}).MaxRows != MaxExportRows {
-		t.Error("default MaxRows")
+	if NewService(Repos{}).MaxRows != 0 {
+		t.Error("rows must be unlimited by default")
 	}
 }
 
@@ -202,7 +202,7 @@ func TestEstimateRows_UpperBound(t *testing.T) {
 func TestBuild_RowCapCheckedBeforeBuilding(t *testing.T) {
 	s := newSeededService(t)
 	ctx := context.Background()
-	s.svc.MaxRows = 0
+	s.svc.MaxRows = 1
 	built := false
 	tbl := &Table{
 		ID: "PROBE", Scope: ScopeProject,
@@ -210,7 +210,7 @@ func TestBuild_RowCapCheckedBeforeBuilding(t *testing.T) {
 			built = true
 			return &TableData{}, nil
 		},
-		estimate: func(context.Context, *repositories.RowCounter, string, string) (int, error) { return 1, nil },
+		estimate: func(context.Context, *repositories.RowCounter, string, string) (int, error) { return 2, nil },
 	}
 	s.svc.byID[tbl.ID] = tbl
 	if _, err := s.svc.Build(ctx, tbl.ID, s.projectID, ""); !errors.Is(err, ErrTooManyRows) {
@@ -353,8 +353,8 @@ func TestLookDetailsTable_CellBudget(t *testing.T) {
 	if _, err := s.svc.Build(ctx, TableLookDetails, s.projectID, s.lookWarm); err != nil {
 		t.Errorf("at budget: %v", err)
 	}
-	if NewService(Repos{}).MaxCells != MaxExportCells {
-		t.Error("default MaxCells")
+	if NewService(Repos{}).MaxCells != 0 {
+		t.Error("cells must be unlimited by default")
 	}
 }
 
@@ -406,7 +406,7 @@ func TestEstimateRows_ExactForCollapsedAndFilteredTables(t *testing.T) {
 		if _, err := s.svc.Build(ctx, c.id, c.pid, c.scope); err != nil {
 			t.Errorf("%s at cap: %v", c.id, err)
 		}
-		s.svc.MaxRows = MaxExportRows
+		s.svc.MaxRows = 0
 	}
 }
 
@@ -415,7 +415,7 @@ func TestEstimateRows_ExactForCollapsedAndFilteredTables(t *testing.T) {
 func TestBuild_ForeignScopeCheckedBeforeSizing(t *testing.T) {
 	s := newSeededService(t)
 	ctx := context.Background()
-	s.svc.MaxRows = 0
+	s.svc.MaxRows = 1
 	cases := map[TableID]string{
 		TableLookDetails:      s.otherLook,
 		TableCueListDetails:   s.otherCueList,
@@ -494,8 +494,8 @@ func TestAcquire_CancelledContextWithFreeSlot(t *testing.T) {
 
 func TestEncode_ByteCap(t *testing.T) {
 	svc := NewService(Repos{})
-	if svc.MaxBytes != MaxExportBytes {
-		t.Error("default MaxBytes")
+	if svc.MaxBytes != 0 {
+		t.Error("bytes must be unlimited by default")
 	}
 	cols := []Column{{"a", "Name"}}
 	rows := [][]any{{strings.Repeat("x", 100)}}
@@ -506,7 +506,7 @@ func TestEncode_ByteCap(t *testing.T) {
 	if _, err := svc.EncodeXLSX([]Sheet{{Name: "S", Columns: cols, Rows: rows}}); !errors.Is(err, ErrTooLarge) {
 		t.Errorf("xlsx err = %v", err)
 	}
-	svc.MaxBytes = MaxExportBytes
+	svc.MaxBytes = 0 // unlimited
 	if _, err := svc.EncodeCSV(cols, rows); err != nil {
 		t.Errorf("csv under cap: %v", err)
 	}
@@ -518,5 +518,90 @@ func TestEncode_ByteCap(t *testing.T) {
 	svc.MaxBytes = len(full)
 	if _, err := svc.EncodeCSV(cols, rows); err != nil {
 		t.Errorf("at cap: %v", err)
+	}
+}
+
+// With no limits set (the default), exports never run sizing queries, so
+// the common path costs nothing extra.
+func TestBuild_NoLimitsSkipsSizing(t *testing.T) {
+	s := newSeededService(t)
+	ctx := context.Background()
+	tbl := &Table{
+		ID: "PROBE2", Scope: ScopeProject,
+		build: func(context.Context, *Service, string, string) (*TableData, error) {
+			return &TableData{Rows: [][]any{{1}, {2}, {3}}}, nil
+		},
+		estimate: func(context.Context, *repositories.RowCounter, string, string) (int, error) {
+			t.Error("estimate must not run when MaxRows is unset")
+			return 0, nil
+		},
+	}
+	s.svc.byID[tbl.ID] = tbl
+	if _, err := s.svc.Build(ctx, tbl.ID, s.projectID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.svc.BuildWorkbook(ctx, s.projectID, []TableID{tbl.ID}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Channel offsets can have gaps: the export uses the highest offset for
+// the end address and the Look Details grid.
+func TestSparseChannelOffsets(t *testing.T) {
+	s := newSeededService(t)
+	ctx := context.Background()
+	sparse := &models.FixtureInstance{
+		Name: "Sparse", ProjectID: s.projectID, DefinitionID: s.defCustom,
+		ChannelCount: ptr(2), Universe: 5, StartChannel: 10,
+	}
+	if err := s.db.FixtureRepo.CreateWithChannels(ctx, sparse, []models.InstanceChannel{
+		{Offset: 0, Name: "Dim", Type: "INTENSITY"},
+		{Offset: 5, Name: "Strobe", Type: "STROBE"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := s.svc.Build(ctx, TableFixtures, s.projectID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range data.Rows {
+		if r[0] == "Sparse" {
+			if r[7] != 15 || r[8] != 2 { // end = 10 + 5, count stays 2
+				t.Errorf("end = %v, count = %v", r[7], r[8])
+			}
+		}
+	}
+
+	look := &models.Look{Name: "Sparse look", ProjectID: s.projectID}
+	if err := s.db.LookRepo.CreateWithFixtureValues(ctx, look, []models.FixtureValue{
+		{FixtureID: sparse.ID, Channels: `[{"offset":0,"value":10},{"offset":5,"value":200}]`},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ld, err := s.svc.Build(ctx, TableLookDetails, s.projectID, look.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := len(lookDetailBaseColumns)
+	if len(ld.Columns) != base+6 || ld.Rows[0][base+5] != 200 {
+		t.Errorf("cols = %v row = %v", headers(ld.Columns), ld.Rows[0])
+	}
+	if ld.Extra[0].Rows[0][base+5] != "Strobe" {
+		t.Errorf("names row = %v", ld.Extra[0].Rows[0])
+	}
+}
+
+func TestEncodeXLSX_ColumnLimit(t *testing.T) {
+	cols := make([]Column, MaxXLSXColumns+1)
+	for i := range cols {
+		cols[i] = Column{"c", "C"}
+	}
+	if _, err := EncodeXLSX([]Sheet{{Name: "Wide", Columns: cols}}); !errors.Is(err, ErrTooLarge) {
+		t.Errorf("err = %v", err)
+	}
+	// CSV has no column limit.
+	if _, err := EncodeCSV(cols, nil); err != nil {
+		t.Errorf("csv: %v", err)
 	}
 }

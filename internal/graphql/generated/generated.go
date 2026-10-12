@@ -10282,8 +10282,9 @@ extend type Query {
   projectId, if given, is only access-checked; the library is global.
   CSV is not a lossless round-trip format: text cells starting with
   = + - @ tab, CR or LF get a leading ' to prevent formula injection.
-  XLSX stores text unchanged. Exports over the row, cell or file-size
-  limits fail with a "too large" error.
+  XLSX stores text unchanged. Exports have no size limit by default; a
+  server configured with limits, or an XLSX sheet wider than Excel's
+  16,384 columns, fails with a "too large" error.
   """
   exportDataTable(projectId: ID, table: DataExportTable!, format: DataExportFormat!, scopeId: ID): DataExportResult!
   """

@@ -277,7 +277,7 @@ func buildLookDetails(ctx context.Context, s *Service, projectID, scopeID string
 			fixture:  f,
 			values:   make(map[int]int, len(cvs)),
 			names:    make(map[int]string),
-			channels: fixtureChannelCount(f, channels[f.ID]),
+			channels: fixtureSpan(f, channels[f.ID]),
 		}
 		for _, cv := range cvs {
 			// Ignore stored values for channels the fixture does not have.
@@ -317,11 +317,11 @@ func buildLookDetails(ctx context.Context, s *Service, projectID, scopeID string
 		return lessName(a.fixture.Name, b.fixture.Name)
 	})
 
-	// The grid is rows × (base + N) cells, twice over (values and channel
-	// names), so a row cap alone does not bound it.
-	// Checked by division so a huge stored channel count cannot overflow
+	// When a cell cap is set: the grid is rows × (base + N) cells, twice
+	// over (values and channel names), so a row cap alone does not bound
+	// it. Checked by division so a huge stored channel count cannot overflow
 	// the product and slip past the limit.
-	if !gridFits(len(entries), len(lookDetailBaseColumns), maxChannels, s.MaxCells) {
+	if s.MaxCells > 0 && !gridFits(len(entries), len(lookDetailBaseColumns), maxChannels, s.MaxCells) {
 		return nil, fmt.Errorf("%w: look %s grid of %d rows × %d channels exceeds %d cells", ErrTooManyRows, look.ID, len(entries), maxChannels, s.MaxCells)
 	}
 

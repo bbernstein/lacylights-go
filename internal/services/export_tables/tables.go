@@ -71,15 +71,25 @@ func buildFixtures(ctx context.Context, s *Service, projectID, _ string) (*Table
 	if err != nil {
 		return nil, err
 	}
+	// Channel offsets can have gaps, so the last address comes from the
+	// highest offset, not the channel count (one grouped query).
+	maxOffsets, err := s.repos.Fixtures.MaxChannelOffsetByFixtureIDs(ctx, fixtureIDs(fixtures))
+	if err != nil {
+		return nil, err
+	}
 
 	rows := make([][]any, 0, len(fixtures))
 	for i := range fixtures {
 		f := &fixtures[i]
 		def := defs[f.DefinitionID]
 		count := fixtureChannelCount(f, channels[f.ID])
+		span := count
+		if off, ok := maxOffsets[f.ID]; ok && off+1 > span {
+			span = off + 1
+		}
 		var end any
-		if count > 0 {
-			end = f.StartChannel + count - 1
+		if span > 0 {
+			end = f.StartChannel + span - 1
 		}
 		rows = append(rows, []any{
 			f.Name,
@@ -285,6 +295,14 @@ func (s *Service) fixtureGroupNames(ctx context.Context, projectID string) (map[
 	return out, nil
 }
 
+func fixtureIDs(fixtures []models.FixtureInstance) []string {
+	ids := make([]string, len(fixtures))
+	for i := range fixtures {
+		ids[i] = fixtures[i].ID
+	}
+	return ids
+}
+
 // idsNeedingChannelFallback returns the IDs of fixtures without a positive
 // denormalised channel count: the only ones whose instance channels
 // fixtureChannelCount needs.
@@ -296,6 +314,20 @@ func idsNeedingChannelFallback(fixtures []models.FixtureInstance) []string {
 		}
 	}
 	return ids
+}
+
+// fixtureSpan is the number of DMX addresses a fixture occupies: the
+// highest instance-channel offset + 1, or the channel count if larger.
+// Custom definitions may leave gaps between offsets (e.g. 0 and 5), so the
+// span can exceed the channel count.
+func fixtureSpan(f *models.FixtureInstance, channels []models.InstanceChannel) int {
+	span := fixtureChannelCount(f, channels)
+	for _, ch := range channels {
+		if ch.Offset+1 > span {
+			span = ch.Offset + 1
+		}
+	}
+	return span
 }
 
 // fixtureChannelCount prefers the denormalised channel count and falls back

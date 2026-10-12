@@ -12,6 +12,9 @@ import (
 // MaxSheetNameLength is Excel's limit on worksheet name length.
 const MaxSheetNameLength = 31
 
+// MaxXLSXColumns is the most columns an Excel worksheet can have.
+const MaxXLSXColumns = 16384
+
 // MaxCellLength is the most characters Excel stores in one cell. Longer
 // strings make excelize reject the row, so they are truncated.
 const MaxCellLength = 32767
@@ -43,6 +46,11 @@ func encodeXLSX(sheets []Sheet, maxBytes int) ([]byte, error) {
 		return nil, fmt.Errorf("xlsx: at least one sheet is required")
 	}
 	sheets = UniqueSheetNames(sheets)
+	for _, sh := range sheets {
+		if len(sh.Columns) > MaxXLSXColumns {
+			return nil, fmt.Errorf("%w: sheet %q has %d columns; Excel supports at most %d (export as CSV instead)", ErrTooLarge, sh.Name, len(sh.Columns), MaxXLSXColumns)
+		}
+	}
 
 	f := excelize.NewFile()
 	defer func() { _ = f.Close() }()

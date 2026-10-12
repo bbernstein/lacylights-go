@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
@@ -189,36 +190,42 @@ var (
 	ErrTooManyRows = errors.New("export is too large")
 )
 
-// MaxExportRows is the default cap on the number of data rows in one export (a table, or
-// the total across a workbook's sheets). Exports are built in memory and
-// returned inline as base64, so the cap bounds server memory and response
-// size on small hosts such as a Raspberry Pi. It is well above any
-// realistic show and the full OFL library, and below Excel's
-// 1,048,576-row sheet limit.
+// Export size limits are opt-in. LacyLights is mainly used in-house by
+// lighting designers and techs, who must be able to export large projects,
+// so by default nothing is capped and no sizing queries run. A restricted
+// deployment (for example a public demo) can set Service.MaxRows,
+// MaxCells and MaxBytes; the constants below are suggested values.
+
+// MaxExportRows is a suggested cap on the data rows in one export (a
+// table, or the total across a workbook's sheets).
 const MaxExportRows = 100_000
 
-// MaxExportBytes caps the size of an encoded export file. Base64 in the
-// GraphQL response adds about a third, so the response stays under ~27 MB.
-// Rows bound the count of values but not their length (text fields such as
-// descriptions are unbounded), so the encoded size is capped too, while
-// encoding.
+// MaxExportBytes is a suggested cap on an encoded export file's size
+// (base64 in the GraphQL response adds about a third).
 const MaxExportBytes = 20 << 20 // 20 MiB
 
-// EncodeCSV encodes a table as CSV, failing with ErrTooLarge as soon as
-// the output would exceed MaxBytes.
+// EncodeCSV encodes a table as CSV. When MaxBytes is set, it fails with
+// ErrTooLarge as soon as the output would exceed it.
 func (s *Service) EncodeCSV(cols []Column, rows [][]any) ([]byte, error) {
-	return encodeCSV(cols, rows, s.MaxBytes)
+	return encodeCSV(cols, rows, byteLimit(s.MaxBytes))
 }
 
-// EncodeXLSX encodes sheets as XLSX, failing with ErrTooLarge when the
-// output would exceed MaxBytes.
+// EncodeXLSX encodes sheets as XLSX. When MaxBytes is set, it fails with
+// ErrTooLarge when the output would exceed it.
 func (s *Service) EncodeXLSX(sheets []Sheet) ([]byte, error) {
-	return encodeXLSX(sheets, s.MaxBytes)
+	return encodeXLSX(sheets, byteLimit(s.MaxBytes))
 }
 
-// MaxExportCells caps the cells of a dynamic-width table (LOOK_DETAILS),
-// whose width grows with fixture channel counts. 5 million cells is far
-// beyond any real look (1,000 fixtures × 64 channels is ~140k per sheet).
+// byteLimit maps an unset (<= 0) limit to "unlimited".
+func byteLimit(n int) int {
+	if n <= 0 {
+		return math.MaxInt
+	}
+	return n
+}
+
+// MaxExportCells is a suggested cap on the cells of a dynamic-width table
+// (LOOK_DETAILS), whose width grows with fixture channel counts.
 const MaxExportCells = 5_000_000
 
 // Repos are the repositories a Service reads from.
@@ -230,8 +237,9 @@ type Repos struct {
 	LookBoards    *repositories.LookBoardRepository
 	Effects       *repositories.EffectRepository
 	// Counts sizes an export with COUNT queries before its data is loaded,
-	// so over-limit exports are rejected without materialising them.
-	// When nil the row cap is only checked after building.
+	// so over-limit exports are rejected without materialising them. Only
+	// used when MaxRows is set; when nil the row cap is only checked after
+	// building.
 	Counts *repositories.RowCounter
 }
 
@@ -243,12 +251,14 @@ type Service struct {
 	// Now returns the current time (server local time; it supplies the
 	// date in generated filenames). Overridable in tests.
 	Now func() time.Time
-	// MaxRows caps the rows in one export; defaults to MaxExportRows.
+	// MaxRows caps the rows in one export. 0 (the default) means no limit
+	// and skips the pre-build COUNT queries.
 	MaxRows int
-	// MaxBytes caps an encoded export's size; defaults to MaxExportBytes.
+	// MaxBytes caps an encoded export's size. 0 (the default) means no
+	// limit.
 	MaxBytes int
 	// MaxCells caps the cells in a dynamic-width grid (LOOK_DETAILS,
-	// counting both of its sheets); defaults to MaxExportCells.
+	// counting both of its sheets). 0 (the default) means no limit.
 	MaxCells int
 	// slots bounds how many exports build and encode at once.
 	slots chan struct{}
@@ -278,7 +288,7 @@ func (s *Service) Acquire(ctx context.Context) (func(), error) {
 
 // NewService creates a Service with every registered table.
 func NewService(repos Repos) *Service {
-	s := &Service{repos: repos, Now: time.Now, MaxRows: MaxExportRows, MaxCells: MaxExportCells, MaxBytes: MaxExportBytes, slots: make(chan struct{}, MaxConcurrentExports)}
+	s := &Service{repos: repos, Now: time.Now, slots: make(chan struct{}, MaxConcurrentExports)}
 	s.tables = registry()
 	s.byID = make(map[TableID]*Table, len(s.tables))
 	for _, t := range s.tables {
@@ -319,18 +329,20 @@ func (s *Service) Build(ctx context.Context, id TableID, projectID, scopeID stri
 	if err := s.checkScope(ctx, t, projectID, scopeID); err != nil {
 		return nil, err
 	}
-	n, err := s.estimateRows(ctx, t, projectID, scopeID)
-	if err != nil {
-		return nil, err
-	}
-	if n > s.MaxRows {
-		return nil, fmt.Errorf("%w: %s has about %d rows", ErrTooManyRows, id, n)
+	if s.MaxRows > 0 {
+		n, err := s.estimateRows(ctx, t, projectID, scopeID)
+		if err != nil {
+			return nil, err
+		}
+		if n > s.MaxRows {
+			return nil, fmt.Errorf("%w: %s has about %d rows", ErrTooManyRows, id, n)
+		}
 	}
 	data, err := t.build(ctx, s, projectID, scopeID)
 	if err != nil {
 		return nil, err
 	}
-	if len(data.Rows) > s.MaxRows {
+	if s.MaxRows > 0 && len(data.Rows) > s.MaxRows {
 		return nil, fmt.Errorf("%w: %s has %d rows", ErrTooManyRows, id, len(data.Rows))
 	}
 	return data, nil
@@ -440,13 +452,15 @@ func (s *Service) BuildWorkbook(ctx context.Context, projectID string, ids []Tab
 		if t.Scope == ScopeNone {
 			return nil, 0, fmt.Errorf("%w: %s", ErrNotWorkbookTable, id)
 		}
-		n, err := s.estimateRows(ctx, t, projectID, "")
-		if err != nil {
-			return nil, 0, err
-		}
-		estimated += n
-		if estimated > s.MaxRows {
-			return nil, 0, fmt.Errorf("%w: workbook has about %d rows", ErrTooManyRows, estimated)
+		if s.MaxRows > 0 {
+			n, err := s.estimateRows(ctx, t, projectID, "")
+			if err != nil {
+				return nil, 0, err
+			}
+			estimated += n
+			if estimated > s.MaxRows {
+				return nil, 0, fmt.Errorf("%w: workbook has about %d rows", ErrTooManyRows, estimated)
+			}
 		}
 		tables = append(tables, t)
 	}
@@ -460,7 +474,7 @@ func (s *Service) BuildWorkbook(ctx context.Context, projectID string, ids []Tab
 			return nil, 0, fmt.Errorf("build %s: %w", id, err)
 		}
 		total += len(data.Rows)
-		if total > s.MaxRows {
+		if s.MaxRows > 0 && total > s.MaxRows {
 			return nil, 0, fmt.Errorf("%w: workbook has more than %d rows", ErrTooManyRows, s.MaxRows)
 		}
 		sheets = append(sheets, data.Sheets(t.Label)...)

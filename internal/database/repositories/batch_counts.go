@@ -211,3 +211,29 @@ func (r *LookRepository) GetFixtureValuesInProject(ctx context.Context, lookID, 
 		Find(&values).Error
 	return values, err
 }
+
+// MaxChannelOffsetByFixtureIDs returns the highest instance-channel offset
+// of each fixture, keyed by fixture ID, with one grouped query per chunk.
+// Fixtures without instance channels are absent.
+func (r *FixtureRepository) MaxChannelOffsetByFixtureIDs(ctx context.Context, fixtureIDs []string) (map[string]int, error) {
+	out := make(map[string]int, len(fixtureIDs))
+	type row struct {
+		FixtureID string
+		MaxOffset int
+	}
+	for _, chunk := range chunkIDs(fixtureIDs) {
+		var rows []row
+		if err := r.db.WithContext(ctx).
+			Model(&models.InstanceChannel{}).
+			Select("fixture_id, MAX(offset) AS max_offset").
+			Where("fixture_id IN ?", chunk).
+			Group("fixture_id").
+			Scan(&rows).Error; err != nil {
+			return nil, err
+		}
+		for _, rw := range rows {
+			out[rw.FixtureID] = rw.MaxOffset
+		}
+	}
+	return out, nil
+}

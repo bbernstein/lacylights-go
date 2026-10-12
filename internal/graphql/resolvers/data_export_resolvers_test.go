@@ -426,10 +426,9 @@ func TestExportDataTable_LibraryRejectsScopeAndRowCap(t *testing.T) {
 	_, err = q.ExportDataWorkbook(ctx, s.projectID, []generated.DataExportTable{generated.DataExportTableFixtureLibrary})
 	require.ErrorIs(t, err, exporttables.ErrNotWorkbookTable)
 
-	// Exports over the row cap fail with a clear error.
-	r.DataExportService.MaxRows = 0
-	_, err = q.ExportDataTable(ctx, &s.projectID, generated.DataExportTableFixtures, generated.DataExportFormatCSV, nil)
-	require.ErrorIs(t, err, exporttables.ErrTooManyRows)
+	// When a row cap is configured (opt-in), exports over it fail with a
+	// clear error. The seeded workbook has more than one row.
+	r.DataExportService.MaxRows = 1
 	_, err = q.ExportDataWorkbook(ctx, s.projectID, nil)
 	require.ErrorIs(t, err, exporttables.ErrTooManyRows)
 }
