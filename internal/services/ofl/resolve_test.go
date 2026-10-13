@@ -352,8 +352,8 @@ func TestBuildImportPlan_DefaultValueResolution(t *testing.T) {
 	want := map[string][3]int{
 		"Pan":       {127, 0, 255}, // floor(0.5 * 65535) = 32767 = 127/255
 		"Pan fine":  {255, 0, 255},
-		"Iris":      {132, 0, 131}, // 8-bit value on a 16-bit channel: 132 << 8
-		"Iris fine": {0, 0, 255},
+		"Iris":      {132, 0, 131}, // 8-bit 132 on a 16-bit channel: 0x8484 (OFL scaleDmxValue)
+		"Iris fine": {132, 0, 255},
 		"Tilt":      {127, 0, 255}, // no default: centre of [0, 65535], reduced to coarse
 		"Tilt fine": {0, 0, 255},
 		"Dimmer":    {255, 0, 255},
@@ -417,7 +417,7 @@ func TestResolution(t *testing.T) {
 		t.Errorf("resolution clamped = %+v", r)
 	}
 	r = resolutionOf(OFLChannel{FineChannelAliases: []string{"a", "b"}, DMXValueResolution: "16bit"})
-	if r.valueBytes != 2 || r.toFull(0x1234) != 0x123400 || r.byteAt(0x123456, 2) != 0x56 || r.byteAt(1, 5) != 0 {
+	if r.valueBytes != 2 || r.toFull(0x1234) != 0x123434 || r.byteAt(0x123456, 2) != 0x56 || r.byteAt(1, 5) != 0 {
 		t.Errorf("24-bit channel with 16-bit values: %+v", r)
 	}
 	// A channel without capability still honours an explicit default.

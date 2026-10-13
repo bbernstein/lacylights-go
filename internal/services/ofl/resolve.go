@@ -351,9 +351,14 @@ func resolutionOf(ch OFLChannel) resolution {
 }
 
 // toFull scales a value from the value resolution to the full channel
-// resolution (e.g. an 8-bit value 132 on a 16-bit channel is 33792).
+// resolution the way OFL's scaleDmxValue does: each added byte repeats the
+// least-significant byte (an 8-bit 132 on a 16-bit channel is 0x8484).
 func (r resolution) toFull(v int) int {
-	return v << (8 * (r.channelBytes - r.valueBytes))
+	lsb := v & 0xff
+	for i := r.valueBytes; i < r.channelBytes; i++ {
+		v = v<<8 | lsb
+	}
+	return v
 }
 
 // byteAt returns byte i (0 = coarse) of a full-resolution value.
