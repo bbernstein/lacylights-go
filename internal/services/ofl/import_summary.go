@@ -67,7 +67,7 @@ func ClassifyImportError(err error) string {
 		return CategoryInvalidJSON
 	case strings.HasPrefix(msg, "OFL fixture must have"):
 		return CategoryValidation
-	case strings.HasPrefix(msg, "failed to"):
+	case strings.HasPrefix(msg, "failed to"), strings.HasPrefix(msg, "error checking existing fixture"):
 		return CategoryDatabase
 	}
 	return CategoryOther

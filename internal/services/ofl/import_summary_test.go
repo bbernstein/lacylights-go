@@ -24,6 +24,7 @@ func TestClassifyImportError(t *testing.T) {
 		{errors.New("invalid JSON: boom"), CategoryInvalidJSON},
 		{errors.New(`OFL fixture must have a "name" field`), CategoryValidation},
 		{errors.New("failed to create channels: locked"), CategoryDatabase},
+		{errors.New("error checking existing fixture: locked"), CategoryDatabase},
 		{errors.New("something else"), CategoryOther},
 	}
 	for _, tt := range tests {
