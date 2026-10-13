@@ -33,6 +33,10 @@ const (
 	// the importer allocate unbounded memory. The largest OFL matrix has a
 	// few hundred pixels.
 	maxMatrixPixels = 65536
+	// maxModeChannels is the most channels a mode can have: one DMX
+	// universe. Insert blocks are checked against the remaining budget
+	// before they are expanded.
+	maxModeChannels = 512
 
 	pixelKeyVar = "$pixelKey"
 	// unusedChannelName names the placeholder channel used for null mode
@@ -310,7 +314,8 @@ func channelDefFromOFL(name string, ch OFLChannel) ChannelDefinition {
 	minVal, maxVal := getMinMaxValues(capability)
 	defaultVal := getDefaultValue(capability)
 	if capability.DMXRange != nil {
-		minVal, maxVal, defaultVal = r.coarse(minVal), r.coarse(maxVal), r.coarse(defaultVal)
+		minVal, maxVal = r.coarseRange(minVal, maxVal)
+		defaultVal = r.coarse(defaultVal)
 	}
 	if hasDefault {
 		defaultVal = r.byteAt(r.toFull(explicitDefault), 0)
@@ -372,6 +377,22 @@ func (r resolution) byteAt(full, i int) int {
 // coarse reduces a value in the value resolution to its coarse byte.
 func (r resolution) coarse(v int) int {
 	return clampByte(v >> (8 * (r.valueBytes - 1)))
+}
+
+// coarseRange reduces a DMX range to the coarse byte like OFL's
+// scaleDmxRangeIndividually: the end drops its fine bytes, and the start is
+// rounded up when a dropped byte was non-zero (unless that would pass the
+// end), so the stored range never widens.
+func (r resolution) coarseRange(start, end int) (int, int) {
+	end = r.coarse(end)
+	for res := r.valueBytes; res > 1; res-- {
+		dropped := start & 0xff
+		start >>= 8
+		if dropped > 0 && start < end {
+			start++
+		}
+	}
+	return clampByte(start), end
 }
 
 func clampByte(v int) int {
@@ -591,6 +612,9 @@ func (b *planBuilder) resolveTemplate(k string) (int, bool, error) {
 func expandModeChannels(m OFLMode, matrix *OFLMatrix) ([]*string, error) {
 	var keys []*string
 	for i, raw := range m.Channels {
+		if len(keys) >= maxModeChannels {
+			return nil, fmt.Errorf("%w: mode %q has more than %d channels", ErrUnsupportedModeChannel, m.Name, maxModeChannels)
+		}
 		trimmed := bytes.TrimSpace(raw)
 		switch {
 		case len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")):
@@ -602,7 +626,7 @@ func expandModeChannels(m OFLMode, matrix *OFLMatrix) ([]*string, error) {
 			}
 			keys = append(keys, &s)
 		case trimmed[0] == '{':
-			expanded, err := expandInsertBlock(trimmed, matrix)
+			expanded, err := expandInsertBlock(trimmed, matrix, maxModeChannels-len(keys))
 			if err != nil {
 				return nil, fmt.Errorf("%w: mode %q entry %d: %v", ErrUnsupportedModeChannel, m.Name, i, err)
 			}
@@ -621,7 +645,10 @@ type insertBlock struct {
 	TemplateChannels []*string       `json:"templateChannels"`
 }
 
-func expandInsertBlock(raw []byte, matrix *OFLMatrix) ([]*string, error) {
+// expandInsertBlock expands a matrix insert block. budget is the number of
+// channels the mode can still take; larger blocks are rejected before any
+// allocation.
+func expandInsertBlock(raw []byte, matrix *OFLMatrix, budget int) ([]*string, error) {
 	var blk insertBlock
 	if err := json.Unmarshal(raw, &blk); err != nil {
 		return nil, err
@@ -633,6 +660,9 @@ func expandInsertBlock(raw []byte, matrix *OFLMatrix) ([]*string, error) {
 	if err != nil {
 		return nil, err
 	}
+	if n := len(pixelKeys) * len(blk.TemplateChannels); n > budget {
+		return nil, fmt.Errorf("insert block expands to %d channels, more than the %d left in the mode", n, budget)
+	}
 	resolve := func(tmpl *string, pk string) *string {
 		if tmpl == nil {
 			return nil
@@ -640,7 +670,7 @@ func expandInsertBlock(raw []byte, matrix *OFLMatrix) ([]*string, error) {
 		s := strings.ReplaceAll(*tmpl, pixelKeyVar, pk)
 		return &s
 	}
-	var keys []*string
+	keys := make([]*string, 0, len(pixelKeys)*len(blk.TemplateChannels))
 	switch blk.ChannelOrder {
 	case "perPixel":
 		for _, pk := range pixelKeys {
@@ -760,7 +790,17 @@ func (m *OFLMatrix) pixelKeysABC() []string {
 	for k := range pos {
 		keys = append(keys, k)
 	}
-	sort.Slice(keys, func(i, j int) bool { return naturalLess(keys[i], keys[j]) })
+	// Numeric collation can tie ("1" vs "01"); break ties on the raw
+	// string so the order (and thus DMX offsets) is deterministic.
+	sort.Slice(keys, func(i, j int) bool {
+		if naturalLess(keys[i], keys[j]) {
+			return true
+		}
+		if naturalLess(keys[j], keys[i]) {
+			return false
+		}
+		return keys[i] < keys[j]
+	})
 	return keys
 }
 

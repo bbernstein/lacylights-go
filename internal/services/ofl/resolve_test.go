@@ -466,3 +466,63 @@ func TestNaturalLess_LongDigitRuns(t *testing.T) {
 		t.Error("equal-length digit runs compare lexically")
 	}
 }
+
+func TestCoarseRange(t *testing.T) {
+	r := resolution{channelBytes: 2, valueBytes: 2}
+	tests := []struct{ start, end, wantStart, wantEnd int }{
+		{1, 65535, 1, 255},       // non-zero dropped byte rounds the start up
+		{0, 65535, 0, 255},       // zero dropped byte keeps the start
+		{256, 511, 1, 1},         // exact byte boundary
+		{257, 300, 1, 1},         // rounding up would pass the end: keep floor
+		{32768, 65535, 128, 255}, // upper half
+	}
+	for _, tt := range tests {
+		s, e := r.coarseRange(tt.start, tt.end)
+		if s != tt.wantStart || e != tt.wantEnd {
+			t.Errorf("coarseRange(%d, %d) = %d, %d; want %d, %d", tt.start, tt.end, s, e, tt.wantStart, tt.wantEnd)
+		}
+	}
+	if s, e := (resolution{channelBytes: 1, valueBytes: 1}).coarseRange(10, 20); s != 10 || e != 20 {
+		t.Errorf("8-bit range changed: %d, %d", s, e)
+	}
+}
+
+func TestBuildImportPlan_ModeChannelBudget(t *testing.T) {
+	// 600 pixels x 1 template channel is more than one universe.
+	big := `{"name":"X","categories":["Matrix"],"matrix":{"pixelCount":[600,1,1]},
+		"templateChannels":{"D $pixelKey":{}},
+		"modes":[{"name":"m","channels":[{"insert":"matrixChannels","repeatFor":"eachPixelABC","channelOrder":"perPixel","templateChannels":["D $pixelKey"]}]}]}`
+	f, _ := parseOFLFixture(big)
+	if _, err := buildImportPlan(f); !errors.Is(err, ErrUnsupportedModeChannel) {
+		t.Errorf("oversized insert: err = %v, want ErrUnsupportedModeChannel", err)
+	}
+
+	// A plain channel list longer than 512 entries is rejected too.
+	entries := make([]string, 513)
+	for i := range entries {
+		entries[i] = "null"
+	}
+	long := `{"name":"X","categories":["Dimmer"],"availableChannels":{"D":{}},
+		"modes":[{"name":"m","channels":[` + strings.Join(entries, ",") + `]}]}`
+	f, _ = parseOFLFixture(long)
+	if _, err := buildImportPlan(f); !errors.Is(err, ErrUnsupportedModeChannel) {
+		t.Errorf("long mode: err = %v, want ErrUnsupportedModeChannel", err)
+	}
+
+	// Exactly 512 is fine.
+	f, _ = parseOFLFixture(`{"name":"X","categories":["Dimmer"],"availableChannels":{"D":{}},
+		"modes":[{"name":"m","channels":[` + strings.Join(entries[:512], ",") + `]}]}`)
+	if _, err := buildImportPlan(f); err != nil {
+		t.Errorf("512-channel mode rejected: %v", err)
+	}
+}
+
+func TestOFLMatrix_PixelKeysABCDeterministicTies(t *testing.T) {
+	one, zeroOne := "1", "01"
+	for i := 0; i < 20; i++ {
+		m := &OFLMatrix{PixelKeys: [][][]*string{{{&one, &zeroOne}}}}
+		if got := fmt.Sprint(m.pixelKeysABC()); got != "[01 1]" {
+			t.Fatalf("iteration %d: pixelKeysABC = %s, want [01 1]", i, got)
+		}
+	}
+}
