@@ -20,6 +20,7 @@ func TestClassifyImportError(t *testing.T) {
 		{fmt.Errorf("%w to a/b", ErrFixtureRedirect), CategoryRedirect},
 		{fmt.Errorf("mode: %w", ErrUnknownModeChannel), CategoryUnknownModeChannel},
 		{fmt.Errorf("mode: %w", ErrUnsupportedModeChannel), CategoryUnsupportedEntry},
+		{fmt.Errorf("%w: open: boom", ErrReadFixture), CategoryFileIO},
 		{errors.New("invalid JSON: boom"), CategoryInvalidJSON},
 		{errors.New(`OFL fixture must have a "name" field`), CategoryValidation},
 		{errors.New("failed to create channels: locked"), CategoryDatabase},

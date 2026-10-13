@@ -180,6 +180,10 @@ func TestImportOFLSample_TemplateChannelsAndTemplateSwitching(t *testing.T) {
 	if defs[8].Type != "PAN" || defs[9].Type != "PAN" {
 		t.Errorf("Pan 2 / Pan 2 fine types = %s / %s, want PAN", defs[8].Type, defs[9].Type)
 	}
+	// The Pan template's 16-bit "50%" default is 32767 = coarse 127, fine 255.
+	if defs[8].DefaultValue != 127 || defs[9].DefaultValue != 255 {
+		t.Errorf("Pan 2 / Pan 2 fine defaults = %d / %d, want 127 / 255", defs[8].DefaultValue, defs[9].DefaultValue)
+	}
 }
 
 // Fixtures that only have template channels (no availableChannels).

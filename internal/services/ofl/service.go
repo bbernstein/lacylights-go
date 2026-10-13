@@ -312,14 +312,22 @@ func (s *Service) ImportFixtureWithHash(ctx context.Context, manufacturer, oflFi
 		if existing != nil && update {
 			// First delete related mode channels
 			var modeIDs []string
-			tx.Table("fixture_modes").Where("definition_id = ?", existing.ID).Pluck("id", &modeIDs)
+			if err := tx.Table("fixture_modes").Where("definition_id = ?", existing.ID).Pluck("id", &modeIDs).Error; err != nil {
+				return fmt.Errorf("failed to load existing modes: %w", err)
+			}
 			if len(modeIDs) > 0 {
-				tx.Where("mode_id IN ?", modeIDs).Delete(&models.ModeChannel{})
+				if err := tx.Where("mode_id IN ?", modeIDs).Delete(&models.ModeChannel{}).Error; err != nil {
+					return fmt.Errorf("failed to delete existing mode channels: %w", err)
+				}
 			}
 			// Delete modes
-			tx.Where("definition_id = ?", existing.ID).Delete(&models.FixtureMode{})
+			if err := tx.Where("definition_id = ?", existing.ID).Delete(&models.FixtureMode{}).Error; err != nil {
+				return fmt.Errorf("failed to delete existing modes: %w", err)
+			}
 			// Delete channels
-			tx.Where("definition_id = ?", existing.ID).Delete(&models.ChannelDefinition{})
+			if err := tx.Where("definition_id = ?", existing.ID).Delete(&models.ChannelDefinition{}).Error; err != nil {
+				return fmt.Errorf("failed to delete existing channels: %w", err)
+			}
 			// Delete definition
 			if err := tx.Delete(existing).Error; err != nil {
 				return fmt.Errorf("failed to delete existing fixture: %w", err)

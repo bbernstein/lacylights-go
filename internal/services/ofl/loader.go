@@ -234,14 +234,14 @@ func (l *Loader) importFromZip(ctx context.Context, zipPath string) (*ImportStat
 			// Read fixture JSON
 			rc, err := file.Open()
 			if err != nil {
-				summary.Record(fixtureKey, fmt.Errorf("failed to open: %w", err))
+				summary.Record(fixtureKey, fmt.Errorf("%w: open: %v", ErrReadFixture, err))
 				return
 			}
 			defer func() { _ = rc.Close() }()
 
 			data, err := io.ReadAll(rc)
 			if err != nil {
-				summary.Record(fixtureKey, fmt.Errorf("failed to read: %w", err))
+				summary.Record(fixtureKey, fmt.Errorf("%w: read: %v", ErrReadFixture, err))
 				return
 			}
 

@@ -324,3 +324,145 @@ func TestRepeatForKeys_ExplicitList(t *testing.T) {
 		t.Error("expected error for unknown repeatFor")
 	}
 }
+
+// Channel-level defaultValue is honoured and split across coarse/fine
+// bytes at the channel's resolution (OFL: percentages use Math.floor).
+func TestBuildImportPlan_DefaultValueResolution(t *testing.T) {
+	js := `{"name":"X","categories":["Moving Head"],"availableChannels":{
+		"Pan": {"fineChannelAliases":["Pan fine"],"defaultValue":"50%","capability":{"type":"Pan","angleStart":"0deg","angleEnd":"540deg"}},
+		"Iris": {"fineChannelAliases":["Iris fine"],"dmxValueResolution":"8bit","defaultValue":132,
+			"capabilities":[{"dmxRange":[0,131],"type":"Iris"},{"dmxRange":[132,255],"type":"Iris"}]},
+		"Tilt": {"fineChannelAliases":["Tilt fine"],"capability":{"dmxRange":[0,65535],"type":"Tilt"}},
+		"Dimmer": {"defaultValue":255,"capability":{"type":"Intensity"}},
+		"Raw": {"defaultValue":"25%"}
+	},"modes":[{"name":"m","channels":["Pan","Pan fine","Iris","Iris fine","Tilt","Tilt fine","Dimmer","Raw"]}]}`
+	f, err := parseOFLFixture(js)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := buildImportPlan(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string][3]int{}
+	for _, idx := range plan.Modes[0].channelIdx {
+		c := plan.Channels[idx]
+		got[c.Name] = [3]int{c.DefaultValue, c.MinValue, c.MaxValue}
+	}
+	want := map[string][3]int{
+		"Pan":       {127, 0, 255}, // floor(0.5 * 65535) = 32767 = 127/255
+		"Pan fine":  {255, 0, 255},
+		"Iris":      {132, 0, 131}, // 8-bit value on a 16-bit channel: 132 << 8
+		"Iris fine": {0, 0, 255},
+		"Tilt":      {127, 0, 255}, // no default: centre of [0, 65535], reduced to coarse
+		"Tilt fine": {0, 0, 255},
+		"Dimmer":    {255, 0, 255},
+		"Raw":       {63, 0, 255}, // floor(0.25 * 255)
+	}
+	for name, w := range want {
+		if got[name] != w {
+			t.Errorf("%s default/min/max = %v, want %v", name, got[name], w)
+		}
+	}
+}
+
+// A percentage defaultValue selects the switching capability it falls in.
+func TestBuildImportPlan_SwitchingPercentDefaultSelectsCapability(t *testing.T) {
+	js := `{"name":"X","categories":["Dimmer"],"availableChannels":{
+		"Mode": {"defaultValue": "90%", "capabilities": [
+			{"dmxRange":[0,127],"type":"Generic","switchChannels":{"Alias":"Speed"}},
+			{"dmxRange":[128,255],"type":"Generic","switchChannels":{"Alias":"Sens"}}
+		]},
+		"Speed": {"capability": {"type": "Speed"}},
+		"Sens": {"capability": {"type": "Intensity"}}
+	},"modes":[{"name":"m","channels":["Alias"]}]}`
+	f, _ := parseOFLFixture(js)
+	plan, err := buildImportPlan(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := plan.Channels[plan.Modes[0].channelIdx[0]]; c.Type != "INTENSITY" {
+		t.Errorf("alias type = %s, want INTENSITY (target Sens)", c.Type)
+	}
+}
+
+func TestParseDMXValue(t *testing.T) {
+	tests := []struct {
+		raw   string
+		bytes int
+		want  int
+		ok    bool
+	}{
+		{``, 1, 0, false},
+		{`128`, 1, 128, true},
+		{`999`, 1, 255, true},
+		{`-5`, 1, 0, true},
+		{`"100%"`, 2, 65535, true},
+		{`"0%"`, 1, 0, true},
+		{`"abc%"`, 1, 0, false},
+		{`"fast"`, 1, 0, false},
+		{`true`, 1, 0, false},
+	}
+	for _, tt := range tests {
+		got, ok := parseDMXValue(json.RawMessage(tt.raw), tt.bytes)
+		if got != tt.want || ok != tt.ok {
+			t.Errorf("parseDMXValue(%s, %d) = %d, %v; want %d, %v", tt.raw, tt.bytes, got, ok, tt.want, tt.ok)
+		}
+	}
+}
+
+func TestResolution(t *testing.T) {
+	r := resolutionOf(OFLChannel{FineChannelAliases: []string{"a"}, DMXValueResolution: "24bit"})
+	if r.channelBytes != 2 || r.valueBytes != 2 {
+		t.Errorf("resolution clamped = %+v", r)
+	}
+	r = resolutionOf(OFLChannel{FineChannelAliases: []string{"a", "b"}, DMXValueResolution: "16bit"})
+	if r.valueBytes != 2 || r.toFull(0x1234) != 0x123400 || r.byteAt(0x123456, 2) != 0x56 || r.byteAt(1, 5) != 0 {
+		t.Errorf("24-bit channel with 16-bit values: %+v", r)
+	}
+	// A channel without capability still honours an explicit default.
+	if d := channelDefFromOFL("x", OFLChannel{DefaultValue: json.RawMessage(`7`)}); d.DefaultValue != 7 || d.Type != "OTHER" {
+		t.Errorf("no-capability default = %+v", d)
+	}
+}
+
+// A real channel named like the null placeholder is not confused with it.
+func TestBuildImportPlan_NullPlaceholderNameCollision(t *testing.T) {
+	js := `{"name":"X","categories":["Dimmer"],"availableChannels":{"No function":{"capability":{"type":"Intensity"}}},
+		"modes":[{"name":"m","channels":["No function",null]}]}`
+	f, _ := parseOFLFixture(js)
+	plan, err := buildImportPlan(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := plan.Modes[0]
+	if m.channelIdx[0] == m.channelIdx[1] {
+		t.Fatal("null slot resolved to the real 'No function' channel")
+	}
+	if plan.Channels[m.channelIdx[0]].Type != "INTENSITY" || plan.Channels[m.channelIdx[1]].Type != "OTHER" {
+		t.Errorf("types = %s, %s", plan.Channels[m.channelIdx[0]].Type, plan.Channels[m.channelIdx[1]].Type)
+	}
+}
+
+func TestBuildImportPlan_RejectsHugeMatrix(t *testing.T) {
+	js := `{"name":"X","categories":["Matrix"],"matrix":{"pixelCount":[100000,100000,100000]},
+		"templateChannels":{"D $pixelKey":{}},"modes":[{"name":"m","channels":["D 1"]}]}`
+	f, _ := parseOFLFixture(js)
+	if _, err := buildImportPlan(f); !errors.Is(err, ErrUnsupportedModeChannel) {
+		t.Errorf("err = %v, want ErrUnsupportedModeChannel", err)
+	}
+}
+
+func TestNaturalLess_LongDigitRuns(t *testing.T) {
+	a := "pixel 99999999999999999999999"
+	b := "pixel 100000000000000000000000"
+	if !naturalLess(a, b) || naturalLess(b, a) {
+		t.Error("long digit runs must compare numerically")
+	}
+	if !naturalLess("x007", "x8") {
+		t.Error("leading zeros should be ignored")
+	}
+	if !naturalLess("x12", "x13") {
+		t.Error("equal-length digit runs compare lexically")
+	}
+}

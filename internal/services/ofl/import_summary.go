@@ -27,6 +27,9 @@ var (
 	// ErrUnsupportedModeChannel means a mode channel entry has a shape the
 	// importer does not understand (e.g. an unknown insert block).
 	ErrUnsupportedModeChannel = errors.New("unsupported mode channel entry")
+	// ErrReadFixture means the fixture file could not be read from the
+	// OFL archive.
+	ErrReadFixture = errors.New("failed to read fixture file")
 )
 
 // Import failure categories reported by ImportSummary.
@@ -36,6 +39,7 @@ const (
 	CategoryUnknownModeChannel = "mode references unknown channel"
 	CategoryUnsupportedEntry   = "unsupported mode channel entry"
 	CategoryInvalidJSON        = "invalid JSON"
+	CategoryFileIO             = "file read error"
 	CategoryValidation         = "validation"
 	CategoryDatabase           = "database"
 	CategoryOther              = "other"
@@ -54,6 +58,8 @@ func ClassifyImportError(err error) string {
 		return CategoryUnknownModeChannel
 	case errors.Is(err, ErrUnsupportedModeChannel):
 		return CategoryUnsupportedEntry
+	case errors.Is(err, ErrReadFixture):
+		return CategoryFileIO
 	}
 	msg := err.Error()
 	switch {

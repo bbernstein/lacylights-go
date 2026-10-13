@@ -429,7 +429,7 @@ func (m *Manager) runImport(ctx context.Context, opts *ImportOptions) (*ImportRe
 			fileKey := manufacturerKey + "/" + strings.TrimSuffix(fixtureFileName, ".json")
 			rc, err := file.Open()
 			if err != nil {
-				summary.Record(fileKey, fmt.Errorf("failed to open: %w", err))
+				summary.Record(fileKey, fmt.Errorf("%w: open: %v", ErrReadFixture, err))
 				atomic.AddInt64(&failCount, 1)
 				m.statusTracker.IncrementFailed()
 				return
@@ -438,7 +438,7 @@ func (m *Manager) runImport(ctx context.Context, opts *ImportOptions) (*ImportRe
 
 			data, err := io.ReadAll(rc)
 			if err != nil {
-				summary.Record(fileKey, fmt.Errorf("failed to read: %w", err))
+				summary.Record(fileKey, fmt.Errorf("%w: read: %v", ErrReadFixture, err))
 				atomic.AddInt64(&failCount, 1)
 				m.statusTracker.IncrementFailed()
 				return

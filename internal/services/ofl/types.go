@@ -30,8 +30,13 @@ type OFLChannel struct {
 	Capability         *OFLCapability  `json:"capability,omitempty"`
 	Capabilities       []OFLCapability `json:"capabilities,omitempty"`
 	FineChannelAliases []string        `json:"fineChannelAliases,omitempty"`
-	// DefaultValue is a DMX value (number) or a percentage string.
+	// DefaultValue is a DMX value (number) or a percentage string, given
+	// in the channel's value resolution (see DMXValueResolution).
 	DefaultValue json.RawMessage `json:"defaultValue,omitempty"`
+	// DMXValueResolution ("8bit", "16bit", "24bit") is the resolution of
+	// the DMX values in this channel. Defaults to the channel's full
+	// resolution (8 bit per coarse/fine channel).
+	DMXValueResolution string `json:"dmxValueResolution,omitempty"`
 }
 
 // OFLMode represents an operating mode

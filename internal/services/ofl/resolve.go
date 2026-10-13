@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -23,10 +24,16 @@ import (
 //   - matrix template channels ("Red $pixelKey") referenced directly or
 //     through matrix insert blocks ({"insert": "matrixChannels", ...})
 //
-// Every mode entry produces exactly one mode channel at its index, so DMX
-// offsets match the fixture's documented layout.
+// After insert blocks are expanded, every resulting mode channel (including
+// null slots) occupies exactly one DMX offset, so offsets match the
+// fixture's documented layout.
 
 const (
+	// maxMatrixPixels bounds pixelCount so a malformed fixture cannot make
+	// the importer allocate unbounded memory. The largest OFL matrix has a
+	// few hundred pixels.
+	maxMatrixPixels = 65536
+
 	pixelKeyVar = "$pixelKey"
 	// unusedChannelName names the placeholder channel used for null mode
 	// entries and switching aliases that switch to no channel.
@@ -180,6 +187,10 @@ func buildImportPlan(f *OFLFixture) (*importPlan, error) {
 	b.collectSwitchingAliases()
 	b.compileTemplates()
 	if f.Matrix != nil {
+		if c := f.Matrix.pixelCount(); c[0] < 0 || c[1] < 0 || c[2] < 0 || c[0]*c[1]*c[2] > maxMatrixPixels ||
+			c[0] > maxMatrixPixels || c[1] > maxMatrixPixels || c[2] > maxMatrixPixels {
+			return nil, fmt.Errorf("%w: matrix pixelCount %v exceeds %d pixels", ErrUnsupportedModeChannel, c, maxMatrixPixels)
+		}
 		b.pixelSet = map[string]bool{}
 		for _, k := range f.Matrix.pixelKeysABC() {
 			b.pixelSet[k] = true
@@ -224,41 +235,55 @@ func (b *planBuilder) addAvailableChannels() {
 	for _, key := range order {
 		ch := b.fixture.AvailableChannels[key]
 		b.addChannel(key, ch)
-		for _, alias := range ch.FineChannelAliases {
-			b.addFine(alias, ch)
+		for i, alias := range ch.FineChannelAliases {
+			b.addFine(alias, ch, i+1)
 		}
 	}
 }
 
 func (b *planBuilder) add(def ChannelDefinition) int {
-	def.Offset = len(b.channels)
-	b.channels = append(b.channels, def)
-	idx := len(b.channels) - 1
+	idx := b.addUnlisted(def)
 	if _, exists := b.byKey[def.Name]; !exists {
 		b.byKey[def.Name] = idx
 	}
 	return idx
 }
 
+// addUnlisted adds a channel that mode keys cannot resolve to by name
+// (the shared placeholder for null slots).
+func (b *planBuilder) addUnlisted(def ChannelDefinition) int {
+	def.Offset = len(b.channels)
+	b.channels = append(b.channels, def)
+	return len(b.channels) - 1
+}
+
 func (b *planBuilder) addChannel(name string, ch OFLChannel) int {
 	return b.add(channelDefFromOFL(name, ch))
 }
 
-func (b *planBuilder) addFine(name string, parent OFLChannel) int {
+// addFine adds the fineIdx-th fine channel (1 = first fine alias) of
+// parent. Its default is the matching byte of the parent's defaultValue.
+func (b *planBuilder) addFine(name string, parent OFLChannel, fineIdx int) int {
 	coarse := channelDefFromOFL(name, parent)
+	defaultByte := 0
+	r := resolutionOf(parent)
+	if v, ok := parseDMXValue(parent.DefaultValue, r.valueBytes); ok {
+		defaultByte = r.byteAt(r.toFull(v), fineIdx)
+	}
 	return b.add(ChannelDefinition{
 		Name:         name,
 		Type:         coarse.Type,
 		MinValue:     0,
 		MaxValue:     255,
-		DefaultValue: 0,
+		DefaultValue: defaultByte,
 		FadeBehavior: coarse.FadeBehavior,
 		IsDiscrete:   false, // fine channels are always continuous
 	})
 }
 
 // channelDefFromOFL converts one OFL channel to a channel definition
-// (without offset), auto-detecting type and fade behavior.
+// (without offset), auto-detecting type and fade behavior. DMX values of
+// multi-byte (coarse + fine) channels are reduced to the coarse byte.
 func channelDefFromOFL(name string, ch OFLChannel) ChannelDefinition {
 	var capability *OFLCapability
 	if ch.Capability != nil {
@@ -266,24 +291,110 @@ func channelDefFromOFL(name string, ch OFLChannel) ChannelDefinition {
 	} else if len(ch.Capabilities) > 0 {
 		capability = &ch.Capabilities[0]
 	}
+	r := resolutionOf(ch)
+	explicitDefault, hasDefault := parseDMXValue(ch.DefaultValue, r.valueBytes)
 	if capability == nil {
-		return ChannelDefinition{
+		def := ChannelDefinition{
 			Name: name, Type: "OTHER", MinValue: 0, MaxValue: 255,
 			DefaultValue: 0, FadeBehavior: "FADE",
 		}
+		if hasDefault {
+			def.DefaultValue = r.byteAt(r.toFull(explicitDefault), 0)
+		}
+		return def
 	}
 	isDiscrete := len(ch.Capabilities) > 1
 	channelType := mapChannelType(capability)
+	// dmxRange-derived values are in the value resolution; without a
+	// dmxRange the helpers return 8-bit values that need no reduction.
 	minVal, maxVal := getMinMaxValues(capability)
+	defaultVal := getDefaultValue(capability)
+	if capability.DMXRange != nil {
+		minVal, maxVal, defaultVal = r.coarse(minVal), r.coarse(maxVal), r.coarse(defaultVal)
+	}
+	if hasDefault {
+		defaultVal = r.byteAt(r.toFull(explicitDefault), 0)
+	}
 	return ChannelDefinition{
 		Name:         name,
 		Type:         channelType,
 		MinValue:     minVal,
 		MaxValue:     maxVal,
-		DefaultValue: getDefaultValue(capability),
+		DefaultValue: defaultVal,
 		FadeBehavior: mapFadeBehavior(channelType, isDiscrete),
 		IsDiscrete:   isDiscrete,
 	}
+}
+
+// resolution describes how an OFL channel's DMX values map to bytes.
+type resolution struct {
+	channelBytes int // 1 + number of fine channel aliases
+	valueBytes   int // resolution DMX values are written in
+}
+
+func resolutionOf(ch OFLChannel) resolution {
+	r := resolution{channelBytes: 1 + len(ch.FineChannelAliases)}
+	switch ch.DMXValueResolution {
+	case "8bit":
+		r.valueBytes = 1
+	case "16bit":
+		r.valueBytes = 2
+	case "24bit":
+		r.valueBytes = 3
+	default:
+		r.valueBytes = r.channelBytes
+	}
+	if r.valueBytes > r.channelBytes {
+		r.valueBytes = r.channelBytes
+	}
+	return r
+}
+
+// toFull scales a value from the value resolution to the full channel
+// resolution (e.g. an 8-bit value 132 on a 16-bit channel is 33792).
+func (r resolution) toFull(v int) int {
+	return v << (8 * (r.channelBytes - r.valueBytes))
+}
+
+// byteAt returns byte i (0 = coarse) of a full-resolution value.
+func (r resolution) byteAt(full, i int) int {
+	if i < 0 || i >= r.channelBytes {
+		return 0
+	}
+	return (full >> (8 * (r.channelBytes - 1 - i))) & 0xff
+}
+
+// coarse reduces a value in the value resolution to its coarse byte.
+func (r resolution) coarse(v int) int {
+	return clampByte(v >> (8 * (r.valueBytes - 1)))
+}
+
+func clampByte(v int) int {
+	return min(max(v, 0), 255)
+}
+
+// parseDMXValue parses an OFL DMX value: a number, or a percentage string
+// ("50%") scaled to the given byte resolution.
+func parseDMXValue(raw json.RawMessage, valueBytes int) (int, bool) {
+	if len(raw) == 0 {
+		return 0, false
+	}
+	maxVal := (1 << (8 * valueBytes)) - 1
+	var n float64
+	if err := json.Unmarshal(raw, &n); err == nil {
+		return min(max(int(n), 0), maxVal), true
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil || !strings.HasSuffix(s, "%") {
+		return 0, false
+	}
+	pct, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(s, "%")), 64)
+	if err != nil {
+		return 0, false
+	}
+	pct = min(max(pct, 0), 100)
+	// Math.floor, matching the OFL reference implementation.
+	return int(math.Floor(pct / 100 * float64(maxVal))), true
 }
 
 func unusedChannelDef(name string) ChannelDefinition {
@@ -320,7 +431,7 @@ func switchDefaults(ch OFLChannel) map[string]*string {
 		caps = []OFLCapability{*ch.Capability}
 	}
 	out := map[string]*string{}
-	if def, ok := numericDefault(ch.DefaultValue); ok {
+	if def, ok := parseDMXValue(ch.DefaultValue, resolutionOf(ch).valueBytes); ok {
 		for _, c := range caps {
 			if c.DMXRange != nil && def >= c.DMXRange[0] && def <= c.DMXRange[1] {
 				for alias, target := range c.SwitchChannels {
@@ -338,17 +449,6 @@ func switchDefaults(ch OFLChannel) map[string]*string {
 		}
 	}
 	return out
-}
-
-func numericDefault(raw json.RawMessage) (int, bool) {
-	if len(raw) == 0 {
-		return 0, false
-	}
-	var n float64
-	if err := json.Unmarshal(raw, &n); err != nil {
-		return 0, false
-	}
-	return int(n), true
 }
 
 // compileTemplates builds a matcher for each template channel key and each
@@ -388,7 +488,7 @@ func (b *planBuilder) compileTemplates() {
 func (b *planBuilder) resolve(key *string) (int, error) {
 	if key == nil {
 		if b.unusedIdx < 0 {
-			b.unusedIdx = b.add(unusedChannelDef(unusedChannelName))
+			b.unusedIdx = b.addUnlisted(unusedChannelDef(unusedChannelName))
 		}
 		return b.unusedIdx, nil
 	}
@@ -434,7 +534,10 @@ func (b *planBuilder) addSwitching(k string, target *string) (int, error) {
 }
 
 // resolveTemplate matches k against the template channel patterns and, if
-// one matches, adds the resolved channel (and remembers it under k).
+// one matches, adds the resolved channel (and remembers it under k). OFL
+// template keys contain $pixelKey once; for switching targets the first
+// captured pixel key is substituted. When several patterns match, the one
+// with the longest literal part wins (ties: first in sorted template order).
 func (b *planBuilder) resolveTemplate(k string) (int, bool, error) {
 	best := -1
 	var bestPixel string
@@ -474,7 +577,7 @@ func (b *planBuilder) resolveTemplate(k string) (int, bool, error) {
 	case t.fineIdx == 0:
 		return b.addChannel(k, tmpl), true, nil
 	default:
-		return b.addFine(k, tmpl), true, nil
+		return b.addFine(k, tmpl, t.fineIdx), true, nil
 	}
 }
 
@@ -704,8 +807,11 @@ func naturalLess(a, b string) bool {
 			for j < len(br) && unicode.IsDigit(br[j]) {
 				j++
 			}
-			na, _ := strconv.Atoi(string(ar[si:i]))
-			nb, _ := strconv.Atoi(string(br[sj:j]))
+			na := strings.TrimLeft(string(ar[si:i]), "0")
+			nb := strings.TrimLeft(string(br[sj:j]), "0")
+			if len(na) != len(nb) {
+				return len(na) < len(nb)
+			}
 			if na != nb {
 				return na < nb
 			}
