@@ -44,6 +44,7 @@ type ImportStatus struct {
 	TotalFixtures     int       `json:"totalFixtures"`
 	SuccessfulImports int       `json:"successfulImports"`
 	FailedImports     int       `json:"failedImports"`
+	SkippedImports    int       `json:"skippedImports"`
 	Version           string    `json:"version"`
 }
 
@@ -201,9 +202,9 @@ func (l *Loader) importFromZip(ctx context.Context, zipPath string) (*ImportStat
 
 	var (
 		successCount int64
-		failCount    int64
 		wg           sync.WaitGroup
 	)
+	summary := NewImportSummary()
 
 	// Use a semaphore to limit concurrency (database operations)
 	sem := make(chan struct{}, 10)
@@ -228,34 +229,27 @@ func (l *Loader) importFromZip(ctx context.Context, zipPath string) (*ImportStat
 				manufacturerName = mfg.Name
 			}
 
+			fixtureKey := manufacturerKey + "/" + strings.TrimSuffix(fixtureFileName, ".json")
+
 			// Read fixture JSON
 			rc, err := file.Open()
 			if err != nil {
-				log.Printf("⚠️  Failed to open %s: %v", fixtureFileName, err)
-				atomic.AddInt64(&failCount, 1)
+				summary.Record(fixtureKey, fmt.Errorf("%w: open: %v", ErrReadFixture, err))
 				return
 			}
 			defer func() { _ = rc.Close() }()
 
 			data, err := io.ReadAll(rc)
 			if err != nil {
-				log.Printf("⚠️  Failed to read %s: %v", fixtureFileName, err)
-				atomic.AddInt64(&failCount, 1)
+				summary.Record(fixtureKey, fmt.Errorf("%w: read: %v", ErrReadFixture, err))
 				return
 			}
 
-			// Import the fixture
+			// Import the fixture. Duplicates, redirects and fixtures
+			// without channels are counted as skipped by the summary.
 			_, err = l.service.ImportFixture(ctx, manufacturerName, string(data), false)
+			summary.Record(fixtureKey, err)
 			if err != nil {
-				// Check if it's a duplicate (not an error, just skip)
-				if strings.HasPrefix(err.Error(), "FIXTURE_EXISTS:") {
-					return
-				}
-				// Log other errors but don't spam
-				if atomic.LoadInt64(&failCount) < 10 {
-					log.Printf("⚠️  Failed to import %s/%s: %v", manufacturerName, fixtureFileName, err)
-				}
-				atomic.AddInt64(&failCount, 1)
 				return
 			}
 
@@ -269,11 +263,14 @@ func (l *Loader) importFromZip(ctx context.Context, zipPath string) (*ImportStat
 
 	wg.Wait()
 
-	status.SuccessfulImports = int(successCount)
-	status.FailedImports = int(failCount)
+	imported, skipped, failed := summary.Counts()
+	status.SuccessfulImports = imported
+	status.SkippedImports = skipped
+	status.FailedImports = failed
 
-	log.Printf("✅ OFL import complete: %d successful, %d failed, %d total",
-		status.SuccessfulImports, status.FailedImports, status.TotalFixtures)
+	log.Printf("✅ OFL import complete: %d successful, %d skipped, %d failed, %d total",
+		status.SuccessfulImports, status.SkippedImports, status.FailedImports, status.TotalFixtures)
+	summary.Log("OFL import")
 
 	return status, nil
 }
