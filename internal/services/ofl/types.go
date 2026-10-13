@@ -45,7 +45,7 @@ type OFLMode struct {
 	ShortName string `json:"shortName,omitempty"`
 	// Channels holds the raw mode channel entries. Each entry is a channel
 	// key (string), null (an unused DMX slot) or a matrix insert block
-	// object. See resolveModeChannels.
+	// object. See expandModeChannels.
 	Channels []json.RawMessage `json:"channels"`
 }
 

@@ -479,6 +479,11 @@ func (m *Manager) runImport(ctx context.Context, opts *ImportOptions) (*ImportRe
 			summary.Record(key, err)
 			if err != nil {
 				if IsSkippableImportError(err) {
+					// SkippedDuplicates already covers every "not imported on
+					// purpose" outcome (unchanged, in use, exists). OFL
+					// redirects are the same fixture under another name, so
+					// they are counted here too; the summary log lists them
+					// separately by category.
 					atomic.AddInt64(&skipCount, 1)
 					m.statusTracker.IncrementSkipped()
 					return
