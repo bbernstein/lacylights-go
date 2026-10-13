@@ -21,7 +21,7 @@ func TestClassifyImportError(t *testing.T) {
 		{fmt.Errorf("mode: %w", ErrUnknownModeChannel), CategoryUnknownModeChannel},
 		{fmt.Errorf("mode: %w", ErrUnsupportedModeChannel), CategoryUnsupportedEntry},
 		{fmt.Errorf("%w: open: boom", ErrReadFixture), CategoryFileIO},
-		{errors.New("invalid JSON: boom"), CategoryInvalidJSON},
+		{fmt.Errorf("%w: boom", ErrInvalidJSON), CategoryInvalidJSON},
 		{errors.New(`OFL fixture must have a "name" field`), CategoryValidation},
 		{errors.New("failed to create channels: locked"), CategoryDatabase},
 		{errors.New("error checking existing fixture: locked"), CategoryDatabase},
@@ -56,17 +56,21 @@ func TestImportSummary(t *testing.T) {
 	s := NewImportSummary()
 	var wg sync.WaitGroup
 	for i := 0; i < 5; i++ {
-		wg.Add(1)
+		wg.Add(2)
 		go func(i int) {
 			defer wg.Done()
 			s.Record(fmt.Sprintf("ok/%d", i), nil)
+		}(i)
+		go func(i int) { // concurrent readers alongside writers (-race)
+			defer wg.Done()
+			_ = s.String()
 		}(i)
 	}
 	wg.Wait()
 	s.Record("dup/a", errors.New("FIXTURE_EXISTS:A B:0"))
 	s.Record("redir/a", fmt.Errorf("%w to x/y", ErrFixtureRedirect))
 	s.Record("bad/b", fmt.Errorf("mode %q: %w", "m", ErrUnknownModeChannel))
-	s.Record("bad/a", errors.New("invalid JSON: nope"))
+	s.Record("bad/a", fmt.Errorf("%w: nope", ErrInvalidJSON))
 	s.RecordSkipped()
 
 	imported, skipped, failed := s.Counts()
@@ -103,5 +107,31 @@ func TestImportSummary_StringWithoutFailures(t *testing.T) {
 	s.Record("a/b", nil)
 	if got := s.String(); got != "imported=1 skipped=0 failed=0" {
 		t.Errorf("String() = %q", got)
+	}
+}
+
+func TestImportSummary_LogCapsEntriesPerCategory(t *testing.T) {
+	s := NewImportSummary()
+	var wg sync.WaitGroup
+	for i := 0; i < maxLoggedPerCategory+7; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			s.Record(fmt.Sprintf("bad/%03d", i), fmt.Errorf("mode: %w", ErrUnknownModeChannel))
+		}(i)
+	}
+	wg.Wait()
+	var buf bytes.Buffer
+	prevOut, prevFlags := log.Writer(), log.Flags()
+	log.SetOutput(&buf)
+	log.SetFlags(0)
+	defer func() { log.SetOutput(prevOut); log.SetFlags(prevFlags) }()
+	s.Log("OFL")
+	out := buf.String()
+	if got := strings.Count(out, "  - bad/"); got != maxLoggedPerCategory {
+		t.Errorf("logged %d entries, want %d", got, maxLoggedPerCategory)
+	}
+	if !strings.Contains(out, "... and 7 more") {
+		t.Errorf("missing overflow line:\n%s", out)
 	}
 }

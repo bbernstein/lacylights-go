@@ -526,3 +526,43 @@ func TestOFLMatrix_PixelKeysABCDeterministicTies(t *testing.T) {
 		}
 	}
 }
+
+// When several template patterns match, the one with the longest literal
+// part wins: "Red 1" is the "Red $pixelKey" template, not "$pixelKey".
+func TestBuildImportPlan_TemplateLongestLiteralWins(t *testing.T) {
+	js := `{"name":"X","categories":["Pixel Bar"],
+		"templateChannels":{
+			"$pixelKey":{"capability":{"type":"Intensity"}},
+			"Red $pixelKey":{"capability":{"type":"ColorIntensity","color":"Red"}}
+		},
+		"modes":[{"name":"m","channels":["Red 1","Solo"]}]}`
+	f, _ := parseOFLFixture(js)
+	plan, err := buildImportPlan(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := plan.Modes[0]
+	if got := plan.Channels[m.channelIdx[0]].Type; got != "RED" {
+		t.Errorf("Red 1 type = %s, want RED", got)
+	}
+	if got := plan.Channels[m.channelIdx[1]].Type; got != "INTENSITY" {
+		t.Errorf("Solo type = %s, want INTENSITY", got)
+	}
+}
+
+func TestValidPixelCount(t *testing.T) {
+	for _, tt := range []struct {
+		c    [3]int
+		want bool
+	}{
+		{[3]int{16, 1, 1}, true},
+		{[3]int{256, 256, 1}, true},
+		{[3]int{256, 256, 2}, false},
+		{[3]int{-1, 1, 1}, false},
+		{[3]int{1 << 30, 1 << 30, 1}, false},
+	} {
+		if got := validPixelCount(tt.c); got != tt.want {
+			t.Errorf("validPixelCount(%v) = %v, want %v", tt.c, got, tt.want)
+		}
+	}
+}

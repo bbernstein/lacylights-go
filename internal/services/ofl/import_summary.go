@@ -27,6 +27,8 @@ var (
 	// ErrUnsupportedModeChannel means a mode channel entry has a shape the
 	// importer does not understand (e.g. an unknown insert block).
 	ErrUnsupportedModeChannel = errors.New("unsupported mode channel entry")
+	// ErrInvalidJSON means the fixture file is not valid OFL JSON.
+	ErrInvalidJSON = errors.New("invalid JSON")
 	// ErrReadFixture means the fixture file could not be read from the
 	// OFL archive.
 	ErrReadFixture = errors.New("failed to read fixture file")
@@ -60,11 +62,11 @@ func ClassifyImportError(err error) string {
 		return CategoryUnsupportedEntry
 	case errors.Is(err, ErrReadFixture):
 		return CategoryFileIO
+	case errors.Is(err, ErrInvalidJSON):
+		return CategoryInvalidJSON
 	}
 	msg := err.Error()
 	switch {
-	case strings.HasPrefix(msg, "invalid JSON"):
-		return CategoryInvalidJSON
 	case strings.HasPrefix(msg, "OFL fixture must have"):
 		return CategoryValidation
 	case strings.HasPrefix(msg, "failed to"), strings.HasPrefix(msg, "error checking existing fixture"):
@@ -173,13 +175,22 @@ func (s *ImportSummary) String() string {
 	return line
 }
 
-// Log writes the summary and every failure, grouped by category.
+// maxLoggedPerCategory caps how many entries Log prints per category so a
+// broken library release cannot flood the log.
+const maxLoggedPerCategory = 50
+
+// Log writes the summary and the failures and skips grouped by category
+// (at most maxLoggedPerCategory entries each).
 func (s *ImportSummary) Log(prefix string) {
 	log.Printf("%s summary: %s", prefix, s.String())
 	for _, c := range s.Categories() {
 		entries := s.Examples(c)
 		log.Printf("%s %s (%d):", prefix, c, len(entries))
-		for _, e := range entries {
+		for i, e := range entries {
+			if i == maxLoggedPerCategory {
+				log.Printf("%s   ... and %d more", prefix, len(entries)-i)
+				break
+			}
 			log.Printf("%s   - %s", prefix, e)
 		}
 	}

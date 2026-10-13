@@ -63,7 +63,7 @@ type importPlan struct {
 func parseOFLFixture(data string) (*OFLFixture, error) {
 	var f OFLFixture
 	if err := json.Unmarshal([]byte(data), &f); err != nil {
-		return nil, fmt.Errorf("invalid JSON: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidJSON, err)
 	}
 	var order struct {
 		AvailableChannels json.RawMessage `json:"availableChannels"`
@@ -72,7 +72,7 @@ func parseOFLFixture(data string) (*OFLFixture, error) {
 		} `json:"matrix"`
 	}
 	if err := json.Unmarshal([]byte(data), &order); err != nil {
-		return nil, fmt.Errorf("invalid JSON: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidJSON, err)
 	}
 	f.availableChannelOrder = orderedObjectKeys(order.AvailableChannels)
 	if f.Matrix != nil && order.Matrix != nil {
@@ -191,8 +191,7 @@ func buildImportPlan(f *OFLFixture) (*importPlan, error) {
 	b.collectSwitchingAliases()
 	b.compileTemplates()
 	if f.Matrix != nil {
-		if c := f.Matrix.pixelCount(); c[0] < 0 || c[1] < 0 || c[2] < 0 || c[0]*c[1]*c[2] > maxMatrixPixels ||
-			c[0] > maxMatrixPixels || c[1] > maxMatrixPixels || c[2] > maxMatrixPixels {
+		if c := f.Matrix.pixelCount(); !validPixelCount(c) {
 			return nil, fmt.Errorf("%w: matrix pixelCount %v exceeds %d pixels", ErrUnsupportedModeChannel, c, maxMatrixPixels)
 		}
 		b.pixelSet = map[string]bool{}
@@ -719,6 +718,22 @@ func repeatForKeys(raw json.RawMessage, matrix *OFLMatrix) ([]string, error) {
 
 func isAxisPermutation(s string) bool {
 	return len(s) == 3 && strings.ContainsRune(s, 'X') && strings.ContainsRune(s, 'Y') && strings.ContainsRune(s, 'Z')
+}
+
+// validPixelCount checks each axis before multiplying so the product
+// cannot overflow (int is 32 bits on 32-bit ARM builds).
+func validPixelCount(c [3]int) bool {
+	total := 1
+	for _, n := range c {
+		if n < 0 || n > maxMatrixPixels {
+			return false
+		}
+		total *= n
+		if total > maxMatrixPixels {
+			return false
+		}
+	}
+	return true
 }
 
 // pixelCount returns [x, y, z], derived from pixelKeys when pixelCount is
