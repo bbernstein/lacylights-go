@@ -560,6 +560,9 @@ func TestValidPixelCount(t *testing.T) {
 		{[3]int{256, 256, 2}, false},
 		{[3]int{-1, 1, 1}, false},
 		{[3]int{1 << 30, 1 << 30, 1}, false},
+		{[3]int{65536, 65536, 1}, false}, // wraps to 0 in 32-bit int if multiplied first
+		{[3]int{65536, 1, 1}, true},
+		{[3]int{0, 5, 5}, true},
 	} {
 		if got := validPixelCount(tt.c); got != tt.want {
 			t.Errorf("validPixelCount(%v) = %v, want %v", tt.c, got, tt.want)

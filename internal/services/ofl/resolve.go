@@ -720,18 +720,18 @@ func isAxisPermutation(s string) bool {
 	return len(s) == 3 && strings.ContainsRune(s, 'X') && strings.ContainsRune(s, 'Y') && strings.ContainsRune(s, 'Z')
 }
 
-// validPixelCount checks each axis before multiplying so the product
-// cannot overflow (int is 32 bits on 32-bit ARM builds).
+// validPixelCount checks the bound before each multiplication so the
+// product cannot overflow (int is 32 bits on 32-bit ARM builds).
 func validPixelCount(c [3]int) bool {
 	total := 1
 	for _, n := range c {
 		if n < 0 || n > maxMatrixPixels {
 			return false
 		}
-		total *= n
-		if total > maxMatrixPixels {
+		if n > 0 && total > maxMatrixPixels/n {
 			return false
 		}
+		total *= n
 	}
 	return true
 }
