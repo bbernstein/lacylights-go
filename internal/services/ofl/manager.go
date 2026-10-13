@@ -395,6 +395,7 @@ func (m *Manager) runImport(ctx context.Context, opts *ImportOptions) (*ImportRe
 	)
 
 	sem := make(chan struct{}, 10) // Limit concurrency
+	summary := NewImportSummary()
 
 	for _, f := range fixtureFiles {
 		// Check for cancellation
@@ -425,8 +426,10 @@ func (m *Manager) runImport(ctx context.Context, opts *ImportOptions) (*ImportRe
 			m.statusTracker.SetCurrentFixture(manufacturerName, strings.TrimSuffix(fixtureFileName, ".json"))
 
 			// Read fixture JSON
+			fileKey := manufacturerKey + "/" + strings.TrimSuffix(fixtureFileName, ".json")
 			rc, err := file.Open()
 			if err != nil {
+				summary.Record(fileKey, fmt.Errorf("failed to open: %w", err))
 				atomic.AddInt64(&failCount, 1)
 				m.statusTracker.IncrementFailed()
 				return
@@ -435,6 +438,7 @@ func (m *Manager) runImport(ctx context.Context, opts *ImportOptions) (*ImportRe
 
 			data, err := io.ReadAll(rc)
 			if err != nil {
+				summary.Record(fileKey, fmt.Errorf("failed to read: %w", err))
 				atomic.AddInt64(&failCount, 1)
 				m.statusTracker.IncrementFailed()
 				return
@@ -450,6 +454,7 @@ func (m *Manager) runImport(ctx context.Context, opts *ImportOptions) (*ImportRe
 			if exists && !opts.ForceReimport {
 				if currentHash == newHash {
 					// Unchanged, skip
+					summary.RecordSkipped()
 					atomic.AddInt64(&skipCount, 1)
 					m.statusTracker.IncrementSkipped()
 					return
@@ -461,6 +466,7 @@ func (m *Manager) runImport(ctx context.Context, opts *ImportOptions) (*ImportRe
 					count, ok := instanceCounts[defID]
 					if ok && count > 0 && !opts.UpdateInUseFixtures {
 						// In use and not allowed to update
+						summary.RecordSkipped()
 						atomic.AddInt64(&skipCount, 1)
 						m.statusTracker.IncrementSkipped()
 						return
@@ -470,8 +476,9 @@ func (m *Manager) runImport(ctx context.Context, opts *ImportOptions) (*ImportRe
 
 			// Import the fixture
 			_, err = m.service.ImportFixtureWithHash(ctx, manufacturerName, jsonData, newHash, "master", exists)
+			summary.Record(key, err)
 			if err != nil {
-				if strings.HasPrefix(err.Error(), "FIXTURE_EXISTS:") {
+				if IsSkippableImportError(err) {
 					atomic.AddInt64(&skipCount, 1)
 					m.statusTracker.IncrementSkipped()
 					return
@@ -490,6 +497,7 @@ func (m *Manager) runImport(ctx context.Context, opts *ImportOptions) (*ImportRe
 	}
 
 	wg.Wait()
+	summary.Log("OFL import")
 
 	// Calculate stats
 	stats = ImportStats{

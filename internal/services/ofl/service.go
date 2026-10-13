@@ -2,7 +2,6 @@ package ofl
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -29,13 +28,14 @@ func NewService(db *gorm.DB, fixtureRepo *repositories.FixtureRepository) *Servi
 // ImportFixture imports a fixture from OFL JSON format
 func (s *Service) ImportFixture(ctx context.Context, manufacturer, oflFixtureJSON string, replace bool) (*models.FixtureDefinition, error) {
 	// Parse the OFL JSON
-	var oflFixture OFLFixture
-	if err := json.Unmarshal([]byte(oflFixtureJSON), &oflFixture); err != nil {
-		return nil, fmt.Errorf("invalid JSON: %w", err)
+	oflFixture, err := parseOFLFixture(oflFixtureJSON)
+	if err != nil {
+		return nil, err
 	}
 
-	// Validate required fields
-	if err := validateOFLFixture(&oflFixture); err != nil {
+	// Validate and resolve every mode channel before touching the database
+	plan, err := buildImportPlan(oflFixture)
+	if err != nil {
 		return nil, err
 	}
 
@@ -66,9 +66,6 @@ func (s *Service) ImportFixture(ctx context.Context, manufacturer, oflFixtureJSO
 		// Map fixture type from categories
 		fixtureType := mapFixtureType(oflFixture.Categories)
 
-		// Process channels with fade behavior auto-detection
-		channelDefs := processChannels(oflFixture.AvailableChannels)
-
 		// Create fixture definition
 		fixtureID := cuid.New()
 		definition := &models.FixtureDefinition{
@@ -84,75 +81,8 @@ func (s *Service) ImportFixture(ctx context.Context, manufacturer, oflFixtureJSO
 			return fmt.Errorf("failed to create fixture definition: %w", err)
 		}
 
-		// Create channel definitions
-		var channels []models.ChannelDefinition
-		for _, ch := range channelDefs {
-			channels = append(channels, models.ChannelDefinition{
-				ID:           cuid.New(),
-				Name:         ch.Name,
-				Type:         ch.Type,
-				Offset:       ch.Offset,
-				MinValue:     ch.MinValue,
-				MaxValue:     ch.MaxValue,
-				DefaultValue: ch.DefaultValue,
-				FadeBehavior: ch.FadeBehavior,
-				IsDiscrete:   ch.IsDiscrete,
-				DefinitionID: fixtureID,
-			})
-		}
-
-		if len(channels) > 0 {
-			if err := tx.Create(&channels).Error; err != nil {
-				return fmt.Errorf("failed to create channels: %w", err)
-			}
-		}
-
-		// Build channel name to ID map
-		channelNameToID := make(map[string]string)
-		for _, ch := range channels {
-			channelNameToID[ch.Name] = ch.ID
-		}
-
-		// Create modes
-		for _, oflMode := range oflFixture.Modes {
-			modeID := cuid.New()
-			mode := &models.FixtureMode{
-				ID:           modeID,
-				Name:         oflMode.Name,
-				ShortName:    stringPtr(oflMode.ShortName),
-				ChannelCount: len(oflMode.Channels),
-				DefinitionID: fixtureID,
-			}
-
-			if err := tx.Create(mode).Error; err != nil {
-				return fmt.Errorf("failed to create mode %s: %w", oflMode.Name, err)
-			}
-
-			// Create mode channels
-			for offset, channelName := range oflMode.Channels {
-				// Handle switched channels (e.g., "Dimmer fine / Step Duration")
-				primaryChannelName := channelName
-				if strings.Contains(channelName, " / ") {
-					primaryChannelName = strings.Split(channelName, " / ")[0]
-				}
-
-				channelID, ok := channelNameToID[primaryChannelName]
-				if !ok {
-					return fmt.Errorf("channel %q (primary: %q) in mode %q not found in availableChannels",
-						channelName, primaryChannelName, oflMode.Name)
-				}
-
-				modeChannel := &models.ModeChannel{
-					ID:        cuid.New(),
-					ModeID:    modeID,
-					ChannelID: channelID,
-					Offset:    offset,
-				}
-
-				if err := tx.Create(modeChannel).Error; err != nil {
-					return fmt.Errorf("failed to create mode channel: %w", err)
-				}
-			}
+		if err := writeImportPlan(tx, fixtureID, plan); err != nil {
+			return err
 		}
 
 		// Load the complete result with relations
@@ -169,97 +99,6 @@ func (s *Service) ImportFixture(ctx context.Context, manufacturer, oflFixtureJSO
 	}
 
 	return result, nil
-}
-
-// validateOFLFixture validates required OFL fixture fields
-func validateOFLFixture(fixture *OFLFixture) error {
-	if fixture.Name == "" {
-		return fmt.Errorf("OFL fixture must have a \"name\" field")
-	}
-
-	if len(fixture.Categories) == 0 {
-		return fmt.Errorf("OFL fixture must have a \"categories\" array with at least one category")
-	}
-
-	if len(fixture.AvailableChannels) == 0 {
-		return fmt.Errorf("OFL fixture must have \"availableChannels\" with at least one channel")
-	}
-
-	if len(fixture.Modes) == 0 {
-		return fmt.Errorf("OFL fixture must have a \"modes\" array with at least one mode")
-	}
-
-	return nil
-}
-
-// processChannels converts OFL channels to our format with fade behavior auto-detection
-func processChannels(availableChannels map[string]OFLChannel) []ChannelDefinition {
-	var channels []ChannelDefinition
-	offset := 0
-
-	for channelName, channelData := range availableChannels {
-		// Get the first capability to determine channel type and values
-		var capability *OFLCapability
-		if channelData.Capability != nil {
-			capability = channelData.Capability
-		} else if len(channelData.Capabilities) > 0 {
-			capability = &channelData.Capabilities[0]
-		}
-
-		// Determine if this is a discrete channel (has multiple capabilities/ranges)
-		isDiscrete := len(channelData.Capabilities) > 1
-
-		if capability == nil {
-			// Default channel if no capability info
-			channels = append(channels, ChannelDefinition{
-				Name:         channelName,
-				Type:         "OTHER",
-				Offset:       offset,
-				MinValue:     0,
-				MaxValue:     255,
-				DefaultValue: 0,
-				FadeBehavior: "FADE", // Default to FADE
-				IsDiscrete:   false,
-			})
-			offset++
-			continue
-		}
-
-		channelType := mapChannelType(capability)
-		minVal, maxVal := getMinMaxValues(capability)
-		defaultVal := getDefaultValue(capability)
-		fadeBehavior := mapFadeBehavior(channelType, isDiscrete)
-
-		// Add the main channel
-		channels = append(channels, ChannelDefinition{
-			Name:         channelName,
-			Type:         channelType,
-			Offset:       offset,
-			MinValue:     minVal,
-			MaxValue:     maxVal,
-			DefaultValue: defaultVal,
-			FadeBehavior: fadeBehavior,
-			IsDiscrete:   isDiscrete,
-		})
-		offset++
-
-		// Add fine channel aliases if they exist
-		for _, fineAlias := range channelData.FineChannelAliases {
-			channels = append(channels, ChannelDefinition{
-				Name:         fineAlias,
-				Type:         channelType, // Same type as parent channel
-				Offset:       offset,
-				MinValue:     0,
-				MaxValue:     255,
-				DefaultValue: 0,
-				FadeBehavior: fadeBehavior, // Same behavior as parent
-				IsDiscrete:   false,        // Fine channels are always continuous
-			})
-			offset++
-		}
-	}
-
-	return channels
 }
 
 // mapChannelType maps OFL capability type to our ChannelType enum
@@ -443,13 +282,14 @@ func stringPtr(s string) *string {
 // ImportFixtureWithHash imports a fixture from OFL JSON format with hash tracking for change detection
 func (s *Service) ImportFixtureWithHash(ctx context.Context, manufacturer, oflFixtureJSON, hash, version string, update bool) (*models.FixtureDefinition, error) {
 	// Parse the OFL JSON
-	var oflFixture OFLFixture
-	if err := json.Unmarshal([]byte(oflFixtureJSON), &oflFixture); err != nil {
-		return nil, fmt.Errorf("invalid JSON: %w", err)
+	oflFixture, err := parseOFLFixture(oflFixtureJSON)
+	if err != nil {
+		return nil, err
 	}
 
-	// Validate required fields
-	if err := validateOFLFixture(&oflFixture); err != nil {
+	// Validate and resolve every mode channel before touching the database
+	plan, err := buildImportPlan(oflFixture)
+	if err != nil {
 		return nil, err
 	}
 
@@ -489,9 +329,6 @@ func (s *Service) ImportFixtureWithHash(ctx context.Context, manufacturer, oflFi
 		// Map fixture type from categories
 		fixtureType := mapFixtureType(oflFixture.Categories)
 
-		// Process channels with fade behavior auto-detection
-		channelDefs := processChannels(oflFixture.AvailableChannels)
-
 		// Create fixture definition with hash and version
 		fixtureID := cuid.New()
 		definition := &models.FixtureDefinition{
@@ -509,75 +346,8 @@ func (s *Service) ImportFixtureWithHash(ctx context.Context, manufacturer, oflFi
 			return fmt.Errorf("failed to create fixture definition: %w", err)
 		}
 
-		// Create channel definitions
-		var channels []models.ChannelDefinition
-		for _, ch := range channelDefs {
-			channels = append(channels, models.ChannelDefinition{
-				ID:           cuid.New(),
-				Name:         ch.Name,
-				Type:         ch.Type,
-				Offset:       ch.Offset,
-				MinValue:     ch.MinValue,
-				MaxValue:     ch.MaxValue,
-				DefaultValue: ch.DefaultValue,
-				FadeBehavior: ch.FadeBehavior,
-				IsDiscrete:   ch.IsDiscrete,
-				DefinitionID: fixtureID,
-			})
-		}
-
-		if len(channels) > 0 {
-			if err := tx.Create(&channels).Error; err != nil {
-				return fmt.Errorf("failed to create channels: %w", err)
-			}
-		}
-
-		// Build channel name to ID map
-		channelNameToID := make(map[string]string)
-		for _, ch := range channels {
-			channelNameToID[ch.Name] = ch.ID
-		}
-
-		// Create modes
-		for _, oflMode := range oflFixture.Modes {
-			modeID := cuid.New()
-			mode := &models.FixtureMode{
-				ID:           modeID,
-				Name:         oflMode.Name,
-				ShortName:    stringPtr(oflMode.ShortName),
-				ChannelCount: len(oflMode.Channels),
-				DefinitionID: fixtureID,
-			}
-
-			if err := tx.Create(mode).Error; err != nil {
-				return fmt.Errorf("failed to create mode %s: %w", oflMode.Name, err)
-			}
-
-			// Create mode channels
-			for offset, channelName := range oflMode.Channels {
-				// Handle switched channels (e.g., "Dimmer fine / Step Duration")
-				primaryChannelName := channelName
-				if strings.Contains(channelName, " / ") {
-					primaryChannelName = strings.Split(channelName, " / ")[0]
-				}
-
-				channelID, ok := channelNameToID[primaryChannelName]
-				if !ok {
-					return fmt.Errorf("channel %q (primary: %q) in mode %q not found in availableChannels",
-						channelName, primaryChannelName, oflMode.Name)
-				}
-
-				modeChannel := &models.ModeChannel{
-					ID:        cuid.New(),
-					ModeID:    modeID,
-					ChannelID: channelID,
-					Offset:    offset,
-				}
-
-				if err := tx.Create(modeChannel).Error; err != nil {
-					return fmt.Errorf("failed to create mode channel: %w", err)
-				}
-			}
+		if err := writeImportPlan(tx, fixtureID, plan); err != nil {
+			return err
 		}
 
 		// Load the complete result with relations
@@ -594,4 +364,62 @@ func (s *Service) ImportFixtureWithHash(ctx context.Context, manufacturer, oflFi
 	}
 
 	return result, nil
+}
+
+// writeImportPlan creates the channel definitions, modes and mode channels
+// of a resolved plan for the definition fixtureID. Each mode gets one mode
+// channel per DMX offset, in the order the OFL mode lists them.
+func writeImportPlan(tx *gorm.DB, fixtureID string, plan *importPlan) error {
+	channelIDs := make([]string, len(plan.Channels))
+	channels := make([]models.ChannelDefinition, 0, len(plan.Channels))
+	for i, ch := range plan.Channels {
+		channelIDs[i] = cuid.New()
+		channels = append(channels, models.ChannelDefinition{
+			ID:           channelIDs[i],
+			Name:         ch.Name,
+			Type:         ch.Type,
+			Offset:       ch.Offset,
+			MinValue:     ch.MinValue,
+			MaxValue:     ch.MaxValue,
+			DefaultValue: ch.DefaultValue,
+			FadeBehavior: ch.FadeBehavior,
+			IsDiscrete:   ch.IsDiscrete,
+			DefinitionID: fixtureID,
+		})
+	}
+	if len(channels) > 0 {
+		if err := tx.CreateInBatches(&channels, 100).Error; err != nil {
+			return fmt.Errorf("failed to create channels: %w", err)
+		}
+	}
+
+	for _, pm := range plan.Modes {
+		modeID := cuid.New()
+		mode := &models.FixtureMode{
+			ID:           modeID,
+			Name:         pm.Name,
+			ShortName:    stringPtr(pm.ShortName),
+			ChannelCount: len(pm.channelIdx),
+			DefinitionID: fixtureID,
+		}
+		if err := tx.Create(mode).Error; err != nil {
+			return fmt.Errorf("failed to create mode %s: %w", pm.Name, err)
+		}
+		if len(pm.channelIdx) == 0 {
+			continue
+		}
+		modeChannels := make([]models.ModeChannel, 0, len(pm.channelIdx))
+		for offset, idx := range pm.channelIdx {
+			modeChannels = append(modeChannels, models.ModeChannel{
+				ID:        cuid.New(),
+				ModeID:    modeID,
+				ChannelID: channelIDs[idx],
+				Offset:    offset,
+			})
+		}
+		if err := tx.CreateInBatches(&modeChannels, 100).Error; err != nil {
+			return fmt.Errorf("failed to create mode channels for mode %s: %w", pm.Name, err)
+		}
+	}
+	return nil
 }
