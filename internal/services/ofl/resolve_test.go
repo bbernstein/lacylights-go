@@ -497,6 +497,18 @@ func TestBuildImportPlan_ModeChannelBudget(t *testing.T) {
 		t.Errorf("oversized insert: err = %v, want ErrUnsupportedModeChannel", err)
 	}
 
+	// One pixel with 513 template entries is rejected as well.
+	tmpls := make([]string, 513)
+	for i := range tmpls {
+		tmpls[i] = `"D $pixelKey"`
+	}
+	wide := `{"name":"X","categories":["Matrix"],"templateChannels":{"D $pixelKey":{}},
+		"modes":[{"name":"m","channels":[{"insert":"matrixChannels","repeatFor":["1"],"channelOrder":"perPixel","templateChannels":[` + strings.Join(tmpls, ",") + `]}]}]}`
+	f, _ = parseOFLFixture(wide)
+	if _, err := buildImportPlan(f); !errors.Is(err, ErrUnsupportedModeChannel) {
+		t.Errorf("wide insert: err = %v, want ErrUnsupportedModeChannel", err)
+	}
+
 	// A plain channel list longer than 512 entries is rejected too.
 	entries := make([]string, 513)
 	for i := range entries {

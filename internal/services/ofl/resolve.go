@@ -659,8 +659,10 @@ func expandInsertBlock(raw []byte, matrix *OFLMatrix, budget int) ([]*string, er
 	if err != nil {
 		return nil, err
 	}
-	if n := len(pixelKeys) * len(blk.TemplateChannels); n > budget {
-		return nil, fmt.Errorf("insert block expands to %d channels, more than the %d left in the mode", n, budget)
+	// Compare by division so the product cannot overflow on 32-bit builds.
+	if t := len(blk.TemplateChannels); t > 0 && len(pixelKeys) > budget/t {
+		return nil, fmt.Errorf("insert block of %d pixels x %d template channels exceeds the %d channels left in the mode",
+			len(pixelKeys), t, budget)
 	}
 	resolve := func(tmpl *string, pk string) *string {
 		if tmpl == nil {
