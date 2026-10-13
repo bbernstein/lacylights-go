@@ -53,7 +53,7 @@ func TestBatchedCountsAndLookups(t *testing.T) {
 	}
 
 	must(db.Create(&[]models.FixtureDefinition{
-		{ID: "d1", Manufacturer: "A", Model: "One"}, {ID: "d2", Manufacturer: "B", Model: "Two"},
+		{ID: "d1", RefID: "d1", Manufacturer: "A", Model: "One"}, {ID: "d2", RefID: "d2", Manufacturer: "B", Model: "Two"},
 	}).Error)
 	defs, err := NewFixtureRepository(db).FindDefinitionsByIDs(ctx, []string{"d1", "missing"})
 	must(err)
@@ -137,7 +137,7 @@ func TestBatchedLookups_ManyIDs(t *testing.T) {
 	ids := make([]string, n)
 	for i := range defs {
 		ids[i] = fmt.Sprintf("id%04d", i)
-		defs[i] = models.FixtureDefinition{ID: ids[i], Manufacturer: "M", Model: ids[i]}
+		defs[i] = models.FixtureDefinition{ID: ids[i], RefID: ids[i], Manufacturer: "M", Model: ids[i]}
 		values[i] = models.FixtureValue{ID: "v" + ids[i], LookID: ids[i], FixtureID: "f"}
 	}
 	if err := db.CreateInBatches(&defs, 200).Error; err != nil {
@@ -163,7 +163,7 @@ func TestRowCounter(t *testing.T) {
 	ctx := context.Background()
 	c := NewRowCounter(db)
 
-	if err := db.Create(&[]models.LookBoard{{ID: "b1", ProjectID: "p"}, {ID: "b2", ProjectID: "p"}, {ID: "b3", ProjectID: "q"}}).Error; err != nil {
+	if err := db.Create(&[]models.LookBoard{{ID: "b1", RefID: "b1", ProjectID: "p"}, {ID: "b2", RefID: "b2", ProjectID: "p"}, {ID: "b3", RefID: "b3", ProjectID: "q"}}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Create(&[]models.LookBoardButton{
@@ -192,11 +192,11 @@ func TestRowCounter_ExactExportCounts(t *testing.T) {
 
 	// Fixture types: (d1, A) ×2, (d1, B), (d2, nil) → 3 distinct; other project ignored.
 	if err := db.Create(&[]models.FixtureInstance{
-		{ID: "i1", ProjectID: "p", DefinitionID: "d1", ModeName: mode("A")},
-		{ID: "i2", ProjectID: "p", DefinitionID: "d1", ModeName: mode("A")},
-		{ID: "i3", ProjectID: "p", DefinitionID: "d1", ModeName: mode("B")},
-		{ID: "i4", ProjectID: "p", DefinitionID: "d2"},
-		{ID: "i5", ProjectID: "q", DefinitionID: "d3"},
+		{ID: "i1", RefID: "i1", ProjectID: "p", DefinitionID: "d1", ModeName: mode("A")},
+		{ID: "i2", RefID: "i2", ProjectID: "p", DefinitionID: "d1", ModeName: mode("A")},
+		{ID: "i3", RefID: "i3", ProjectID: "p", DefinitionID: "d1", ModeName: mode("B")},
+		{ID: "i4", RefID: "i4", ProjectID: "p", DefinitionID: "d2"},
+		{ID: "i5", RefID: "i5", ProjectID: "q", DefinitionID: "d3"},
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +205,7 @@ func TestRowCounter_ExactExportCounts(t *testing.T) {
 	}
 
 	// Library: d1 has 2 modes, d2 has none → 3 rows.
-	if err := db.Create(&[]models.FixtureDefinition{{ID: "d1"}, {ID: "d2"}}).Error; err != nil {
+	if err := db.Create(&[]models.FixtureDefinition{{ID: "d1", RefID: "d1"}, {ID: "d2", RefID: "d2"}}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Create(&[]models.FixtureMode{{ID: "m1", DefinitionID: "d1"}, {ID: "m2", DefinitionID: "d1"}}).Error; err != nil {
@@ -233,7 +233,7 @@ func TestOrphanModesAndProjectFixtureValues(t *testing.T) {
 	ctx := context.Background()
 
 	// An orphaned mode (its definition was deleted) is not a library row.
-	if err := db.Create(&models.FixtureDefinition{ID: "d1"}).Error; err != nil {
+	if err := db.Create(&models.FixtureDefinition{ID: "d1", RefID: "d1"}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Create(&[]models.FixtureMode{{ID: "m1", DefinitionID: "d1"}, {ID: "m2", DefinitionID: "deleted"}}).Error; err != nil {
@@ -251,7 +251,7 @@ func TestOrphanModesAndProjectFixtureValues(t *testing.T) {
 
 	// Only fixture values whose fixture is in the project are loaded, in
 	// look order.
-	if err := db.Create(&[]models.FixtureInstance{{ID: "a", ProjectID: "p"}, {ID: "b", ProjectID: "p"}, {ID: "x", ProjectID: "q"}}).Error; err != nil {
+	if err := db.Create(&[]models.FixtureInstance{{ID: "a", RefID: "a", ProjectID: "p"}, {ID: "b", RefID: "b", ProjectID: "p"}, {ID: "x", RefID: "x", ProjectID: "q"}}).Error; err != nil {
 		t.Fatal(err)
 	}
 	one, two := 1, 2

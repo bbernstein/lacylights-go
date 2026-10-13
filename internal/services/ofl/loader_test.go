@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/bbernstein/lacylights-go/internal/database/migrations"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	"gorm.io/driver/sqlite"
@@ -31,6 +32,12 @@ func setupLoaderTestDB(t *testing.T) *gorm.DB {
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate test database: %v", err)
+	}
+
+	// Create the production ref_id unique indexes so tests catch create
+	// paths that skip RefID (see migrations.CreateRefIDIndexes).
+	if err := migrations.CreateRefIDIndexes(db); err != nil {
+		t.Fatalf("Failed to create ref_id indexes: %v", err)
 	}
 
 	return db

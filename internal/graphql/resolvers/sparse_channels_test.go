@@ -133,6 +133,7 @@ func TestSparseChannels_QueryLook(t *testing.T) {
 
 	fixtureDef := &models.FixtureDefinition{
 		ID:           "test-fixture-def-sparse-query",
+		RefID: "test-fixture-def-sparse-query",
 		Manufacturer: "Test",
 		Model:        "TestPar4",
 		Type:         "LED_PAR",
@@ -141,6 +142,7 @@ func TestSparseChannels_QueryLook(t *testing.T) {
 
 	fixture := &models.FixtureInstance{
 		ID:           "test-fixture-sparse-query",
+		RefID: "test-fixture-sparse-query",
 		Name:         "Test Par 4ch",
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
@@ -152,6 +154,7 @@ func TestSparseChannels_QueryLook(t *testing.T) {
 	// Create a look (in the new format, this will use sparse storage)
 	scene := &models.Look{
 		ID:        "test-scene-sparse-query",
+		RefID: "test-scene-sparse-query",
 		Name:      "Test Scene",
 		ProjectID: project.ID,
 	}
@@ -249,6 +252,7 @@ func TestSparseChannels_UpdateLook(t *testing.T) {
 
 	fixtureDef := &models.FixtureDefinition{
 		ID:           "test-fixture-def-sparse-update",
+		RefID: "test-fixture-def-sparse-update",
 		Manufacturer: "Test",
 		Model:        "TestPar3",
 		Type:         "LED_PAR",
@@ -257,6 +261,7 @@ func TestSparseChannels_UpdateLook(t *testing.T) {
 
 	fixture := &models.FixtureInstance{
 		ID:           "test-fixture-sparse-update",
+		RefID: "test-fixture-sparse-update",
 		Name:         "Test Par 3ch",
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
@@ -267,6 +272,7 @@ func TestSparseChannels_UpdateLook(t *testing.T) {
 
 	scene := &models.Look{
 		ID:        "test-scene-sparse-update",
+		RefID: "test-scene-sparse-update",
 		Name:      "Original Scene",
 		ProjectID: project.ID,
 	}
@@ -331,6 +337,7 @@ func TestSparseChannels_AddFixturesToLook(t *testing.T) {
 
 	fixtureDef := &models.FixtureDefinition{
 		ID:           "test-fixture-def-sparse-add",
+		RefID: "test-fixture-def-sparse-add",
 		Manufacturer: "Test",
 		Model:        "TestPar",
 		Type:         "LED_PAR",
@@ -339,6 +346,7 @@ func TestSparseChannels_AddFixturesToLook(t *testing.T) {
 
 	fixture1 := &models.FixtureInstance{
 		ID:           "test-fixture-1-sparse-add",
+		RefID: "test-fixture-1-sparse-add",
 		Name:         "Test Par 1",
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
@@ -349,6 +357,7 @@ func TestSparseChannels_AddFixturesToLook(t *testing.T) {
 
 	fixture2 := &models.FixtureInstance{
 		ID:           "test-fixture-2-sparse-add",
+		RefID: "test-fixture-2-sparse-add",
 		Name:         "Test Par 2",
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
@@ -360,6 +369,7 @@ func TestSparseChannels_AddFixturesToLook(t *testing.T) {
 	// Create look with only fixture1
 	scene := &models.Look{
 		ID:        "test-scene-sparse-add",
+		RefID: "test-scene-sparse-add",
 		Name:      "Test Scene",
 		ProjectID: project.ID,
 	}
@@ -421,6 +431,7 @@ func TestSparseChannels_UpdateLookPartial(t *testing.T) {
 
 	fixtureDef := &models.FixtureDefinition{
 		ID:           "test-fixture-def-sparse-partial",
+		RefID: "test-fixture-def-sparse-partial",
 		Manufacturer: "Test",
 		Model:        "TestPar",
 		Type:         "LED_PAR",
@@ -429,6 +440,7 @@ func TestSparseChannels_UpdateLookPartial(t *testing.T) {
 
 	fixture := &models.FixtureInstance{
 		ID:           "test-fixture-sparse-partial",
+		RefID: "test-fixture-sparse-partial",
 		Name:         "Test Par",
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
@@ -440,6 +452,7 @@ func TestSparseChannels_UpdateLookPartial(t *testing.T) {
 	// Create look with initial values
 	scene := &models.Look{
 		ID:        "test-scene-sparse-partial",
+		RefID: "test-scene-sparse-partial",
 		Name:      "Original Name",
 		ProjectID: project.ID,
 	}
@@ -508,6 +521,7 @@ func TestSparseChannels_LookActivation_OnlyAffectsSpecifiedChannels(t *testing.T
 
 	fixtureDef := &models.FixtureDefinition{
 		ID:           "test-fixture-def-sparse-dmx",
+		RefID: "test-fixture-def-sparse-dmx",
 		Manufacturer: "Test",
 		Model:        "TestPar6",
 		Type:         "LED_PAR",
@@ -516,6 +530,7 @@ func TestSparseChannels_LookActivation_OnlyAffectsSpecifiedChannels(t *testing.T
 
 	fixture := &models.FixtureInstance{
 		ID:           "test-fixture-sparse-dmx",
+		RefID: "test-fixture-sparse-dmx",
 		Name:         "Test Par 6ch",
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
@@ -533,6 +548,7 @@ func TestSparseChannels_LookActivation_OnlyAffectsSpecifiedChannels(t *testing.T
 	// (DMX channels 11, 13, 15)
 	scene := &models.Look{
 		ID:        "test-scene-sparse-dmx",
+		RefID: "test-scene-sparse-dmx",
 		Name:      "Sparse DMX Scene",
 		ProjectID: project.ID,
 	}
@@ -631,6 +647,7 @@ func TestSparseChannels_EmptyChannelsArray(t *testing.T) {
 
 	fixtureDef := &models.FixtureDefinition{
 		ID:           "test-fixture-def-sparse-empty",
+		RefID: "test-fixture-def-sparse-empty",
 		Manufacturer: "Test",
 		Model:        "TestPar",
 		Type:         "LED_PAR",
@@ -639,6 +656,7 @@ func TestSparseChannels_EmptyChannelsArray(t *testing.T) {
 
 	fixture := &models.FixtureInstance{
 		ID:           "test-fixture-sparse-empty",
+		RefID: "test-fixture-sparse-empty",
 		Name:         "Test Par",
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
@@ -765,6 +783,7 @@ func TestSparseChannels_BulkUpdateLooksPartial(t *testing.T) {
 
 	fixtureDef := &models.FixtureDefinition{
 		ID:           "test-fixture-def-bulk-partial",
+		RefID: "test-fixture-def-bulk-partial",
 		Manufacturer: "Test",
 		Model:        "TestPar",
 		Type:         "LED_PAR",
@@ -773,6 +792,7 @@ func TestSparseChannels_BulkUpdateLooksPartial(t *testing.T) {
 
 	fixture := &models.FixtureInstance{
 		ID:           "test-fixture-bulk-partial",
+		RefID: "test-fixture-bulk-partial",
 		Name:         "Test Par",
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
@@ -784,11 +804,13 @@ func TestSparseChannels_BulkUpdateLooksPartial(t *testing.T) {
 	// Create two looks with initial values
 	scene1 := &models.Look{
 		ID:        "test-scene-bulk-partial-1",
+		RefID: "test-scene-bulk-partial-1",
 		Name:      "Scene 1",
 		ProjectID: project.ID,
 	}
 	scene2 := &models.Look{
 		ID:        "test-scene-bulk-partial-2",
+		RefID: "test-scene-bulk-partial-2",
 		Name:      "Scene 2",
 		ProjectID: project.ID,
 	}
@@ -907,6 +929,7 @@ func TestSparseChannels_BulkUpdateLooksPartial_MergeFixturesFalse(t *testing.T) 
 
 	fixtureDef := &models.FixtureDefinition{
 		ID:           "test-fixture-def-bulk-replace",
+		RefID: "test-fixture-def-bulk-replace",
 		Manufacturer: "Test",
 		Model:        "TestPar",
 		Type:         "LED_PAR",
@@ -915,6 +938,7 @@ func TestSparseChannels_BulkUpdateLooksPartial_MergeFixturesFalse(t *testing.T) 
 
 	fixture1 := &models.FixtureInstance{
 		ID:           "test-fixture-bulk-replace-1",
+		RefID: "test-fixture-bulk-replace-1",
 		Name:         "Test Par 1",
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
@@ -923,6 +947,7 @@ func TestSparseChannels_BulkUpdateLooksPartial_MergeFixturesFalse(t *testing.T) 
 	}
 	fixture2 := &models.FixtureInstance{
 		ID:           "test-fixture-bulk-replace-2",
+		RefID: "test-fixture-bulk-replace-2",
 		Name:         "Test Par 2",
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
@@ -935,6 +960,7 @@ func TestSparseChannels_BulkUpdateLooksPartial_MergeFixturesFalse(t *testing.T) 
 	// Create look with two fixtures
 	scene := &models.Look{
 		ID:        "test-scene-bulk-replace",
+		RefID: "test-scene-bulk-replace",
 		Name:      "Original Scene",
 		ProjectID: project.ID,
 	}

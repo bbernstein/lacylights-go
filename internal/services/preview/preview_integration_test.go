@@ -51,6 +51,7 @@ func createTestProjectWithFixture(t *testing.T, testDB *testutil.TestDB) (*model
 	// Create fixture definition
 	fixtureDef := &models.FixtureDefinition{
 		ID:           cuid.New(),
+		RefID: cuid.New(),
 		Manufacturer: "Test",
 		Model:        testutil.UniqueFixtureName("par-can"),
 		Type:         "dimmer",
@@ -62,6 +63,7 @@ func createTestProjectWithFixture(t *testing.T, testDB *testutil.TestDB) (*model
 	// Create fixture instance
 	fixture := &models.FixtureInstance{
 		ID:           cuid.New(),
+		RefID: cuid.New(),
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
 		Name:         testutil.UniqueFixtureName("fixture"),
@@ -509,6 +511,7 @@ func TestInitializeWithLook_Integration(t *testing.T) {
 	// Create look with fixture values
 	look := &models.Look{
 		ID:        cuid.New(),
+		RefID: cuid.New(),
 		ProjectID: project.ID,
 		Name:      "Test Look",
 	}
@@ -560,6 +563,7 @@ func TestInitializeWithLook_NonExistentSession(t *testing.T) {
 
 	look := &models.Look{
 		ID:        cuid.New(),
+		RefID: cuid.New(),
 		ProjectID: project.ID,
 		Name:      "Test Look",
 	}
@@ -813,6 +817,7 @@ func TestMultipleUniverses(t *testing.T) {
 	// Create fixture in universe 2
 	fixtureDef := &models.FixtureDefinition{
 		ID:           cuid.New(),
+		RefID: cuid.New(),
 		Manufacturer: "Test",
 		Model:        testutil.UniqueFixtureName("fixture2"),
 		Type:         "dimmer",
@@ -821,6 +826,7 @@ func TestMultipleUniverses(t *testing.T) {
 
 	fixture2 := &models.FixtureInstance{
 		ID:           cuid.New(),
+		RefID: cuid.New(),
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
 		Name:         testutil.UniqueFixtureName("fixture2"),
@@ -861,6 +867,7 @@ func TestInitializeWithLook_MultipleFixtures(t *testing.T) {
 	// Create second fixture
 	fixtureDef := &models.FixtureDefinition{
 		ID:           cuid.New(),
+		RefID: cuid.New(),
 		Manufacturer: "Test",
 		Model:        testutil.UniqueFixtureName("fixture2"),
 		Type:         "dimmer",
@@ -869,6 +876,7 @@ func TestInitializeWithLook_MultipleFixtures(t *testing.T) {
 
 	fixture2 := &models.FixtureInstance{
 		ID:           cuid.New(),
+		RefID: cuid.New(),
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
 		Name:         testutil.UniqueFixtureName("fixture2"),
@@ -880,6 +888,7 @@ func TestInitializeWithLook_MultipleFixtures(t *testing.T) {
 	// Create look with both fixtures
 	look := &models.Look{
 		ID:        cuid.New(),
+		RefID: cuid.New(),
 		ProjectID: project.ID,
 		Name:      "Test Look",
 	}

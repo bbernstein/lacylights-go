@@ -25,6 +25,7 @@ func TestService_CaptureFixturePositions(t *testing.T) {
 	// Create fixture definition
 	def := &models.FixtureDefinition{
 		ID:           cuid.New(),
+		RefID:        cuid.New(),
 		Manufacturer: "Test",
 		Model:        "TestModel",
 		Type:         "LED_PAR",
@@ -34,6 +35,7 @@ func TestService_CaptureFixturePositions(t *testing.T) {
 	// Create fixtures with layout positions
 	fixture1 := &models.FixtureInstance{
 		ID:             cuid.New(),
+		RefID:          cuid.New(),
 		Name:           "Fixture 1",
 		ProjectID:      project.ID,
 		DefinitionID:   def.ID,
@@ -47,6 +49,7 @@ func TestService_CaptureFixturePositions(t *testing.T) {
 
 	fixture2 := &models.FixtureInstance{
 		ID:             cuid.New(),
+		RefID:          cuid.New(),
 		Name:           "Fixture 2",
 		ProjectID:      project.ID,
 		DefinitionID:   def.ID,
@@ -145,6 +148,7 @@ func TestService_ApplyBulkFixturePositionSnapshot(t *testing.T) {
 	// Create fixture definition
 	def := &models.FixtureDefinition{
 		ID:           cuid.New(),
+		RefID:        cuid.New(),
 		Manufacturer: "Test",
 		Model:        "TestModel",
 		Type:         "LED_PAR",
@@ -154,6 +158,7 @@ func TestService_ApplyBulkFixturePositionSnapshot(t *testing.T) {
 	// Create fixtures with initial positions
 	fixture1 := &models.FixtureInstance{
 		ID:             cuid.New(),
+		RefID:          cuid.New(),
 		Name:           "Fixture 1",
 		ProjectID:      project.ID,
 		DefinitionID:   def.ID,
@@ -167,6 +172,7 @@ func TestService_ApplyBulkFixturePositionSnapshot(t *testing.T) {
 
 	fixture2 := &models.FixtureInstance{
 		ID:             cuid.New(),
+		RefID:          cuid.New(),
 		Name:           "Fixture 2",
 		ProjectID:      project.ID,
 		DefinitionID:   def.ID,

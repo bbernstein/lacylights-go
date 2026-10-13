@@ -62,6 +62,7 @@ func createTestFixtureWithLook(t *testing.T, testDB *testutil.TestDB, project *m
 	// Create fixture definition
 	fixtureDef := &models.FixtureDefinition{
 		ID:           cuid.New(),
+		RefID:        cuid.New(),
 		Manufacturer: "Test",
 		Model:        testutil.UniqueFixtureName("par-can"),
 		Type:         "dimmer",
@@ -84,6 +85,7 @@ func createTestFixtureWithLook(t *testing.T, testDB *testutil.TestDB, project *m
 	// Create fixture instance
 	fixture := &models.FixtureInstance{
 		ID:           cuid.New(),
+		RefID:        cuid.New(),
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
 		Name:         testutil.UniqueFixtureName("fixture"),
@@ -97,6 +99,7 @@ func createTestFixtureWithLook(t *testing.T, testDB *testutil.TestDB, project *m
 	// Create look
 	look := &models.Look{
 		ID:        cuid.New(),
+		RefID:     cuid.New(),
 		ProjectID: project.ID,
 		Name:      "Test Look",
 	}
@@ -232,6 +235,7 @@ func TestStartCueList_FromSpecificCue(t *testing.T) {
 	_, look1 := createTestFixtureWithLook(t, testDB, project)
 	look2 := &models.Look{
 		ID:        cuid.New(),
+		RefID:     cuid.New(),
 		ProjectID: project.ID,
 		Name:      "Look 2",
 	}
@@ -267,6 +271,7 @@ func TestNextCue_Integration(t *testing.T) {
 	_, look1 := createTestFixtureWithLook(t, testDB, project)
 	look2 := &models.Look{
 		ID:        cuid.New(),
+		RefID:     cuid.New(),
 		ProjectID: project.ID,
 		Name:      "Look 2",
 	}
@@ -358,6 +363,7 @@ func TestPreviousCue_Integration(t *testing.T) {
 	_, look1 := createTestFixtureWithLook(t, testDB, project)
 	look2 := &models.Look{
 		ID:        cuid.New(),
+		RefID:     cuid.New(),
 		ProjectID: project.ID,
 		Name:      "Look 2",
 	}
@@ -422,6 +428,7 @@ func TestPreviousCue_AtStart_WithLoop(t *testing.T) {
 	_, look1 := createTestFixtureWithLook(t, testDB, project)
 	look2 := &models.Look{
 		ID:        cuid.New(),
+		RefID:     cuid.New(),
 		ProjectID: project.ID,
 		Name:      "Look 2",
 	}
@@ -459,8 +466,8 @@ func TestJumpToCue_Integration(t *testing.T) {
 
 	// Create three looks
 	_, look1 := createTestFixtureWithLook(t, testDB, project)
-	look2 := &models.Look{ID: cuid.New(), ProjectID: project.ID, Name: "Look 2"}
-	look3 := &models.Look{ID: cuid.New(), ProjectID: project.ID, Name: "Look 3"}
+	look2 := &models.Look{ID: cuid.New(), RefID: cuid.New(), ProjectID: project.ID, Name: "Look 2"}
+	look3 := &models.Look{ID: cuid.New(), RefID: cuid.New(), ProjectID: project.ID, Name: "Look 3"}
 	testDB.DB.Create(look2)
 	testDB.DB.Create(look3)
 
@@ -510,7 +517,7 @@ func TestGoToCueNumber_Integration(t *testing.T) {
 
 	// Create two looks
 	_, look1 := createTestFixtureWithLook(t, testDB, project)
-	look2 := &models.Look{ID: cuid.New(), ProjectID: project.ID, Name: "Look 2"}
+	look2 := &models.Look{ID: cuid.New(), RefID: cuid.New(), ProjectID: project.ID, Name: "Look 2"}
 	testDB.DB.Create(look2)
 
 	cueList := createTestCueList(t, testDB, project, []*models.Look{look1, look2}, false)
@@ -683,7 +690,7 @@ func TestMultipleCueListsPlayback(t *testing.T) {
 	// Create two cue lists
 	cueList1 := createTestCueList(t, testDB, project, []*models.Look{look}, false)
 
-	look2 := &models.Look{ID: cuid.New(), ProjectID: project.ID, Name: "Look 2"}
+	look2 := &models.Look{ID: cuid.New(), RefID: cuid.New(), ProjectID: project.ID, Name: "Look 2"}
 	testDB.DB.Create(look2)
 	cueList2 := &models.CueList{ID: cuid.New(), ProjectID: project.ID, Name: "CL2"}
 	testDB.DB.Create(cueList2)
@@ -927,7 +934,7 @@ func TestNextCue_WithFadeOverride(t *testing.T) {
 	ctx := context.Background()
 	project := createTestProject(t, testDB)
 	_, look1 := createTestFixtureWithLook(t, testDB, project)
-	look2 := &models.Look{ID: cuid.New(), ProjectID: project.ID, Name: "Look 2"}
+	look2 := &models.Look{ID: cuid.New(), RefID: cuid.New(), ProjectID: project.ID, Name: "Look 2"}
 	testDB.DB.Create(look2)
 	cueList := createTestCueList(t, testDB, project, []*models.Look{look1, look2}, false)
 
@@ -1015,6 +1022,7 @@ func TestExecuteCueDmx_InvalidChannelsJSON(t *testing.T) {
 	// Create fixture definition
 	fixtureDef := &models.FixtureDefinition{
 		ID:           cuid.New(),
+		RefID:        cuid.New(),
 		Manufacturer: "Test",
 		Model:        testutil.UniqueFixtureName("test-invalid-json"),
 		Type:         "dimmer",
@@ -1024,6 +1032,7 @@ func TestExecuteCueDmx_InvalidChannelsJSON(t *testing.T) {
 	// Create fixture instance
 	fixture := &models.FixtureInstance{
 		ID:           cuid.New(),
+		RefID:        cuid.New(),
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
 		Name:         testutil.UniqueFixtureName("fixture-invalid"),
@@ -1035,6 +1044,7 @@ func TestExecuteCueDmx_InvalidChannelsJSON(t *testing.T) {
 	// Create look
 	look := &models.Look{
 		ID:        cuid.New(),
+		RefID:     cuid.New(),
 		ProjectID: project.ID,
 		Name:      "Look with invalid JSON",
 	}
@@ -1081,6 +1091,7 @@ func TestExecuteCueDmx_DMXChannelOutOfBounds(t *testing.T) {
 	// Create fixture definition
 	fixtureDef := &models.FixtureDefinition{
 		ID:           cuid.New(),
+		RefID:        cuid.New(),
 		Manufacturer: "Test",
 		Model:        testutil.UniqueFixtureName("test-oob-channel"),
 		Type:         "dimmer",
@@ -1090,6 +1101,7 @@ func TestExecuteCueDmx_DMXChannelOutOfBounds(t *testing.T) {
 	// Create fixture instance with high start channel that will go out of bounds
 	fixture := &models.FixtureInstance{
 		ID:           cuid.New(),
+		RefID:        cuid.New(),
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
 		Name:         testutil.UniqueFixtureName("fixture-oob"),
@@ -1101,6 +1113,7 @@ func TestExecuteCueDmx_DMXChannelOutOfBounds(t *testing.T) {
 	// Create look
 	look := &models.Look{
 		ID:        cuid.New(),
+		RefID:     cuid.New(),
 		ProjectID: project.ID,
 		Name:      "Look with OOB channels",
 	}
@@ -1149,6 +1162,7 @@ func TestStartCueList_StopsPreviousCueList(t *testing.T) {
 	_, look1 := createTestFixtureWithLook(t, testDB, project)
 	look2 := &models.Look{
 		ID:        cuid.New(),
+		RefID:     cuid.New(),
 		ProjectID: project.ID,
 		Name:      "Look 2",
 	}
@@ -1247,6 +1261,7 @@ func TestStartCueList_CrossProjectPlayback(t *testing.T) {
 
 	look2 := &models.Look{
 		ID:        cuid.New(),
+		RefID:     cuid.New(),
 		ProjectID: project2.ID,
 		Name:      "Look 2",
 	}

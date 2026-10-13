@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/bbernstein/lacylights-go/internal/database/migrations"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
@@ -34,6 +35,12 @@ func newResolverWithFixtureRepo(t *testing.T) (*fixtureInstanceResolver, *gorm.D
 		&models.InstanceChannel{},
 	); err != nil {
 		t.Fatalf("failed to migrate db: %v", err)
+	}
+
+	// Create the production ref_id unique indexes so tests catch create
+	// paths that skip RefID (see migrations.CreateRefIDIndexes).
+	if err := migrations.CreateRefIDIndexes(db); err != nil {
+		t.Fatalf("Failed to create ref_id indexes: %v", err)
 	}
 	r := &fixtureInstanceResolver{Resolver: &Resolver{
 		FixtureRepo: repositories.NewFixtureRepository(db),

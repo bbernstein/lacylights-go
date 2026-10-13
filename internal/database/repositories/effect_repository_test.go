@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/bbernstein/lacylights-go/internal/database/migrations"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/glebarez/sqlite"
 	"github.com/lucsky/cuid"
@@ -43,6 +44,12 @@ func setupEffectTestDB(t *testing.T) (*gorm.DB, func()) {
 		t.Fatalf("Failed to migrate database: %v", err)
 	}
 
+	// Create the production ref_id unique indexes so tests catch create
+	// paths that skip RefID (see migrations.CreateRefIDIndexes).
+	if err := migrations.CreateRefIDIndexes(db); err != nil {
+		t.Fatalf("Failed to create ref_id indexes: %v", err)
+	}
+
 	cleanup := func() {
 		sqlDB, err := db.DB()
 		if err == nil {
@@ -67,6 +74,7 @@ func createTestProjectAndFixtures(t *testing.T, db *gorm.DB) (*models.Project, [
 
 	fixtureDef := &models.FixtureDefinition{
 		ID:           cuid.New(),
+		RefID:        cuid.New(),
 		Manufacturer: "Test",
 		Model:        "TestModel",
 		Type:         "LED_PAR",
@@ -79,6 +87,7 @@ func createTestProjectAndFixtures(t *testing.T, db *gorm.DB) (*models.Project, [
 	for i := range fixtures {
 		fixtures[i] = &models.FixtureInstance{
 			ID:           cuid.New(),
+			RefID:        cuid.New(),
 			Name:         "Fixture " + string(rune('A'+i)),
 			ProjectID:    project.ID,
 			DefinitionID: fixtureDef.ID,
@@ -526,6 +535,7 @@ func TestEffectRepository_CueEffectOperations(t *testing.T) {
 	// Create a look
 	look := &models.Look{
 		ID:        cuid.New(),
+		RefID:     cuid.New(),
 		Name:      "Test Look",
 		ProjectID: project.ID,
 	}
@@ -831,7 +841,7 @@ func TestEffectRepository_Delete_Cascade(t *testing.T) {
 	project, fixtures := createTestProjectAndFixtures(t, db)
 
 	// Create a look, cue list, and cue
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	db.Create(look)
 	cueList := &models.CueList{ID: cuid.New(), Name: "Test CL", ProjectID: project.ID}
 	db.Create(cueList)
