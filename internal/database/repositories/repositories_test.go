@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/bbernstein/lacylights-go/internal/database/migrations"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/glebarez/sqlite"
 	"github.com/lucsky/cuid"
@@ -49,6 +50,12 @@ func setupTestDB(t *testing.T) (*testDB, func()) {
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	// Create the production ref_id unique indexes so tests catch create
+	// paths that skip RefID (see migrations.CreateRefIDIndexes).
+	if err := migrations.CreateRefIDIndexes(db); err != nil {
+		t.Fatalf("Failed to create ref_id indexes: %v", err)
 	}
 
 	cleanup := func() {
@@ -190,6 +197,7 @@ func TestProjectRepository_CountMethods(t *testing.T) {
 	// Create a fixture definition and fixture
 	fixtureDef := &models.FixtureDefinition{
 		ID:           cuid.New(),
+		RefID: cuid.New(),
 		Manufacturer: "Test",
 		Model:        "Test Model",
 		Type:         "test",
@@ -198,6 +206,7 @@ func TestProjectRepository_CountMethods(t *testing.T) {
 
 	fixture := &models.FixtureInstance{
 		ID:           cuid.New(),
+		RefID: cuid.New(),
 		Name:         "Test Fixture",
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
@@ -226,6 +235,7 @@ func TestProjectRepository_CountMethods(t *testing.T) {
 	// Create a look
 	look := &models.Look{
 		ID:        cuid.New(),
+		RefID: cuid.New(),
 		Name:      "Test Look",
 		ProjectID: project.ID,
 	}
@@ -732,12 +742,13 @@ func TestLookRepository_FixtureValueOperations(t *testing.T) {
 	// Create project and look
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	testDB.DB.Create(look)
 
 	// Create fixture definition and fixture
 	fixtureDef := &models.FixtureDefinition{
 		ID:           cuid.New(),
+		RefID: cuid.New(),
 		Manufacturer: "Test",
 		Model:        "Test Model",
 		Type:         "test",
@@ -745,6 +756,7 @@ func TestLookRepository_FixtureValueOperations(t *testing.T) {
 	testDB.DB.Create(fixtureDef)
 	fixture := &models.FixtureInstance{
 		ID:           cuid.New(),
+		RefID: cuid.New(),
 		Name:         "Test Fixture",
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
@@ -832,10 +844,11 @@ func TestLookRepository_CreateWithFixtureValues(t *testing.T) {
 	// Create project and fixture
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	fixtureDef := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "Test", Model: "M", Type: "t"}
+	fixtureDef := &models.FixtureDefinition{ID: cuid.New(), RefID: cuid.New(), Manufacturer: "Test", Model: "M", Type: "t"}
 	testDB.DB.Create(fixtureDef)
 	fixture := &models.FixtureInstance{
 		ID:           cuid.New(),
+		RefID: cuid.New(),
 		Name:         "F1",
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
@@ -877,15 +890,16 @@ func TestLookRepository_CreateFixtureValues(t *testing.T) {
 	// Create project, look, fixtures
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	testDB.DB.Create(look)
-	fixtureDef := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	fixtureDef := &models.FixtureDefinition{ID: cuid.New(), RefID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
 	testDB.DB.Create(fixtureDef)
 
 	fixtures := make([]*models.FixtureInstance, 3)
 	for i := range fixtures {
 		fixtures[i] = &models.FixtureInstance{
 			ID:           cuid.New(),
+			RefID: cuid.New(),
 			Name:         "F" + string(rune('1'+i)),
 			ProjectID:    project.ID,
 			DefinitionID: fixtureDef.ID,
@@ -1028,7 +1042,7 @@ func TestCueListRepository_CueOperations(t *testing.T) {
 	// Create project, look, cue list
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	testDB.DB.Create(look)
 	cueList := &models.CueList{ID: cuid.New(), Name: "Test CL", ProjectID: project.ID}
 	testDB.DB.Create(cueList)
@@ -1089,7 +1103,7 @@ func TestCueRepository_CRUD(t *testing.T) {
 	// Create project, look, cue list
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	testDB.DB.Create(look)
 	cueList := &models.CueList{ID: cuid.New(), Name: "Test CL", ProjectID: project.ID}
 	testDB.DB.Create(cueList)
@@ -1173,7 +1187,7 @@ func TestCueRepository_DeleteByCueListID(t *testing.T) {
 	// Create project, look, cue list, cues
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	testDB.DB.Create(look)
 	cueList := &models.CueList{ID: cuid.New(), Name: "Test CL", ProjectID: project.ID}
 	testDB.DB.Create(cueList)
@@ -1229,8 +1243,8 @@ func TestCueRepository_FindCueListIDsByLookID(t *testing.T) {
 	testDB.DB.Create(project)
 
 	// Create two looks
-	look1 := &models.Look{ID: cuid.New(), Name: "Look 1", ProjectID: project.ID}
-	look2 := &models.Look{ID: cuid.New(), Name: "Look 2", ProjectID: project.ID}
+	look1 := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Look 1", ProjectID: project.ID}
+	look2 := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Look 2", ProjectID: project.ID}
 	testDB.DB.Create(look1)
 	testDB.DB.Create(look2)
 
@@ -1313,9 +1327,9 @@ func TestCueRepository_CountCuesByLookIDs(t *testing.T) {
 	testDB.DB.Create(project)
 
 	// Create looks
-	look1 := &models.Look{ID: cuid.New(), Name: "Look 1", ProjectID: project.ID}
-	look2 := &models.Look{ID: cuid.New(), Name: "Look 2", ProjectID: project.ID}
-	look3 := &models.Look{ID: cuid.New(), Name: "Look 3", ProjectID: project.ID}
+	look1 := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Look 1", ProjectID: project.ID}
+	look2 := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Look 2", ProjectID: project.ID}
+	look3 := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Look 3", ProjectID: project.ID}
 	testDB.DB.Create(look1)
 	testDB.DB.Create(look2)
 	testDB.DB.Create(look3)
@@ -1405,6 +1419,7 @@ func TestFixtureRepository_CRUD(t *testing.T) {
 	testDB.DB.Create(project)
 	fixtureDef := &models.FixtureDefinition{
 		ID:           cuid.New(),
+		RefID: cuid.New(),
 		Manufacturer: "Test",
 		Model:        "Test Model",
 		Type:         "test",
@@ -1592,6 +1607,7 @@ func TestFixtureRepository_ChannelOperations(t *testing.T) {
 	// Create definition
 	def := &models.FixtureDefinition{
 		ID:           cuid.New(),
+		RefID: cuid.New(),
 		Manufacturer: "Test",
 		Model:        "M",
 		Type:         "t",
@@ -1688,10 +1704,11 @@ func TestFixtureRepository_InstanceChannelOperations(t *testing.T) {
 	// Create project, definition, fixture
 	project := &models.Project{ID: cuid.New(), Name: "P"}
 	testDB.DB.Create(project)
-	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	def := &models.FixtureDefinition{ID: cuid.New(), RefID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
 	testDB.DB.Create(def)
 	fixture := &models.FixtureInstance{
 		ID:           cuid.New(),
+		RefID: cuid.New(),
 		Name:         "F",
 		ProjectID:    project.ID,
 		DefinitionID: def.ID,
@@ -1747,7 +1764,7 @@ func TestFixtureRepository_CreateWithChannels(t *testing.T) {
 	// Create project, definition
 	project := &models.Project{ID: cuid.New(), Name: "P"}
 	testDB.DB.Create(project)
-	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	def := &models.FixtureDefinition{ID: cuid.New(), RefID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
 	testDB.DB.Create(def)
 
 	// Create fixture with channels
@@ -1790,7 +1807,7 @@ func TestFixtureRepository_CreateWithChannels_PresetIDs(t *testing.T) {
 	// Create project, definition
 	project := &models.Project{ID: cuid.New(), Name: "P"}
 	testDB.DB.Create(project)
-	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	def := &models.FixtureDefinition{ID: cuid.New(), RefID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
 	testDB.DB.Create(def)
 
 	// Create fixture with preset IDs
@@ -1837,7 +1854,7 @@ func TestFixtureRepository_CreateWithChannels_NoChannels(t *testing.T) {
 	// Create project, definition
 	project := &models.Project{ID: cuid.New(), Name: "P"}
 	testDB.DB.Create(project)
-	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	def := &models.FixtureDefinition{ID: cuid.New(), RefID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
 	testDB.DB.Create(def)
 
 	// Create fixture with empty channels
@@ -1941,7 +1958,7 @@ func TestFixtureRepository_ModeOperations(t *testing.T) {
 	ctx := context.Background()
 
 	// Create definition and mode
-	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	def := &models.FixtureDefinition{ID: cuid.New(), RefID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
 	testDB.DB.Create(def)
 	mode := &models.FixtureMode{
 		ID:           cuid.New(),
@@ -2010,7 +2027,7 @@ func TestFixtureRepository_CountInstancesByDefinitionID(t *testing.T) {
 	// Create project and definition
 	project := &models.Project{ID: cuid.New(), Name: "P"}
 	testDB.DB.Create(project)
-	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	def := &models.FixtureDefinition{ID: cuid.New(), RefID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
 	testDB.DB.Create(def)
 
 	// Test count (should be 0)
@@ -2026,6 +2043,7 @@ func TestFixtureRepository_CountInstancesByDefinitionID(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		fixture := &models.FixtureInstance{
 			ID:           cuid.New(),
+			RefID: cuid.New(),
 			Name:         "F",
 			ProjectID:    project.ID,
 			DefinitionID: def.ID,
@@ -2061,7 +2079,7 @@ func TestFixtureRepository_GetDefinitionModes(t *testing.T) {
 	ctx := context.Background()
 
 	// Create definition
-	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	def := &models.FixtureDefinition{ID: cuid.New(), RefID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
 	testDB.DB.Create(def)
 
 	// Test GetDefinitionModes with no modes (should return empty)
@@ -2106,7 +2124,7 @@ func TestFixtureRepository_CreateMode(t *testing.T) {
 	ctx := context.Background()
 
 	// Create definition
-	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	def := &models.FixtureDefinition{ID: cuid.New(), RefID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
 	testDB.DB.Create(def)
 
 	// Test CreateMode without ID (should auto-generate)
@@ -2155,7 +2173,7 @@ func TestFixtureRepository_CreateModeChannels(t *testing.T) {
 	ctx := context.Background()
 
 	// Create definition, channels, and mode
-	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	def := &models.FixtureDefinition{ID: cuid.New(), RefID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
 	testDB.DB.Create(def)
 
 	ch1 := &models.ChannelDefinition{ID: cuid.New(), Name: "Red", Type: "color", Offset: 0, DefinitionID: def.ID}
@@ -2211,7 +2229,7 @@ func TestFixtureRepository_DeleteDefinitionModes(t *testing.T) {
 	ctx := context.Background()
 
 	// Create definition
-	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	def := &models.FixtureDefinition{ID: cuid.New(), RefID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
 	testDB.DB.Create(def)
 
 	// Create channels
@@ -2265,7 +2283,7 @@ func TestFixtureRepository_DeleteDefinitionModes_NoModes(t *testing.T) {
 	ctx := context.Background()
 
 	// Create definition without modes
-	def := &models.FixtureDefinition{ID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
+	def := &models.FixtureDefinition{ID: cuid.New(), RefID: cuid.New(), Manufacturer: "T", Model: "M", Type: "t"}
 	testDB.DB.Create(def)
 
 	// Delete modes (should not error even with no modes)
@@ -2296,6 +2314,7 @@ func TestFixtureRepository_CountDefinitions(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		def := &models.FixtureDefinition{
 			ID:           cuid.New(),
+			RefID: cuid.New(),
 			Manufacturer: "Test",
 			Model:        "Model" + string(rune('A'+i)),
 			Type:         "led",
@@ -2473,11 +2492,11 @@ func TestLookBoardRepository_ButtonOperations(t *testing.T) {
 	// Create project and look
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	testDB.DB.Create(look)
 
 	// Create board
-	board := &models.LookBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	board := &models.LookBoard{ID: cuid.New(), RefID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
 	testDB.DB.Create(board)
 
 	// Test GetButtons with no buttons
@@ -2538,9 +2557,9 @@ func TestLookBoardRepository_CreateButton_WithID(t *testing.T) {
 	// Create project, look, and board
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	testDB.DB.Create(look)
-	board := &models.LookBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	board := &models.LookBoard{ID: cuid.New(), RefID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
 	testDB.DB.Create(board)
 
 	customID := cuid.New()
@@ -2571,13 +2590,13 @@ func TestLookBoardRepository_CreateButtons(t *testing.T) {
 	// Create project, looks, and board
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	look1 := &models.Look{ID: cuid.New(), Name: "Look 1", ProjectID: project.ID}
-	look2 := &models.Look{ID: cuid.New(), Name: "Look 2", ProjectID: project.ID}
-	look3 := &models.Look{ID: cuid.New(), Name: "Look 3", ProjectID: project.ID}
+	look1 := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Look 1", ProjectID: project.ID}
+	look2 := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Look 2", ProjectID: project.ID}
+	look3 := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Look 3", ProjectID: project.ID}
 	testDB.DB.Create(look1)
 	testDB.DB.Create(look2)
 	testDB.DB.Create(look3)
-	board := &models.LookBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	board := &models.LookBoard{ID: cuid.New(), RefID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
 	testDB.DB.Create(board)
 
 	// Test CreateButtons with empty slice (should be no-op)
@@ -2622,9 +2641,9 @@ func TestLookBoardRepository_CreateButtons_WithIDs(t *testing.T) {
 	// Create project, look, and board
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	testDB.DB.Create(look)
-	board := &models.LookBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	board := &models.LookBoard{ID: cuid.New(), RefID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
 	testDB.DB.Create(board)
 
 	// Test CreateButtons with pre-set IDs
@@ -2659,8 +2678,8 @@ func TestLookBoardRepository_CreateWithButtons(t *testing.T) {
 	// Create project and looks
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	look1 := &models.Look{ID: cuid.New(), Name: "Look 1", ProjectID: project.ID}
-	look2 := &models.Look{ID: cuid.New(), Name: "Look 2", ProjectID: project.ID}
+	look1 := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Look 1", ProjectID: project.ID}
+	look2 := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Look 2", ProjectID: project.ID}
 	testDB.DB.Create(look1)
 	testDB.DB.Create(look2)
 
@@ -2718,7 +2737,7 @@ func TestLookBoardRepository_CreateWithButtons_PresetIDs(t *testing.T) {
 	// Create project and look
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	testDB.DB.Create(look)
 
 	// Test CreateWithButtons with pre-set IDs
@@ -2798,9 +2817,9 @@ func TestLookBoardRepository_GetButtons_Ordering(t *testing.T) {
 	// Create project, look, and board
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	testDB.DB.Create(look)
-	board := &models.LookBoard{ID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
+	board := &models.LookBoard{ID: cuid.New(), RefID: cuid.New(), Name: "Test Board", ProjectID: project.ID}
 	testDB.DB.Create(board)
 
 	// Create buttons in non-ordered way
@@ -2850,7 +2869,7 @@ func TestLookBoardRepository_Delete_CascadesButtons(t *testing.T) {
 	// Create project and look
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	testDB.DB.Create(look)
 
 	// Create board with buttons
@@ -2907,7 +2926,7 @@ func TestLookBoardRepository_FindButtonByID(t *testing.T) {
 	// Create project and look
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	testDB.DB.Create(look)
 
 	// Create board and button
@@ -2947,7 +2966,7 @@ func TestLookBoardRepository_UpdateButton(t *testing.T) {
 	// Create project and look
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	testDB.DB.Create(look)
 
 	// Create board and button
@@ -2985,7 +3004,7 @@ func TestLookBoardRepository_DeleteButton(t *testing.T) {
 	// Create project and look
 	project := &models.Project{ID: cuid.New(), Name: "Test Project"}
 	testDB.DB.Create(project)
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	testDB.DB.Create(look)
 
 	// Create board and button
@@ -3028,6 +3047,7 @@ func TestLookRepository_DeleteFixtureValuesByFixtureID(t *testing.T) {
 	// Create fixture definition and fixture
 	fixtureDef := &models.FixtureDefinition{
 		ID:           cuid.New(),
+		RefID: cuid.New(),
 		Manufacturer: "Test",
 		Model:        "CascadeTest",
 		Type:         "test",
@@ -3036,6 +3056,7 @@ func TestLookRepository_DeleteFixtureValuesByFixtureID(t *testing.T) {
 
 	fixtureToDelete := &models.FixtureInstance{
 		ID:           cuid.New(),
+		RefID: cuid.New(),
 		Name:         "Fixture To Delete",
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
@@ -3047,6 +3068,7 @@ func TestLookRepository_DeleteFixtureValuesByFixtureID(t *testing.T) {
 	// Create another fixture that should NOT be affected
 	otherFixture := &models.FixtureInstance{
 		ID:           cuid.New(),
+		RefID: cuid.New(),
 		Name:         "Other Fixture",
 		ProjectID:    project.ID,
 		DefinitionID: fixtureDef.ID,
@@ -3056,9 +3078,9 @@ func TestLookRepository_DeleteFixtureValuesByFixtureID(t *testing.T) {
 	testDB.DB.Create(otherFixture)
 
 	// Create two looks, each with fixture values for both fixtures
-	look1 := &models.Look{ID: cuid.New(), Name: "Look 1", ProjectID: project.ID}
+	look1 := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Look 1", ProjectID: project.ID}
 	testDB.DB.Create(look1)
-	look2 := &models.Look{ID: cuid.New(), Name: "Look 2", ProjectID: project.ID}
+	look2 := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Look 2", ProjectID: project.ID}
 	testDB.DB.Create(look2)
 
 	// Add fixture values for fixtureToDelete to both looks

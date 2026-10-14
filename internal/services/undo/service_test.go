@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/bbernstein/lacylights-go/internal/database/migrations"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	"github.com/bbernstein/lacylights-go/internal/services/pubsub"
@@ -56,6 +57,12 @@ func setupTestDB(t *testing.T) (*gorm.DB, func()) {
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	// Create the production ref_id unique indexes so tests catch create
+	// paths that skip RefID (see migrations.CreateRefIDIndexes).
+	if err := migrations.CreateRefIDIndexes(db); err != nil {
+		t.Fatalf("Failed to create ref_id indexes: %v", err)
 	}
 
 	cleanup := func() {
@@ -115,6 +122,7 @@ func createTestLook(t *testing.T, db *gorm.DB, projectID string) *models.Look {
 
 	look := &models.Look{
 		ID:        cuid.New(),
+		RefID:     cuid.New(),
 		Name:      "Test Look " + cuid.Slug(),
 		ProjectID: projectID,
 	}
@@ -131,6 +139,7 @@ func createTestFixtureInstance(t *testing.T, db *gorm.DB, projectID string) *mod
 	// Create fixture definition first
 	def := &models.FixtureDefinition{
 		ID:           cuid.New(),
+		RefID:        cuid.New(),
 		Manufacturer: "Test",
 		Model:        "TestModel",
 		Type:         "LED_PAR",
@@ -141,6 +150,7 @@ func createTestFixtureInstance(t *testing.T, db *gorm.DB, projectID string) *mod
 
 	fixture := &models.FixtureInstance{
 		ID:           cuid.New(),
+		RefID:        cuid.New(),
 		Name:         "Test Fixture " + cuid.Slug(),
 		ProjectID:    projectID,
 		DefinitionID: def.ID,
@@ -1230,6 +1240,7 @@ func createTestLookBoard(t *testing.T, db *gorm.DB, projectID string) *models.Lo
 
 	lookBoard := &models.LookBoard{
 		ID:              cuid.New(),
+		RefID:           cuid.New(),
 		Name:            "Test Look Board " + cuid.Slug(),
 		ProjectID:       projectID,
 		CanvasWidth:     2000,
@@ -3321,6 +3332,7 @@ func TestService_ApplyLookBoardSnapshot_EmptySnapshotWithEntityID(t *testing.T) 
 	// Create a look board
 	lookBoard := &models.LookBoard{
 		ID:        cuid.New(),
+		RefID:     cuid.New(),
 		ProjectID: project.ID,
 		Name:      "Test Board",
 	}
@@ -4314,7 +4326,7 @@ func TestService_UndoRedo_CueEffectUpdate(t *testing.T) {
 	db.Create(cueList)
 
 	// Create a look and a cue
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	db.Create(look)
 
 	cue := &models.Cue{ID: cuid.New(), Name: "Test Cue", CueNumber: 1, CueListID: cueList.ID, LookID: look.ID}
@@ -4423,7 +4435,7 @@ func TestService_UndoRedo_CueEffectWithOnCueChange(t *testing.T) {
 	db.Create(cueList)
 
 	// Create a look and a cue
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	db.Create(look)
 
 	cue := &models.Cue{ID: cuid.New(), Name: "Test Cue", CueNumber: 1, CueListID: cueList.ID, LookID: look.ID}
@@ -4523,7 +4535,7 @@ func TestService_ApplyCueEffectSnapshot_NilSnapshotWithEntityID(t *testing.T) {
 	db.Create(cueList)
 
 	// Create a look and a cue
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	db.Create(look)
 
 	cue := &models.Cue{ID: cuid.New(), Name: "Test Cue", CueNumber: 1, CueListID: cueList.ID, LookID: look.ID}
@@ -4594,7 +4606,7 @@ func TestService_ApplyCueEffectSnapshot_SnapshotWithNilCueEffect(t *testing.T) {
 	db.Create(cueList)
 
 	// Create a look and a cue
-	look := &models.Look{ID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
+	look := &models.Look{ID: cuid.New(), RefID: cuid.New(), Name: "Test Look", ProjectID: project.ID}
 	db.Create(look)
 
 	cue := &models.Cue{ID: cuid.New(), Name: "Test Cue", CueNumber: 1, CueListID: cueList.ID, LookID: look.ID}

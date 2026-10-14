@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bbernstein/lacylights-go/internal/database/migrations"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	"github.com/bbernstein/lacylights-go/internal/services/testutil"
@@ -45,6 +46,12 @@ func newSeededService(t *testing.T) *seed {
 	t.Cleanup(cleanup)
 	if err := db.DB.AutoMigrate(&models.FixtureGroup{}, &models.FixtureGroupMember{}); err != nil {
 		t.Fatalf("migrate groups: %v", err)
+	}
+
+	// Create the production ref_id unique indexes so tests catch create
+	// paths that skip RefID (see migrations.CreateRefIDIndexes).
+	if err := migrations.CreateRefIDIndexes(db.DB); err != nil {
+		t.Fatalf("Failed to create ref_id indexes: %v", err)
 	}
 	ctx := context.Background()
 	must := func(err error) {

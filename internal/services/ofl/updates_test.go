@@ -75,6 +75,7 @@ func TestUpdatesService_GetCurrentFixtureHashes(t *testing.T) {
 	hash := "abc123def456abc123def456abc123def456abc123def456abc123def456abcd"
 	def := &models.FixtureDefinition{
 		ID:            "test-def-1",
+		RefID:         "test-def-1",
 		Manufacturer:  "TestMfg",
 		Model:         "TestModel",
 		Type:          "LED_PAR",
@@ -133,6 +134,7 @@ func TestUpdatesService_GetFixtureInstanceCounts(t *testing.T) {
 	// Create a fixture definition
 	def := &models.FixtureDefinition{
 		ID:           "test-def-1",
+		RefID:        "test-def-1",
 		Manufacturer: "TestMfg",
 		Model:        "TestModel",
 		Type:         "LED_PAR",
@@ -145,6 +147,7 @@ func TestUpdatesService_GetFixtureInstanceCounts(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		instance := &models.FixtureInstance{
 			ID:           "test-instance-" + string(rune('a'+i)),
+			RefID:        "test-instance-" + string(rune('a'+i)),
 			Name:         "Instance",
 			ProjectID:    project.ID,
 			DefinitionID: def.ID,
@@ -256,6 +259,7 @@ func TestUpdatesService_IsFixtureInUse(t *testing.T) {
 
 	def := &models.FixtureDefinition{
 		ID:           "test-def",
+		RefID:        "test-def",
 		Manufacturer: "Mfg",
 		Model:        "Model",
 		Type:         "LED_PAR",
@@ -281,6 +285,7 @@ func TestUpdatesService_IsFixtureInUse(t *testing.T) {
 	// Create instance
 	instance := &models.FixtureInstance{
 		ID:           "test-instance",
+		RefID:        "test-instance",
 		Name:         "Instance",
 		ProjectID:    project.ID,
 		DefinitionID: def.ID,

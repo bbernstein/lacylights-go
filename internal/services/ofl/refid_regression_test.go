@@ -5,22 +5,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bbernstein/lacylights-go/internal/database/migrations"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 )
 
-// setupTestDBWithRefIDIndexes mirrors production startup, which creates the
-// unique ref_id indexes (including the global idx_fixture_definitions_refid)
-// after AutoMigrate. testutil.SetupTestDB does not create them, which is how
-// the empty-RefID bug in the OFL import paths went unnoticed.
-func setupTestDBWithRefIDIndexes(t *testing.T) (*Service, func()) {
+// setupRefIDTestService returns an OFL service backed by testutil.SetupTestDB,
+// which creates the production ref_id unique indexes (including the global
+// idx_fixture_definitions_refid). Before go#86 the shared setup skipped them,
+// which is how the empty-RefID bug in the OFL import paths went unnoticed.
+func setupRefIDTestService(t *testing.T) *Service {
 	t.Helper()
 	service, cleanup := setupTestDB(t)
-	if err := migrations.CreateRefIDIndexes(service.db); err != nil {
-		cleanup()
-		t.Fatalf("CreateRefIDIndexes: %v", err)
-	}
-	return service, cleanup
+	t.Cleanup(cleanup)
+	return service
 }
 
 func renamedFixture(name string) string {
@@ -31,8 +27,7 @@ func renamedFixture(name string) string {
 // with "UNIQUE constraint failed: fixture_definitions.ref_id" because the
 // definition was created with an empty RefID.
 func TestImportFixture_MultipleDefinitionsGetUniqueRefIDs(t *testing.T) {
-	service, cleanup := setupTestDBWithRefIDIndexes(t)
-	defer cleanup()
+	service := setupRefIDTestService(t)
 	ctx := context.Background()
 
 	seen := map[string]bool{}
@@ -55,8 +50,7 @@ func TestImportFixture_MultipleDefinitionsGetUniqueRefIDs(t *testing.T) {
 }
 
 func TestImportFixture_ReplacePreservesRefID(t *testing.T) {
-	service, cleanup := setupTestDBWithRefIDIndexes(t)
-	defer cleanup()
+	service := setupRefIDTestService(t)
 	ctx := context.Background()
 
 	// Seed an unrelated definition first so that, without the fix, the
@@ -82,8 +76,7 @@ func TestImportFixture_ReplacePreservesRefID(t *testing.T) {
 }
 
 func TestImportFixtureWithHash_MultipleDefinitionsGetUniqueRefIDs(t *testing.T) {
-	service, cleanup := setupTestDBWithRefIDIndexes(t)
-	defer cleanup()
+	service := setupRefIDTestService(t)
 	ctx := context.Background()
 
 	seen := map[string]bool{}

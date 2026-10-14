@@ -20,6 +20,7 @@ func TestService_CaptureBulkLookState(t *testing.T) {
 	// Create looks with fixture values
 	look1 := &models.Look{
 		ID:        cuid.New(),
+		RefID:     cuid.New(),
 		Name:      "Look 1",
 		ProjectID: project.ID,
 	}
@@ -27,6 +28,7 @@ func TestService_CaptureBulkLookState(t *testing.T) {
 
 	look2 := &models.Look{
 		ID:        cuid.New(),
+		RefID:     cuid.New(),
 		Name:      "Look 2",
 		ProjectID: project.ID,
 	}
@@ -35,6 +37,7 @@ func TestService_CaptureBulkLookState(t *testing.T) {
 	// Create fixture definition and instance
 	def := &models.FixtureDefinition{
 		ID:           cuid.New(),
+		RefID:        cuid.New(),
 		Manufacturer: "Test",
 		Model:        "TestModel",
 		Type:         "LED_PAR",
@@ -43,6 +46,7 @@ func TestService_CaptureBulkLookState(t *testing.T) {
 
 	fixture := &models.FixtureInstance{
 		ID:           cuid.New(),
+		RefID:        cuid.New(),
 		Name:         "Fixture 1",
 		ProjectID:    project.ID,
 		DefinitionID: def.ID,
@@ -152,6 +156,7 @@ func TestService_ApplyBulkLookUpdateSnapshot(t *testing.T) {
 	// Create fixture definition and instance
 	def := &models.FixtureDefinition{
 		ID:           cuid.New(),
+		RefID:        cuid.New(),
 		Manufacturer: "Test",
 		Model:        "TestModel",
 		Type:         "LED_PAR",
@@ -160,6 +165,7 @@ func TestService_ApplyBulkLookUpdateSnapshot(t *testing.T) {
 
 	fixture := &models.FixtureInstance{
 		ID:           cuid.New(),
+		RefID:        cuid.New(),
 		Name:         "Fixture 1",
 		ProjectID:    project.ID,
 		DefinitionID: def.ID,
@@ -171,6 +177,7 @@ func TestService_ApplyBulkLookUpdateSnapshot(t *testing.T) {
 	// Create looks with initial fixture values
 	look1 := &models.Look{
 		ID:        cuid.New(),
+		RefID:     cuid.New(),
 		Name:      "Look 1",
 		ProjectID: project.ID,
 	}
@@ -178,6 +185,7 @@ func TestService_ApplyBulkLookUpdateSnapshot(t *testing.T) {
 
 	look2 := &models.Look{
 		ID:        cuid.New(),
+		RefID:     cuid.New(),
 		Name:      "Look 2",
 		ProjectID: project.ID,
 	}
