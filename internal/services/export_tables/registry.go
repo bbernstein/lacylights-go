@@ -492,7 +492,7 @@ func (s *Service) BuildWorkbook(ctx context.Context, projectID string, ids []Tab
 		}
 		total += len(data.Rows)
 		if s.MaxRows > 0 && total > s.MaxRows {
-			return nil, 0, fmt.Errorf("%w: workbook has more than %d rows, this server's export limit", ErrTooManyRows, s.MaxRows)
+			return nil, 0, fmt.Errorf("%w: workbook has at least %d rows, over this server's export limit of %d rows", ErrTooManyRows, total, s.MaxRows)
 		}
 		sheets = append(sheets, data.Sheets(t.Label)...)
 	}

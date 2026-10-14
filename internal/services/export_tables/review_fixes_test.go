@@ -715,3 +715,29 @@ func TestFilename_ByteCap(t *testing.T) {
 		t.Errorf("mid-rune cut = %q", got)
 	}
 }
+
+// Without a row counter (or when an estimate undercounts), the row cap is
+// still enforced after building, for a single table and for a workbook,
+// and the error names the configured limit.
+func TestBuild_RowCapCheckedAfterBuildingWithoutCounter(t *testing.T) {
+	s := newSeededService(t)
+	ctx := context.Background()
+	s.svc.repos.Counts = nil
+	s.svc.MaxRows = 1
+
+	_, err := s.svc.Build(ctx, TableFixtures, s.projectID, "")
+	if !errors.Is(err, ErrTooManyRows) {
+		t.Fatalf("Build err = %v, want ErrTooManyRows", err)
+	}
+	if !strings.Contains(err.Error(), "over this server's export limit of 1 rows") {
+		t.Errorf("Build err = %q, want it to name the limit", err)
+	}
+
+	_, _, err = s.svc.BuildWorkbook(ctx, s.projectID, []TableID{TableFixtures})
+	if !errors.Is(err, ErrTooManyRows) {
+		t.Fatalf("BuildWorkbook err = %v, want ErrTooManyRows", err)
+	}
+	if !strings.Contains(err.Error(), "over this server's export limit of 1 rows") {
+		t.Errorf("BuildWorkbook err = %q, want it to name the limit", err)
+	}
+}

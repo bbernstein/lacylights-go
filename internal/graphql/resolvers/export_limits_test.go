@@ -176,3 +176,16 @@ func TestProjectExportSlot_ReleaseAfterResize(t *testing.T) {
 	require.NoError(t, err)
 	r2()
 }
+
+// SetExportLimits works on a Resolver built without a data export service:
+// the project export limits still apply.
+func TestSetExportLimits_NoDataExportService(t *testing.T) {
+	restoreProjectExportBound(t)
+	r := &Resolver{}
+	r.SetExportLimits(ExportLimits{MaxRows: 1, MaxCells: 2, MaxBytes: 3, MaxConcurrentProjectExports: 1})
+	require.Nil(t, r.DataExportService)
+	require.Equal(t, 3, r.projectExportMaxBytes)
+	require.Equal(t, 1, maxConcurrentProjectExports())
+	require.ErrorIs(t, r.checkProjectExportSize("JSON", 4), exporttables.ErrTooLarge)
+	require.NoError(t, r.checkProjectExportSize("JSON", 3))
+}
