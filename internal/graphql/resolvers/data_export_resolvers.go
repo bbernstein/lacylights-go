@@ -24,10 +24,12 @@ func (r *Resolver) dataExportTables() ([]*generated.DataExportTableInfo, error) 
 	out := make([]*generated.DataExportTableInfo, 0, len(tables))
 	for _, t := range tables {
 		out = append(out, &generated.DataExportTableInfo{
-			Table:   generated.DataExportTable(t.ID),
-			Label:   t.Label,
-			Scope:   string(t.Scope),
-			Columns: t.InfoHeaders(),
+			Table: generated.DataExportTable(t.ID),
+			Label: t.Label,
+			Scope: string(t.Scope),
+			// Same rule Service.Build enforces (ErrScopeRequired).
+			ScopeRequired: t.RequiresScopeID(),
+			Columns:       t.InfoHeaders(),
 		})
 	}
 	return out, nil

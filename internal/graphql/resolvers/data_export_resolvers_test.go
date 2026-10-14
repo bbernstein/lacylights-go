@@ -128,13 +128,14 @@ func TestDataExportTables_Query(t *testing.T) {
 
 	var resp struct {
 		DataExportTables []struct {
-			Table   string
-			Label   string
-			Scope   string
-			Columns []string
+			Table         string
+			Label         string
+			Scope         string
+			ScopeRequired bool
+			Columns       []string
 		}
 	}
-	require.NoError(t, c.Post(`query { dataExportTables { table label scope columns } }`, &resp))
+	require.NoError(t, c.Post(`query { dataExportTables { table label scope scopeRequired columns } }`, &resp))
 	require.Len(t, resp.DataExportTables, len(r.DataExportService.Tables()))
 	byID := map[string]int{}
 	for i, info := range resp.DataExportTables {
@@ -151,6 +152,64 @@ func TestDataExportTables_Query(t *testing.T) {
 	require.Equal(t, "none", resp.DataExportTables[byID["FIXTURE_LIBRARY"]].Scope)
 	require.Equal(t, "lookBoard", resp.DataExportTables[byID["LOOK_BOARD_ENTRIES"]].Scope)
 	require.Len(t, resp.DataExportTables, 9)
+
+	// Every table's scope and scopeRequired, so clients need not hard-code
+	// which tables demand a scopeId (lacylights-fe#179).
+	want := map[string]struct {
+		scope         string
+		scopeRequired bool
+	}{
+		"FIXTURE_TYPES":      {"project", false},
+		"FIXTURE_LIBRARY":    {"none", false},
+		"FIXTURES":           {"project", false},
+		"LOOKS":              {"project", false},
+		"LOOK_DETAILS":       {"look", true},
+		"EFFECTS":            {"project", false},
+		"LOOK_BOARD_ENTRIES": {"lookBoard", false},
+		"CUE_LISTS":          {"project", false},
+		"CUE_LIST_DETAILS":   {"cueList", true},
+	}
+	require.Len(t, want, len(resp.DataExportTables))
+	for _, info := range resp.DataExportTables {
+		w, ok := want[info.Table]
+		require.True(t, ok, "unexpected table %s", info.Table)
+		require.Equal(t, w.scope, info.Scope, "scope for %s", info.Table)
+		require.Equal(t, w.scopeRequired, info.ScopeRequired, "scopeRequired for %s", info.Table)
+		// scopeRequired must match what exportDataTable enforces.
+		tbl, ok := r.DataExportService.Lookup(exporttables.TableID(info.Table))
+		require.True(t, ok)
+		require.Equal(t, tbl.RequiresScopeID(), info.ScopeRequired, "scopeRequired vs enforcement for %s", info.Table)
+	}
+}
+
+// TestDataExportTables_ScopeRequiredMatchesEnforcement checks that every
+// table advertised with scopeRequired=true is rejected without a scopeId,
+// and every table with scopeRequired=false is not rejected for a missing one.
+func TestDataExportTables_ScopeRequiredMatchesEnforcement(t *testing.T) {
+	c, r, cleanup := testSetup(t)
+	defer cleanup()
+	ctx := context.Background()
+	seed := seedDataExport(t, r, nil, nil)
+
+	var resp struct {
+		DataExportTables []struct {
+			Table         string
+			ScopeRequired bool
+		}
+	}
+	require.NoError(t, c.Post(`query { dataExportTables { table scopeRequired } }`, &resp))
+	require.NotEmpty(t, resp.DataExportTables)
+
+	q := r.Query()
+	for _, info := range resp.DataExportTables {
+		pid := seed.projectID
+		_, err := q.ExportDataTable(ctx, &pid, generated.DataExportTable(info.Table), generated.DataExportFormatCSV, nil)
+		if info.ScopeRequired {
+			require.ErrorIs(t, err, exporttables.ErrScopeRequired, "table %s", info.Table)
+		} else {
+			require.NoError(t, err, "table %s", info.Table)
+		}
+	}
 }
 
 var filenamePattern = regexp.MustCompile(`^[\p{L}\p{N}._-]+-\d{4}-\d{2}-\d{2}\.(csv|xlsx)$`)

@@ -303,10 +303,11 @@ type ComplexityRoot struct {
 	}
 
 	DataExportTableInfo struct {
-		Columns func(childComplexity int) int
-		Label   func(childComplexity int) int
-		Scope   func(childComplexity int) int
-		Table   func(childComplexity int) int
+		Columns       func(childComplexity int) int
+		Label         func(childComplexity int) int
+		Scope         func(childComplexity int) int
+		ScopeRequired func(childComplexity int) int
+		Table         func(childComplexity int) int
 	}
 
 	Device struct {
@@ -2719,6 +2720,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.DataExportTableInfo.Scope(childComplexity), true
+	case "DataExportTableInfo.scopeRequired":
+		if e.complexity.DataExportTableInfo.ScopeRequired == nil {
+			break
+		}
+
+		return e.complexity.DataExportTableInfo.ScopeRequired(childComplexity), true
 	case "DataExportTableInfo.table":
 		if e.complexity.DataExportTableInfo.Table == nil {
 			break
@@ -10296,6 +10303,13 @@ type DataExportTableInfo {
   label: String!
   "One of: none, project, look, cueList, lookBoard"
   scope: String!
+  """
+  True when exportDataTable rejects this table without a scopeId
+  (LOOK_DETAILS, CUE_LIST_DETAILS). False for tables that take no scopeId
+  and for LOOK_BOARD_ENTRIES, whose scopeId is optional (omit it to export
+  every board). Derived from the same rule the server enforces.
+  """
+  scopeRequired: Boolean!
   "Column headers. LOOK_DETAILS ends with a variable run of channel columns, shown as 'Ch 1 … Ch N'."
   columns: [String!]!
 }
@@ -19446,6 +19460,35 @@ func (ec *executionContext) fieldContext_DataExportTableInfo_scope(_ context.Con
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DataExportTableInfo_scopeRequired(ctx context.Context, field graphql.CollectedField, obj *DataExportTableInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DataExportTableInfo_scopeRequired,
+		func(ctx context.Context) (any, error) {
+			return obj.ScopeRequired, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DataExportTableInfo_scopeRequired(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DataExportTableInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -45785,6 +45828,8 @@ func (ec *executionContext) fieldContext_Query_dataExportTables(_ context.Contex
 				return ec.fieldContext_DataExportTableInfo_label(ctx, field)
 			case "scope":
 				return ec.fieldContext_DataExportTableInfo_scope(ctx, field)
+			case "scopeRequired":
+				return ec.fieldContext_DataExportTableInfo_scopeRequired(ctx, field)
 			case "columns":
 				return ec.fieldContext_DataExportTableInfo_columns(ctx, field)
 			}
@@ -56720,6 +56765,11 @@ func (ec *executionContext) _DataExportTableInfo(ctx context.Context, sel ast.Se
 			}
 		case "scope":
 			out.Values[i] = ec._DataExportTableInfo_scope(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "scopeRequired":
+			out.Values[i] = ec._DataExportTableInfo_scopeRequired(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

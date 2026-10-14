@@ -159,6 +159,41 @@ func TestScopeHelpers(t *testing.T) {
 	}
 }
 
+// TestRegistryScopeRequirements pins RequiresScopeID / AcceptsScopeID for
+// every registered table. RequiresScopeID is exposed to clients as
+// DataExportTableInfo.scopeRequired, so a change here is an API change.
+func TestRegistryScopeRequirements(t *testing.T) {
+	s := newSeededService(t)
+	want := map[TableID]struct{ requires, accepts bool }{
+		TableFixtureTypes:     {false, false},
+		TableFixtureLibrary:   {false, false},
+		TableFixtures:         {false, false},
+		TableLooks:            {false, false},
+		TableLookDetails:      {true, true},
+		TableEffects:          {false, false},
+		TableLookBoardEntries: {false, true},
+		TableCueLists:         {false, false},
+		TableCueListDetails:   {true, true},
+	}
+	tables := s.svc.Tables()
+	if len(tables) != len(want) {
+		t.Fatalf("registry has %d tables, test expects %d", len(tables), len(want))
+	}
+	for _, tbl := range tables {
+		w, ok := want[tbl.ID]
+		if !ok {
+			t.Errorf("unexpected table %s", tbl.ID)
+			continue
+		}
+		if tbl.RequiresScopeID() != w.requires {
+			t.Errorf("%s RequiresScopeID = %v, want %v", tbl.ID, tbl.RequiresScopeID(), w.requires)
+		}
+		if tbl.AcceptsScopeID() != w.accepts {
+			t.Errorf("%s AcceptsScopeID = %v, want %v", tbl.ID, tbl.AcceptsScopeID(), w.accepts)
+		}
+	}
+}
+
 func TestTableDataSheets(t *testing.T) {
 	d := &TableData{
 		Columns: []Column{{"a", "A"}},
