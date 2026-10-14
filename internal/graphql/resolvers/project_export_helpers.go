@@ -3,8 +3,10 @@ package resolvers
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
+	exporttables "github.com/bbernstein/lacylights-go/internal/services/export_tables"
 )
 
 // Shared implementations of the project export operations. Each is exposed
@@ -21,7 +23,30 @@ const MaxConcurrentProjectExports = 2
 
 // projectExportSlots is shared by every Resolver in the process, so the
 // bound holds across requests as well as across aliases in one request.
-var projectExportSlots = make(chan struct{}, MaxConcurrentProjectExports)
+// It is an atomic pointer so the bound can be configured at startup
+// (setMaxConcurrentProjectExports); an export releases into the same
+// channel it acquired from.
+var projectExportSlots atomic.Pointer[chan struct{}]
+
+func init() {
+	setMaxConcurrentProjectExports(0)
+}
+
+// setMaxConcurrentProjectExports sets how many project exports may run at
+// once. n <= 0 restores the default, MaxConcurrentProjectExports. Call it at
+// startup, before exports run; exports already holding a slot keep it.
+func setMaxConcurrentProjectExports(n int) {
+	if n <= 0 {
+		n = MaxConcurrentProjectExports
+	}
+	slots := make(chan struct{}, n)
+	projectExportSlots.Store(&slots)
+}
+
+// maxConcurrentProjectExports reports the current project export bound.
+func maxConcurrentProjectExports() int {
+	return cap(*projectExportSlots.Load())
+}
 
 // acquireProjectExportSlot waits for a project export slot. It returns
 // ctx.Err() if the context ends first. Call the returned release function
@@ -32,12 +57,52 @@ func acquireProjectExportSlot(ctx context.Context) (func(), error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	slots := *projectExportSlots.Load()
 	select {
-	case projectExportSlots <- struct{}{}:
-		return func() { <-projectExportSlots }, nil
+	case slots <- struct{}{}:
+		return func() { <-slots }, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+}
+
+// ExportLimits are the opt-in export limits read from EXPORT_MAX_* at
+// startup. Every field defaults to 0, meaning no limit (or, for
+// MaxConcurrentProjectExports, the built-in default): LacyLights is mainly
+// used in-house and large projects must always export. A restricted
+// deployment such as a public demo sets them.
+type ExportLimits struct {
+	// MaxRows caps the data rows in one CSV/XLSX data export.
+	MaxRows int
+	// MaxCells caps the cells in a dynamic-width LOOK_DETAILS grid.
+	MaxCells int
+	// MaxBytes caps the encoded size of any export: CSV/XLSX data exports
+	// and whole-project JSON and Eos ASCII exports.
+	MaxBytes int
+	// MaxConcurrentProjectExports bounds concurrent project exports.
+	MaxConcurrentProjectExports int
+}
+
+// SetExportLimits applies export limits. Call it once at startup, before
+// the server handles requests.
+func (r *Resolver) SetExportLimits(l ExportLimits) {
+	if r.DataExportService != nil {
+		r.DataExportService.MaxRows = max(l.MaxRows, 0)
+		r.DataExportService.MaxCells = max(l.MaxCells, 0)
+		r.DataExportService.MaxBytes = max(l.MaxBytes, 0)
+	}
+	r.projectExportMaxBytes = max(l.MaxBytes, 0)
+	setMaxConcurrentProjectExports(l.MaxConcurrentProjectExports)
+}
+
+// checkProjectExportSize enforces the opt-in byte limit on a whole-project
+// export. kind names the format in the error ("JSON", "Eos ASCII").
+func (r *Resolver) checkProjectExportSize(kind string, size int) error {
+	if r.projectExportMaxBytes > 0 && size > r.projectExportMaxBytes {
+		return fmt.Errorf("%w: project %s export is %d bytes, over this server's export limit of %d bytes",
+			exporttables.ErrTooLarge, kind, size, r.projectExportMaxBytes)
+	}
+	return nil
 }
 
 // exportProjectJSON exports a project as LacyLights JSON.
@@ -90,6 +155,9 @@ func (r *Resolver) exportProjectJSON(ctx context.Context, projectID string, opti
 	if err != nil {
 		return nil, err
 	}
+	if err := r.checkProjectExportSize("JSON", len(jsonContent)); err != nil {
+		return nil, err
+	}
 
 	return &generated.ExportResult{
 		ProjectID:   projectID,
@@ -134,6 +202,9 @@ func (r *Resolver) exportProjectEos(ctx context.Context, projectID string) (*gen
 	defer release()
 	res, err := r.EosExportService.Export(ctx, projectID)
 	if err != nil {
+		return nil, err
+	}
+	if err := r.checkProjectExportSize("Eos ASCII", len(res.Content)); err != nil {
 		return nil, err
 	}
 	return &generated.EosExportResult{

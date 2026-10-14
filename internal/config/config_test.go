@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 	"time"
 )
@@ -790,4 +791,70 @@ func TestLoad_OFLConfig(t *testing.T) {
 			t.Errorf("Expected OFLCachePath to default to './.ofl-cache', got '%s'", cfg.OFLCachePath)
 		}
 	})
+}
+
+func TestLoad_ExportLimits_DefaultUnlimited(t *testing.T) {
+	for _, k := range []string{"EXPORT_MAX_ROWS", "EXPORT_MAX_CELLS", "EXPORT_MAX_BYTES", "EXPORT_MAX_CONCURRENT_PROJECT_EXPORTS"} {
+		t.Setenv(k, "") // registers cleanup of any outer value
+		if err := os.Unsetenv(k); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := Load()
+	if cfg.ExportMaxRows != 0 || cfg.ExportMaxCells != 0 || cfg.ExportMaxBytes != 0 || cfg.ExportMaxConcurrentProjectExports != 0 {
+		t.Errorf("export limits must default to 0 (unlimited), got rows=%d cells=%d bytes=%d concurrent=%d",
+			cfg.ExportMaxRows, cfg.ExportMaxCells, cfg.ExportMaxBytes, cfg.ExportMaxConcurrentProjectExports)
+	}
+}
+
+func TestLoad_ExportLimits_Set(t *testing.T) {
+	t.Setenv("EXPORT_MAX_ROWS", "100000")
+	t.Setenv("EXPORT_MAX_CELLS", "5000000")
+	t.Setenv("EXPORT_MAX_BYTES", "20971520")
+	t.Setenv("EXPORT_MAX_CONCURRENT_PROJECT_EXPORTS", "1")
+	cfg := Load()
+	if cfg.ExportMaxRows != 100000 {
+		t.Errorf("ExportMaxRows = %d, want 100000", cfg.ExportMaxRows)
+	}
+	if cfg.ExportMaxCells != 5000000 {
+		t.Errorf("ExportMaxCells = %d, want 5000000", cfg.ExportMaxCells)
+	}
+	if cfg.ExportMaxBytes != 20971520 {
+		t.Errorf("ExportMaxBytes = %d, want 20971520", cfg.ExportMaxBytes)
+	}
+	if cfg.ExportMaxConcurrentProjectExports != 1 {
+		t.Errorf("ExportMaxConcurrentProjectExports = %d, want 1", cfg.ExportMaxConcurrentProjectExports)
+	}
+}
+
+func TestGetEnvLimit(t *testing.T) {
+	const key = "LACYLIGHTS_TEST_EXPORT_LIMIT"
+	tests := []struct {
+		name  string
+		value string
+		set   bool
+		want  int
+	}{
+		{"unset", "", false, 0},
+		{"empty", "", true, 0},
+		{"zero", "0", true, 0},
+		{"positive", "42", true, 42},
+		{"negative is unlimited", "-5", true, 0},
+		{"garbage is unlimited", "20MB", true, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.set {
+				t.Setenv(key, tt.value)
+			} else {
+				t.Setenv(key, "")
+				if err := os.Unsetenv(key); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := getEnvLimit(key); got != tt.want {
+				t.Errorf("getEnvLimit(%q) = %d, want %d", tt.value, got, tt.want)
+			}
+		})
+	}
 }

@@ -186,7 +186,7 @@ var (
 	ErrNoTables = errors.New("at least one table is required; omit tables to export the default set")
 	// ErrTooLarge is returned when an encoded export exceeds MaxBytes.
 	ErrTooLarge = errors.New("export file is too large")
-	// ErrTooManyRows is returned when an export exceeds MaxExportRows.
+	// ErrTooManyRows is returned when an export exceeds MaxRows or MaxCells.
 	ErrTooManyRows = errors.New("export is too large")
 )
 
@@ -194,7 +194,8 @@ var (
 // lighting designers and techs, who must be able to export large projects,
 // so by default nothing is capped and no sizing queries run. A restricted
 // deployment (for example a public demo) can set Service.MaxRows,
-// MaxCells and MaxBytes; the constants below are suggested values.
+// MaxCells and MaxBytes (from the EXPORT_MAX_ROWS, EXPORT_MAX_CELLS and
+// EXPORT_MAX_BYTES env vars); the constants below are suggested values.
 
 // MaxExportRows is a suggested cap on the data rows in one export (a
 // table, or the total across a workbook's sheets).
@@ -335,7 +336,7 @@ func (s *Service) Build(ctx context.Context, id TableID, projectID, scopeID stri
 			return nil, err
 		}
 		if n > s.MaxRows {
-			return nil, fmt.Errorf("%w: %s has about %d rows", ErrTooManyRows, id, n)
+			return nil, fmt.Errorf("%w: %s has about %d rows, over this server's export limit of %d rows", ErrTooManyRows, id, n, s.MaxRows)
 		}
 	}
 	data, err := t.build(ctx, s, projectID, scopeID)
@@ -343,7 +344,7 @@ func (s *Service) Build(ctx context.Context, id TableID, projectID, scopeID stri
 		return nil, err
 	}
 	if s.MaxRows > 0 && len(data.Rows) > s.MaxRows {
-		return nil, fmt.Errorf("%w: %s has %d rows", ErrTooManyRows, id, len(data.Rows))
+		return nil, fmt.Errorf("%w: %s has %d rows, over this server's export limit of %d rows", ErrTooManyRows, id, len(data.Rows), s.MaxRows)
 	}
 	return data, nil
 }
@@ -475,7 +476,7 @@ func (s *Service) BuildWorkbook(ctx context.Context, projectID string, ids []Tab
 			}
 			estimated += n
 			if estimated > s.MaxRows {
-				return nil, 0, fmt.Errorf("%w: workbook has about %d rows", ErrTooManyRows, estimated)
+				return nil, 0, fmt.Errorf("%w: workbook has about %d rows, over this server's export limit of %d rows", ErrTooManyRows, estimated, s.MaxRows)
 			}
 		}
 		tables = append(tables, t)
@@ -491,7 +492,7 @@ func (s *Service) BuildWorkbook(ctx context.Context, projectID string, ids []Tab
 		}
 		total += len(data.Rows)
 		if s.MaxRows > 0 && total > s.MaxRows {
-			return nil, 0, fmt.Errorf("%w: workbook has more than %d rows", ErrTooManyRows, s.MaxRows)
+			return nil, 0, fmt.Errorf("%w: workbook has more than %d rows, this server's export limit", ErrTooManyRows, s.MaxRows)
 		}
 		sheets = append(sheets, data.Sheets(t.Label)...)
 	}
