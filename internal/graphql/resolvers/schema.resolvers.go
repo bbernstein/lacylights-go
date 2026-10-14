@@ -4598,9 +4598,8 @@ func (r *mutationResolver) ImportProject(ctx context.Context, jsonContent string
 }
 
 // ImportProjectFromQlc is the resolver for the importProjectFromQLC field.
-// Returns error - QLC+ import not available on this platform
 func (r *mutationResolver) ImportProjectFromQlc(ctx context.Context, xmlContent string, originalFileName string) (*generated.QLCImportResult, error) {
-	return nil, fmt.Errorf("QLC+ import not available on this platform")
+	return r.importProjectFromQLC(ctx, xmlContent, originalFileName)
 }
 
 // ExportProjectToQlc is the resolver for the exportProjectToQLC field.

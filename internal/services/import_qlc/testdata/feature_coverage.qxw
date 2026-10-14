@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE Workspace>
+<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="VirtualConsole">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>4.12.7</Version>
+  <Author>LacyLights Test</Author>
+ </Creator>
+ <Engine>
+  <InputOutputMap>
+   <Universe Name="Universe 1" ID="0"/>
+  </InputOutputMap>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic</Model>
+   <Mode>Generic</Mode>
+   <ID>10</ID>
+   <Name>Dimmers 1-4</Name>
+   <Universe>0</Universe>
+   <Address>100</Address>
+   <Channels>4</Channels>
+   <ExcludeFade>3</ExcludeFade>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>RGBPanel</Model>
+   <Mode>GRB</Mode>
+   <ID>11</ID>
+   <Name>Pixel Strip</Name>
+   <Universe>0</Universe>
+   <Address>200</Address>
+   <Channels>6</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Acme</Manufacturer>
+   <Model>Mystery Spot</Model>
+   <Mode>Standard</Mode>
+   <ID>12</ID>
+   <Name>Mystery</Name>
+   <Universe>0</Universe>
+   <Address>300</Address>
+   <Channels>2</Channels>
+  </Fixture>
+  <Function ID="0" Type="Scene" Name="Warm">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="10">0,255,1,128,7,99</FixtureVal>
+   <FixtureVal ID="11">0,10,1,20,2,999</FixtureVal>
+   <FixtureVal ID="12"/>
+   <FixtureVal ID="77">0,255</FixtureVal>
+  </Function>
+  <Function ID="1" Type="Scene" Name="Legacy Values">
+   <Speed FadeIn="2000" FadeOut="0" Duration="0"/>
+   <Value Fixture="10" Channel="2">64</Value>
+   <Value Fixture="12" Channel="1">200</Value>
+  </Function>
+  <Function ID="2" Type="Scene" Name="Seq Base">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="10">0,0,1,0</FixtureVal>
+  </Function>
+  <Function ID="3" Type="EFX" Name="Circle">
+   <Fixture>
+    <ID>12</ID>
+    <Direction>Forward</Direction>
+   </Fixture>
+  </Function>
+  <Function ID="4" Type="Collection" Name="Combo">
+   <Step Number="0">0</Step>
+  </Function>
+  <Function ID="5" Type="Sequence" Name="Dimmer Chase" BoundScene="2">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <Direction>Forward</Direction>
+   <RunOrder>SingleShot</RunOrder>
+   <SpeedModes FadeIn="PerStep" FadeOut="PerStep" Duration="PerStep"/>
+   <Step Number="0" FadeIn="0" Hold="500" FadeOut="0" Values="2">10:0,255</Step>
+   <Step Number="1" FadeIn="0" Hold="500" FadeOut="0" Values="2">10:1,255</Step>
+  </Function>
+  <Function ID="6" Type="Chaser" Name="Common Speeds">
+   <Speed FadeIn="3000" FadeOut="1500" Duration="5000"/>
+   <Direction>Backward</Direction>
+   <RunOrder>PingPong</RunOrder>
+   <SpeedModes FadeIn="Common" FadeOut="Common" Duration="Common"/>
+   <Step Number="0" FadeIn="0" Hold="0" FadeOut="0">0</Step>
+   <Step Number="1" FadeIn="0" Hold="0" FadeOut="0">3</Step>
+   <Step Number="2" FadeIn="0" Hold="0" FadeOut="0">1</Step>
+  </Function>
+  <Function ID="7" Type="Chaser" Name="Legacy Durations">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <Direction>Forward</Direction>
+   <RunOrder>Loop</RunOrder>
+   <SpeedModes FadeIn="Default" FadeOut="Default" Duration="PerStep"/>
+   <Step Number="0" Duration="4000" FadeOut="0" FadeIn="0">1</Step>
+   <Step Number="1" Duration="0" FadeOut="0" FadeIn="0">0</Step>
+  </Function>
+ </Engine>
+</Workspace>
