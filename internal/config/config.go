@@ -3,6 +3,7 @@ package config
 
 import (
 	"log"
+	"math"
 	"os"
 	"strconv"
 	"time"
@@ -177,12 +178,15 @@ func getEnvLimit(key string) int {
 	if !ok || value == "" {
 		return 0
 	}
-	n, err := strconv.Atoi(value)
+	// Parse as 64-bit so a large value (e.g. EXPORT_MAX_BYTES over 2 GiB)
+	// is not rejected on 32-bit builds (linux/arm); clamp it to the
+	// platform int, which no export can exceed there anyway.
+	n, err := strconv.ParseInt(value, 10, 64)
 	if err != nil || n < 0 {
 		log.Printf("Warning: ignoring %s=%q: not a non-negative whole number; treating it as unset", key, value)
 		return 0
 	}
-	return n
+	return int(min(n, int64(math.MaxInt)))
 }
 
 // getEnvBool returns the boolean value of an environment variable or a default value.

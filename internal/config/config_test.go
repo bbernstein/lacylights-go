@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"log"
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -896,5 +897,23 @@ func TestGetEnvLimit_WarnsOnInvalidValue(t *testing.T) {
 				t.Errorf("expected no warning for %q, got %q", tt.value, out)
 			}
 		})
+	}
+}
+
+func TestGetEnvLimit_LargeValueClampsToPlatformInt(t *testing.T) {
+	// 4 GiB does not fit a 32-bit int (linux/arm release builds). It must
+	// still parse (no warning, not "unlimited") and clamp to math.MaxInt.
+	const key = "LACYLIGHTS_TEST_EXPORT_LIMIT"
+	var buf bytes.Buffer
+	prevOut := log.Writer()
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(prevOut) })
+	t.Setenv(key, "4294967296")
+	want := int(min(int64(4294967296), int64(math.MaxInt)))
+	if got := getEnvLimit(key); got != want {
+		t.Errorf("getEnvLimit(4294967296) = %d, want %d", got, want)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected no warning for a large valid value, got %q", buf.String())
 	}
 }
