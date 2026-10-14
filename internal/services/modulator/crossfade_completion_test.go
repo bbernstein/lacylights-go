@@ -5,30 +5,55 @@ import (
 	"time"
 )
 
-// startManualCrossfade starts a FadeToLook crossfade on an engine whose update
-// loop is NOT running, so the test can drive ticks deterministically via
-// processModulationAt. It rewinds the effect's StartTime far into the past so
-// that, by wall-clock time, the crossfade is already finished. Any code path
-// that consults the wall clock (rather than the tick timestamp) to decide
-// completion will therefore misbehave, which is exactly the race these tests
-// guard against.
+// startManualCrossfade starts a FadeToLook crossfade (ease-in-out-sine) from an
+// all-zero universe on an engine whose update loop is NOT running. See
+// startManualFade.
 func startManualCrossfade(t *testing.T, channels []LookChannel, duration time.Duration) (*Engine, func(int) byte, time.Time) {
 	t.Helper()
+	return startManualFade(t, nil, channels, duration, EasingInOutSine)
+}
+
+// startManualFade starts a FadeToLook crossfade on an engine whose update loop
+// is NOT running, so the test can drive ticks deterministically via
+// processModulationAt. initial holds the universe-1 channel values to set
+// before the fade starts (they become the crossfade's from-values).
+//
+// It rewinds the effect's StartTime far into the past so that, by wall-clock
+// time, the crossfade is already finished. Any code path that consults the
+// wall clock (rather than the tick timestamp) will therefore misbehave, which
+// is exactly the race these tests guard against.
+func startManualFade(
+	t *testing.T,
+	initial map[int]byte,
+	channels []LookChannel,
+	duration time.Duration,
+	easing EasingType,
+) (*Engine, func(int) byte, time.Time) {
+	t.Helper()
 	engine, dmxService := createTestModulatorEngine()
+	for ch, v := range initial {
+		dmxService.SetChannelValue(1, ch, v)
+	}
 
-	engine.FadeToLook(channels, duration, "manual-crossfade", EasingInOutSine)
+	engine.FadeToLook(channels, duration, "manual-crossfade", easing)
+	start := rewindCrossfade(t, engine, duration)
 
+	get := func(ch int) byte { return dmxService.GetChannelValue(1, ch) }
+	return engine, get, start
+}
+
+// rewindCrossfade moves the engine's single active crossfade's StartTime far
+// into the past and returns it, so ticks can be stamped relative to it.
+func rewindCrossfade(t *testing.T, engine *Engine, duration time.Duration) time.Time {
+	t.Helper()
 	engine.mu.Lock()
+	defer engine.mu.Unlock()
 	if len(engine.activeEffects) != 1 {
-		engine.mu.Unlock()
 		t.Fatalf("expected exactly 1 active crossfade, got %d", len(engine.activeEffects))
 	}
 	start := time.Now().Add(-10 * duration)
 	engine.activeEffects[0].StartTime = start
-	engine.mu.Unlock()
-
-	get := func(ch int) byte { return dmxService.GetChannelValue(1, ch) }
-	return engine, get, start
+	return start
 }
 
 func activeEffectCount(e *Engine) int {
