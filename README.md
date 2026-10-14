@@ -47,8 +47,12 @@ DATABASE_URL="file:./data.db" PORT=4000 ./build/bin/server
 
 Export limits are **off by default**. LacyLights is mainly used in-house, where
 large projects must always export quickly, so an unset, `0`, negative or
-non-numeric `EXPORT_MAX_*` value means "no limit". Only set them for a restricted
-deployment such as a public demo. Suggested demo values:
+non-numeric `EXPORT_MAX_ROWS` / `EXPORT_MAX_CELLS` / `EXPORT_MAX_BYTES` value
+means "no limit". `EXPORT_MAX_CONCURRENT_PROJECT_EXPORTS` is a concurrency bound,
+not a size limit, and is never unlimited: an unset, `0`, negative or non-numeric
+value keeps its built-in default of `2`. A set but negative or non-numeric value
+logs a warning at startup. Only set these for a restricted deployment such as a
+public demo. Suggested demo values:
 
 ```bash
 EXPORT_MAX_ROWS=100000        # 100k rows
@@ -60,7 +64,13 @@ EXPORT_MAX_CONCURRENT_PROJECT_EXPORTS=1
 An export over a configured limit fails with a GraphQL error such as
 `export is too large: LOOKS has about 150000 rows, over this server's export limit of 100000 rows`
 or `export file is too large: project JSON export is 25000000 bytes, over this server's export limit of 20971520 bytes`.
-`EXPORT_MAX_BYTES` takes a plain byte count (no `MB` suffix). The startup banner
+`EXPORT_MAX_BYTES` takes a plain byte count (no `MB` suffix).
+
+For whole-project JSON and Eos ASCII exports only `EXPORT_MAX_BYTES` applies
+(`EXPORT_MAX_ROWS` and `EXPORT_MAX_CELLS` cover CSV/XLSX data exports), and it is
+checked after the export is built: it limits what the server returns, not its
+peak memory use. `EXPORT_MAX_CONCURRENT_PROJECT_EXPORTS` is what bounds the
+memory those exports can use at once. The startup banner
 prints the active limits (`Export caps: none (unlimited)` by default).
 
 ## Development

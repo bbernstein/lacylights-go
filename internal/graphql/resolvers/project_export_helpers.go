@@ -84,7 +84,10 @@ type ExportLimits struct {
 }
 
 // SetExportLimits applies export limits. Call it once at startup, before
-// the server handles requests.
+// the server handles requests: the limits are plain fields read by request
+// handlers without synchronization. The concurrency bound is process-wide
+// (projectExportSlots), so calling this on any Resolver changes it for all
+// of them; the size limits apply to this Resolver only.
 func (r *Resolver) SetExportLimits(l ExportLimits) {
 	if r.DataExportService != nil {
 		r.DataExportService.MaxRows = max(l.MaxRows, 0)

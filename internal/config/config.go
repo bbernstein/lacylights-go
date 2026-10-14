@@ -2,6 +2,7 @@
 package config
 
 import (
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -168,10 +169,17 @@ func getEnvInt(key string, defaultValue int) int {
 
 // getEnvLimit returns a non-negative limit from an environment variable.
 // Unset, empty, negative or unparseable values return 0, which callers
-// treat as "no limit" (limits are opt-in).
+// treat as "no limit" (limits are opt-in). A set but negative or
+// unparseable value (e.g. "20MB") logs a warning, so a typo on a
+// deployment that meant to restrict exports does not go unnoticed.
 func getEnvLimit(key string) int {
-	n := getEnvInt(key, 0)
-	if n < 0 {
+	value, ok := os.LookupEnv(key)
+	if !ok || value == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil || n < 0 {
+		log.Printf("Warning: ignoring %s=%q: not a non-negative whole number; treating it as unset", key, value)
 		return 0
 	}
 	return n

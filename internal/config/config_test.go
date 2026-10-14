@@ -1,7 +1,10 @@
 package config
 
 import (
+	"bytes"
+	"log"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -854,6 +857,43 @@ func TestGetEnvLimit(t *testing.T) {
 			}
 			if got := getEnvLimit(key); got != tt.want {
 				t.Errorf("getEnvLimit(%q) = %d, want %d", tt.value, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetEnvLimit_WarnsOnInvalidValue(t *testing.T) {
+	const key = "LACYLIGHTS_TEST_EXPORT_LIMIT"
+	tests := []struct {
+		name     string
+		value    string
+		wantWarn bool
+	}{
+		{"positive is silent", "42", false},
+		{"zero is silent", "0", false},
+		{"empty is silent", "", false},
+		{"negative warns", "-5", true},
+		{"garbage warns", "20MB", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			prevOut, prevFlags := log.Writer(), log.Flags()
+			log.SetOutput(&buf)
+			log.SetFlags(0)
+			t.Cleanup(func() {
+				log.SetOutput(prevOut)
+				log.SetFlags(prevFlags)
+			})
+			t.Setenv(key, tt.value)
+			_ = getEnvLimit(key)
+			out := buf.String()
+			if tt.wantWarn {
+				if !strings.Contains(out, key) || !strings.Contains(out, tt.value) || !strings.Contains(out, "treating it as unset") {
+					t.Errorf("expected warning naming %s=%q and 'treating it as unset', got %q", key, tt.value, out)
+				}
+			} else if out != "" {
+				t.Errorf("expected no warning for %q, got %q", tt.value, out)
 			}
 		})
 	}
