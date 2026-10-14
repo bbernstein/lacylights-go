@@ -124,10 +124,11 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
   `.qxw` XML, `service.go` creates the project, `definitions.go` maps QLC+ fixtures to definitions.
 - GraphQL surface: `importProjectFromQLC(xmlContent, originalFileName)` mutation; resolver logic
   in `internal/graphql/resolvers/qlc_helpers.go` (50 MiB cap, caller's first group when auth is on).
-- Always creates a new project named after the file. Fixtures (0-based QLC+ universe/address →
+- Always creates a new project named after the file. Fixtures (capped at 512 channels; 0-based QLC+ universe/address →
   1-based), Scene → look, Chaser → cue list (cues reference scene looks), Sequence → cue list with
   one look per step. EFX, RGB matrices, collections, shows, scripts, audio/video are skipped with
-  a warning. Speed modes (Default/Common/PerStep) are honoured; a hold becomes the cue's follow
+  a warning. Speed modes (Default/Common/PerStep) are honoured as QLC+'s ChaserRunner does (a
+  "Default" duration means the chaser's own duration); a hold becomes the cue's follow
   time, an infinite or zero hold a manual cue.
 - `.qxw` files don't contain channel layouts. Fixtures match an existing definition by
   manufacturer/model (exact, then normalized, then an unambiguous manufacturer alias such as

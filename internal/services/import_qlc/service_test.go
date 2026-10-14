@@ -555,3 +555,46 @@ func TestImport_GenericDimmersOfDifferentSizes(t *testing.T) {
 	assert.Equal(t, "Dimmer (4 ch)", fx["four"].def.Model)
 	assert.Equal(t, fx["six"].inst.DefinitionID, fx["six again"].inst.DefinitionID)
 }
+
+// QLC+'s ChaserRunner::stepDuration treats the "Default" duration mode like
+// "Common": every step lasts the chaser's own <Speed Duration>, never the
+// played scene's duration (unlike Default fade modes, which defer to the
+// scene).
+func TestImport_DefaultDurationModeUsesChaserDuration(t *testing.T) {
+	d := newTestDeps(t)
+	xml := `<Workspace><Engine>
+  <Fixture><Manufacturer>Generic</Manufacturer><Model>Generic</Model><Mode>Generic</Mode>
+   <ID>0</ID><Name>dim</Name><Universe>0</Universe><Address>0</Address><Channels>1</Channels></Fixture>
+  <Function ID="0" Type="Scene" Name="A">
+   <Speed FadeIn="1000" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="0">0,255</FixtureVal>
+  </Function>
+  <Function ID="1" Type="Chaser" Name="Defaults">
+   <Speed FadeIn="0" FadeOut="0" Duration="5000"/>
+   <SpeedModes FadeIn="Default" FadeOut="Default" Duration="Default"/>
+   <Step Number="0" FadeIn="0" Hold="0" FadeOut="0">0</Step>
+  </Function>
+ </Engine></Workspace>`
+	res, err := d.svc.Import(context.Background(), xml, Options{ProjectName: "defaults"})
+	require.NoError(t, err)
+	_, cues := d.cueLists(t, res.ProjectID)
+	assert.Equal(t, []cueView{
+		{Name: "A", Number: 1, Look: "A", FadeIn: 1, Follow: fptr(4)},
+	}, cues["Defaults"], "5 s chaser duration minus the scene's 1 s fade in")
+}
+
+// A fixture can't span more than one DMX universe; a corrupt or hostile
+// <Channels> value must not make the importer build millions of channels.
+func TestImport_CapsOversizedChannelCount(t *testing.T) {
+	d := newTestDeps(t)
+	xml := `<Workspace><Engine>
+  <Fixture><Manufacturer>Acme</Manufacturer><Model>Huge</Model><Mode>Std</Mode>
+   <ID>0</ID><Name>huge</Name><Universe>0</Universe><Address>0</Address><Channels>5000</Channels></Fixture>
+ </Engine></Workspace>`
+	res, err := d.svc.Import(context.Background(), xml, Options{ProjectName: "huge"})
+	require.NoError(t, err)
+	fx := d.fixturesByName(t, res.ProjectID)
+	require.Contains(t, fx, "huge")
+	assert.Len(t, fx["huge"].channels, maxFixtureChannels)
+	assert.True(t, containsWarning(res.Warnings, "huge", "5000"), "%v", res.Warnings)
+}

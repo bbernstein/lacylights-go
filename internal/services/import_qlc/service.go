@@ -16,6 +16,11 @@ import (
 // DefaultProjectName names an imported project when the file name is empty.
 const DefaultProjectName = "QLC+ Import"
 
+// maxFixtureChannels caps a fixture's channel count at one DMX universe, so
+// a corrupt or hostile <Channels> value can't make the importer build
+// millions of channel rows.
+const maxFixtureChannels = 512
+
 // Options configures an import run.
 type Options struct {
 	// ProjectName is the new project's name; DefaultProjectName when blank.
@@ -213,6 +218,11 @@ func (im *importer) importFixtures(ctx context.Context, fixtures []Fixture) erro
 		if channels <= 0 {
 			channels = 1 // as QLC+ does
 		}
+		if channels > maxFixtureChannels {
+			im.warn("QLC+ fixture %q declares %d channels; only the first %d (one DMX universe) were imported",
+				name, channels, maxFixtureChannels)
+			channels = maxFixtureChannels
+		}
 
 		res, err := im.defs.resolve(ctx, fx, channels)
 		if err != nil {
@@ -328,7 +338,7 @@ func (im *importer) createCueList(ctx context.Context, fn *Function) (*models.Cu
 type plannedCue struct {
 	name   string
 	lookID string
-	speed  Speed // the referenced function's own speed, for "Default" modes
+	speed  Speed // the referenced function's own speed, for "Default" fade modes
 	step   Step
 }
 
@@ -444,8 +454,11 @@ func overlayValues(base, overrides []FixtureValues) []FixtureValues {
 }
 
 // stepTimes resolves a step's fade in/out and follow time in seconds
-// according to the chaser's speed modes: PerStep uses the step's own times,
-// Common the chaser's <Speed>, Default the played function's <Speed>.
+// according to the chaser's speed modes, as QLC+'s ChaserRunner does: for
+// fades, PerStep uses the step's own times, Common the chaser's <Speed> and
+// Default the played function's <Speed>; for the duration, PerStep uses the
+// step's hold and both Common and Default the chaser's <Speed Duration>
+// (ChaserRunner::stepDuration never defers to the played function).
 // A hold of zero or "infinite" becomes a manual (no follow) cue.
 func stepTimes(fn *Function, step Step, own Speed) (fadeIn, fadeOut float64, follow *float64) {
 	pick := func(mode string, perStep, common, def uint32) uint32 {
@@ -460,8 +473,8 @@ func stepTimes(fn *Function, step Step, own Speed) (fadeIn, fadeOut float64, fol
 	}
 	fi := pick(fn.SpeedModes.FadeIn, step.FadeIn, fn.Speed.FadeIn, own.FadeIn)
 	fo := pick(fn.SpeedModes.FadeOut, step.FadeOut, fn.Speed.FadeOut, own.FadeOut)
-	hold := pick(fn.SpeedModes.Duration, step.Hold,
-		holdFromDuration(fn.Speed.Duration, fi), holdFromDuration(own.Duration, fi))
+	chaserHold := holdFromDuration(fn.Speed.Duration, fi)
+	hold := pick(fn.SpeedModes.Duration, step.Hold, chaserHold, chaserHold)
 
 	fadeIn, fadeOut = seconds(fi), seconds(fo)
 	if hold > 0 && hold < InfiniteSpeed {
