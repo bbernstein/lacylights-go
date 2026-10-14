@@ -174,7 +174,7 @@ type ActiveEffect struct {
 
 	// SnapEndChannels are crossfade channels with SNAP_END behavior: they hold
 	// their FromValue for the duration of the fade and only jump to ToValue when
-	// the fade completes (progress >= 1).
+	// the fade completes (progress >= 1). Read-only once the effect is active.
 	SnapEndChannels map[ChannelKey]bool
 
 	// Intensity fading

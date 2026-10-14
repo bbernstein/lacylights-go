@@ -92,7 +92,9 @@ func (e *Engine) FadeToLook(channels []LookChannel, duration time.Duration, fade
 	}
 
 	// SnapEndChannels hold their start value until the crossfade completes,
-	// then jump to the target. This is handled in CalculateCrossfadeValues.
+	// then jump to the target. This is handled in calculateCrossfadeValuesAt.
+	// The snapEndChannels map is owned by this ActiveEffect and treated as
+	// read-only after this point.
 
 	e.activeEffects = append(e.activeEffects, active)
 	e.sortEffects()
