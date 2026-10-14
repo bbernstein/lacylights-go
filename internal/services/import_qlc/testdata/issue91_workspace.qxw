@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE Workspace>
+<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="FunctionManager">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>4.13.1</Version>
+  <Author>LacyLights Test</Author>
+ </Creator>
+ <Engine>
+  <InputOutputMap>
+   <BeatGenerator BeatType="Disabled" BPM="0"/>
+   <Universe Name="Universe 1" ID="0">
+    <Output Plugin="ArtNet" UID="127.0.0.1" Line="0"/>
+   </Universe>
+   <Universe Name="Universe 2" ID="1"/>
+  </InputOutputMap>
+  <Fixture>
+   <Manufacturer>Chauvet</Manufacturer>
+   <Model>SlimPAR Pro Q USB</Model>
+   <Mode>4 Channel</Mode>
+   <ID>0</ID>
+   <Name>par-4chan</Name>
+   <Universe>0</Universe>
+   <Address>0</Address>
+   <Channels>4</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Chauvet</Manufacturer>
+   <Model>SlimPAR Pro Q USB</Model>
+   <Mode>5 Channel</Mode>
+   <ID>1</ID>
+   <Name>par-5chan</Name>
+   <Universe>0</Universe>
+   <Address>4</Address>
+   <Channels>5</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>ETC</Manufacturer>
+   <Model>ColorSource PAR</Model>
+   <Mode>3-channel (RGB)</Mode>
+   <ID>2</ID>
+   <Name>etc-par-3chan</Name>
+   <Universe>0</Universe>
+   <Address>9</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Chauvet</Manufacturer>
+   <Model>SlimPAR Pro Q USB</Model>
+   <Mode>4 Channel</Mode>
+   <ID>4</ID>
+   <Name>par-u2-4chan</Name>
+   <Universe>1</Universe>
+   <Address>0</Address>
+   <Channels>4</Channels>
+  </Fixture>
+  <Function ID="0" Type="Scene" Name="first scene">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="2">0,232,1,237,2,229</FixtureVal>
+   <FixtureVal ID="0">0,246,1,241,2,239,3,232</FixtureVal>
+   <FixtureVal ID="1">0,200,1,200,2,200,3,200,4,200</FixtureVal>
+   <FixtureVal ID="4">0,228,1,246,2,230,3,248</FixtureVal>
+  </Function>
+  <Function ID="1" Type="Scene" Name="blackout">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="2">0,0,1,0,2,0</FixtureVal>
+   <FixtureVal ID="0">0,0,1,0,2,0,3,0</FixtureVal>
+   <FixtureVal ID="1">0,0,1,0,2,0,3,0,4,0</FixtureVal>
+   <FixtureVal ID="4">0,0,1,0,2,0,3,0</FixtureVal>
+  </Function>
+  <Function ID="2" Type="Chaser" Name="Full Show Cuelist">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <Direction>Forward</Direction>
+   <RunOrder>Loop</RunOrder>
+   <SpeedModes FadeIn="PerStep" FadeOut="PerStep" Duration="PerStep"/>
+   <Step Number="0" FadeIn="1000" Hold="1000" FadeOut="500">0</Step>
+   <Step Number="1" FadeIn="1000" Hold="1000" FadeOut="500">1</Step>
+   <Step Number="2" FadeIn="2500" Hold="4294967294" FadeOut="500">0</Step>
+   <Step Number="3" FadeIn="1000" Hold="4294967294" FadeOut="500" Note="Final blackout">1</Step>
+  </Function>
+ </Engine>
+ <VirtualConsole>
+  <Frame Caption="">
+   <Appearance>
+    <FrameStyle>None</FrameStyle>
+   </Appearance>
+  </Frame>
+ </VirtualConsole>
+ <SimpleDesk>
+  <Engine/>
+ </SimpleDesk>
+</Workspace>

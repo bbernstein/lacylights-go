@@ -119,6 +119,25 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
   `targetProjectId` (append) — they are mutually exclusive and the resolver
   returns an error if both are set.
 
+### QLC+ Workspace Import
+- Package: `internal/services/import_qlc/` (Go package `importqlc`): `parser.go` reads the
+  `.qxw` XML, `service.go` creates the project, `definitions.go` maps QLC+ fixtures to definitions.
+- GraphQL surface: `importProjectFromQLC(xmlContent, originalFileName)` mutation; resolver logic
+  in `internal/graphql/resolvers/qlc_helpers.go` (50 MiB cap, caller's first group when auth is on).
+- Always creates a new project named after the file. Fixtures (capped at 512 channels; 0-based QLC+ universe/address →
+  1-based), Scene → look, Chaser → cue list (cues reference scene looks), Sequence → cue list with
+  one look per step. EFX, RGB matrices, collections, shows, scripts, audio/video are skipped with
+  a warning. Speed modes (Default/Common/PerStep) are honoured as QLC+'s ChaserRunner does (a
+  "Default" duration means the chaser's own duration); a hold becomes the cue's follow
+  time, an infinite or zero hold a manual cue.
+- `.qxw` files don't contain channel layouts. Fixtures match an existing definition by
+  manufacturer/model (exact, then normalized, then an unambiguous manufacturer alias such as
+  QLC+ "Chauvet" vs OFL "Chauvet DJ") with a mode of the same channel count. Otherwise a
+  definition is created (generic dimmers and RGB panels exactly; other fixtures as RGB… from an
+  all-caps colour token in the mode name, or `OTHER` channels, with a warning). Re-imports reuse
+  those definitions.
+- QLC+ export (`projectExportQLC`) is still not implemented.
+
 ### Data Export (CSV / XLSX)
 - Package: `internal/services/export_tables/` (Go package `exporttables`)
 - Table registry (`tables.go`, `tables_detail.go`): each table has an ID matching
