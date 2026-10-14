@@ -67,6 +67,10 @@ type Resolver struct {
 
 	// Auth service (optional - nil if auth is disabled)
 	AuthService *auth.Service
+
+	// projectExportMaxBytes caps a whole-project JSON/Eos export's size
+	// (opt-in; 0 = no limit). Set by SetExportLimits.
+	projectExportMaxBytes int
 }
 
 // NewResolver creates a new Resolver instance with all dependencies.

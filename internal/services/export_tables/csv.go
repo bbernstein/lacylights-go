@@ -74,7 +74,7 @@ type cappedBuffer struct {
 
 func (b *cappedBuffer) Write(p []byte) (int, error) {
 	if len(p) > b.max-b.Len() {
-		return 0, fmt.Errorf("%w: file exceeds %d bytes", ErrTooLarge, b.max)
+		return 0, fmt.Errorf("%w: file exceeds this server's export limit of %d bytes", ErrTooLarge, b.max)
 	}
 	return b.Buffer.Write(p)
 }

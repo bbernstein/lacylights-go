@@ -2,6 +2,8 @@
 package config
 
 import (
+	"log"
+	"math"
 	"os"
 	"strconv"
 	"time"
@@ -60,6 +62,18 @@ type Config struct {
 	AppleTeamID          string        // Apple Sign-In team ID
 	AppleKeyID           string        // Apple Sign-In key ID
 	ApplePrivateKeyPath  string        // Path to Apple Sign-In private key (.p8)
+
+	// Export limits. These are opt-in: LacyLights is mainly used in-house,
+	// where large projects must always export, so 0 (the default, also used
+	// for unset, negative or unparseable values) means no limit. A
+	// restricted deployment such as a public demo can set them.
+	ExportMaxRows  int // EXPORT_MAX_ROWS: data rows in one CSV/XLSX export (a table, or a workbook's total)
+	ExportMaxCells int // EXPORT_MAX_CELLS: cells in a dynamic-width LOOK_DETAILS grid
+	ExportMaxBytes int // EXPORT_MAX_BYTES: encoded size of any export file (CSV, XLSX, project JSON, Eos ASCII)
+	// ExportMaxConcurrentProjectExports (EXPORT_MAX_CONCURRENT_PROJECT_EXPORTS)
+	// bounds how many whole-project exports (JSON or Eos) run at once. It is
+	// a concurrency guard, not a size limit; 0 keeps the built-in default.
+	ExportMaxConcurrentProjectExports int
 }
 
 // Load loads configuration from environment variables with sensible defaults.
@@ -117,6 +131,12 @@ func Load() *Config {
 		AppleTeamID:          getEnv("APPLE_TEAM_ID", ""),
 		AppleKeyID:           getEnv("APPLE_KEY_ID", ""),
 		ApplePrivateKeyPath:  getEnv("APPLE_PRIVATE_KEY_PATH", ""),
+
+		// Export limits (opt-in; 0 = unlimited / built-in default)
+		ExportMaxRows:                     getEnvLimit("EXPORT_MAX_ROWS"),
+		ExportMaxCells:                    getEnvLimit("EXPORT_MAX_CELLS"),
+		ExportMaxBytes:                    getEnvLimit("EXPORT_MAX_BYTES"),
+		ExportMaxConcurrentProjectExports: getEnvLimit("EXPORT_MAX_CONCURRENT_PROJECT_EXPORTS"),
 	}
 }
 
@@ -146,6 +166,27 @@ func getEnvInt(key string, defaultValue int) int {
 		}
 	}
 	return defaultValue
+}
+
+// getEnvLimit returns a non-negative limit from an environment variable.
+// Unset, empty, negative or unparseable values return 0, which callers
+// treat as "no limit" (limits are opt-in). A set but negative or
+// unparseable value (e.g. "20MB") logs a warning, so a typo on a
+// deployment that meant to restrict exports does not go unnoticed.
+func getEnvLimit(key string) int {
+	value, ok := os.LookupEnv(key)
+	if !ok || value == "" {
+		return 0
+	}
+	// Parse as 64-bit so a large value (e.g. EXPORT_MAX_BYTES over 2 GiB)
+	// is not rejected on 32-bit builds (linux/arm); clamp it to the
+	// platform int, which no export can exceed there anyway.
+	n, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || n < 0 {
+		log.Printf("Warning: ignoring %s=%q: not a non-negative whole number; treating it as unset", key, value)
+		return 0
+	}
+	return int(min(n, int64(math.MaxInt)))
 }
 
 // getEnvBool returns the boolean value of an environment variable or a default value.

@@ -94,6 +94,9 @@ func TestPrintBanner(t *testing.T) {
 	if !strings.Contains(output, "Database:    test.db") {
 		t.Error("Expected 'Database: test.db' in banner")
 	}
+	if !strings.Contains(output, "Export caps: none (unlimited)") {
+		t.Error("Expected 'Export caps: none (unlimited)' in banner")
+	}
 }
 
 func TestVersionVariables(t *testing.T) {
@@ -1699,5 +1702,42 @@ func TestLegacyDB_AutoMigrate_AddsRefIDColumn(t *testing.T) {
 
 	if !db.Migrator().HasColumn("fixture_definitions", "ref_id") {
 		t.Error("ref_id column must be added by AutoMigrate")
+	}
+}
+
+func TestExportLimitsFromConfig(t *testing.T) {
+	// Unset (zero) config means no limits.
+	got := exportLimitsFromConfig(&config.Config{})
+	if got.MaxRows != 0 || got.MaxCells != 0 || got.MaxBytes != 0 || got.MaxConcurrentProjectExports != 0 {
+		t.Errorf("zero config must give zero (unlimited) export limits, got %+v", got)
+	}
+
+	got = exportLimitsFromConfig(&config.Config{
+		ExportMaxRows:                     100000,
+		ExportMaxCells:                    5000000,
+		ExportMaxBytes:                    20971520,
+		ExportMaxConcurrentProjectExports: 1,
+	})
+	if got.MaxRows != 100000 || got.MaxCells != 5000000 || got.MaxBytes != 20971520 || got.MaxConcurrentProjectExports != 1 {
+		t.Errorf("export limits not mapped from config: %+v", got)
+	}
+}
+
+func TestDescribeExportLimits(t *testing.T) {
+	if got := describeExportLimits(&config.Config{}); got != "none (unlimited)" {
+		t.Errorf("describeExportLimits(unset) = %q", got)
+	}
+	got := describeExportLimits(&config.Config{
+		ExportMaxRows:                     10,
+		ExportMaxCells:                    20,
+		ExportMaxBytes:                    30,
+		ExportMaxConcurrentProjectExports: 1,
+	})
+	want := "rows=10 cells=20 bytes=30 concurrentProjectExports=1"
+	if got != want {
+		t.Errorf("describeExportLimits = %q, want %q", got, want)
+	}
+	if got := describeExportLimits(&config.Config{ExportMaxBytes: 5}); got != "bytes=5" {
+		t.Errorf("describeExportLimits(bytes only) = %q", got)
 	}
 }

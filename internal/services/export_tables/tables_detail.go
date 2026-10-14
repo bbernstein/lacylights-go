@@ -339,7 +339,7 @@ func buildLookDetails(ctx context.Context, s *Service, projectID, scopeID string
 		sheets = 2
 	}
 	if s.MaxCells > 0 && !gridFits(len(entries), len(lookDetailBaseColumns), maxChannels, sheets, s.MaxCells) {
-		return nil, fmt.Errorf("%w: look %s grid of %d rows × %d channels exceeds %d cells", ErrTooManyRows, look.ID, len(entries), maxChannels, s.MaxCells)
+		return nil, fmt.Errorf("%w: look %s grid of %d rows × %d channels exceeds this server's export limit of %d cells", ErrTooManyRows, look.ID, len(entries), maxChannels, s.MaxCells)
 	}
 
 	cols := append([]Column{}, lookDetailBaseColumns...)

@@ -139,6 +139,9 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
   estimates (`RowCounter`) only run when `MaxRows` is set. `MaxExport*` constants are suggested
   values for a restricted deployment such as a public demo. Over a configured limit returns
   `ErrTooManyRows` / `ErrTooLarge`.
+- The limits are set from `EXPORT_MAX_ROWS`, `EXPORT_MAX_CELLS` and `EXPORT_MAX_BYTES` at startup
+  (`config.Load` → `Resolver.SetExportLimits`); unset/0 = unlimited. `EXPORT_MAX_BYTES` also caps
+  whole-project JSON and Eos exports (`checkProjectExportSize`). See README "Export limits".
 - XLSX sheets wider than 16,384 columns (Excel's limit) return `ErrTooLarge`; CSV has no such limit.
 - At most `MaxConcurrentExports` exports build/encode at once (`Service.Acquire`).
 - Batch `IN ?` lookups are chunked (`chunkIDs`, 500 IDs) to stay under SQLite's bind-variable limit.
@@ -197,6 +200,10 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 | `JWT_REFRESH_TTL` | `168h` | Refresh token lifetime (7 days) |
 | `PASSWORD_MIN_LENGTH` | `8` | Minimum password length |
 | `DEVICE_AUTH_ENABLED` | `true` | Enable device-based authentication |
+| `EXPORT_MAX_ROWS` | unset (unlimited) | Opt-in cap on rows in one data export (`Service.MaxRows`) |
+| `EXPORT_MAX_CELLS` | unset (unlimited) | Opt-in cap on `LOOK_DETAILS` grid cells (`Service.MaxCells`) |
+| `EXPORT_MAX_BYTES` | unset (unlimited) | Opt-in cap on encoded size of data exports and project JSON/Eos exports |
+| `EXPORT_MAX_CONCURRENT_PROJECT_EXPORTS` | unset (built-in 2) | Concurrent project (JSON/Eos) export bound |
 
 ### Database Environments
 

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -372,6 +373,9 @@ func main() {
 		resolver.SetAuthService(authService)
 	}
 
+	// Opt-in export size limits (EXPORT_MAX_*); unset means unlimited.
+	resolver.SetExportLimits(exportLimitsFromConfig(cfg))
+
 	// Create GraphQL server
 	srv := handler.New(generated.NewExecutableSchema(generated.Config{
 		Resolvers: resolver,
@@ -467,6 +471,39 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(response))
 }
 
+// exportLimitsFromConfig maps the EXPORT_MAX_* settings onto the resolver's
+// export limits. All default to 0 (no limit).
+func exportLimitsFromConfig(cfg *config.Config) resolvers.ExportLimits {
+	return resolvers.ExportLimits{
+		MaxRows:                     cfg.ExportMaxRows,
+		MaxCells:                    cfg.ExportMaxCells,
+		MaxBytes:                    cfg.ExportMaxBytes,
+		MaxConcurrentProjectExports: cfg.ExportMaxConcurrentProjectExports,
+	}
+}
+
+// describeExportLimits summarises the configured export size limits for
+// the startup banner, so a deployment can confirm what it set.
+func describeExportLimits(cfg *config.Config) string {
+	var parts []string
+	if cfg.ExportMaxRows > 0 {
+		parts = append(parts, fmt.Sprintf("rows=%d", cfg.ExportMaxRows))
+	}
+	if cfg.ExportMaxCells > 0 {
+		parts = append(parts, fmt.Sprintf("cells=%d", cfg.ExportMaxCells))
+	}
+	if cfg.ExportMaxBytes > 0 {
+		parts = append(parts, fmt.Sprintf("bytes=%d", cfg.ExportMaxBytes))
+	}
+	if cfg.ExportMaxConcurrentProjectExports > 0 {
+		parts = append(parts, fmt.Sprintf("concurrentProjectExports=%d", cfg.ExportMaxConcurrentProjectExports))
+	}
+	if len(parts) == 0 {
+		return "none (unlimited)"
+	}
+	return strings.Join(parts, " ")
+}
+
 // printBanner prints the startup banner.
 func printBanner(cfg *config.Config) {
 	fmt.Println("============================================")
@@ -480,6 +517,7 @@ func printBanner(cfg *config.Config) {
 	fmt.Printf("  Database:    %s\n", cfg.DatabaseURL)
 	fmt.Printf("  Art-Net:     %v\n", cfg.ArtNetEnabled)
 	fmt.Printf("  OFL Import:  %v\n", cfg.OFLImportEnabled)
+	fmt.Printf("  Export caps: %s\n", describeExportLimits(cfg))
 	fmt.Println("============================================")
 }
 
