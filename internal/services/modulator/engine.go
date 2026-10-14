@@ -167,6 +167,11 @@ func (e *Engine) updateLoop() {
 // processModulation processes all active effects and updates DMX channels.
 // This is called once per update tick (60Hz by default).
 func (e *Engine) processModulation() {
+	e.processModulationAt(time.Now())
+}
+
+// processModulationAt runs one update tick stamped with the given time.
+func (e *Engine) processModulationAt(now time.Time) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -175,7 +180,6 @@ func (e *Engine) processModulation() {
 		return
 	}
 
-	now := time.Now()
 	elapsed := now.Sub(e.lastUpdate)
 	e.lastUpdate = now
 
@@ -188,7 +192,7 @@ func (e *Engine) processModulation() {
 	// Process effects in priority order (lowest to highest)
 	// Effects are already sorted by priority
 	for _, active := range e.activeEffects {
-		e.processEffect(active, elapsed, channelValues)
+		e.processEffect(active, now, elapsed, channelValues)
 	}
 
 	// Write final values to DMX
@@ -201,10 +205,14 @@ func (e *Engine) processModulation() {
 		e.dmxService.TriggerChangeDetection()
 	}
 
-	// Clean up completed effects
+	// Clean up completed effects. Completion is judged against the same tick
+	// timestamp used to compute this tick's values: re-reading the wall clock
+	// here could retire a crossfade whose final frame was computed at
+	// progress < 1, stranding its channels short of their targets (e.g. 199
+	// instead of 200, or a SNAP_END channel still at its start value).
 	newActiveEffects := make([]*ActiveEffect, 0, len(e.activeEffects))
 	for _, active := range e.activeEffects {
-		if active.IsComplete() {
+		if active.isCompleteAt(now) {
 			completedEffects = append(completedEffects, active.Effect.ID)
 		} else {
 			newActiveEffects = append(newActiveEffects, active)
@@ -226,7 +234,7 @@ func (e *Engine) processModulation() {
 }
 
 // processEffect calculates the effect's contribution to channel values.
-func (e *Engine) processEffect(active *ActiveEffect, elapsed time.Duration, channels map[ChannelKey]ChannelState) {
+func (e *Engine) processEffect(active *ActiveEffect, now time.Time, elapsed time.Duration, channels map[ChannelKey]ChannelState) {
 	// Update intensity if fading
 	active.UpdateIntensityFromFade()
 
@@ -238,7 +246,7 @@ func (e *Engine) processEffect(active *ActiveEffect, elapsed time.Duration, chan
 	// Calculate effect values based on type
 	switch active.Effect.EffectType {
 	case EffectTypeCrossfade:
-		MergeCrossfadeValues(active, channels)
+		mergeCrossfadeValuesAt(active, channels, now)
 
 	case EffectTypeWaveform:
 		MergeWaveformValues(active, elapsed, channels)
