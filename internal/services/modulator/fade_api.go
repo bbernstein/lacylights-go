@@ -81,17 +81,20 @@ func (e *Engine) FadeToLook(channels []LookChannel, duration time.Duration, fade
 	effect.ID = fadeID
 
 	active := &ActiveEffect{
-		Effect:       effect,
-		StartTime:    time.Now(),
-		Intensity:    100,
-		FromValues:   fromValues,
-		ToValues:     toValues,
-		Duration:     duration,
-		cachedValues: make(map[ChannelKey]int),
+		Effect:          effect,
+		StartTime:       time.Now(),
+		Intensity:       100,
+		FromValues:      fromValues,
+		ToValues:        toValues,
+		Duration:        duration,
+		SnapEndChannels: snapEndChannels,
+		cachedValues:    make(map[ChannelKey]int),
 	}
 
-	// Store snap-end channels for processing at completion
-	// We'll handle these in processEffect when the crossfade completes
+	// SnapEndChannels hold their start value until the crossfade completes,
+	// then jump to the target. This is handled in calculateCrossfadeValuesAt.
+	// The snapEndChannels map is owned by this ActiveEffect and treated as
+	// read-only after this point.
 
 	e.activeEffects = append(e.activeEffects, active)
 	e.sortEffects()

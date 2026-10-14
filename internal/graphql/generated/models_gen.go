@@ -500,6 +500,11 @@ type DataExportTableInfo struct {
 	Label string          `json:"label"`
 	// One of: none, project, look, cueList, lookBoard
 	Scope string `json:"scope"`
+	// True when exportDataTable rejects this table without a scopeId
+	// (LOOK_DETAILS, CUE_LIST_DETAILS). False for tables that take no scopeId
+	// and for LOOK_BOARD_ENTRIES, whose scopeId is optional (omit it to export
+	// every board). Derived from the same rule the server enforces.
+	ScopeRequired bool `json:"scopeRequired"`
 	// Column headers. LOOK_DETAILS ends with a variable run of channel columns, shown as 'Ch 1 … Ch N'.
 	Columns []string `json:"columns"`
 }

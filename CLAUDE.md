@@ -126,6 +126,9 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
   (`none | project | look | cueList | lookBoard`) and columns. Add new list
   exports by registering a table there.
 - `Service.Build` validates scope and checks that `scopeId` belongs to the project.
+  `Table.RequiresScopeID()` drives both `ErrScopeRequired` and the
+  `DataExportTableInfo.scopeRequired` field clients read, so set `ScopeOptional`
+  (not a client-side rule) when a scoped table can be exported without a `scopeId`.
 - Writers: `EncodeCSV` (UTF-8 BOM, formula-injection escaping of string cells) and
   `EncodeXLSX` (excelize; bold frozen header, typed numbers, unique ≤31-char sheet names).
 - GraphQL surface (Queries, read-only): `dataExportTables`, `exportDataTable`,

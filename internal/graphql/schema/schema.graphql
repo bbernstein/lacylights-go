@@ -1616,6 +1616,13 @@ type DataExportTableInfo {
   label: String!
   "One of: none, project, look, cueList, lookBoard"
   scope: String!
+  """
+  True when exportDataTable rejects this table without a scopeId
+  (LOOK_DETAILS, CUE_LIST_DETAILS). False for tables that take no scopeId
+  and for LOOK_BOARD_ENTRIES, whose scopeId is optional (omit it to export
+  every board). Derived from the same rule the server enforces.
+  """
+  scopeRequired: Boolean!
   "Column headers. LOOK_DETAILS ends with a variable run of channel columns, shown as 'Ch 1 … Ch N'."
   columns: [String!]!
 }

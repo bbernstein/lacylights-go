@@ -637,32 +637,182 @@ func TestFadeToLook_MidFadeTransition(t *testing.T) {
 	)
 }
 
-// TestFadeToLook_SnapEnd tests that SNAP_END channels hold until fade completes.
+// The SNAP_END hold/snap assertions below drive the engine with explicit
+// processModulationAt tick timestamps (no background update loop), so they
+// cannot be broken by scheduler delays on slow CI runners. A single real-time
+// test (TestFadeToLook_SnapEndWithUpdateLoop) covers the end-to-end path
+// through the running update loop and only asserts the eventual target.
+
+// TestFadeToLook_SnapEnd tests that SNAP_END channels hold the start value for
+// the duration of the fade and only jump to the target when the fade completes.
 func TestFadeToLook_SnapEnd(t *testing.T) {
+	duration := 200 * time.Millisecond
+	engine, get, start := startManualFade(t, map[int]byte{1: 50}, []LookChannel{
+		{Universe: 1, Channel: 1, Value: 200, FadeBehavior: FadeBehaviorSnapEnd},
+	}, duration, EasingLinear)
+
+	// Throughout the fade, SNAP_END must HOLD the start value (50), not
+	// interpolate toward 200.
+	for _, offset := range []time.Duration{0, duration / 2, duration - time.Millisecond} {
+		engine.processModulationAt(start.Add(offset))
+		if v := get(1); v != 50 {
+			t.Fatalf("SNAP_END channel at +%v should hold start value 50, got %d", offset, v)
+		}
+	}
+
+	// At completion it snaps to the target and the crossfade is retired.
+	engine.processModulationAt(start.Add(duration))
+	if v := get(1); v != 200 {
+		t.Errorf("SNAP_END channel should snap to target 200 at fade end, got %d", v)
+	}
+	if n := activeEffectCount(engine); n != 0 {
+		t.Errorf("crossfade should be removed after its final tick, active effects = %d", n)
+	}
+}
+
+// TestFadeToLook_SnapEndFromZero reproduces the integration scenario: a SNAP_END
+// channel fading from black (0) to 255. It must emit EXACTLY 0 mid-fade rather
+// than interpolating (which previously made it track FADE channels at 1,2,3,...).
+func TestFadeToLook_SnapEndFromZero(t *testing.T) {
+	duration := time.Second
+	engine, get, start := startManualFade(t, map[int]byte{1: 0}, []LookChannel{
+		{Universe: 1, Channel: 1, Value: 255, FadeBehavior: FadeBehaviorSnapEnd},
+	}, duration, EasingLinear)
+
+	// Sample repeatedly mid-fade; SNAP_END from 0 must hold EXACTLY 0.
+	for i := 1; i <= 9; i++ {
+		offset := time.Duration(i) * 100 * time.Millisecond
+		engine.processModulationAt(start.Add(offset))
+		if v := get(1); v != 0 {
+			t.Fatalf("SNAP_END channel from 0 at +%v should hold exactly 0 mid-fade, got %d", offset, v)
+		}
+	}
+
+	// And reach the target exactly at the end of the fade.
+	engine.processModulationAt(start.Add(duration))
+	if v := get(1); v != 255 {
+		t.Errorf("SNAP_END channel should snap to target 255 at fade end, got %d", v)
+	}
+}
+
+// TestFadeToLook_SnapEndDescending tests that a SNAP_END channel going from a
+// HIGH start value to a LOW target holds the start value mid-fade (i.e. does
+// NOT decrease) and only reaches the target after the fade completes.
+// This mirrors TestFadeToLook_SnapEnd but exercises the descending direction to
+// confirm SNAP_END is direction-agnostic: the hold is always "emit fromValue
+// until progress >= 1".
+func TestFadeToLook_SnapEndDescending(t *testing.T) {
+	duration := 200 * time.Millisecond
+	engine, get, start := startManualFade(t, map[int]byte{1: 200}, []LookChannel{
+		{Universe: 1, Channel: 1, Value: 10, FadeBehavior: FadeBehaviorSnapEnd},
+	}, duration, EasingLinear)
+
+	// Mid-fade: SNAP_END must HOLD the start value (200), not decrease toward 10.
+	for _, offset := range []time.Duration{duration / 2, duration - time.Millisecond} {
+		engine.processModulationAt(start.Add(offset))
+		if v := get(1); v != 200 {
+			t.Fatalf("SNAP_END descending channel at +%v should hold start value 200, got %d", offset, v)
+		}
+	}
+
+	// After the fade completes the channel must reach the target.
+	engine.processModulationAt(start.Add(duration))
+	if v := get(1); v != 10 {
+		t.Errorf("SNAP_END descending channel should snap to target 10 at fade end, got %d", v)
+	}
+}
+
+// TestFadeToLook_SnapEndMixed verifies SNAP_END holds while a sibling FADE channel
+// interpolates - the exact mismatch the integration test detects.
+func TestFadeToLook_SnapEndMixed(t *testing.T) {
+	duration := 500 * time.Millisecond
+	engine, get, start := startManualFade(t, map[int]byte{1: 0, 2: 0}, []LookChannel{
+		{Universe: 1, Channel: 1, Value: 255, FadeBehavior: FadeBehaviorFade},
+		{Universe: 1, Channel: 2, Value: 255, FadeBehavior: FadeBehaviorSnapEnd},
+	}, duration, EasingLinear)
+
+	// 30% of the way through a linear fade: FADE = int(255 * 0.3) = 76.
+	engine.processModulationAt(start.Add(150 * time.Millisecond))
+	if v := get(1); v != 76 {
+		t.Errorf("FADE channel should be interpolating (76) at 30%% of the fade, got %d", v)
+	}
+	if v := get(2); v != 0 {
+		t.Errorf("SNAP_END channel should hold 0 while FADE interpolates, got %d", v)
+	}
+
+	// At the end both channels are at the target.
+	engine.processModulationAt(start.Add(duration))
+	if v := get(1); v != 255 {
+		t.Errorf("FADE channel should reach target 255 at fade end, got %d", v)
+	}
+	if v := get(2); v != 255 {
+		t.Errorf("SNAP_END channel should snap to target 255 at fade end, got %d", v)
+	}
+}
+
+// TestFadeToLook_SnapEndInterrupted documents what happens when a new fade
+// replaces an in-flight crossfade before a SNAP_END channel has snapped: the
+// interrupted fade's SNAP_END target is never applied, and the new fade starts
+// from the current output, i.e. the held start value.
+func TestFadeToLook_SnapEndInterrupted(t *testing.T) {
+	duration := time.Second
+	engine, get, start := startManualFade(t, map[int]byte{1: 50}, []LookChannel{
+		{Universe: 1, Channel: 1, Value: 200, FadeBehavior: FadeBehaviorSnapEnd},
+	}, duration, EasingLinear)
+
+	engine.processModulationAt(start.Add(duration / 2))
+	if v := get(1); v != 50 {
+		t.Fatalf("SNAP_END channel mid-fade should hold start value 50, got %d", v)
+	}
+
+	// Interrupt with a plain FADE to 150.
+	engine.FadeToLook([]LookChannel{
+		{Universe: 1, Channel: 1, Value: 150, FadeBehavior: FadeBehaviorFade},
+	}, duration, "interrupting-fade", EasingLinear)
+	start2 := rewindCrossfade(t, engine, duration)
+
+	engine.mu.RLock()
+	from := engine.activeEffects[0].FromValues[ChannelKey{Universe: 1, Channel: 1}]
+	engine.mu.RUnlock()
+	if from != 50 {
+		t.Errorf("interrupting fade should start from the held SNAP_END value 50, got %d", from)
+	}
+
+	// Halfway through the new fade: 50 + (150-50)*0.5 = 100. The old fade's
+	// target (200) is never applied.
+	engine.processModulationAt(start2.Add(duration / 2))
+	if v := get(1); v != 100 {
+		t.Errorf("interrupting fade midpoint should be 100, got %d", v)
+	}
+	engine.processModulationAt(start2.Add(duration))
+	if v := get(1); v != 150 {
+		t.Errorf("interrupting fade should end at its own target 150, got %d", v)
+	}
+}
+
+// TestFadeToLook_SnapEndWithUpdateLoop is the end-to-end check through the
+// running update loop. It deliberately asserts only the eventual target (with a
+// generous timeout) so it is not sensitive to scheduler jitter; the mid-fade
+// hold is covered deterministically by the tests above.
+func TestFadeToLook_SnapEndWithUpdateLoop(t *testing.T) {
 	engine, dmxService := createTestModulatorEngine()
 	_ = engine.Start()
 	defer func() { _ = engine.Stop() }()
 
-	// Set initial value
 	dmxService.SetChannelValue(1, 1, 50)
 
 	channels := []LookChannel{
 		{Universe: 1, Channel: 1, Value: 200, FadeBehavior: FadeBehaviorSnapEnd},
 	}
 
-	engine.FadeToLook(channels, 200*time.Millisecond, "snap-end-test", EasingLinear)
+	engine.FadeToLook(channels, 200*time.Millisecond, "snap-end-loop", EasingLinear)
 
-	// Check immediately - SNAP_END should start at its current value (50) but...
-	// Actually in this implementation, SNAP_END just uses normal fade behavior
-	// since the modulator handles SNAP_END differently than the original fade engine.
-	// The value should remain at the starting position during the fade.
-
-	time.Sleep(50 * time.Millisecond)
-
-	// Verify the fade eventually reaches the target using bounded poll
-	waitForCondition(t, 1*time.Second,
+	waitForCondition(t, 2*time.Second,
 		func() bool { return dmxService.GetChannelValue(1, 1) == 200 },
-		func() { t.Fatalf("SNAP_END channel did not reach target 200 within timeout, last value %d", dmxService.GetChannelValue(1, 1)) },
+		func() {
+			t.Fatalf("SNAP_END channel did not reach target 200 within timeout, last value %d",
+				dmxService.GetChannelValue(1, 1))
+		},
 	)
 }
 

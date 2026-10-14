@@ -29,6 +29,9 @@ func CreateCrossfadeEffect(
 }
 
 // CreateCrossfadeActive creates an active crossfade effect with the given values.
+// It intentionally produces FADE-only crossfades and does not carry SNAP_END
+// semantics — SnapEndChannels is left nil so callers (tests) that use this
+// constructor directly must not expect the hold-then-snap behaviour.
 func CreateCrossfadeActive(
 	fromValues map[ChannelKey]int,
 	toValues map[ChannelKey]int,
@@ -50,12 +53,18 @@ func CreateCrossfadeActive(
 
 // CalculateCrossfadeValues returns current interpolated values for a crossfade effect.
 func CalculateCrossfadeValues(active *ActiveEffect) map[ChannelKey]int {
+	return calculateCrossfadeValuesAt(active, time.Now())
+}
+
+// calculateCrossfadeValuesAt returns the crossfade's channel values as of the
+// given time (the update tick's timestamp).
+func calculateCrossfadeValuesAt(active *ActiveEffect, now time.Time) map[ChannelKey]int {
 	if active.Effect.EffectType != EffectTypeCrossfade {
 		return nil
 	}
 
 	// Calculate progress
-	progress := active.GetProgress()
+	progress := active.progressAt(now)
 
 	// Apply easing to progress
 	easedProgress := ApplyEasing(progress, active.Effect.EasingType)
@@ -68,6 +77,19 @@ func CalculateCrossfadeValues(active *ActiveEffect) map[ChannelKey]int {
 		if v, ok := active.FromValues[key]; ok {
 			fromValue = v
 		}
+
+		// SNAP_END: hold the start value until the fade completes, then jump to
+		// the target. While in progress, output exactly the start value; do not
+		// interpolate (which would make it track FADE channels).
+		if active.SnapEndChannels[key] {
+			if progress >= 1 {
+				values[key] = toValue
+			} else {
+				values[key] = fromValue
+			}
+			continue
+		}
+
 		interpolated := Interpolate(float64(fromValue), float64(toValue), easedProgress, EasingLinear)
 		values[key] = int(interpolated)
 	}
@@ -117,7 +139,16 @@ func MergeCrossfadeValues(
 	active *ActiveEffect,
 	existing map[ChannelKey]ChannelState,
 ) {
-	values := CalculateCrossfadeValues(active)
+	mergeCrossfadeValuesAt(active, existing, time.Now())
+}
+
+// mergeCrossfadeValuesAt is MergeCrossfadeValues evaluated at the given time.
+func mergeCrossfadeValuesAt(
+	active *ActiveEffect,
+	existing map[ChannelKey]ChannelState,
+	now time.Time,
+) {
+	values := calculateCrossfadeValuesAt(active, now)
 	if values == nil {
 		return
 	}
