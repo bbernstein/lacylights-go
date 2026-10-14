@@ -105,7 +105,6 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 - Parser/mapper: `internal/services/import_eos/`
 - Writer: `internal/services/export_eos/`
 - GraphQL surface: `importProjectFromEos` mutation, `projectExportEos` query
-  (the `exportProjectToEos` mutation is deprecated in favour of the query)
 - Real-world test fixture: `internal/services/import_eos/testdata/golden_otbpa.asc`
   (an in-repo copy of "OTBPA DRESS TUES" used by the round-trip and golden tests)
 - Lossy LacyLights→ASCII concepts (Look Boards, per-channel fade behaviors,
@@ -145,10 +144,9 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 ### Project Export Queries
 - Exports are read-only, so they are Queries: `projectExport`, `projectExportQLC`,
   `projectExportEos`. Imports stay Mutations.
-- The old `exportProject`, `exportProjectToQLC`, `exportProjectToEos` Mutations are
-  `@deprecated` and share the same implementation
-  (`internal/graphql/resolvers/project_export_helpers.go`). Remove them once all
-  clients (fe, mcp, test, Mac/RPi bundled frontends) use the Queries.
+- Implementation: `internal/graphql/resolvers/project_export_helpers.go`.
+- The old `exportProject`, `exportProjectToQLC`, `exportProjectToEos` Mutations were
+  removed (#87, breaking API change). Do not reintroduce export Mutations.
 
 ## Testing Guidelines
 

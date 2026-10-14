@@ -4535,11 +4535,6 @@ func (r *mutationResolver) ResumeCueList(ctx context.Context, cueListID string) 
 	return true, nil
 }
 
-// ExportProject is the resolver for the exportProject field.
-func (r *mutationResolver) ExportProject(ctx context.Context, projectID string, options *generated.ExportOptionsInput) (*generated.ExportResult, error) {
-	return r.exportProjectJSON(ctx, projectID, options)
-}
-
 // ImportProject is the resolver for the importProject field.
 func (r *mutationResolver) ImportProject(ctx context.Context, jsonContent string, options generated.ImportOptionsInput) (*generated.ImportResult, error) {
 	// Build import options
@@ -4601,12 +4596,6 @@ func (r *mutationResolver) ImportProject(ctx context.Context, jsonContent string
 // Returns error - QLC+ import not available on this platform
 func (r *mutationResolver) ImportProjectFromQlc(ctx context.Context, xmlContent string, originalFileName string) (*generated.QLCImportResult, error) {
 	return nil, fmt.Errorf("QLC+ import not available on this platform")
-}
-
-// ExportProjectToQlc is the resolver for the exportProjectToQLC field.
-// Returns error - QLC+ export not available on this platform
-func (r *mutationResolver) ExportProjectToQlc(ctx context.Context, projectID string, fixtureMappings []*generated.FixtureMappingInput) (*generated.QLCExportResult, error) {
-	return r.exportProjectQLC(ctx, projectID, fixtureMappings)
 }
 
 // ImportProjectFromEos is the resolver for the importProjectFromEos field.
@@ -4689,11 +4678,6 @@ func (r *mutationResolver) ImportProjectFromEos(ctx context.Context, asciiConten
 		Warnings:                 toEosWarnings(combined),
 		SynthesizedDefinitionIds: res.SynthesizedDefinitionIDs,
 	}, nil
-}
-
-// ExportProjectToEos is the resolver for the exportProjectToEos field.
-func (r *mutationResolver) ExportProjectToEos(ctx context.Context, projectID string) (*generated.EosExportResult, error) {
-	return r.exportProjectEos(ctx, projectID)
 }
 
 // UpdateSetting is the resolver for the updateSetting field.

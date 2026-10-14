@@ -12,10 +12,9 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 )
 
-// TestProjectExportQuery_MatchesMutation checks that Query.projectExport
-// returns the same result as the deprecated exportProject mutation,
-// including option handling.
-func TestProjectExportQuery_MatchesMutation(t *testing.T) {
+// TestProjectExportQuery checks Query.projectExport, including option
+// handling.
+func TestProjectExportQuery(t *testing.T) {
 	c, r, cleanup := testSetup(t)
 	defer cleanup()
 	s := seedDataExport(t, r, nil, nil)
@@ -35,9 +34,6 @@ func TestProjectExportQuery_MatchesMutation(t *testing.T) {
 	var q struct{ ProjectExport exportResult }
 	require.NoError(t, c.Post(`query($id: ID!) { projectExport(projectId: $id) { `+fields+` } }`,
 		&q, client.Var("id", s.projectID)))
-	var m struct{ ExportProject exportResult }
-	require.NoError(t, c.Post(`mutation($id: ID!) { exportProject(projectId: $id) { `+fields+` } }`,
-		&m, client.Var("id", s.projectID)))
 
 	require.Equal(t, s.projectID, q.ProjectExport.ProjectID)
 	require.Equal(t, "Export Show", q.ProjectExport.ProjectName)
@@ -45,8 +41,6 @@ func TestProjectExportQuery_MatchesMutation(t *testing.T) {
 	require.Equal(t, 1, q.ProjectExport.Stats.LooksCount)
 	require.Equal(t, 1, q.ProjectExport.Stats.CueListsCount)
 	require.NotEmpty(t, q.ProjectExport.JSONContent)
-	require.Equal(t, m.ExportProject.Stats, q.ProjectExport.Stats)
-	require.Equal(t, m.ExportProject.ProjectName, q.ProjectExport.ProjectName)
 
 	// Options are honoured.
 	var opt struct{ ProjectExport exportResult }
@@ -82,16 +76,17 @@ func TestProjectExportEosQuery(t *testing.T) {
 	require.NoError(t, c.Post(`query($id: ID!) {
 		projectExportEos(projectId: $id) { projectId projectName asciiContent filenameSuffix }
 	}`, &q, client.Var("id", imp.ImportProjectFromEos.ProjectID)))
-	var m struct{ ExportProjectToEos eosResult }
-	require.NoError(t, c.Post(`mutation($id: ID!) {
-		exportProjectToEos(projectId: $id) { projectId projectName asciiContent filenameSuffix }
-	}`, &m, client.Var("id", imp.ImportProjectFromEos.ProjectID)))
+	var again struct{ ProjectExportEos eosResult }
+	require.NoError(t, c.Post(`query($id: ID!) {
+		projectExportEos(projectId: $id) { projectId projectName asciiContent filenameSuffix }
+	}`, &again, client.Var("id", imp.ImportProjectFromEos.ProjectID)))
 
 	require.Equal(t, ".asc", q.ProjectExportEos.FilenameSuffix)
 	require.Equal(t, "Query Eos", q.ProjectExportEos.ProjectName)
 	require.Contains(t, q.ProjectExportEos.ASCIIContent, "$$Title Query Eos")
-	// The Eos writer is deterministic, so query and mutation agree exactly.
-	require.Equal(t, m.ExportProjectToEos, q.ProjectExportEos)
+	// The Eos writer is deterministic and group numbers are saved on the
+	// first export, so a second export is identical.
+	require.Equal(t, q.ProjectExportEos, again.ProjectExportEos)
 }
 
 func TestProjectExportQLCQuery(t *testing.T) {
@@ -99,8 +94,7 @@ func TestProjectExportQLCQuery(t *testing.T) {
 	defer cleanup()
 	s := seedDataExport(t, r, nil, nil)
 
-	// QLC+ export is not available on this platform; the query mirrors the
-	// mutation's behaviour.
+	// QLC+ export is not available on this platform.
 	var q struct{ ProjectExportQLC struct{ XMLContent string } }
 	err := c.Post(`query($id: ID!, $m: [FixtureMappingInput!]) {
 		projectExportQLC(projectId: $id, fixtureMappings: $m) { xmlContent }
@@ -117,7 +111,7 @@ func TestProjectExportQueries_EosUnavailable(t *testing.T) {
 }
 
 // TestProjectExportQueries_AccessControl confirms every export Query
-// enforces ensureProjectAccess like the Mutations do.
+// enforces ensureProjectAccess.
 func TestProjectExportQueries_AccessControl(t *testing.T) {
 	r, cleanup := setupGroupAdminTestResolver(t, true)
 	defer cleanup()
@@ -154,36 +148,49 @@ func TestProjectExportQueries_AccessControl(t *testing.T) {
 	require.Equal(t, project.ID, eos.ProjectID)
 }
 
-// TestExportMutations_Deprecated checks the deprecation is visible through
-// introspection so client tooling can warn.
-func TestExportMutations_Deprecated(t *testing.T) {
+// TestExportMutations_Removed checks the old export Mutations are gone
+// from the schema (lacylights-go#87) while the import Mutations and the
+// export Queries remain.
+func TestExportMutations_Removed(t *testing.T) {
 	c, _, cleanup := testSetup(t)
 	defer cleanup()
 
+	type fieldList struct {
+		Fields []struct{ Name string }
+	}
 	var resp struct {
-		Type struct {
-			Fields []struct {
-				Name              string
-				IsDeprecated      bool
-				DeprecationReason *string
-			}
-		} `json:"__type"`
+		Mutation fieldList `json:"mutation"`
+		Query    fieldList `json:"query"`
 	}
-	require.NoError(t, c.Post(`{ __type(name: "Mutation") { fields(includeDeprecated: true) { name isDeprecated deprecationReason } } }`, &resp))
-	deprecated := map[string]string{}
-	for _, f := range resp.Type.Fields {
-		if f.IsDeprecated && f.DeprecationReason != nil {
-			deprecated[f.Name] = *f.DeprecationReason
+	require.NoError(t, c.Post(`{
+		mutation: __type(name: "Mutation") { fields(includeDeprecated: true) { name } }
+		query: __type(name: "Query") { fields(includeDeprecated: true) { name } }
+	}`, &resp))
+	names := func(l fieldList) map[string]bool {
+		m := map[string]bool{}
+		for _, f := range l.Fields {
+			m[f.Name] = true
 		}
+		return m
 	}
-	for name, reason := range map[string]string{
-		"exportProject":      "Use Query.projectExport",
-		"exportProjectToQLC": "Use Query.projectExportQLC",
-		"exportProjectToEos": "Use Query.projectExportEos",
-	} {
-		require.Equal(t, reason, deprecated[name], name)
+	mutations, queries := names(resp.Mutation), names(resp.Query)
+
+	for _, removed := range []string{"exportProject", "exportProjectToQLC", "exportProjectToEos"} {
+		require.False(t, mutations[removed], "Mutation.%s should be removed", removed)
 	}
-	require.NotContains(t, deprecated, "importProject")
+	for _, kept := range []string{"importProject", "importProjectFromQLC", "importProjectFromEos"} {
+		require.True(t, mutations[kept], "Mutation.%s should remain", kept)
+	}
+	for _, kept := range []string{"projectExport", "projectExportQLC", "projectExportEos"} {
+		require.True(t, queries[kept], "Query.%s should remain", kept)
+	}
+
+	// Calling a removed Mutation is a validation error.
+	var out map[string]any
+	err := c.Post(`mutation { exportProject(projectId: "p") { projectId } }`, &out)
+	require.ErrorContains(t, err, "Cannot query field")
+	require.ErrorContains(t, err, "exportProject")
+	require.ErrorContains(t, err, "GRAPHQL_VALIDATION_FAILED")
 }
 
 // TestAcquireProjectExportSlot checks the shared project export bound:

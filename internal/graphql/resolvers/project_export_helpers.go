@@ -7,15 +7,15 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 )
 
-// Shared implementations of the project export operations. Each is exposed
-// twice: as the read-only Query fields (projectExport, projectExportQLC,
-// projectExportEos) and as the deprecated Mutation fields (exportProject,
-// exportProjectToQLC, exportProjectToEos) kept for older clients.
+// Implementations of the project export operations, exposed as the
+// read-only Query fields projectExport, projectExportQLC and
+// projectExportEos. (The old exportProject, exportProjectToQLC and
+// exportProjectToEos Mutations were removed; see lacylights-go#87.)
 
 // MaxConcurrentProjectExports is how many whole-project exports (JSON or
 // Eos) may run at once. As Queries, aliased root fields are resolved
-// concurrently by gqlgen (Mutation root fields are serialized), so without
-// a bound one request could start many full-project scans in parallel.
+// concurrently by gqlgen, so without a bound one request could start many
+// full-project scans in parallel.
 // This bounds concurrency only; it is not a size limit.
 const MaxConcurrentProjectExports = 2
 

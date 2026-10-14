@@ -244,10 +244,10 @@ func TestImportProjectFromEos_RejectsConflictingOptions(t *testing.T) {
 	}
 }
 
-// TestExportProjectToEos_RejectsUnauthorizedUser confirms ensureProjectAccess
+// TestProjectExportEos_RejectsUnauthorizedUser confirms ensureProjectAccess
 // is enforced before the export runs: a user who is not a member of the
 // project's group must not be able to export it.
-func TestExportProjectToEos_RejectsUnauthorizedUser(t *testing.T) {
+func TestProjectExportEos_RejectsUnauthorizedUser(t *testing.T) {
 	resolver, cleanup := setupGroupAdminTestResolver(t, true)
 	defer cleanup()
 
@@ -257,9 +257,9 @@ func TestExportProjectToEos_RejectsUnauthorizedUser(t *testing.T) {
 	project := &models.Project{ID: cuid.New(), Name: "Owned by G1", GroupID: &groupID}
 	require.NoError(t, resolver.ProjectRepo.Create(context.Background(), project))
 
-	mut := resolver.Mutation().(*mutationResolver)
+	q := resolver.Query().(*queryResolver)
 	ctx := createMemberContext("user-1", "user@test.com", otherGroupID)
-	res, err := mut.ExportProjectToEos(ctx, project.ID)
+	res, err := q.ProjectExportEos(ctx, project.ID)
 	if err == nil {
 		t.Fatalf("expected unauthorized error, got result %+v", res)
 	}
@@ -268,9 +268,9 @@ func TestExportProjectToEos_RejectsUnauthorizedUser(t *testing.T) {
 	}
 }
 
-// TestExportProjectToEos_E2E imports a project, exports it via GraphQL, and
+// TestProjectExportEos_E2E imports a project, exports it via GraphQL, and
 // verifies key sections of the output.
-func TestExportProjectToEos_E2E(t *testing.T) {
+func TestProjectExportEos_E2E(t *testing.T) {
 	c, _, cleanup := testSetup(t)
 	defer cleanup()
 
@@ -295,15 +295,15 @@ func TestExportProjectToEos_E2E(t *testing.T) {
 	}
 
 	var exp struct {
-		ExportProjectToEos struct {
+		ProjectExportEos struct {
 			ProjectID      string
 			ProjectName    string
 			ASCIIContent   string
 			FilenameSuffix string
 		}
 	}
-	if err := c.Post(`mutation Export($id: ID!) {
-		exportProjectToEos(projectId: $id) {
+	if err := c.Post(`query Export($id: ID!) {
+		projectExportEos(projectId: $id) {
 			projectId
 			projectName
 			asciiContent
@@ -313,8 +313,8 @@ func TestExportProjectToEos_E2E(t *testing.T) {
 		t.Fatalf("export: %v", err)
 	}
 
-	if exp.ExportProjectToEos.FilenameSuffix != ".asc" {
-		t.Errorf("FilenameSuffix = %q, want .asc", exp.ExportProjectToEos.FilenameSuffix)
+	if exp.ProjectExportEos.FilenameSuffix != ".asc" {
+		t.Errorf("FilenameSuffix = %q, want .asc", exp.ProjectExportEos.FilenameSuffix)
 	}
 	for _, want := range []string{
 		"Ident 3:0",
@@ -323,7 +323,7 @@ func TestExportProjectToEos_E2E(t *testing.T) {
 		"$Patch 1",
 		"$CueList 1",
 	} {
-		if !strings.Contains(exp.ExportProjectToEos.ASCIIContent, want) {
+		if !strings.Contains(exp.ProjectExportEos.ASCIIContent, want) {
 			t.Errorf("export missing %q", want)
 		}
 	}
