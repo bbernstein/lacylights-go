@@ -210,6 +210,14 @@ func NewActiveEffect(effect *Effect) *ActiveEffect {
 
 // IsComplete returns true if the effect has finished and should be removed.
 func (a *ActiveEffect) IsComplete() bool {
+	return a.isCompleteAt(time.Now())
+}
+
+// isCompleteAt reports whether the effect has finished as of the given time.
+// The update loop evaluates completion against the same tick timestamp used to
+// compute the tick's channel values, so a crossfade is only retired after a
+// frame computed at progress == 1 has been written.
+func (a *ActiveEffect) isCompleteAt(now time.Time) bool {
 	// If output is fading to 0 and complete, effect is done
 	if a.OutputFade != nil && a.OutputFade.IsComplete() && a.OutputFade.EndValue == 0 {
 		return true
@@ -227,7 +235,7 @@ func (a *ActiveEffect) IsComplete() bool {
 
 	// Crossfade effects complete when their duration is done
 	if a.Effect.EffectType == EffectTypeCrossfade && a.Duration > 0 {
-		return time.Since(a.StartTime) >= a.Duration
+		return now.Sub(a.StartTime) >= a.Duration
 	}
 
 	return false
@@ -236,8 +244,13 @@ func (a *ActiveEffect) IsComplete() bool {
 // GetProgress returns the progress of the effect (0-1).
 // For crossfades, this is based on duration. For others, it's always 1.
 func (a *ActiveEffect) GetProgress() float64 {
+	return a.progressAt(time.Now())
+}
+
+// progressAt returns the progress of the effect (0-1) as of the given time.
+func (a *ActiveEffect) progressAt(now time.Time) float64 {
 	if a.Effect.EffectType == EffectTypeCrossfade && a.Duration > 0 {
-		progress := time.Since(a.StartTime).Seconds() / a.Duration.Seconds()
+		progress := now.Sub(a.StartTime).Seconds() / a.Duration.Seconds()
 		return clampFloat(progress, 0, 1)
 	}
 	return 1

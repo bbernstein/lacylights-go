@@ -53,12 +53,18 @@ func CreateCrossfadeActive(
 
 // CalculateCrossfadeValues returns current interpolated values for a crossfade effect.
 func CalculateCrossfadeValues(active *ActiveEffect) map[ChannelKey]int {
+	return calculateCrossfadeValuesAt(active, time.Now())
+}
+
+// calculateCrossfadeValuesAt returns the crossfade's channel values as of the
+// given time (the update tick's timestamp).
+func calculateCrossfadeValuesAt(active *ActiveEffect, now time.Time) map[ChannelKey]int {
 	if active.Effect.EffectType != EffectTypeCrossfade {
 		return nil
 	}
 
 	// Calculate progress
-	progress := active.GetProgress()
+	progress := active.progressAt(now)
 
 	// Apply easing to progress
 	easedProgress := ApplyEasing(progress, active.Effect.EasingType)
@@ -133,7 +139,16 @@ func MergeCrossfadeValues(
 	active *ActiveEffect,
 	existing map[ChannelKey]ChannelState,
 ) {
-	values := CalculateCrossfadeValues(active)
+	mergeCrossfadeValuesAt(active, existing, time.Now())
+}
+
+// mergeCrossfadeValuesAt is MergeCrossfadeValues evaluated at the given time.
+func mergeCrossfadeValuesAt(
+	active *ActiveEffect,
+	existing map[ChannelKey]ChannelState,
+	now time.Time,
+) {
+	values := calculateCrossfadeValuesAt(active, now)
 	if values == nil {
 		return
 	}
