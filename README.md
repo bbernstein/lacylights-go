@@ -40,7 +40,7 @@ DATABASE_URL="file:./data.db" PORT=4000 ./build/bin/server
 | `ARTNET_BROADCAST_ADDRESS` | `255.255.255.255` | Art-Net broadcast address |
 | `EXPORT_MAX_ROWS` | unset (unlimited) | Max data rows in one CSV/XLSX data export (a table, or a workbook's total) |
 | `EXPORT_MAX_CELLS` | unset (unlimited) | Max cells in a dynamic-width `LOOK_DETAILS` grid |
-| `EXPORT_MAX_BYTES` | unset (unlimited) | Max encoded size in bytes of any export: CSV/XLSX data exports and project JSON / Eos ASCII exports |
+| `EXPORT_MAX_BYTES` | unset (unlimited) | Max file size in bytes of any export (CSV/XLSX data exports and project JSON / Eos ASCII exports), measured before the base64 wrapping in the GraphQL response |
 | `EXPORT_MAX_CONCURRENT_PROJECT_EXPORTS` | unset (built-in `2`) | How many whole-project (JSON or Eos) exports may run at once |
 
 #### Export limits (opt-in)
@@ -57,7 +57,7 @@ public demo. Suggested demo values:
 ```bash
 EXPORT_MAX_ROWS=100000        # 100k rows
 EXPORT_MAX_CELLS=5000000      # 5M cells
-EXPORT_MAX_BYTES=20971520     # 20 MiB (the GraphQL response carries base64, ~1/3 larger)
+EXPORT_MAX_BYTES=20971520     # 20 MiB file size; the base64 GraphQL response is ~1/3 larger
 EXPORT_MAX_CONCURRENT_PROJECT_EXPORTS=1
 ```
 
