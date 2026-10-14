@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
@@ -27,7 +28,8 @@ func TestSetupTestDB_CreatesRefIDIndexes(t *testing.T) {
 	if err := testDB.DB.Create(&models.FixtureDefinition{ID: "d1", Manufacturer: "A", Model: "One"}).Error; err != nil {
 		t.Fatalf("first create failed: %v", err)
 	}
-	if err := testDB.DB.Create(&models.FixtureDefinition{ID: "d2", Manufacturer: "B", Model: "Two"}).Error; err == nil {
-		t.Fatal("expected unique ref_id violation for a second definition with empty RefID")
+	err := testDB.DB.Create(&models.FixtureDefinition{ID: "d2", Manufacturer: "B", Model: "Two"}).Error
+	if err == nil || !strings.Contains(err.Error(), "UNIQUE constraint failed: fixture_definitions.ref_id") {
+		t.Fatalf("expected unique ref_id violation for a second empty RefID, got %v", err)
 	}
 }
