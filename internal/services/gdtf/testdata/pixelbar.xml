@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic GDTF description written for LacyLights tests. Not from GDTF Share. -->
+<GDTF DataVersion="1.2">
+  <FixtureType Name="TestBar" LongName="Test Pixel Bar 4" Manufacturer="Synthetic Lighting Co" FixtureTypeID="5a1c0b7e-0000-4000-8000-000000000003">
+    <AttributeDefinitions>
+      <Attributes>
+        <Attribute Name="Dimmer" Pretty="Dimmer" Feature="Dimmer.Dimmer"/>
+        <Attribute Name="ColorAdd_R" Pretty="Red" Feature="Color.RGB"/>
+        <Attribute Name="ColorAdd_G" Pretty="Green" Feature="Color.RGB"/>
+        <Attribute Name="ColorAdd_B" Pretty="Blue" Feature="Color.RGB"/>
+      </Attributes>
+    </AttributeDefinitions>
+    <Geometries>
+      <Geometry Name="Bar">
+        <GeometryReference Name="Pixel 1" Geometry="Pixel"><Break DMXBreak="1" DMXOffset="2"/></GeometryReference>
+        <GeometryReference Name="Pixel 2" Geometry="Pixel"><Break DMXBreak="1" DMXOffset="5"/></GeometryReference>
+        <GeometryReference Name="Pixel 3" Geometry="Pixel"><Break DMXBreak="1" DMXOffset="8"/></GeometryReference>
+        <GeometryReference Name="Pixel 4" Geometry="Pixel"><Break DMXBreak="1" DMXOffset="11"/></GeometryReference>
+      </Geometry>
+      <Geometry Name="Pixel">
+        <Beam Name="PixelBeam"/>
+      </Geometry>
+    </Geometries>
+    <DMXModes>
+      <DMXMode Name="13ch" Geometry="Bar">
+        <DMXChannels>
+          <DMXChannel DMXBreak="1" Offset="1" Geometry="Bar">
+            <LogicalChannel Attribute="Dimmer">
+              <ChannelFunction Name="Dimmer" Attribute="Dimmer" DMXFrom="0/1" Default="255/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="1" Geometry="Pixel">
+            <LogicalChannel Attribute="ColorAdd_R">
+              <ChannelFunction Name="Red" Attribute="ColorAdd_R" DMXFrom="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="2" Geometry="Pixel">
+            <LogicalChannel Attribute="ColorAdd_G">
+              <ChannelFunction Name="Green" Attribute="ColorAdd_G" DMXFrom="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="3" Geometry="PixelBeam">
+            <LogicalChannel Attribute="ColorAdd_B">
+              <ChannelFunction Name="Blue" Attribute="ColorAdd_B" DMXFrom="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+        </DMXChannels>
+      </DMXMode>
+    </DMXModes>
+  </FixtureType>
+</GDTF>

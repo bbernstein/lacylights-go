@@ -36,6 +36,7 @@ get_threshold() {
         "internal/middleware") echo 100 ;;  # HTTP middleware with full coverage
         "internal/services/wifi") echo 39 ;;  # WiFi AP mode, platform-specific code paths
         "cmd/server") echo 37 ;;  # Server startup, helper functions covered; auth init code untested
+        "internal/services/gdtf") echo 90 ;;  # GDTF archive/XML/mapping/import with synthetic fixtures
         "internal/services/ofl") echo 36 ;;  # OFL fixture library, bundle operations conditional
         "internal/services/version") echo 32 ;;  # Version info retrieval
         "internal/graphql/resolvers") echo 21 ;;  # Auto-generated + auth resolvers; coverage via integration tests

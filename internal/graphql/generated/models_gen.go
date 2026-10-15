@@ -754,6 +754,41 @@ type FixtureValueInput struct {
 	LookOrder graphql.Omittable[*int] `json:"lookOrder,omitempty"`
 }
 
+// One GDTF fixture type to import: the description.xml of a .gdtf file.
+// Clients unzip the .gdtf (or a .zip of them) and send only description.xml.
+type GdtfFileInput struct {
+	// Original file name, e.g. Foo.gdtf or archive.zip/inner/Foo.gdtf
+	FileName string `json:"fileName"`
+	// Contents of the .gdtf's description.xml (at most 32 MB)
+	DescriptionXML string `json:"descriptionXml"`
+}
+
+type GdtfImportFileResult struct {
+	FileName string           `json:"fileName"`
+	Status   GdtfImportStatus `json:"status"`
+	// The created, updated or existing definition; null when FAILED
+	Definition   *models.FixtureDefinition `json:"definition,omitempty"`
+	Manufacturer *string                   `json:"manufacturer,omitempty"`
+	Model        *string                   `json:"model,omitempty"`
+	ModeCount    *int                      `json:"modeCount,omitempty"`
+	Warnings     []string                  `json:"warnings"`
+	Error        *string                   `json:"error,omitempty"`
+}
+
+type GdtfImportOptions struct {
+	// What to do when the same FixtureTypeID was imported before and changed
+	OnExisting graphql.Omittable[*GdtfExistingPolicy] `json:"onExisting,omitempty"`
+}
+
+type GdtfImportResult struct {
+	Results        []*GdtfImportFileResult `json:"results"`
+	CreatedCount   int                     `json:"createdCount"`
+	UpdatedCount   int                     `json:"updatedCount"`
+	UnchangedCount int                     `json:"unchangedCount"`
+	SkippedCount   int                     `json:"skippedCount"`
+	FailedCount    int                     `json:"failedCount"`
+}
+
 // Global playback status - returns which cue list is currently playing or paused (if any)
 type GlobalPlaybackStatus struct {
 	// True if any cue list is currently playing
@@ -2451,6 +2486,124 @@ func (e *FixtureType) UnmarshalJSON(b []byte) error {
 }
 
 func (e FixtureType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type GdtfExistingPolicy string
+
+const (
+	// Rebuild the existing definition in place, keeping its ID
+	GdtfExistingPolicyUpdate GdtfExistingPolicy = "UPDATE"
+	// Keep the existing definition unchanged
+	GdtfExistingPolicySkip GdtfExistingPolicy = "SKIP"
+)
+
+var AllGdtfExistingPolicy = []GdtfExistingPolicy{
+	GdtfExistingPolicyUpdate,
+	GdtfExistingPolicySkip,
+}
+
+func (e GdtfExistingPolicy) IsValid() bool {
+	switch e {
+	case GdtfExistingPolicyUpdate, GdtfExistingPolicySkip:
+		return true
+	}
+	return false
+}
+
+func (e GdtfExistingPolicy) String() string {
+	return string(e)
+}
+
+func (e *GdtfExistingPolicy) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = GdtfExistingPolicy(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid GdtfExistingPolicy", str)
+	}
+	return nil
+}
+
+func (e GdtfExistingPolicy) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *GdtfExistingPolicy) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e GdtfExistingPolicy) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type GdtfImportStatus string
+
+const (
+	GdtfImportStatusCreated   GdtfImportStatus = "CREATED"
+	GdtfImportStatusUpdated   GdtfImportStatus = "UPDATED"
+	GdtfImportStatusUnchanged GdtfImportStatus = "UNCHANGED"
+	GdtfImportStatusSkipped   GdtfImportStatus = "SKIPPED"
+	GdtfImportStatusFailed    GdtfImportStatus = "FAILED"
+)
+
+var AllGdtfImportStatus = []GdtfImportStatus{
+	GdtfImportStatusCreated,
+	GdtfImportStatusUpdated,
+	GdtfImportStatusUnchanged,
+	GdtfImportStatusSkipped,
+	GdtfImportStatusFailed,
+}
+
+func (e GdtfImportStatus) IsValid() bool {
+	switch e {
+	case GdtfImportStatusCreated, GdtfImportStatusUpdated, GdtfImportStatusUnchanged, GdtfImportStatusSkipped, GdtfImportStatusFailed:
+		return true
+	}
+	return false
+}
+
+func (e GdtfImportStatus) String() string {
+	return string(e)
+}
+
+func (e *GdtfImportStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = GdtfImportStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid GdtfImportStatus", str)
+	}
+	return nil
+}
+
+func (e GdtfImportStatus) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *GdtfImportStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e GdtfImportStatus) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
