@@ -36,7 +36,7 @@ func TestBuildPlan_RGBWPar(t *testing.T) {
 	}
 
 	six := p.channels(p.mode(t, "6ch"))
-	if got := channelNames(six); !reflect.DeepEqual(got, []string{"Dimmer", "Red", "Green", "Blue", "White", "Sh1"}) {
+	if got := channelNames(six); !reflect.DeepEqual(got, []string{"Dimmer", "Red", "Green", "Blue", "White", "Shutter 1"}) {
 		t.Errorf("6ch channels = %v", got)
 	}
 	shutter := six[5]
@@ -79,8 +79,8 @@ func TestBuildPlan_Mover16Bit(t *testing.T) {
 		{"Gobo", typeGobo, 0, "SNAP", true},
 		{"Gobo Rotate", typeEffect, 128, "FADE", false},
 		{"Shutter", typeStrobe, 40, "SNAP", true}, // InitialFunction Open's Default
-		{"Dim", typeIntensity, 0, "FADE", false},
-		{"Dim Fine", typeIntensity, 0, "FADE", false},
+		{"Dimmer", typeIntensity, 0, "FADE", false},
+		{"Dimmer Fine", typeIntensity, 0, "FADE", false},
 	}
 	if len(std) != len(wants) {
 		t.Fatalf("Standard 16bit has %d channels (%v), want %d", len(std), channelNames(std), len(wants))
@@ -92,7 +92,7 @@ func TestBuildPlan_Mover16Bit(t *testing.T) {
 		}
 	}
 	basic := p.channels(p.mode(t, "Basic 8bit"))
-	if got := channelNames(basic); !reflect.DeepEqual(got, []string{"Pan", "Tilt", "Dim"}) {
+	if got := channelNames(basic); !reflect.DeepEqual(got, []string{"Pan", "Tilt", "Dimmer"}) {
 		t.Errorf("Basic 8bit = %v", got)
 	}
 	// The 8-bit Pan/Tilt/Dim equal the 16-bit coarse channels and are shared.
@@ -432,11 +432,11 @@ func TestDisplayName(t *testing.T) {
 		"unnamed": {},
 	}}
 	tests := map[string]string{
-		"Dimmer":      "Dim",         // Pretty
-		"DIMMER":      "Dim",         // case-insensitive lookup
-		"Pan":         "Pan",         // no Pretty: attribute name
-		"VendorThing": "VendorThing", // not defined: the link itself
-		"unnamed":     "unnamed",     // defined without names
+		"Dimmer":      "Dimmer",       // terse Pretty "Dim" ignored
+		"DIMMER":      "Dimmer",       // case-insensitive lookup
+		"Pan":         "Pan",          // no Pretty: attribute name
+		"VendorThing": "Vendor Thing", // not defined: the link, humanized
+		"unnamed":     "unnamed",      // defined without names
 		"":            placeholderName,
 	}
 	for attr, want := range tests {

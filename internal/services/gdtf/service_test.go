@@ -114,7 +114,7 @@ func TestImport_Create(t *testing.T) {
 		t.Errorf("preloaded %d channels, %d modes", len(def.Channels), len(def.Modes))
 	}
 	layout := modeLayout(t, db, def.ID)
-	if got := strings.Join(layout["6ch"], ","); got != "Dimmer,Red,Green,Blue,White,Sh1" {
+	if got := strings.Join(layout["6ch"], ","); got != "Dimmer,Red,Green,Blue,White,Shutter 1" {
 		t.Errorf("6ch = %s", got)
 	}
 	if got := strings.Join(layout["4ch"], ","); got != "Red,Green,Blue,White" {

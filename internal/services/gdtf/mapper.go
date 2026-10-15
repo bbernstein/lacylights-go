@@ -261,20 +261,17 @@ func uniqueName(name string, used map[string]bool) string {
 	return out
 }
 
-// displayName is the attribute's Pretty name, else its name.
+// displayName is a readable channel name for an attribute; see
+// channelDisplayName.
 func (b *planBuilder) displayName(attr string) string {
 	if a := b.attrs[strings.ToLower(attr)]; a != nil {
-		if p := strings.TrimSpace(a.Pretty); p != "" {
-			return p
+		name := a.Name
+		if strings.TrimSpace(name) == "" {
+			name = attr
 		}
-		if n := strings.TrimSpace(a.Name); n != "" {
-			return n
-		}
+		return channelDisplayName(name, a.Pretty)
 	}
-	if attr = strings.TrimSpace(attr); attr != "" {
-		return attr
-	}
-	return placeholderName
+	return channelDisplayName(attr, "")
 }
 
 // channelFor returns the coarse channel of an instance without name or
