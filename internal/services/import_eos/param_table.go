@@ -77,10 +77,27 @@ func mapParamTypeName(name string, category int) generated.ChannelType {
 		return generated.ChannelTypeGobo
 	case "shutter_strobe", "strobe":
 		return generated.ChannelTypeStrobe
+	case "hue":
+		return generated.ChannelTypeHue
+	case "saturation":
+		return generated.ChannelTypeSaturation
+	case "color_temperature", "colour_temperature", "color_temp", "cct", "ctc":
+		return generated.ChannelTypeColorTemperature
+	}
+	if isSpeedParamName(name) {
+		return generated.ChannelTypeSpeed
 	}
 	switch category {
 	case 1:
 		return generated.ChannelTypeIntensity
 	}
 	return generated.ChannelTypeOther
+}
+
+// isSpeedParamName reports whether an EOS parameter long name is a pure speed
+// control ("Speed", "Effect_Speed", "Position_MSpeed"). Combined index/speed
+// parameters such as "Gobo_Index/Speed" are not treated as speed channels.
+func isSpeedParamName(name string) bool {
+	n := strings.ToLower(name)
+	return n == "speed" || strings.HasSuffix(n, "_speed") || strings.HasSuffix(n, "mspeed")
 }

@@ -166,10 +166,10 @@ func mapChannelType(capability *OFLCapability) string {
 		return "MACRO"
 	case "ColorPreset":
 		return "COLOR_WHEEL"
-	case "EffectSpeed":
-		return "EFFECT"
-	case "Speed":
-		return "EFFECT"
+	case "ColorTemperature":
+		return "COLOR_TEMPERATURE"
+	case "EffectSpeed", "Speed", "PanTiltSpeed":
+		return "SPEED"
 	case "Rotation":
 		return "EFFECT"
 	case "NoFunction":
@@ -202,7 +202,8 @@ func mapFadeBehavior(channelType string, isDiscrete bool) string {
 
 	// All other channels should FADE smoothly
 	// This includes: INTENSITY, RED, GREEN, BLUE, WHITE, AMBER, UV,
-	// PAN, TILT, ZOOM, FOCUS, IRIS, EFFECT, OTHER
+	// COLOR_TEMPERATURE, HUE, SATURATION, PAN, TILT, ZOOM, FOCUS, IRIS,
+	// EFFECT, SPEED, OTHER
 	return "FADE"
 }
 
