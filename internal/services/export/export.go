@@ -43,13 +43,17 @@ type ExportProjectInfo struct {
 
 // ExportedFixtureDefinition represents an exported fixture definition.
 type ExportedFixtureDefinition struct {
-	RefID        string                      `json:"refId"`
-	Manufacturer string                      `json:"manufacturer"`
-	Model        string                      `json:"model"`
-	Type         string                      `json:"type"`
-	IsBuiltIn    bool                        `json:"isBuiltIn"`
-	Modes        []ExportedFixtureMode       `json:"modes,omitempty"`
-	Channels     []ExportedChannelDefinition `json:"channels"`
+	RefID        string `json:"refId"`
+	Manufacturer string `json:"manufacturer"`
+	Model        string `json:"model"`
+	Type         string `json:"type"`
+	IsBuiltIn    bool   `json:"isBuiltIn"`
+	// Source fields are optional for compatibility with older exports.
+	Source        string                      `json:"source,omitempty"`
+	SourceID      *string                     `json:"sourceId,omitempty"`
+	SourceVersion *string                     `json:"sourceVersion,omitempty"`
+	Modes         []ExportedFixtureMode       `json:"modes,omitempty"`
+	Channels      []ExportedChannelDefinition `json:"channels"`
 }
 
 // ExportedFixtureMode represents a fixture mode in export.
@@ -349,11 +353,14 @@ func (s *Service) ExportProjectWithOptions(ctx context.Context, projectID string
 			}
 
 			exportedDef := ExportedFixtureDefinition{
-				RefID:        def.ID,
-				Manufacturer: def.Manufacturer,
-				Model:        def.Model,
-				Type:         def.Type,
-				IsBuiltIn:    def.IsBuiltIn,
+				RefID:         def.ID,
+				Manufacturer:  def.Manufacturer,
+				Model:         def.Model,
+				Type:          def.Type,
+				IsBuiltIn:     def.IsBuiltIn,
+				Source:        def.Source,
+				SourceID:      def.SourceID,
+				SourceVersion: def.SourceVersion,
 			}
 
 			for _, ch := range channels {

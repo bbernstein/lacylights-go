@@ -59,6 +59,8 @@ models:
         resolver: true
   FixtureDefinition:
     fields:
+      source:
+        resolver: true
       channels:
         resolver: true
       modes:

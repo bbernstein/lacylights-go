@@ -4,6 +4,8 @@ package models
 
 import (
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // User represents a user in the system.
@@ -294,12 +296,51 @@ type FixtureDefinition struct {
 	OFLSourceHash *string `gorm:"column:ofl_source_hash"` // SHA256 of the original OFL JSON
 	OFLVersion    *string `gorm:"column:ofl_version"`     // OFL commit/version when imported
 
+	// Source tracking. Source is one of the FixtureSource* constants; the
+	// other fields identify the definition within that source.
+	Source        string  `gorm:"column:source;not null;default:USER;index:idx_fixture_definitions_source,priority:1"`
+	SourceID      *string `gorm:"column:source_id;index:idx_fixture_definitions_source,priority:2"` // OFL key, GDTF FixtureTypeID, ...
+	SourceVersion *string `gorm:"column:source_version"`                                            // library or file version
+	SourceHash    *string `gorm:"column:source_hash"`                                               // SHA-256 of the source document
+	SourcePayload []byte  `gorm:"column:source_payload"`                                            // gzip of the source document (optional)
+
 	// Relations
 	Channels []ChannelDefinition `gorm:"foreignKey:DefinitionID"`
 	Modes    []FixtureMode       `gorm:"foreignKey:DefinitionID"`
 }
 
 func (FixtureDefinition) TableName() string { return "fixture_definitions" }
+
+// BeforeCreate defaults Source to USER so callers that don't set it get
+// the same value in memory as the database default.
+func (d *FixtureDefinition) BeforeCreate(tx *gorm.DB) error {
+	if d.Source == "" {
+		d.Source = FixtureSourceUser
+	}
+	return nil
+}
+
+// Fixture definition sources, stored in FixtureDefinition.Source.
+const (
+	FixtureSourceBuiltIn     = "BUILTIN"
+	FixtureSourceOFL         = "OFL"
+	FixtureSourceGDTF        = "GDTF"
+	FixtureSourceEOS         = "EOS"
+	FixtureSourceUser        = "USER"
+	FixtureSourceSynthesized = "SYNTHESIZED"
+)
+
+// DefaultFixtureSourcePrecedence is the order used to pick between
+// definitions of the same manufacturer and model from different sources,
+// highest priority first.
+var DefaultFixtureSourcePrecedence = []string{
+	FixtureSourceUser,
+	FixtureSourceGDTF,
+	FixtureSourceOFL,
+	FixtureSourceBuiltIn,
+	FixtureSourceEOS,
+	FixtureSourceSynthesized,
+}
 
 // ChannelDefinition represents a channel within a fixture definition.
 // Table: channel_definitions

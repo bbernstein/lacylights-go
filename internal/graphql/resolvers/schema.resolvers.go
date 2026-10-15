@@ -288,6 +288,14 @@ func (r *fixtureDefinitionResolver) Modes(ctx context.Context, obj *models.Fixtu
 	return pointers, nil
 }
 
+// Source is the resolver for the source field.
+func (r *fixtureDefinitionResolver) Source(ctx context.Context, obj *models.FixtureDefinition) (generated.FixtureSource, error) {
+	if obj.Source == "" {
+		return generated.FixtureSourceUser, nil
+	}
+	return generated.FixtureSource(obj.Source), nil
+}
+
 // CreatedAt is the resolver for the createdAt field.
 func (r *fixtureDefinitionResolver) CreatedAt(ctx context.Context, obj *models.FixtureDefinition) (string, error) {
 	return obj.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z"), nil
@@ -1075,10 +1083,24 @@ func (r *mutationResolver) BulkDeleteProjects(ctx context.Context, projectIds []
 	}, nil
 }
 
+// SetFixtureSourcePrecedence is the resolver for the setFixtureSourcePrecedence field.
+func (r *mutationResolver) SetFixtureSourcePrecedence(ctx context.Context, order []generated.FixtureSource) ([]generated.FixtureSource, error) {
+	in := make([]string, len(order))
+	for i, s := range order {
+		in[i] = string(s)
+	}
+	stored, err := r.FixtureRepo.SetFixtureSourcePrecedence(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return toFixtureSources(stored), nil
+}
+
 // CreateFixtureDefinition is the resolver for the createFixtureDefinition field.
 func (r *mutationResolver) CreateFixtureDefinition(ctx context.Context, input generated.CreateFixtureDefinitionInput) (*models.FixtureDefinition, error) {
-	// Check if definition with same manufacturer/model already exists
-	existing, err := r.FixtureRepo.FindDefinitionByManufacturerModel(ctx, input.Manufacturer, input.Model)
+	// Check if a user definition with the same manufacturer/model already
+	// exists. Definitions from other sources (OFL, GDTF, ...) may share it.
+	existing, err := r.FixtureRepo.FindDefinitionBySourceManufacturerModel(ctx, models.FixtureSourceUser, input.Manufacturer, input.Model)
 	if err != nil {
 		return nil, err
 	}
@@ -1092,6 +1114,7 @@ func (r *mutationResolver) CreateFixtureDefinition(ctx context.Context, input ge
 		Model:        input.Model,
 		Type:         string(input.Type),
 		IsBuiltIn:    false,
+		Source:       models.FixtureSourceUser,
 	}
 
 	// Build channel definitions and track name -> ID mapping
@@ -1197,7 +1220,7 @@ func (r *mutationResolver) UpdateFixtureDefinition(ctx context.Context, id strin
 
 	// Check if changing manufacturer/model would conflict
 	if definition.Manufacturer != input.Manufacturer || definition.Model != input.Model {
-		existing, err := r.FixtureRepo.FindDefinitionByManufacturerModel(ctx, input.Manufacturer, input.Model)
+		existing, err := r.FixtureRepo.FindDefinitionBySourceManufacturerModel(ctx, definition.Source, input.Manufacturer, input.Model)
 		if err != nil {
 			return nil, err
 		}
@@ -5667,6 +5690,12 @@ func (r *queryResolver) FixtureDefinitions(ctx context.Context, filter *generate
 				}
 			}
 		}
+		// Apply source filter
+		if filter != nil && filter.Source.IsSet() {
+			if source := filter.Source.Value(); source != nil && def.Source != string(*source) {
+				continue
+			}
+		}
 		filtered = append(filtered, def)
 	}
 
@@ -5681,6 +5710,15 @@ func (r *queryResolver) FixtureDefinitions(ctx context.Context, filter *generate
 // FixtureDefinition is the resolver for the fixtureDefinition field.
 func (r *queryResolver) FixtureDefinition(ctx context.Context, id string) (*models.FixtureDefinition, error) {
 	return r.FixtureRepo.FindDefinitionByID(ctx, id)
+}
+
+// FixtureSourcePrecedence is the resolver for the fixtureSourcePrecedence field.
+func (r *queryResolver) FixtureSourcePrecedence(ctx context.Context) ([]generated.FixtureSource, error) {
+	order, err := r.FixtureRepo.FixtureSourcePrecedence(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return toFixtureSources(order), nil
 }
 
 // FixtureInstances is the resolver for the fixtureInstances field.

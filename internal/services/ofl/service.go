@@ -41,8 +41,8 @@ func (s *Service) ImportFixture(ctx context.Context, manufacturer, oflFixtureJSO
 
 	model := oflFixture.Name
 
-	// Check if fixture already exists
-	existing, err := s.fixtureRepo.FindDefinitionByManufacturerModel(ctx, manufacturer, model)
+	// Check if an OFL definition already exists (other sources may share the name)
+	existing, err := s.fixtureRepo.FindDefinitionBySourceManufacturerModel(ctx, models.FixtureSourceOFL, manufacturer, model)
 	if err != nil {
 		return nil, fmt.Errorf("error checking existing fixture: %w", err)
 	}
@@ -75,6 +75,7 @@ func (s *Service) ImportFixture(ctx context.Context, manufacturer, oflFixtureJSO
 			Model:        model,
 			Type:         fixtureType,
 			IsBuiltIn:    false,
+			Source:       models.FixtureSourceOFL,
 		}
 
 		if err := tx.Create(definition).Error; err != nil {
@@ -295,8 +296,8 @@ func (s *Service) ImportFixtureWithHash(ctx context.Context, manufacturer, oflFi
 
 	model := oflFixture.Name
 
-	// Check if fixture already exists
-	existing, err := s.fixtureRepo.FindDefinitionByManufacturerModel(ctx, manufacturer, model)
+	// Check if an OFL definition already exists (other sources may share the name)
+	existing, err := s.fixtureRepo.FindDefinitionBySourceManufacturerModel(ctx, models.FixtureSourceOFL, manufacturer, model)
 	if err != nil {
 		return nil, fmt.Errorf("error checking existing fixture: %w", err)
 	}
@@ -348,6 +349,9 @@ func (s *Service) ImportFixtureWithHash(ctx context.Context, manufacturer, oflFi
 			IsBuiltIn:     false,
 			OFLSourceHash: &hash,
 			OFLVersion:    &version,
+			Source:        models.FixtureSourceOFL,
+			SourceHash:    &hash,
+			SourceVersion: &version,
 		}
 
 		if err := tx.Create(definition).Error; err != nil {

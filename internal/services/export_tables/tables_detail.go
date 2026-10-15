@@ -15,6 +15,9 @@ const (
 	sourceOFL     = "OFL"
 	sourceBuiltIn = "Built-in"
 	sourceCustom  = "Custom"
+	sourceGDTF    = "GDTF"
+	sourceEOS     = "Eos"
+	sourceSynth   = "Synthesized"
 )
 
 // --- FIXTURE_TYPES / FIXTURE_LIBRARY ---------------------------------------
@@ -160,15 +163,22 @@ func buildFixtureLibrary(ctx context.Context, s *Service, _, _ string) (*TableDa
 	return &TableData{Columns: fixtureLibraryTable().Columns, Rows: rows}, nil
 }
 
-// definitionSource classifies a definition as OFL-imported, built-in or
-// user-created. Returns "" for a missing definition.
+// definitionSource labels where a definition came from. It uses Source,
+// falling back to the legacy OFL/built-in fields for rows that have not been
+// backfilled. Returns "" for a missing definition.
 func definitionSource(def *models.FixtureDefinition) string {
 	switch {
 	case def == nil:
 		return ""
-	case def.OFLSourceHash != nil:
+	case def.Source == models.FixtureSourceGDTF:
+		return sourceGDTF
+	case def.Source == models.FixtureSourceEOS:
+		return sourceEOS
+	case def.Source == models.FixtureSourceSynthesized:
+		return sourceSynth
+	case def.Source == models.FixtureSourceOFL, def.OFLSourceHash != nil:
 		return sourceOFL
-	case def.IsBuiltIn:
+	case def.Source == models.FixtureSourceBuiltIn, def.IsBuiltIn:
 		return sourceBuiltIn
 	default:
 		return sourceCustom

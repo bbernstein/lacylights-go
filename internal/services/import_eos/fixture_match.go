@@ -86,6 +86,7 @@ func (m *Matcher) synthesize(pers Personality) (*models.FixtureDefinition, []mod
 		Model:        pers.Model,
 		Type:         "OTHER",
 		IsBuiltIn:    false,
+		Source:       models.FixtureSourceSynthesized,
 	}
 	channels := make([]models.ChannelDefinition, len(pers.Channels))
 	for i, pc := range pers.Channels {
@@ -175,24 +176,29 @@ func (a *repoAdapter) FindMatchingDefinition(ctx context.Context, mfg, model str
 	if a.repo == nil {
 		return nil, nil
 	}
-	def, err := a.repo.FindDefinitionByManufacturerModel(ctx, mfg, model)
-	if err != nil || def == nil {
-		return nil, err
-	}
-	channels, err := a.repo.GetDefinitionChannels(ctx, def.ID)
+	// Candidates come back in source-precedence order; the first whose
+	// channel layout matches the personality wins.
+	defs, err := a.repo.FindDefinitionsByManufacturerModel(ctx, mfg, model)
 	if err != nil {
 		return nil, err
 	}
-	ids := channelDefsToParamIDs(channels)
-	if !slices.Equal(ids, paramIDs) {
-		return nil, nil
+	for _, def := range defs {
+		channels, err := a.repo.GetDefinitionChannels(ctx, def.ID)
+		if err != nil {
+			return nil, err
+		}
+		ids := channelDefsToParamIDs(channels)
+		if !slices.Equal(ids, paramIDs) {
+			continue
+		}
+		return &FakeDef{
+			ID:              def.ID,
+			Manufacturer:    def.Manufacturer,
+			Model:           def.Model,
+			ChannelParamIDs: ids,
+		}, nil
 	}
-	return &FakeDef{
-		ID:              def.ID,
-		Manufacturer:    def.Manufacturer,
-		Model:           def.Model,
-		ChannelParamIDs: ids,
-	}, nil
+	return nil, nil
 }
 
 // channelDefsToParamIDs derives a representative paramID slice from existing
