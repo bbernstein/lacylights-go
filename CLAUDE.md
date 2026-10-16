@@ -101,6 +101,17 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 - Configurable update rate (default 60Hz)
 - Handles concurrent scene activations
 
+### Fixture Definition Sources
+- `FixtureDefinition.Source` is one of USER, GDTF, OFL, BUILTIN, EOS, SYNTHESIZED
+  (`models.FixtureSource*`), plus `SourceID` / `SourceVersion` / `SourceHash` /
+  `SourcePayload`. Manufacturer + model are unique per source, not globally.
+- Lookups by manufacturer/model go through `FixtureRepository.FindDefinitionsByManufacturerModel`,
+  ordered by the `fixture_source_precedence` setting (default USER > GDTF > OFL > BUILTIN >
+  EOS > SYNTHESIZED). `setFixtureSourcePrecedence` is admin-only and only affects future matching.
+- Startup: `migrations.BackfillFixtureSources` classifies pre-source rows once (settings flag
+  `fixture_source_backfill`), then `ofl.ReclassifyLegacyImportsFromBundle` moves hashless legacy
+  OFL rows to OFL when their channels match the embedded bundle (flag `ofl_legacy_source_backfill`).
+
 ### Eos ASCII Import/Export
 - Parser/mapper: `internal/services/import_eos/`
 - Writer: `internal/services/export_eos/`

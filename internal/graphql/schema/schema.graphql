@@ -2625,7 +2625,9 @@ type Mutation {
   # Fixture Definitions
   """
   Set the fixture source preference order, highest first. Sources left out
-  are appended in default order. Returns the stored order.
+  are appended in default order. Returns the stored order. Admin only when
+  authentication is enabled. Affects future definition matching (project and
+  Eos imports, model pickers); existing fixtures keep their definitions.
   """
   setFixtureSourcePrecedence(order: [FixtureSource!]!): [FixtureSource!]!
   createFixtureDefinition(
