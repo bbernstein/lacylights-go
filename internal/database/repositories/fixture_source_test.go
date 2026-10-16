@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -87,6 +88,26 @@ func TestFixtureSourcePrecedence_CorruptSettingFallsBackToDefault(t *testing.T) 
 	}
 	if !reflect.DeepEqual(got, models.DefaultFixtureSourcePrecedence) {
 		t.Errorf("got %v, want default", got)
+	}
+}
+
+func TestFixtureSourcePrecedence_ReadErrorIsReturned(t *testing.T) {
+	tdb, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := NewFixtureRepository(tdb.DB)
+	seedSourceDefs(t, repo, models.FixtureSourceUser)
+	if err := tdb.DB.Migrator().DropTable(&models.Setting{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := repo.FixtureSourcePrecedence(ctx); err == nil {
+		t.Errorf("FixtureSourcePrecedence = %v, want a read error", got)
+	} else if !strings.Contains(err.Error(), FixtureSourcePrecedenceSettingKey) {
+		t.Errorf("error %q should name the setting", err)
+	}
+	if defs, err := repo.FindDefinitionsByManufacturerModel(ctx, "Acme", "Par"); err == nil {
+		t.Errorf("FindDefinitionsByManufacturerModel = %d defs, want the read error", len(defs))
 	}
 }
 

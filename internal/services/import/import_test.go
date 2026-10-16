@@ -1144,6 +1144,7 @@ func setupTestDB(t *testing.T) (*gorm.DB, func()) {
 		&models.Cue{},
 		&models.LookBoard{},
 		&models.LookBoardButton{},
+		&models.Setting{}, // fixture source precedence is read from settings
 	)
 	if err != nil {
 		t.Fatalf("Failed to migrate database: %v", err)

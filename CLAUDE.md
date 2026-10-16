@@ -108,6 +108,8 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 - Lookups by manufacturer/model go through `FixtureRepository.FindDefinitionsByManufacturerModel`,
   ordered by the `fixture_source_precedence` setting (default USER > GDTF > OFL > BUILTIN >
   EOS > SYNTHESIZED). `setFixtureSourcePrecedence` is admin-only and only affects future matching.
+  A database error reading the setting is returned to the caller; an invalid stored value is
+  logged and the default order is used. Test DBs that import projects must migrate `models.Setting`.
 - Startup: `migrations.BackfillFixtureSources` classifies pre-source rows once (settings flag
   `fixture_source_backfill`), then `ofl.ReclassifyLegacyImportsFromBundle` moves hashless legacy
   OFL rows to OFL when their channels match the embedded bundle (flag `ofl_legacy_source_backfill`).
