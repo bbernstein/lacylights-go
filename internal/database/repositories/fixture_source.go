@@ -53,14 +53,15 @@ func normalizeFixtureSourcePrecedence(order []string) ([]string, error) {
 }
 
 // FixtureSourcePrecedence returns the configured source precedence. A
-// missing setting yields the default order. A read error or an invalid
-// stored value is logged and also yields the default order: precedence is a
-// preference, so failing to read it must not fail the lookup that needs it.
+// missing setting yields the default order. An invalid stored value is
+// logged and also yields the default order, since it can only be fixed by
+// saving a new order. A database error is returned: silently using the
+// default order would hide a broken database and could pick the wrong
+// definition.
 func (r *FixtureRepository) FixtureSourcePrecedence(ctx context.Context) ([]string, error) {
 	setting, err := NewSettingRepository(r.db).FindByKey(ctx, FixtureSourcePrecedenceSettingKey)
 	if err != nil {
-		log.Printf("Warning: could not read %s, using the default order: %v", FixtureSourcePrecedenceSettingKey, err)
-		return slices.Clone(models.DefaultFixtureSourcePrecedence), nil
+		return nil, fmt.Errorf("read %s: %w", FixtureSourcePrecedenceSettingKey, err)
 	}
 	if setting == nil {
 		return slices.Clone(models.DefaultFixtureSourcePrecedence), nil
