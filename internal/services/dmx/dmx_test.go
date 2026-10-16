@@ -1816,12 +1816,13 @@ func TestTransmitLoopResetsTickerOnSignal(t *testing.T) {
 	svc := NewService(Config{Enabled: false, RefreshRateHz: 60, IdleRateHz: 1, HighRateDuration: time.Second})
 
 	// Change the rate and queue the reset signal before the loop starts, as
-	// ForceImmediateTransmission does. 2 Hz differs from the loop's initial
-	// lastRate (0), so the reset body runs, and its 500 ms interval means no
+	// ForceImmediateTransmission does. 1 Hz differs from the loop's initial
+	// lastRate (0), so the reset body runs, and its 1 s interval means no
 	// tick can be ready when the loop first selects: the queued signal is the
-	// only ready case.
+	// only ready case. The test checks that the branch runs (for coverage),
+	// not the new ticker's timing.
 	svc.mu.Lock()
-	svc.currentRate = 2
+	svc.currentRate = 1
 	svc.mu.Unlock()
 	svc.resetTickerChan <- struct{}{}
 
