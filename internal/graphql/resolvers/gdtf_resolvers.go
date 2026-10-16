@@ -2,9 +2,18 @@ package resolvers
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 	"github.com/bbernstein/lacylights-go/internal/services/gdtf"
+)
+
+// Per-request limits for importGdtfFixtures. Clients send batches of 25
+// files and at most 64 MB; these leave room while bounding the work one
+// request can cause.
+const (
+	maxGdtfFilesPerRequest = 200
+	maxGdtfRequestBytes    = gdtf.MaxTotalDescriptionBytes
 )
 
 // importGdtfFixtures implements the importGdtfFixtures mutation.
@@ -19,10 +28,18 @@ func (r *mutationResolver) importGdtfFixtures(ctx context.Context, files []*gene
 			opts.OnExisting = gdtf.OnExistingSkip
 		}
 	}
+	if len(files) > maxGdtfFilesPerRequest {
+		return nil, fmt.Errorf("too many files in one request: %d (at most %d; send them in batches)", len(files), maxGdtfFilesPerRequest)
+	}
 	in := make([]gdtf.File, 0, len(files))
+	total := 0
 	for _, f := range files {
 		if f == nil {
 			continue
+		}
+		total += len(f.DescriptionXML)
+		if total > maxGdtfRequestBytes {
+			return nil, fmt.Errorf("request is larger than %d MB of GDTF descriptions; send the files in smaller batches", maxGdtfRequestBytes>>20)
 		}
 		in = append(in, gdtf.File{FileName: f.FileName, DescriptionXML: f.DescriptionXML})
 	}

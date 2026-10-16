@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/99designs/gqlgen/client"
+
+	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 )
 
 const importGdtfMutation = `mutation($files: [GdtfFileInput!]!, $options: GdtfImportOptions) {
@@ -178,5 +180,30 @@ func TestImportGdtfFixtures_RequiresAuthentication(t *testing.T) {
 	}
 	if len(res.Results) != 0 {
 		t.Errorf("results = %v, want none", res.Results)
+	}
+}
+
+func TestImportGdtfFixtures_RequestLimits(t *testing.T) {
+	_, r, cleanup := testSetup(t)
+	defer cleanup()
+	m := r.Mutation().(*mutationResolver)
+	ctx := context.Background()
+
+	tooMany := make([]*generated.GdtfFileInput, maxGdtfFilesPerRequest+1)
+	for i := range tooMany {
+		tooMany[i] = &generated.GdtfFileInput{FileName: "f.gdtf", DescriptionXML: "<GDTF/>"}
+	}
+	if _, err := m.ImportGdtfFixtures(ctx, tooMany, nil); err == nil || !strings.Contains(err.Error(), "too many files") {
+		t.Errorf("too many files: err = %v", err)
+	}
+
+	big := strings.Repeat(" ", maxGdtfRequestBytes/2+1)
+	tooLarge := []*generated.GdtfFileInput{
+		{FileName: "a.gdtf", DescriptionXML: big},
+		nil,
+		{FileName: "b.gdtf", DescriptionXML: big},
+	}
+	if _, err := m.ImportGdtfFixtures(ctx, tooLarge, nil); err == nil || !strings.Contains(err.Error(), "larger than") {
+		t.Errorf("too large: err = %v", err)
 	}
 }

@@ -137,7 +137,8 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
   CREATED / UPDATED / UNCHANGED / SKIPPED / FAILED.
 - `ExtractDescriptions` reads `.gdtf` or `.zip` (nested ≤ 2) in memory with per-entry limits and a
   per-call budget (`MaxTotalFiles`, `MaxTotalDescriptionBytes`).
-- The mutation requires authentication (`requireAuthenticated`); `setFixtureSourcePrecedence`
+- The mutation requires authentication (`requireAuthenticated`) and accepts at most 200 files /
+  256 MB of descriptions per request; `setFixtureSourcePrecedence`
   requires an admin. Mode expansion is capped at `maxModeInstances` channel instances.
 - Definitions are `source = GDTF`, `source_id` = upper-cased FixtureTypeID. Re-import updates
   in place (same ID and RefID); `onExisting: SKIP` keeps the old one.
