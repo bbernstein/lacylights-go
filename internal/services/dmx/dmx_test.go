@@ -1806,3 +1806,52 @@ func TestForceImmediateTransmissionMultipleCalls(t *testing.T) {
 
 	t.Log("✓ Multiple ForceImmediateTransmission calls handled correctly")
 }
+
+// TestTransmitLoopResetsTickerOnSignal drives transmitLoop directly so the
+// reset-ticker branch runs deterministically. Tests that call
+// ForceImmediateTransmission and then Stop race the reset signal against
+// stopChan (select picks a ready case at random), which made this
+// package's coverage flaky on CI.
+func TestTransmitLoopResetsTickerOnSignal(t *testing.T) {
+	svc := NewService(Config{Enabled: false, RefreshRateHz: 60, IdleRateHz: 1, HighRateDuration: time.Second})
+
+	// Change the rate and queue the reset signal before the loop starts, as
+	// ForceImmediateTransmission does. 1 Hz differs from the loop's initial
+	// lastRate (0), so the reset body runs, and its 1 s interval means no
+	// tick can be ready when the loop first selects: the queued signal is the
+	// only ready case. The test checks that the branch runs (for coverage),
+	// not the new ticker's timing.
+	svc.mu.Lock()
+	svc.currentRate = 1
+	svc.mu.Unlock()
+	svc.resetTickerChan <- struct{}{}
+
+	done := make(chan struct{})
+	go func() {
+		svc.transmitLoop()
+		close(done)
+	}()
+
+	// resetTickerChan holds one signal, so this send completes only once the
+	// loop has received the first one, and the loop receives the second only
+	// after it has finished handling the first.
+	select {
+	case svc.resetTickerChan <- struct{}{}:
+	case <-time.After(2 * time.Second):
+		t.Fatal("transmitLoop did not take the reset signal")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for len(svc.resetTickerChan) > 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("transmitLoop did not finish handling the reset signal")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	close(svc.stopChan)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("transmitLoop did not stop")
+	}
+}
