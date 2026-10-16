@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 )
@@ -206,5 +207,30 @@ func TestSortDefinitionsByPrecedence_UnknownSourceLast(t *testing.T) {
 	SortDefinitionsByPrecedence(defs, models.DefaultFixtureSourcePrecedence)
 	if defs[0].ID != "c" || defs[1].ID != "b" || defs[2].ID != "a" {
 		t.Errorf("order = %s %s %s", defs[0].ID, defs[1].ID, defs[2].ID)
+	}
+}
+
+func TestFindDefinitionsByManufacturerModel_TiesOrderByID(t *testing.T) {
+	tdb, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	repo := NewFixtureRepository(tdb.DB)
+	same := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	for _, id := range []string{"b-def", "a-def", "c-def"} {
+		def := &models.FixtureDefinition{ID: id, Manufacturer: "Acme", Model: "Tie", Type: "LED_PAR", CreatedAt: same}
+		if err := repo.CreateDefinition(ctx, def); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := repo.FindDefinitionsByManufacturerModel(ctx, "Acme", "Tie")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, d := range got {
+		ids = append(ids, d.ID)
+	}
+	if want := []string{"a-def", "b-def", "c-def"}; !reflect.DeepEqual(ids, want) {
+		t.Errorf("order = %v, want %v", ids, want)
 	}
 }

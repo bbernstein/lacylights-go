@@ -98,7 +98,7 @@ func reclassifyCandidates(ctx context.Context, db *gorm.DB, zr *zip.Reader, cand
 		candidateMfrs[c.Manufacturer] = true
 	}
 
-	var ids []string
+	var matched []*models.FixtureDefinition
 	for _, f := range zr.File {
 		parts := strings.Split(f.Name, "/")
 		if len(parts) != 4 || parts[1] != "fixtures" || !strings.HasSuffix(f.Name, ".json") || parts[3] == ManufacturersFile {
@@ -127,22 +127,33 @@ func reclassifyCandidates(ctx context.Context, db *gorm.DB, zr *zip.Reader, cand
 		want := planChannelNames(plan)
 		for _, d := range defs {
 			if slices.Equal(definitionChannelNames(d), want) {
-				ids = append(ids, d.ID)
+				matched = append(matched, d)
 			}
 		}
 	}
 
-	if len(ids) == 0 {
+	if len(matched) == 0 {
 		return 0, nil
 	}
-	// Update in chunks to stay well below SQLite's bound-parameter limit.
-	for start := 0; start < len(ids); start += reclassifyChunkSize {
-		chunk := ids[start:min(start+reclassifyChunkSize, len(ids))]
-		if err := db.WithContext(ctx).Model(&models.FixtureDefinition{}).
-			Where("id IN ? AND source = ?", chunk, models.FixtureSourceUser).
-			Update("source", models.FixtureSourceOFL).Error; err != nil {
-			return 0, fmt.Errorf("reclassify legacy OFL definitions: %w", err)
+	ids := make([]string, len(matched))
+	for i, d := range matched {
+		ids[i] = d.ID
+		log.Printf("📋 Legacy OFL definition %s %q/%q matches the OFL bundle; source set to OFL", d.ID, d.Manufacturer, d.Model)
+	}
+	// One transaction, chunked to stay well below SQLite's bound-parameter limit.
+	err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for start := 0; start < len(ids); start += reclassifyChunkSize {
+			chunk := ids[start:min(start+reclassifyChunkSize, len(ids))]
+			if err := tx.Model(&models.FixtureDefinition{}).
+				Where("id IN ? AND source = ?", chunk, models.FixtureSourceUser).
+				Update("source", models.FixtureSourceOFL).Error; err != nil {
+				return fmt.Errorf("reclassify legacy OFL definitions: %w", err)
+			}
 		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
 	}
 	return len(ids), nil
 }
