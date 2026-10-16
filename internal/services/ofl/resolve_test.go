@@ -231,7 +231,7 @@ func TestBuildImportPlan_AvailableChannelOverridesTemplate(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := plan.Modes[0]
-	if plan.Channels[m.channelIdx[0]].Type != "INTENSITY" || plan.Channels[m.channelIdx[1]].Type != "EFFECT" {
+	if plan.Channels[m.channelIdx[0]].Type != "INTENSITY" || plan.Channels[m.channelIdx[1]].Type != "SPEED" {
 		t.Errorf("types = %s, %s", plan.Channels[m.channelIdx[0]].Type, plan.Channels[m.channelIdx[1]].Type)
 	}
 }

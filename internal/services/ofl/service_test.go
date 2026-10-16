@@ -411,6 +411,10 @@ func TestMapFadeBehavior(t *testing.T) {
 		{"FOCUS", false, "FADE"},
 		{"IRIS", false, "FADE"},
 		{"EFFECT", false, "FADE"},
+		{"COLOR_TEMPERATURE", false, "FADE"},
+		{"HUE", false, "FADE"},
+		{"SATURATION", false, "FADE"},
+		{"SPEED", false, "FADE"},
 		{"OTHER", false, "FADE"},
 
 		// Discrete channels should SNAP (regardless of type)
@@ -461,8 +465,10 @@ func TestMapChannelType(t *testing.T) {
 		{OFLCapability{Type: "ColorWheel"}, "COLOR_WHEEL"},
 		{OFLCapability{Type: "ColorPreset"}, "COLOR_WHEEL"},
 		{OFLCapability{Type: "Effect"}, "EFFECT"},
-		{OFLCapability{Type: "EffectSpeed"}, "EFFECT"},
-		{OFLCapability{Type: "Speed"}, "EFFECT"},
+		{OFLCapability{Type: "EffectSpeed"}, "SPEED"},
+		{OFLCapability{Type: "Speed"}, "SPEED"},
+		{OFLCapability{Type: "PanTiltSpeed"}, "SPEED"},
+		{OFLCapability{Type: "ColorTemperature"}, "COLOR_TEMPERATURE"},
 		{OFLCapability{Type: "Rotation"}, "EFFECT"},
 		{OFLCapability{Type: "ShutterStrobe"}, "STROBE"},
 		{OFLCapability{Type: "Maintenance"}, "MACRO"},

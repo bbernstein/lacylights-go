@@ -144,6 +144,14 @@ func channelNameFor(paramID int, table *ParamTable) string {
 		return "Gobo"
 	case generated.ChannelTypeStrobe:
 		return "Strobe"
+	case generated.ChannelTypeHue:
+		return "Hue"
+	case generated.ChannelTypeSaturation:
+		return "Saturation"
+	case generated.ChannelTypeColorTemperature:
+		return "Color Temperature"
+	case generated.ChannelTypeSpeed:
+		return "Speed"
 	}
 	return "Channel " + strconv.Itoa(paramID)
 }
@@ -220,6 +228,10 @@ func paramIDForChannelType(t string) int {
 		return 2
 	case generated.ChannelTypeTilt:
 		return 3
+	case generated.ChannelTypeHue:
+		return 7
+	case generated.ChannelTypeSaturation:
+		return 8
 	case generated.ChannelTypeRed:
 		return 12
 	case generated.ChannelTypeGreen:

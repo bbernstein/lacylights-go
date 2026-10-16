@@ -1364,31 +1364,35 @@ type WiFiStatus struct {
 type ChannelType string
 
 const (
-	ChannelTypeIntensity  ChannelType = "INTENSITY"
-	ChannelTypeRed        ChannelType = "RED"
-	ChannelTypeGreen      ChannelType = "GREEN"
-	ChannelTypeBlue       ChannelType = "BLUE"
-	ChannelTypeWhite      ChannelType = "WHITE"
-	ChannelTypeAmber      ChannelType = "AMBER"
-	ChannelTypeUv         ChannelType = "UV"
-	ChannelTypeCyan       ChannelType = "CYAN"
-	ChannelTypeMagenta    ChannelType = "MAGENTA"
-	ChannelTypeYellow     ChannelType = "YELLOW"
-	ChannelTypeLime       ChannelType = "LIME"
-	ChannelTypeIndigo     ChannelType = "INDIGO"
-	ChannelTypeColdWhite  ChannelType = "COLD_WHITE"
-	ChannelTypeWarmWhite  ChannelType = "WARM_WHITE"
-	ChannelTypePan        ChannelType = "PAN"
-	ChannelTypeTilt       ChannelType = "TILT"
-	ChannelTypeZoom       ChannelType = "ZOOM"
-	ChannelTypeFocus      ChannelType = "FOCUS"
-	ChannelTypeIris       ChannelType = "IRIS"
-	ChannelTypeGobo       ChannelType = "GOBO"
-	ChannelTypeColorWheel ChannelType = "COLOR_WHEEL"
-	ChannelTypeEffect     ChannelType = "EFFECT"
-	ChannelTypeStrobe     ChannelType = "STROBE"
-	ChannelTypeMacro      ChannelType = "MACRO"
-	ChannelTypeOther      ChannelType = "OTHER"
+	ChannelTypeIntensity        ChannelType = "INTENSITY"
+	ChannelTypeRed              ChannelType = "RED"
+	ChannelTypeGreen            ChannelType = "GREEN"
+	ChannelTypeBlue             ChannelType = "BLUE"
+	ChannelTypeWhite            ChannelType = "WHITE"
+	ChannelTypeAmber            ChannelType = "AMBER"
+	ChannelTypeUv               ChannelType = "UV"
+	ChannelTypeCyan             ChannelType = "CYAN"
+	ChannelTypeMagenta          ChannelType = "MAGENTA"
+	ChannelTypeYellow           ChannelType = "YELLOW"
+	ChannelTypeLime             ChannelType = "LIME"
+	ChannelTypeIndigo           ChannelType = "INDIGO"
+	ChannelTypeColdWhite        ChannelType = "COLD_WHITE"
+	ChannelTypeWarmWhite        ChannelType = "WARM_WHITE"
+	ChannelTypeColorTemperature ChannelType = "COLOR_TEMPERATURE"
+	ChannelTypeHue              ChannelType = "HUE"
+	ChannelTypeSaturation       ChannelType = "SATURATION"
+	ChannelTypePan              ChannelType = "PAN"
+	ChannelTypeTilt             ChannelType = "TILT"
+	ChannelTypeZoom             ChannelType = "ZOOM"
+	ChannelTypeFocus            ChannelType = "FOCUS"
+	ChannelTypeIris             ChannelType = "IRIS"
+	ChannelTypeGobo             ChannelType = "GOBO"
+	ChannelTypeColorWheel       ChannelType = "COLOR_WHEEL"
+	ChannelTypeEffect           ChannelType = "EFFECT"
+	ChannelTypeSpeed            ChannelType = "SPEED"
+	ChannelTypeStrobe           ChannelType = "STROBE"
+	ChannelTypeMacro            ChannelType = "MACRO"
+	ChannelTypeOther            ChannelType = "OTHER"
 )
 
 var AllChannelType = []ChannelType{
@@ -1406,6 +1410,9 @@ var AllChannelType = []ChannelType{
 	ChannelTypeIndigo,
 	ChannelTypeColdWhite,
 	ChannelTypeWarmWhite,
+	ChannelTypeColorTemperature,
+	ChannelTypeHue,
+	ChannelTypeSaturation,
 	ChannelTypePan,
 	ChannelTypeTilt,
 	ChannelTypeZoom,
@@ -1414,6 +1421,7 @@ var AllChannelType = []ChannelType{
 	ChannelTypeGobo,
 	ChannelTypeColorWheel,
 	ChannelTypeEffect,
+	ChannelTypeSpeed,
 	ChannelTypeStrobe,
 	ChannelTypeMacro,
 	ChannelTypeOther,
@@ -1421,7 +1429,7 @@ var AllChannelType = []ChannelType{
 
 func (e ChannelType) IsValid() bool {
 	switch e {
-	case ChannelTypeIntensity, ChannelTypeRed, ChannelTypeGreen, ChannelTypeBlue, ChannelTypeWhite, ChannelTypeAmber, ChannelTypeUv, ChannelTypeCyan, ChannelTypeMagenta, ChannelTypeYellow, ChannelTypeLime, ChannelTypeIndigo, ChannelTypeColdWhite, ChannelTypeWarmWhite, ChannelTypePan, ChannelTypeTilt, ChannelTypeZoom, ChannelTypeFocus, ChannelTypeIris, ChannelTypeGobo, ChannelTypeColorWheel, ChannelTypeEffect, ChannelTypeStrobe, ChannelTypeMacro, ChannelTypeOther:
+	case ChannelTypeIntensity, ChannelTypeRed, ChannelTypeGreen, ChannelTypeBlue, ChannelTypeWhite, ChannelTypeAmber, ChannelTypeUv, ChannelTypeCyan, ChannelTypeMagenta, ChannelTypeYellow, ChannelTypeLime, ChannelTypeIndigo, ChannelTypeColdWhite, ChannelTypeWarmWhite, ChannelTypeColorTemperature, ChannelTypeHue, ChannelTypeSaturation, ChannelTypePan, ChannelTypeTilt, ChannelTypeZoom, ChannelTypeFocus, ChannelTypeIris, ChannelTypeGobo, ChannelTypeColorWheel, ChannelTypeEffect, ChannelTypeSpeed, ChannelTypeStrobe, ChannelTypeMacro, ChannelTypeOther:
 		return true
 	}
 	return false
