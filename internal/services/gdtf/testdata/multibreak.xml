@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic GDTF description written for LacyLights tests. Not from GDTF Share. -->
+<GDTF DataVersion="1.2">
+  <FixtureType Name="TestFresnel" LongName="Test Fresnel With Scroller" Manufacturer="Synthetic Lighting Co" FixtureTypeID="5a1c0b7e-0000-4000-8000-000000000004">
+    <AttributeDefinitions>
+      <Attributes>
+        <Attribute Name="Dimmer" Pretty="Dimmer" Feature="Dimmer.Dimmer"/>
+        <Attribute Name="Color1" Pretty="Scroller" Feature="Color.Color"/>
+        <Attribute Name="Color1MSpeed" Pretty="Scroll Speed" Feature="Control.Control"/>
+      </Attributes>
+    </AttributeDefinitions>
+    <Geometries>
+      <Geometry Name="Body">
+        <Beam Name="Lamp"/>
+        <Geometry Name="Scroller"/>
+      </Geometry>
+    </Geometries>
+    <DMXModes>
+      <DMXMode Name="Dimmer + Scroller" Geometry="Body">
+        <DMXChannels>
+          <DMXChannel DMXBreak="1" Offset="1" Geometry="Lamp">
+            <LogicalChannel Attribute="Dimmer">
+              <ChannelFunction Name="Dimmer" Attribute="Dimmer" DMXFrom="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="2" Offset="1" Geometry="Scroller">
+            <LogicalChannel Attribute="Color1">
+              <ChannelFunction Name="Frame" Attribute="Color1" DMXFrom="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="2" Offset="2" Geometry="Scroller">
+            <LogicalChannel Attribute="Color1MSpeed">
+              <ChannelFunction Name="Speed" Attribute="Color1MSpeed" DMXFrom="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+        </DMXChannels>
+      </DMXMode>
+    </DMXModes>
+  </FixtureType>
+</GDTF>

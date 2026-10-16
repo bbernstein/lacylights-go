@@ -1208,6 +1208,12 @@ func (r *mutationResolver) ImportOFLFixture(ctx context.Context, input generated
 	return r.OFLService.ImportFixture(ctx, input.Manufacturer, input.OflFixtureJSON, replace)
 }
 
+// ImportGdtfFixtures is the resolver for the importGdtfFixtures field.
+// Each file is imported in its own transaction (see gdtf.Service.Import).
+func (r *mutationResolver) ImportGdtfFixtures(ctx context.Context, files []*generated.GdtfFileInput, options *generated.GdtfImportOptions) (*generated.GdtfImportResult, error) {
+	return r.importGdtfFixtures(ctx, files, options)
+}
+
 // UpdateFixtureDefinition is the resolver for the updateFixtureDefinition field.
 func (r *mutationResolver) UpdateFixtureDefinition(ctx context.Context, id string, input generated.CreateFixtureDefinitionInput) (*models.FixtureDefinition, error) {
 	// Find existing definition

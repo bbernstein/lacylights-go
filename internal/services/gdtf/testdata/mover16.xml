@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic GDTF description written for LacyLights tests. Not from GDTF Share. -->
+<GDTF DataVersion="1.2">
+  <FixtureType Name="TestSpot" LongName="" Manufacturer="Synthetic Lighting Co" FixtureTypeID="5A1C0B7E-0000-4000-8000-000000000002">
+    <AttributeDefinitions>
+      <Attributes>
+        <Attribute Name="Pan" Pretty="Pan" Feature="Position.PanTilt" PhysicalUnit="Angle"/>
+        <Attribute Name="Tilt" Pretty="Tilt" Feature="Position.PanTilt" PhysicalUnit="Angle"/>
+        <Attribute Name="Dimmer" Pretty="Dim" Feature="Dimmer.Dimmer"/>
+        <Attribute Name="Shutter1" Pretty="Shutter" Feature="Beam.Beam"/>
+        <Attribute Name="Color1" Pretty="Color Wheel" Feature="Color.Color"/>
+        <Attribute Name="Gobo1" Pretty="Gobo" Feature="Gobo.Gobo"/>
+        <Attribute Name="Gobo1PosRotate" Pretty="Gobo Rotate" Feature="Gobo.Gobo"/>
+        <Attribute Name="PositionMSpeed" Pretty="PT Speed" Feature="Control.Control"/>
+      </Attributes>
+    </AttributeDefinitions>
+    <Wheels>
+      <Wheel Name="Color Wheel 1">
+        <Slot Name="Open" Color="0.3127,0.3290,100.0"/>
+        <Slot Name="Red" Color="0.64,0.33,21.26"/>
+      </Wheel>
+    </Wheels>
+    <Geometries>
+      <Geometry Name="Base">
+        <Axis Name="Yoke">
+          <Axis Name="Head">
+            <Beam Name="Beam"/>
+          </Axis>
+        </Axis>
+      </Geometry>
+    </Geometries>
+    <DMXModes>
+      <DMXMode Name="Standard 16bit" Geometry="Base">
+        <DMXChannels>
+          <DMXChannel DMXBreak="1" Offset="1,2" Geometry="Yoke">
+            <LogicalChannel Attribute="Pan">
+              <ChannelFunction Name="Pan" Attribute="Pan" DMXFrom="0/2" Default="128/1" PhysicalFrom="-270" PhysicalTo="270"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="3,4" Geometry="Head">
+            <LogicalChannel Attribute="Tilt">
+              <ChannelFunction Name="Tilt" Attribute="Tilt" DMXFrom="0/2" Default="128/1s"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="5" Geometry="Head">
+            <LogicalChannel Attribute="PositionMSpeed">
+              <ChannelFunction Name="Speed" Attribute="PositionMSpeed" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="6" Geometry="Beam">
+            <LogicalChannel Attribute="Color1" Snap="Yes">
+              <ChannelFunction Name="Color1" Attribute="Color1" DMXFrom="0/1" Default="0/1" Wheel="Color Wheel 1">
+                <ChannelSet Name="Open" DMXFrom="0/1" WheelSlotIndex="1"/>
+                <ChannelSet Name="Red" DMXFrom="10/1" WheelSlotIndex="2"/>
+              </ChannelFunction>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="7" Geometry="Beam">
+            <LogicalChannel Attribute="Gobo1">
+              <ChannelFunction Name="Gobo1" Attribute="Gobo1" DMXFrom="0/1" Default="0/1">
+                <ChannelSet Name="Open" DMXFrom="0/1" WheelSlotIndex="1"/>
+                <ChannelSet Name="Dots" DMXFrom="8/1" WheelSlotIndex="2"/>
+              </ChannelFunction>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="8" Geometry="Beam">
+            <LogicalChannel Attribute="Gobo1PosRotate">
+              <ChannelFunction Name="Rotate" Attribute="Gobo1PosRotate" DMXFrom="0/1" Default="128/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="9" InitialFunction="Beam_Shutter1.Shutter1.Open" Geometry="Beam">
+            <LogicalChannel Attribute="Shutter1">
+              <ChannelFunction Name="Closed" Attribute="Shutter1" DMXFrom="0/1"/>
+              <ChannelFunction Name="Open" Attribute="Shutter1" DMXFrom="32/1" Default="40/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="10,11" Geometry="Beam">
+            <LogicalChannel Attribute="Dimmer">
+              <ChannelFunction Name="Dimmer" Attribute="Dimmer" DMXFrom="0/2" Default="0/2"/>
+            </LogicalChannel>
+          </DMXChannel>
+        </DMXChannels>
+      </DMXMode>
+      <DMXMode Name="Basic 8bit" Geometry="Base">
+        <DMXChannels>
+          <DMXChannel DMXBreak="1" Offset="1" Geometry="Yoke">
+            <LogicalChannel Attribute="Pan">
+              <ChannelFunction Name="Pan" Attribute="Pan" DMXFrom="0/1" Default="128/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="2" Geometry="Head">
+            <LogicalChannel Attribute="Tilt">
+              <ChannelFunction Name="Tilt" Attribute="Tilt" DMXFrom="0/1" Default="128/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="3" Geometry="Beam">
+            <LogicalChannel Attribute="Dimmer">
+              <ChannelFunction Name="Dimmer" Attribute="Dimmer" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+        </DMXChannels>
+      </DMXMode>
+    </DMXModes>
+  </FixtureType>
+</GDTF>
