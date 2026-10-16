@@ -581,3 +581,120 @@ func TestMapper_GroupsIdempotentReimport(t *testing.T) {
 		}
 	}
 }
+
+func TestMapper_ReimportUpgradesLegacySynthesizedChannelTypes(t *testing.T) {
+	// A synthesized definition created before HUE/SATURATION existed stores
+	// those channels as OTHER. Re-importing must still place hue and
+	// saturation values on those channels instead of dropping them.
+	deps := newTestDeps(t)
+	defer deps.close()
+	ctx := context.Background()
+
+	legacy := &models.FixtureDefinition{
+		Manufacturer: "Generic",
+		Model:        "HSI",
+		Type:         "OTHER",
+		RefID:        eosFixtureDefRefID("Generic", "HSI"),
+	}
+	legacyChannels := []models.ChannelDefinition{
+		{Offset: 0, Name: "Intensity", Type: "INTENSITY", MaxValue: 255},
+		{Offset: 1, Name: "Param 7", Type: "OTHER", MaxValue: 255},
+		{Offset: 2, Name: "Param 8", Type: "OTHER", MaxValue: 255},
+	}
+	if err := deps.fixtureRepo.CreateDefinitionWithChannels(ctx, legacy, legacyChannels); err != nil {
+		t.Fatal(err)
+	}
+
+	src := strings.NewReader(`Ident 3:0
+Manufacturer ETC
+Console Eos
+$$Format 3.20
+$$Title HSI
+
+$ParamType 1 1 Intens
+$ParamType 7 3 Hue
+$ParamType 8 3 Saturation
+
+$Personality 9200
+   $$Manuf Generic
+   $$Model HSI
+   $$Footprint 3
+   $$PersChan 1 1 1 0 0
+   $$PersChan 7 1 2 0 0
+   $$PersChan 8 1 3 0 0
+
+$Patch 1 1 9200
+
+$ColorPalette 1
+   Text Teal
+   $$Param  1 7@100 8@200
+`)
+	svc := NewServiceWithDeps(deps.projectRepo, deps.fixtureRepo, deps.fixtureGroupRepo, deps.lookRepo,
+		deps.cueListRepo, deps.cueRepo, deps.lookBoardRepo)
+	res, err := svc.Import(ctx, src, Options{NewProjectName: ptr("HSI")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.SynthesizedDefinitionIDs) != 0 {
+		t.Fatalf("expected the legacy definition to be reused, synthesized %v", res.SynthesizedDefinitionIDs)
+	}
+
+	looks, err := deps.lookRepo.FindByProjectID(ctx, res.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[int]int{}
+	for _, l := range looks {
+		values, err := deps.lookRepo.GetFixtureValues(ctx, l.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, fv := range values {
+			var chans []models.ChannelValue
+			if err := json.Unmarshal([]byte(fv.Channels), &chans); err != nil {
+				t.Fatal(err)
+			}
+			for _, cv := range chans {
+				got[cv.Offset] = cv.Value
+			}
+		}
+	}
+	if got[1] != 100 || got[2] != 200 {
+		t.Errorf("hue/saturation values = %v, want offset 1=100 and 2=200", got)
+	}
+
+	stored, err := deps.fixtureRepo.GetDefinitionChannels(ctx, legacy.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range stored {
+		if c.Offset > 0 && c.Type != "OTHER" {
+			t.Errorf("stored definition channel %d changed to %s; it should be left as is", c.Offset, c.Type)
+		}
+	}
+}
+
+func TestUpgradeLegacySynthChannels(t *testing.T) {
+	stored := []models.ChannelDefinition{
+		{Offset: 0, Type: "INTENSITY"},
+		{Offset: 1, Type: "OTHER"},
+		{Offset: 2, Type: "OTHER"},
+		{Offset: 3, Type: "RED"},
+	}
+	fresh := []models.ChannelDefinition{
+		{Offset: 0, Type: "INTENSITY"},
+		{Offset: 1, Type: "HUE"},
+		{Offset: 1, Type: "SPEED"}, // duplicate offset: first one wins
+		{Offset: 3, Type: "GREEN"}, // non-OTHER stored types are kept
+	}
+	got := upgradeLegacySynthChannels(stored, fresh)
+	want := []string{"INTENSITY", "HUE", "OTHER", "RED"}
+	for i, c := range got {
+		if c.Type != want[i] {
+			t.Errorf("offset %d type = %s, want %s", c.Offset, c.Type, want[i])
+		}
+	}
+	if stored[1].Type != "OTHER" {
+		t.Error("input slice was modified")
+	}
+}
