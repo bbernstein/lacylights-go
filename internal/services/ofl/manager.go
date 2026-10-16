@@ -461,7 +461,7 @@ func (m *Manager) runImport(ctx context.Context, opts *ImportOptions) (*ImportRe
 				}
 
 				// Changed - check if in use
-				defID, _ := m.updatesService.GetDefinitionIDByManufacturerModel(ctx, manufacturerName, strings.TrimSuffix(fixtureFileName, ".json"))
+				defID, _ := m.updatesService.GetOFLDefinitionIDByManufacturerModel(ctx, manufacturerName, strings.TrimSuffix(fixtureFileName, ".json"))
 				if defID != "" {
 					count, ok := instanceCounts[defID]
 					if ok && count > 0 && !opts.UpdateInUseFixtures {
@@ -569,6 +569,12 @@ func (m *Manager) downloadOFLZip(ctx context.Context, destPath string) error {
 
 // parseManufacturers finds and parses the manufacturers.json from the zip
 func (m *Manager) parseManufacturers(zipReader *zip.Reader) (map[string]Manufacturer, error) {
+	return parseManufacturersFromZip(zipReader)
+}
+
+// parseManufacturersFromZip reads fixtures/manufacturers.json from an OFL
+// archive, keyed by manufacturer key.
+func parseManufacturersFromZip(zipReader *zip.Reader) (map[string]Manufacturer, error) {
 	for _, f := range zipReader.File {
 		if strings.HasSuffix(f.Name, "fixtures/"+ManufacturersFile) {
 			rc, err := f.Open()

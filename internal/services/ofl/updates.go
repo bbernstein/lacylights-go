@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	"gorm.io/gorm"
 )
@@ -114,8 +115,11 @@ func (u *UpdatesService) GetFixtureInstanceCounts(ctx context.Context) (map[stri
 	return counts, nil
 }
 
-// GetDefinitionIDByManufacturerModel looks up a definition ID by manufacturer/model
-func (u *UpdatesService) GetDefinitionIDByManufacturerModel(ctx context.Context, manufacturer, model string) (string, error) {
+// GetOFLDefinitionIDByManufacturerModel looks up the OFL definition ID for a
+// manufacturer/model. Definitions from other sources may share the name, so
+// the lookup is limited to OFL to match the definition ImportFixtureWithHash
+// replaces.
+func (u *UpdatesService) GetOFLDefinitionIDByManufacturerModel(ctx context.Context, manufacturer, model string) (string, error) {
 	type idResult struct {
 		ID string
 	}
@@ -124,7 +128,8 @@ func (u *UpdatesService) GetDefinitionIDByManufacturerModel(ctx context.Context,
 	if err := u.db.WithContext(ctx).
 		Table("fixture_definitions").
 		Select("id").
-		Where("manufacturer = ? AND model = ?", manufacturer, model).
+		Where("source = ? AND manufacturer = ? AND model = ?", models.FixtureSourceOFL, manufacturer, model).
+		Order("created_at ASC").
 		First(&result).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return "", nil
@@ -184,7 +189,7 @@ func (u *UpdatesService) CompareFixture(
 	}
 
 	// Check if in use
-	defID, err := u.GetDefinitionIDByManufacturerModel(ctx, manufacturer, model)
+	defID, err := u.GetOFLDefinitionIDByManufacturerModel(ctx, manufacturer, model)
 	if err != nil {
 		return nil, err
 	}

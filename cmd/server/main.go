@@ -197,6 +197,11 @@ func main() {
 	if err := migrations.BackfillFixtureSources(db); err != nil {
 		log.Fatalf("Failed to backfill fixture sources: %v", err)
 	}
+	// Definitions from the original OFL startup loader carry no OFL hash;
+	// match them against the embedded OFL bundle to restore their source.
+	if _, err := ofl.ReclassifyLegacyImportsFromBundle(context.Background(), db); err != nil {
+		log.Printf("Warning: legacy OFL source backfill failed: %v", err)
+	}
 
 	// Backfill default layout canvas dimensions for existing projects
 	if err := backfillLayoutCanvasDimensions(db); err != nil {

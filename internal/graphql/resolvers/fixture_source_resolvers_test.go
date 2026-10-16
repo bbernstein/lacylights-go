@@ -2,12 +2,14 @@ package resolvers
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/99designs/gqlgen/client"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
+	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
 )
 
 // withVars turns alternating name/value pairs into GraphQL variables.
@@ -152,5 +154,26 @@ func TestFixtureSourcePrecedence_QueryAndSet(t *testing.T) {
 	err := c.Post(`mutation { setFixtureSourcePrecedence(order: [OFL, OFL]) }`, &m)
 	if err == nil {
 		t.Error("expected error for duplicate source")
+	}
+}
+
+func TestSetFixtureSourcePrecedence_RequiresAdmin(t *testing.T) {
+	r, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+	m := r.Mutation().(*mutationResolver)
+	order := []generated.FixtureSource{generated.FixtureSourceOfl}
+
+	if _, err := m.SetFixtureSourcePrecedence(context.Background(), order); !errors.Is(err, ErrNotAuthenticated) {
+		t.Errorf("unauthenticated: err = %v, want ErrNotAuthenticated", err)
+	}
+	if _, err := m.SetFixtureSourcePrecedence(createMemberContext("u", "u@test.com", "g"), order); !errors.Is(err, ErrNotAuthorized) {
+		t.Errorf("non-admin: err = %v, want ErrNotAuthorized", err)
+	}
+	got, err := m.SetFixtureSourcePrecedence(createAdminContext(), order)
+	if err != nil {
+		t.Fatalf("admin: %v", err)
+	}
+	if len(got) == 0 || got[0] != generated.FixtureSourceOfl {
+		t.Errorf("admin result = %v, want OFL first", got)
 	}
 }
