@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 
 	"github.com/lucsky/cuid"
 	"gorm.io/gorm"
@@ -69,6 +70,11 @@ type Result struct {
 // Service imports GDTF fixture types as fixture definitions.
 type Service struct {
 	db *gorm.DB
+	// importMu serializes imports: the existing-definition lookup and the
+	// insert are check-then-act, so two concurrent imports of the same
+	// FixtureTypeID could otherwise both create a definition. It also caps
+	// memory to one import's worth of parsing at a time.
+	importMu sync.Mutex
 }
 
 // NewService creates a GDTF import service.
@@ -82,7 +88,9 @@ func NewService(db *gorm.DB) *Service {
 // updated in place (UPDATED, keeping the definition ID and RefID) or left
 // alone (SKIPPED) per opts.OnExisting.
 func (s *Service) Import(ctx context.Context, files []File, opts Options) *Result {
-	if opts.OnExisting == "" {
+	s.importMu.Lock()
+	defer s.importMu.Unlock()
+	if opts.OnExisting != OnExistingSkip {
 		opts.OnExisting = OnExistingUpdate
 	}
 	res := &Result{Results: make([]FileResult, 0, len(files))}

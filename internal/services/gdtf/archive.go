@@ -35,6 +35,10 @@ const (
 	// MaxTotalFiles caps how many descriptions one ExtractDescriptions call
 	// returns, across all nested archives.
 	MaxTotalFiles = MaxArchiveEntries
+	// MaxTotalInflatedBytes caps how many bytes one ExtractDescriptions call
+	// decompresses in total (nested archives and descriptions), bounding the
+	// work done on archives that hold no descriptions.
+	MaxTotalInflatedBytes = 2 << 30
 )
 
 // descriptionFileName is the GDTF description at the root of a .gdtf.
@@ -48,8 +52,8 @@ var (
 	ErrDescriptionTooLarge = fmt.Errorf("description.xml is larger than %d MB", MaxDescriptionBytes>>20)
 	ErrNestingTooDeep      = fmt.Errorf("archives nested more than %d levels deep", MaxNestingDepth)
 	ErrNestedTooLarge      = fmt.Errorf("nested archive is larger than %d MB", MaxNestedArchiveBytes>>20)
-	ErrExtractionTooLarge  = fmt.Errorf("archive holds more than %d fixture files or %d MB of descriptions",
-		MaxTotalFiles, MaxTotalDescriptionBytes>>20)
+	ErrExtractionTooLarge  = fmt.Errorf("archive holds more than %d fixture files or %d MB of descriptions, or inflates to more than %d MB",
+		MaxTotalFiles, MaxTotalDescriptionBytes>>20, MaxTotalInflatedBytes>>20)
 )
 
 // File is one GDTF description to import.
@@ -80,8 +84,16 @@ func ExtractDescriptions(r io.ReaderAt, size int64, name string) ([]File, error)
 
 // extractBudget tracks what one ExtractDescriptions call has returned so far.
 type extractBudget struct {
-	files int
-	bytes int64
+	files    int
+	bytes    int64
+	inflated int64
+}
+
+// inflate records n decompressed bytes; false once the total passes
+// MaxTotalInflatedBytes.
+func (b *extractBudget) inflate(n int64) bool {
+	b.inflated += n
+	return b.inflated <= MaxTotalInflatedBytes
 }
 
 // take reserves room for one description of n bytes.
@@ -111,7 +123,7 @@ func extract(r io.ReaderAt, size int64, name string, depth int, budget *extractB
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
-		if !budget.take(int64(len(xmlText))) {
+		if !budget.inflate(int64(len(xmlText))) || !budget.take(int64(len(xmlText))) {
 			return nil, fmt.Errorf("%s: %w", name, ErrExtractionTooLarge)
 		}
 		return []File{{FileName: name, DescriptionXML: xmlText}}, nil
@@ -160,6 +172,9 @@ func extractEntry(f *zip.File, name string, depth int, budget *extractBudget) ([
 			return nil, fmt.Errorf("%s: %w", name, ErrNestedTooLarge)
 		}
 		return nil, fmt.Errorf("%s: %w", name, err)
+	}
+	if !budget.inflate(int64(len(data))) {
+		return nil, fmt.Errorf("%s: %w", name, ErrExtractionTooLarge)
 	}
 	return extract(bytes.NewReader(data), int64(len(data)), name, depth, budget)
 }

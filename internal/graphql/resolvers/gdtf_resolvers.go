@@ -9,11 +9,11 @@ import (
 )
 
 // Per-request limits for importGdtfFixtures. Clients send batches of 25
-// files and at most 64 MB; these leave room while bounding the work one
-// request can cause.
+// files and at most 64 MB; these leave 2x room or more while bounding the
+// work one request can cause.
 const (
 	maxGdtfFilesPerRequest = 200
-	maxGdtfRequestBytes    = gdtf.MaxTotalDescriptionBytes
+	maxGdtfRequestBytes    = 128 << 20
 )
 
 // importGdtfFixtures implements the importGdtfFixtures mutation.

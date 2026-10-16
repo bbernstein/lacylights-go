@@ -218,3 +218,27 @@ func TestExtractBudget_Bytes(t *testing.T) {
 		t.Error("description that exactly fills the budget should fit")
 	}
 }
+
+func TestExtractBudget_Inflated(t *testing.T) {
+	b := &extractBudget{}
+	if !b.inflate(MaxTotalInflatedBytes) {
+		t.Fatal("exactly the budget should fit")
+	}
+	if b.inflate(1) {
+		t.Error("one byte past the budget should not fit")
+	}
+}
+
+func TestExtractDescriptions_InflateBudgetStopsExtraction(t *testing.T) {
+	// Nested archives without descriptions still count against the budget.
+	budget := &extractBudget{inflated: MaxTotalInflatedBytes}
+	inner := buildZip(t, zipEntry{"readme.txt", []byte("no fixtures here")})
+	outer := buildZip(t, zipEntry{"a.zip", inner}, zipEntry{"b.zip", inner})
+	files, err := extract(bytes.NewReader(outer), int64(len(outer)), "all.zip", 0, budget)
+	if !errors.Is(err, ErrExtractionTooLarge) {
+		t.Fatalf("err = %v, want ErrExtractionTooLarge", err)
+	}
+	if len(files) != 0 {
+		t.Errorf("files = %d, want 0", len(files))
+	}
+}

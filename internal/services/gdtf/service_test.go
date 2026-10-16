@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
@@ -306,5 +307,43 @@ func TestImport_ExtractedArchive(t *testing.T) {
 	res := s.Import(context.Background(), files, Options{})
 	if res.CreatedCount != 2 || res.Results[0].FileName != "rig.zip/a/par.gdtf" {
 		t.Errorf("result = %+v", res)
+	}
+}
+
+func TestImport_ConcurrentSameFixtureTypeCreatesOne(t *testing.T) {
+	s, db := setupService(t)
+	text := readTestdata(t, "rgbw_par.xml")
+	const n = 4
+	statuses := make([]Status, n)
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			res := s.Import(context.Background(), []File{{FileName: "TestPar.gdtf", DescriptionXML: text}}, Options{})
+			statuses[i] = res.Results[0].Status
+		}(i)
+	}
+	wg.Wait()
+
+	var count int64
+	if err := db.DB.Model(&models.FixtureDefinition{}).Where("source = ?", models.FixtureSourceGDTF).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Errorf("GDTF definitions = %d, want 1", count)
+	}
+	created := 0
+	for _, st := range statuses {
+		switch st {
+		case StatusCreated:
+			created++
+		case StatusUnchanged:
+		default:
+			t.Errorf("unexpected status %s", st)
+		}
+	}
+	if created != 1 {
+		t.Errorf("created = %d, want 1 (statuses %v)", created, statuses)
 	}
 }
