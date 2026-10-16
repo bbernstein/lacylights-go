@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"slices"
 	"sort"
 	"strings"
@@ -52,15 +53,21 @@ func normalizeFixtureSourcePrecedence(order []string) ([]string, error) {
 }
 
 // FixtureSourcePrecedence returns the configured source precedence. A
-// missing or unreadable setting yields the default order: precedence is a
+// missing setting yields the default order. A read error or an invalid
+// stored value is logged and also yields the default order: precedence is a
 // preference, so failing to read it must not fail the lookup that needs it.
 func (r *FixtureRepository) FixtureSourcePrecedence(ctx context.Context) ([]string, error) {
 	setting, err := NewSettingRepository(r.db).FindByKey(ctx, FixtureSourcePrecedenceSettingKey)
-	if err != nil || setting == nil {
+	if err != nil {
+		log.Printf("Warning: could not read %s, using the default order: %v", FixtureSourcePrecedenceSettingKey, err)
+		return slices.Clone(models.DefaultFixtureSourcePrecedence), nil
+	}
+	if setting == nil {
 		return slices.Clone(models.DefaultFixtureSourcePrecedence), nil
 	}
 	order, err := ParseFixtureSourcePrecedence(setting.Value)
 	if err != nil {
+		log.Printf("Warning: ignoring stored %s: %v", FixtureSourcePrecedenceSettingKey, err)
 		return slices.Clone(models.DefaultFixtureSourcePrecedence), nil
 	}
 	return order, nil

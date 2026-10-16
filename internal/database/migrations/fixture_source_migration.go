@@ -3,19 +3,37 @@ package migrations
 import (
 	"fmt"
 
+	"github.com/bbernstein/lacylights-go/internal/database/models"
+	"github.com/lucsky/cuid"
 	"gorm.io/gorm"
 )
+
+// fixtureSourceBackfillSettingKey records that BackfillFixtureSources has
+// run, so its RefID heuristic never touches definitions created later.
+const fixtureSourceBackfillSettingKey = "fixture_source_backfill"
 
 // BackfillFixtureSources classifies fixture definitions that predate the
 // source column. Adding the column gives every existing row the default
 // 'USER'; this moves OFL imports, built-ins and Eos-synthesized definitions
 // to their real source. Only rows still marked 'USER' are touched, so it is
-// idempotent and safe to run on every server start.
+// idempotent. When a settings table exists it runs once and records that in
+// settings: every definition created afterwards is given its source
+// explicitly, and the "def-" RefID rule is only a heuristic for old rows.
 func BackfillFixtureSources(db *gorm.DB) error {
 	const table = "fixture_definitions"
 	m := db.Migrator()
 	if !m.HasTable(table) {
 		return nil
+	}
+	hasSettings := m.HasTable(models.Setting{}.TableName())
+	if hasSettings {
+		var done int64
+		if err := db.Model(&models.Setting{}).Where("key = ?", fixtureSourceBackfillSettingKey).Count(&done).Error; err != nil {
+			return fmt.Errorf("backfill fixture sources: %w", err)
+		}
+		if done > 0 {
+			return nil
+		}
 	}
 	for _, col := range []string{"source", "source_hash", "source_version", "ofl_source_hash", "ofl_version", "is_built_in", "ref_id"} {
 		if !m.HasColumn(table, col) {
@@ -38,6 +56,12 @@ func BackfillFixtureSources(db *gorm.DB) error {
 	for _, stmt := range stmts {
 		if err := db.Exec(stmt).Error; err != nil {
 			return fmt.Errorf("backfill fixture sources: %w", err)
+		}
+	}
+	if hasSettings {
+		mark := models.Setting{ID: cuid.New(), Key: fixtureSourceBackfillSettingKey, Value: "done"}
+		if err := db.Create(&mark).Error; err != nil {
+			return fmt.Errorf("backfill fixture sources: record completion: %w", err)
 		}
 	}
 	return nil

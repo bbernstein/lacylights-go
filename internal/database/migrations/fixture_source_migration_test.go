@@ -1,6 +1,10 @@
 package migrations
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/bbernstein/lacylights-go/internal/database/models"
+)
 
 const fixtureDefsDDL = `CREATE TABLE fixture_definitions (
 	id TEXT PRIMARY KEY, ref_id TEXT, is_built_in NUMERIC DEFAULT false,
@@ -56,5 +60,45 @@ func TestBackfillFixtureSources_SkipsMissingTableOrColumn(t *testing.T) {
 	}
 	if err := BackfillFixtureSources(db); err != nil {
 		t.Fatalf("no source column: %v", err)
+	}
+}
+
+func TestBackfillFixtureSources_RunsOnceWithSettingsTable(t *testing.T) {
+	db := openTestDB(t)
+	if err := db.Exec(fixtureDefsDDL).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.Setting{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO fixture_definitions (id, ref_id, source) VALUES ('old', 'def-A-B', 'USER')`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := BackfillFixtureSources(db); err != nil {
+		t.Fatal(err)
+	}
+	// A definition created after the backfill keeps its explicit source,
+	// even with a "def-" RefID.
+	if err := db.Exec(`INSERT INTO fixture_definitions (id, ref_id, source) VALUES ('new', 'def-C-D', 'USER')`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := BackfillFixtureSources(db); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	var rows []struct{ ID, Source string }
+	if err := db.Raw(`SELECT id, source FROM fixture_definitions`).Scan(&rows).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		got[r.ID] = r.Source
+	}
+	if got["old"] != "SYNTHESIZED" || got["new"] != "USER" {
+		t.Errorf("sources = %v, want old SYNTHESIZED and new USER", got)
+	}
+	var marks int64
+	db.Model(&models.Setting{}).Where("key = ?", fixtureSourceBackfillSettingKey).Count(&marks)
+	if marks != 1 {
+		t.Errorf("completion marks = %d, want 1", marks)
 	}
 }
