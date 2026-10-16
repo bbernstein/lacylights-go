@@ -158,6 +158,7 @@ func (m *Mapper) Apply(ctx context.Context, show *Show, sidecar Sidecar, opts Op
 				if err != nil {
 					return nil, fmt.Errorf("load existing synth def channels: %w", err)
 				}
+				channels = upgradeLegacySynthChannels(channels, mr.SynthesizedChannels)
 				defByID[defID] = existing
 			} else {
 				mr.SynthesizedDef.RefID = refID
@@ -336,6 +337,44 @@ func applyDenormalizedDefFields(instance *models.FixtureInstance, def *models.Fi
 	instance.Manufacturer = &def.Manufacturer
 	instance.Model = &def.Model
 	instance.Type = &def.Type
+}
+
+// upgradeLegacySynthChannels returns a copy of stored in which every OTHER
+// channel takes the type of the freshly synthesized channel at the same
+// offset. Synthesized definitions created before a channel type existed (for
+// example HUE or SPEED) store those channels as OTHER; without this, look
+// values for those parameters would find no channel of the new type and be
+// dropped on re-import.
+//
+// The upgrade only applies when stored and fresh have the same channel
+// count and offsets; if the layout differs (the definition was edited, or
+// the personality changed) stored is returned unchanged.
+//
+// The stored definition itself is not modified. Instance channels created
+// from the returned slice carry the new types, so a re-imported fixture's
+// channel types can be newer than its definition's; playback and export use
+// the instance channels.
+func upgradeLegacySynthChannels(stored, fresh []models.ChannelDefinition) []models.ChannelDefinition {
+	if len(stored) != len(fresh) {
+		return stored
+	}
+	freshType := make(map[int]string, len(fresh))
+	for _, c := range fresh {
+		freshType[c.Offset] = c.Type
+	}
+	for _, c := range stored {
+		if _, ok := freshType[c.Offset]; !ok {
+			return stored
+		}
+	}
+	out := make([]models.ChannelDefinition, len(stored))
+	copy(out, stored)
+	for i := range out {
+		if out[i].Type == string(generated.ChannelTypeOther) && freshType[out[i].Offset] != "" {
+			out[i].Type = freshType[out[i].Offset]
+		}
+	}
+	return out
 }
 
 // createInstanceChannelsFor copies definition channels to instance channels.
