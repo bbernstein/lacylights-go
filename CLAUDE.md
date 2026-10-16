@@ -130,6 +130,22 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
   `targetProjectId` (append) — they are mutually exclusive and the resolver
   returns an error if both are set.
 
+### GDTF Fixture Import
+- Package: `internal/services/gdtf/` (design: `../docs/plans/2026-10-15-gdtf-import-design.md`)
+- GraphQL: `importGdtfFixtures(files: [GdtfFileInput!]!, options)` takes description.xml
+  strings (clients unzip the `.gdtf`); each file is its own transaction and gets a status
+  CREATED / UPDATED / UNCHANGED / SKIPPED / FAILED.
+- `ExtractDescriptions` reads `.gdtf` or `.zip` (nested ≤ 2) in memory with per-entry limits and a
+  per-call budget (`MaxTotalFiles`, `MaxTotalDescriptionBytes`, `MaxTotalInflatedBytes`).
+- The mutation requires authentication (`requireAuthenticated`) and accepts at most 200 files /
+  128 MB of descriptions per request (imports are serialized); `setFixtureSourcePrecedence`
+  requires an admin. Mode expansion is capped at `maxModeInstances` channel instances.
+- Definitions are `source = GDTF`, `source_id` = upper-cased FixtureTypeID. Re-import updates
+  in place (same ID and RefID); `onExisting: SKIP` keeps the old one.
+- GDTF 1.2 supported; 1.1 and 1.3+ import with a warning; 1.0 is rejected.
+- Multi-break modes become one mode per break, "<Mode> (Break N)".
+- Tests use synthetic `testdata/*.xml` only. Never add GDTF Share or manufacturer files.
+
 ### Data Export (CSV / XLSX)
 - Package: `internal/services/export_tables/` (Go package `exporttables`)
 - Table registry (`tables.go`, `tables_detail.go`): each table has an ID matching

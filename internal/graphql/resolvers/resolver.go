@@ -16,6 +16,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/services/export"
 	exporteos "github.com/bbernstein/lacylights-go/internal/services/export_eos"
 	exporttables "github.com/bbernstein/lacylights-go/internal/services/export_tables"
+	"github.com/bbernstein/lacylights-go/internal/services/gdtf"
 	importservice "github.com/bbernstein/lacylights-go/internal/services/import"
 	importeos "github.com/bbernstein/lacylights-go/internal/services/import_eos"
 	"github.com/bbernstein/lacylights-go/internal/services/modulator"
@@ -58,6 +59,7 @@ type Resolver struct {
 	EosExportService *exporteos.Service
 	DataExportService *exporttables.Service
 	OFLService      *ofl.Service
+	GDTFService     *gdtf.Service
 	OFLManager      *ofl.Manager
 	PreviewService  *preview.Service
 	VersionService  *version.Service
@@ -134,6 +136,7 @@ func NewResolver(db *gorm.DB, dmxService *dmx.Service, fadeEngine *modulator.Eng
 			Counts:        repositories.NewRowCounter(db),
 		}),
 		OFLService:      ofl.NewService(db, fixtureRepo),
+		GDTFService:     gdtf.NewService(db),
 		OFLManager:      oflManager,
 		PreviewService:  preview.NewService(fixtureRepo, lookRepo, dmxService),
 		VersionService:  version.NewService(),

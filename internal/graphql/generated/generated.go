@@ -553,6 +553,26 @@ type ComplexityRoot struct {
 		LookOrder func(childComplexity int) int
 	}
 
+	GdtfImportFileResult struct {
+		Definition   func(childComplexity int) int
+		Error        func(childComplexity int) int
+		FileName     func(childComplexity int) int
+		Manufacturer func(childComplexity int) int
+		ModeCount    func(childComplexity int) int
+		Model        func(childComplexity int) int
+		Status       func(childComplexity int) int
+		Warnings     func(childComplexity int) int
+	}
+
+	GdtfImportResult struct {
+		CreatedCount   func(childComplexity int) int
+		FailedCount    func(childComplexity int) int
+		Results        func(childComplexity int) int
+		SkippedCount   func(childComplexity int) int
+		UnchangedCount func(childComplexity int) int
+		UpdatedCount   func(childComplexity int) int
+	}
+
 	GlobalPlaybackStatus struct {
 		CueCount        func(childComplexity int) int
 		CueListID       func(childComplexity int) int
@@ -817,6 +837,7 @@ type ComplexityRoot struct {
 		FadeToBlack                            func(childComplexity int, fadeOutTime float64) int
 		ForgetWiFiNetwork                      func(childComplexity int, ssid string) int
 		GoToCue                                func(childComplexity int, cueListID string, cueIndex int, fadeInTime *float64) int
+		ImportGdtfFixtures                     func(childComplexity int, files []*GdtfFileInput, options *GdtfImportOptions) int
 		ImportOFLFixture                       func(childComplexity int, input ImportOFLFixtureInput) int
 		ImportProject                          func(childComplexity int, jsonContent string, options ImportOptionsInput) int
 		ImportProjectFromEos                   func(childComplexity int, asciiContent string, options *EosImportOptionsInput) int
@@ -1491,6 +1512,7 @@ type MutationResolver interface {
 	SetFixtureSourcePrecedence(ctx context.Context, order []FixtureSource) ([]FixtureSource, error)
 	CreateFixtureDefinition(ctx context.Context, input CreateFixtureDefinitionInput) (*models.FixtureDefinition, error)
 	ImportOFLFixture(ctx context.Context, input ImportOFLFixtureInput) (*models.FixtureDefinition, error)
+	ImportGdtfFixtures(ctx context.Context, files []*GdtfFileInput, options *GdtfImportOptions) (*GdtfImportResult, error)
 	UpdateFixtureDefinition(ctx context.Context, id string, input CreateFixtureDefinitionInput) (*models.FixtureDefinition, error)
 	DeleteFixtureDefinition(ctx context.Context, id string) (bool, error)
 	BulkCreateFixtureDefinitions(ctx context.Context, input BulkFixtureDefinitionCreateInput) ([]*models.FixtureDefinition, error)
@@ -3775,6 +3797,92 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.FixtureValue.LookOrder(childComplexity), true
 
+	case "GdtfImportFileResult.definition":
+		if e.complexity.GdtfImportFileResult.Definition == nil {
+			break
+		}
+
+		return e.complexity.GdtfImportFileResult.Definition(childComplexity), true
+	case "GdtfImportFileResult.error":
+		if e.complexity.GdtfImportFileResult.Error == nil {
+			break
+		}
+
+		return e.complexity.GdtfImportFileResult.Error(childComplexity), true
+	case "GdtfImportFileResult.fileName":
+		if e.complexity.GdtfImportFileResult.FileName == nil {
+			break
+		}
+
+		return e.complexity.GdtfImportFileResult.FileName(childComplexity), true
+	case "GdtfImportFileResult.manufacturer":
+		if e.complexity.GdtfImportFileResult.Manufacturer == nil {
+			break
+		}
+
+		return e.complexity.GdtfImportFileResult.Manufacturer(childComplexity), true
+	case "GdtfImportFileResult.modeCount":
+		if e.complexity.GdtfImportFileResult.ModeCount == nil {
+			break
+		}
+
+		return e.complexity.GdtfImportFileResult.ModeCount(childComplexity), true
+	case "GdtfImportFileResult.model":
+		if e.complexity.GdtfImportFileResult.Model == nil {
+			break
+		}
+
+		return e.complexity.GdtfImportFileResult.Model(childComplexity), true
+	case "GdtfImportFileResult.status":
+		if e.complexity.GdtfImportFileResult.Status == nil {
+			break
+		}
+
+		return e.complexity.GdtfImportFileResult.Status(childComplexity), true
+	case "GdtfImportFileResult.warnings":
+		if e.complexity.GdtfImportFileResult.Warnings == nil {
+			break
+		}
+
+		return e.complexity.GdtfImportFileResult.Warnings(childComplexity), true
+
+	case "GdtfImportResult.createdCount":
+		if e.complexity.GdtfImportResult.CreatedCount == nil {
+			break
+		}
+
+		return e.complexity.GdtfImportResult.CreatedCount(childComplexity), true
+	case "GdtfImportResult.failedCount":
+		if e.complexity.GdtfImportResult.FailedCount == nil {
+			break
+		}
+
+		return e.complexity.GdtfImportResult.FailedCount(childComplexity), true
+	case "GdtfImportResult.results":
+		if e.complexity.GdtfImportResult.Results == nil {
+			break
+		}
+
+		return e.complexity.GdtfImportResult.Results(childComplexity), true
+	case "GdtfImportResult.skippedCount":
+		if e.complexity.GdtfImportResult.SkippedCount == nil {
+			break
+		}
+
+		return e.complexity.GdtfImportResult.SkippedCount(childComplexity), true
+	case "GdtfImportResult.unchangedCount":
+		if e.complexity.GdtfImportResult.UnchangedCount == nil {
+			break
+		}
+
+		return e.complexity.GdtfImportResult.UnchangedCount(childComplexity), true
+	case "GdtfImportResult.updatedCount":
+		if e.complexity.GdtfImportResult.UpdatedCount == nil {
+			break
+		}
+
+		return e.complexity.GdtfImportResult.UpdatedCount(childComplexity), true
+
 	case "GlobalPlaybackStatus.cueCount":
 		if e.complexity.GlobalPlaybackStatus.CueCount == nil {
 			break
@@ -5428,6 +5536,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.GoToCue(childComplexity, args["cueListId"].(string), args["cueIndex"].(int), args["fadeInTime"].(*float64)), true
+	case "Mutation.importGdtfFixtures":
+		if e.complexity.Mutation.ImportGdtfFixtures == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_importGdtfFixtures_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.ImportGdtfFixtures(childComplexity, args["files"].([]*GdtfFileInput), args["options"].(*GdtfImportOptions)), true
 	case "Mutation.importOFLFixture":
 		if e.complexity.Mutation.ImportOFLFixture == nil {
 			break
@@ -8590,6 +8709,8 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputFixtureSpecInput,
 		ec.unmarshalInputFixtureUpdateItem,
 		ec.unmarshalInputFixtureValueInput,
+		ec.unmarshalInputGdtfFileInput,
+		ec.unmarshalInputGdtfImportOptions,
 		ec.unmarshalInputImportOFLFixtureInput,
 		ec.unmarshalInputImportOptionsInput,
 		ec.unmarshalInputLookBoardButtonPositionInput,
@@ -10529,6 +10650,58 @@ input ImportOFLFixtureInput {
   replace: Boolean
 }
 
+"""
+One GDTF fixture type to import: the description.xml of a .gdtf file.
+Clients unzip the .gdtf (or a .zip of them) and send only description.xml.
+"""
+input GdtfFileInput {
+  "Original file name, e.g. Foo.gdtf or archive.zip/inner/Foo.gdtf"
+  fileName: String!
+  "Contents of the .gdtf's description.xml (at most 32 MB)"
+  descriptionXml: String!
+}
+
+input GdtfImportOptions {
+  "What to do when the same FixtureTypeID was imported before and changed"
+  onExisting: GdtfExistingPolicy = UPDATE
+}
+
+enum GdtfExistingPolicy {
+  "Rebuild the existing definition in place, keeping its ID"
+  UPDATE
+  "Keep the existing definition unchanged"
+  SKIP
+}
+
+enum GdtfImportStatus {
+  CREATED
+  UPDATED
+  UNCHANGED
+  SKIPPED
+  FAILED
+}
+
+type GdtfImportFileResult {
+  fileName: String!
+  status: GdtfImportStatus!
+  "The created, updated or existing definition; null when FAILED"
+  definition: FixtureDefinition
+  manufacturer: String
+  model: String
+  modeCount: Int
+  warnings: [String!]!
+  error: String
+}
+
+type GdtfImportResult {
+  results: [GdtfImportFileResult!]!
+  createdCount: Int!
+  updatedCount: Int!
+  unchangedCount: Int!
+  skippedCount: Int!
+  failedCount: Int!
+}
+
 input CreateFixtureInstanceInput {
   name: String!
   description: String
@@ -11369,6 +11542,11 @@ type Mutation {
     input: CreateFixtureDefinitionInput!
   ): FixtureDefinition!
   importOFLFixture(input: ImportOFLFixtureInput!): FixtureDefinition!
+  """
+  Import GDTF fixture types (description.xml contents). Each file is imported
+  in its own transaction; a failed file does not fail the others.
+  """
+  importGdtfFixtures(files: [GdtfFileInput!]!, options: GdtfImportOptions): GdtfImportResult!
   updateFixtureDefinition(
     id: ID!
     input: CreateFixtureDefinitionInput!
@@ -12698,6 +12876,22 @@ func (ec *executionContext) field_Mutation_goToCue_args(ctx context.Context, raw
 		return nil, err
 	}
 	args["fadeInTime"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_importGdtfFixtures_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "files", ec.unmarshalNGdtfFileInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfFileInputᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["files"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "options", ec.unmarshalOGdtfImportOptions2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfImportOptions)
+	if err != nil {
+		return nil, err
+	}
+	args["options"] = arg1
 	return args, nil
 }
 
@@ -25086,6 +25280,456 @@ func (ec *executionContext) fieldContext_FixtureValue_lookOrder(_ context.Contex
 	return fc, nil
 }
 
+func (ec *executionContext) _GdtfImportFileResult_fileName(ctx context.Context, field graphql.CollectedField, obj *GdtfImportFileResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GdtfImportFileResult_fileName,
+		func(ctx context.Context) (any, error) {
+			return obj.FileName, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GdtfImportFileResult_fileName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GdtfImportFileResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GdtfImportFileResult_status(ctx context.Context, field graphql.CollectedField, obj *GdtfImportFileResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GdtfImportFileResult_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNGdtfImportStatus2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfImportStatus,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GdtfImportFileResult_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GdtfImportFileResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type GdtfImportStatus does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GdtfImportFileResult_definition(ctx context.Context, field graphql.CollectedField, obj *GdtfImportFileResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GdtfImportFileResult_definition,
+		func(ctx context.Context) (any, error) {
+			return obj.Definition, nil
+		},
+		nil,
+		ec.marshalOFixtureDefinition2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋdatabaseᚋmodelsᚐFixtureDefinition,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_GdtfImportFileResult_definition(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GdtfImportFileResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FixtureDefinition_id(ctx, field)
+			case "refId":
+				return ec.fieldContext_FixtureDefinition_refId(ctx, field)
+			case "manufacturer":
+				return ec.fieldContext_FixtureDefinition_manufacturer(ctx, field)
+			case "model":
+				return ec.fieldContext_FixtureDefinition_model(ctx, field)
+			case "type":
+				return ec.fieldContext_FixtureDefinition_type(ctx, field)
+			case "channels":
+				return ec.fieldContext_FixtureDefinition_channels(ctx, field)
+			case "modes":
+				return ec.fieldContext_FixtureDefinition_modes(ctx, field)
+			case "isBuiltIn":
+				return ec.fieldContext_FixtureDefinition_isBuiltIn(ctx, field)
+			case "source":
+				return ec.fieldContext_FixtureDefinition_source(ctx, field)
+			case "sourceId":
+				return ec.fieldContext_FixtureDefinition_sourceId(ctx, field)
+			case "sourceVersion":
+				return ec.fieldContext_FixtureDefinition_sourceVersion(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_FixtureDefinition_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FixtureDefinition", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GdtfImportFileResult_manufacturer(ctx context.Context, field graphql.CollectedField, obj *GdtfImportFileResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GdtfImportFileResult_manufacturer,
+		func(ctx context.Context) (any, error) {
+			return obj.Manufacturer, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_GdtfImportFileResult_manufacturer(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GdtfImportFileResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GdtfImportFileResult_model(ctx context.Context, field graphql.CollectedField, obj *GdtfImportFileResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GdtfImportFileResult_model,
+		func(ctx context.Context) (any, error) {
+			return obj.Model, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_GdtfImportFileResult_model(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GdtfImportFileResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GdtfImportFileResult_modeCount(ctx context.Context, field graphql.CollectedField, obj *GdtfImportFileResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GdtfImportFileResult_modeCount,
+		func(ctx context.Context) (any, error) {
+			return obj.ModeCount, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_GdtfImportFileResult_modeCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GdtfImportFileResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GdtfImportFileResult_warnings(ctx context.Context, field graphql.CollectedField, obj *GdtfImportFileResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GdtfImportFileResult_warnings,
+		func(ctx context.Context) (any, error) {
+			return obj.Warnings, nil
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GdtfImportFileResult_warnings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GdtfImportFileResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GdtfImportFileResult_error(ctx context.Context, field graphql.CollectedField, obj *GdtfImportFileResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GdtfImportFileResult_error,
+		func(ctx context.Context) (any, error) {
+			return obj.Error, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_GdtfImportFileResult_error(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GdtfImportFileResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GdtfImportResult_results(ctx context.Context, field graphql.CollectedField, obj *GdtfImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GdtfImportResult_results,
+		func(ctx context.Context) (any, error) {
+			return obj.Results, nil
+		},
+		nil,
+		ec.marshalNGdtfImportFileResult2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfImportFileResultᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GdtfImportResult_results(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GdtfImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "fileName":
+				return ec.fieldContext_GdtfImportFileResult_fileName(ctx, field)
+			case "status":
+				return ec.fieldContext_GdtfImportFileResult_status(ctx, field)
+			case "definition":
+				return ec.fieldContext_GdtfImportFileResult_definition(ctx, field)
+			case "manufacturer":
+				return ec.fieldContext_GdtfImportFileResult_manufacturer(ctx, field)
+			case "model":
+				return ec.fieldContext_GdtfImportFileResult_model(ctx, field)
+			case "modeCount":
+				return ec.fieldContext_GdtfImportFileResult_modeCount(ctx, field)
+			case "warnings":
+				return ec.fieldContext_GdtfImportFileResult_warnings(ctx, field)
+			case "error":
+				return ec.fieldContext_GdtfImportFileResult_error(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type GdtfImportFileResult", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GdtfImportResult_createdCount(ctx context.Context, field graphql.CollectedField, obj *GdtfImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GdtfImportResult_createdCount,
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GdtfImportResult_createdCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GdtfImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GdtfImportResult_updatedCount(ctx context.Context, field graphql.CollectedField, obj *GdtfImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GdtfImportResult_updatedCount,
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GdtfImportResult_updatedCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GdtfImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GdtfImportResult_unchangedCount(ctx context.Context, field graphql.CollectedField, obj *GdtfImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GdtfImportResult_unchangedCount,
+		func(ctx context.Context) (any, error) {
+			return obj.UnchangedCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GdtfImportResult_unchangedCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GdtfImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GdtfImportResult_skippedCount(ctx context.Context, field graphql.CollectedField, obj *GdtfImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GdtfImportResult_skippedCount,
+		func(ctx context.Context) (any, error) {
+			return obj.SkippedCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GdtfImportResult_skippedCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GdtfImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _GdtfImportResult_failedCount(ctx context.Context, field graphql.CollectedField, obj *GdtfImportResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GdtfImportResult_failedCount,
+		func(ctx context.Context) (any, error) {
+			return obj.FailedCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GdtfImportResult_failedCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GdtfImportResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _GlobalPlaybackStatus_isPlaying(ctx context.Context, field graphql.CollectedField, obj *GlobalPlaybackStatus) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -31269,6 +31913,61 @@ func (ec *executionContext) fieldContext_Mutation_importOFLFixture(ctx context.C
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_importOFLFixture_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_importGdtfFixtures(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_importGdtfFixtures,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().ImportGdtfFixtures(ctx, fc.Args["files"].([]*GdtfFileInput), fc.Args["options"].(*GdtfImportOptions))
+		},
+		nil,
+		ec.marshalNGdtfImportResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfImportResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_importGdtfFixtures(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "results":
+				return ec.fieldContext_GdtfImportResult_results(ctx, field)
+			case "createdCount":
+				return ec.fieldContext_GdtfImportResult_createdCount(ctx, field)
+			case "updatedCount":
+				return ec.fieldContext_GdtfImportResult_updatedCount(ctx, field)
+			case "unchangedCount":
+				return ec.fieldContext_GdtfImportResult_unchangedCount(ctx, field)
+			case "skippedCount":
+				return ec.fieldContext_GdtfImportResult_skippedCount(ctx, field)
+			case "failedCount":
+				return ec.fieldContext_GdtfImportResult_failedCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type GdtfImportResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_importGdtfFixtures_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -53685,6 +54384,71 @@ func (ec *executionContext) unmarshalInputFixtureValueInput(ctx context.Context,
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputGdtfFileInput(ctx context.Context, obj any) (GdtfFileInput, error) {
+	var it GdtfFileInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"fileName", "descriptionXml"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "fileName":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("fileName"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FileName = data
+		case "descriptionXml":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("descriptionXml"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DescriptionXML = data
+		}
+	}
+
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputGdtfImportOptions(ctx context.Context, obj any) (GdtfImportOptions, error) {
+	var it GdtfImportOptions
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	if _, present := asMap["onExisting"]; !present {
+		asMap["onExisting"] = "UPDATE"
+	}
+
+	fieldsInOrder := [...]string{"onExisting"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "onExisting":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("onExisting"))
+			data, err := ec.unmarshalOGdtfExistingPolicy2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfExistingPolicy(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.OnExisting = graphql.OmittableOf(data)
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputImportOFLFixtureInput(ctx context.Context, obj any) (ImportOFLFixtureInput, error) {
 	var it ImportOFLFixtureInput
 	asMap := map[string]any{}
@@ -59803,6 +60567,129 @@ func (ec *executionContext) _FixtureValue(ctx context.Context, sel ast.Selection
 	return out
 }
 
+var gdtfImportFileResultImplementors = []string{"GdtfImportFileResult"}
+
+func (ec *executionContext) _GdtfImportFileResult(ctx context.Context, sel ast.SelectionSet, obj *GdtfImportFileResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, gdtfImportFileResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("GdtfImportFileResult")
+		case "fileName":
+			out.Values[i] = ec._GdtfImportFileResult_fileName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._GdtfImportFileResult_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "definition":
+			out.Values[i] = ec._GdtfImportFileResult_definition(ctx, field, obj)
+		case "manufacturer":
+			out.Values[i] = ec._GdtfImportFileResult_manufacturer(ctx, field, obj)
+		case "model":
+			out.Values[i] = ec._GdtfImportFileResult_model(ctx, field, obj)
+		case "modeCount":
+			out.Values[i] = ec._GdtfImportFileResult_modeCount(ctx, field, obj)
+		case "warnings":
+			out.Values[i] = ec._GdtfImportFileResult_warnings(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "error":
+			out.Values[i] = ec._GdtfImportFileResult_error(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var gdtfImportResultImplementors = []string{"GdtfImportResult"}
+
+func (ec *executionContext) _GdtfImportResult(ctx context.Context, sel ast.SelectionSet, obj *GdtfImportResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, gdtfImportResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("GdtfImportResult")
+		case "results":
+			out.Values[i] = ec._GdtfImportResult_results(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createdCount":
+			out.Values[i] = ec._GdtfImportResult_createdCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updatedCount":
+			out.Values[i] = ec._GdtfImportResult_updatedCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "unchangedCount":
+			out.Values[i] = ec._GdtfImportResult_unchangedCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "skippedCount":
+			out.Values[i] = ec._GdtfImportResult_skippedCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "failedCount":
+			out.Values[i] = ec._GdtfImportResult_failedCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var globalPlaybackStatusImplementors = []string{"GlobalPlaybackStatus"}
 
 func (ec *executionContext) _GlobalPlaybackStatus(ctx context.Context, sel ast.SelectionSet, obj *GlobalPlaybackStatus) graphql.Marshaler {
@@ -62048,6 +62935,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "importOFLFixture":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_importOFLFixture(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "importGdtfFixtures":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_importGdtfFixtures(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -71085,6 +71979,104 @@ func (ec *executionContext) marshalNFloat2ᚕfloat64ᚄ(ctx context.Context, sel
 	return ret
 }
 
+func (ec *executionContext) unmarshalNGdtfFileInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfFileInputᚄ(ctx context.Context, v any) ([]*GdtfFileInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*GdtfFileInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNGdtfFileInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfFileInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNGdtfFileInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfFileInput(ctx context.Context, v any) (*GdtfFileInput, error) {
+	res, err := ec.unmarshalInputGdtfFileInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNGdtfImportFileResult2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfImportFileResultᚄ(ctx context.Context, sel ast.SelectionSet, v []*GdtfImportFileResult) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNGdtfImportFileResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfImportFileResult(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNGdtfImportFileResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfImportFileResult(ctx context.Context, sel ast.SelectionSet, v *GdtfImportFileResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._GdtfImportFileResult(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNGdtfImportResult2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfImportResult(ctx context.Context, sel ast.SelectionSet, v GdtfImportResult) graphql.Marshaler {
+	return ec._GdtfImportResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNGdtfImportResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfImportResult(ctx context.Context, sel ast.SelectionSet, v *GdtfImportResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._GdtfImportResult(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNGdtfImportStatus2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfImportStatus(ctx context.Context, v any) (GdtfImportStatus, error) {
+	var res GdtfImportStatus
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNGdtfImportStatus2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfImportStatus(ctx context.Context, sel ast.SelectionSet, v GdtfImportStatus) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) marshalNGlobalPlaybackStatus2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGlobalPlaybackStatus(ctx context.Context, sel ast.SelectionSet, v GlobalPlaybackStatus) graphql.Marshaler {
 	return ec._GlobalPlaybackStatus(ctx, sel, &v)
 }
@@ -74296,6 +75288,30 @@ func (ec *executionContext) marshalOFloat2ᚖfloat64(ctx context.Context, sel as
 	_ = ctx
 	res := graphql.MarshalFloat(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOGdtfExistingPolicy2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfExistingPolicy(ctx context.Context, v any) (*GdtfExistingPolicy, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(GdtfExistingPolicy)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOGdtfExistingPolicy2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfExistingPolicy(ctx context.Context, sel ast.SelectionSet, v *GdtfExistingPolicy) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalOGdtfImportOptions2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGdtfImportOptions(ctx context.Context, v any) (*GdtfImportOptions, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputGdtfImportOptions(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalOGroupMemberRole2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐGroupMemberRole(ctx context.Context, v any) (*GroupMemberRole, error) {

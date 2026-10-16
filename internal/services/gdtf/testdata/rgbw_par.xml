@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<!-- Synthetic GDTF description written for LacyLights tests. Not from GDTF Share. -->
+<GDTF DataVersion="1.2">
+  <FixtureType Name="TestPar" ShortName="TPar" LongName="Test Par RGBW" Manufacturer="Synthetic Lighting Co" Description="8-bit RGBW par" FixtureTypeID="5a1c0b7e-0000-4000-8000-000000000001" Thumbnail="" RefFT="" CanHaveChildren="Yes">
+    <AttributeDefinitions>
+      <ActivationGroups>
+        <ActivationGroup Name="ColorRGB"/>
+      </ActivationGroups>
+      <FeatureGroups>
+        <FeatureGroup Name="Dimmer" Pretty="Dimmer"><Feature Name="Dimmer"/></FeatureGroup>
+        <FeatureGroup Name="Color" Pretty="Color"><Feature Name="RGB"/></FeatureGroup>
+        <FeatureGroup Name="Beam" Pretty="Beam"><Feature Name="Beam"/></FeatureGroup>
+      </FeatureGroups>
+      <Attributes>
+        <Attribute Name="Dimmer" Pretty="Dimmer" Feature="Dimmer.Dimmer" PhysicalUnit="LuminousIntensity"/>
+        <Attribute Name="ColorAdd_R" Pretty="Red" ActivationGroup="ColorRGB" Feature="Color.RGB" PhysicalUnit="ColorComponent"/>
+        <Attribute Name="ColorAdd_G" Pretty="Green" ActivationGroup="ColorRGB" Feature="Color.RGB" PhysicalUnit="ColorComponent"/>
+        <Attribute Name="ColorAdd_B" Pretty="Blue" ActivationGroup="ColorRGB" Feature="Color.RGB" PhysicalUnit="ColorComponent"/>
+        <Attribute Name="ColorAdd_W" Pretty="White" ActivationGroup="ColorRGB" Feature="Color.RGB" PhysicalUnit="ColorComponent"/>
+        <Attribute Name="Shutter1" Pretty="Sh1" Feature="Beam.Beam" PhysicalUnit="None"/>
+      </Attributes>
+    </AttributeDefinitions>
+    <Wheels/>
+    <PhysicalDescriptions/>
+    <Models/>
+    <Geometries>
+      <Geometry Name="Body" Model="" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,0,1}">
+        <Beam Name="Beam" Model="" LampType="LED" BeamAngle="25.000000"/>
+      </Geometry>
+    </Geometries>
+    <DMXModes>
+      <DMXMode Name="4ch" Geometry="Body">
+        <DMXChannels>
+          <DMXChannel DMXBreak="1" Offset="1" InitialFunction="Beam_ColorAdd_R.ColorAdd_R.Red" Highlight="255/1" Geometry="Beam">
+            <LogicalChannel Attribute="ColorAdd_R" Snap="No" Master="Grand" MibFade="0" DMXChangeTimeLimit="0">
+              <ChannelFunction Name="Red" Attribute="ColorAdd_R" DMXFrom="0/1" Default="0/1" PhysicalFrom="0" PhysicalTo="1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="2" Geometry="Beam">
+            <LogicalChannel Attribute="ColorAdd_G">
+              <ChannelFunction Name="Green" Attribute="ColorAdd_G" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="3" Geometry="Beam">
+            <LogicalChannel Attribute="ColorAdd_B">
+              <ChannelFunction Name="Blue" Attribute="ColorAdd_B" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="4" Geometry="Beam">
+            <LogicalChannel Attribute="ColorAdd_W">
+              <ChannelFunction Name="White" Attribute="ColorAdd_W" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+        </DMXChannels>
+        <Relations/>
+        <FTMacros/>
+      </DMXMode>
+      <DMXMode Name="6ch" Geometry="Body">
+        <DMXChannels>
+          <DMXChannel DMXBreak="1" Offset="1" Geometry="Body">
+            <LogicalChannel Attribute="Dimmer">
+              <ChannelFunction Name="Dimmer" Attribute="Dimmer" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="2" Geometry="Beam">
+            <LogicalChannel Attribute="ColorAdd_R">
+              <ChannelFunction Name="Red" Attribute="ColorAdd_R" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="3" Geometry="Beam">
+            <LogicalChannel Attribute="ColorAdd_G">
+              <ChannelFunction Name="Green" Attribute="ColorAdd_G" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="4" Geometry="Beam">
+            <LogicalChannel Attribute="ColorAdd_B">
+              <ChannelFunction Name="Blue" Attribute="ColorAdd_B" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="5" Geometry="Beam">
+            <LogicalChannel Attribute="ColorAdd_W">
+              <ChannelFunction Name="White" Attribute="ColorAdd_W" DMXFrom="0/1" Default="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="1" Offset="6" InitialFunction="Beam_Shutter1.Shutter1.Open" Geometry="Beam">
+            <LogicalChannel Attribute="Shutter1">
+              <ChannelFunction Name="Closed" Attribute="Shutter1" DMXFrom="0/1"/>
+              <ChannelFunction Name="Open" Attribute="Shutter1" DMXFrom="10/1"/>
+              <ChannelFunction Name="Strobe" Attribute="Shutter1Strobe" DMXFrom="20/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+        </DMXChannels>
+      </DMXMode>
+    </DMXModes>
+    <Revisions>
+      <Revision Date="2026-01-02T10:00:00" Text="First draft" UserID="0"/>
+      <Revision Date="2026-02-03T11:30:00" Text="Added 6ch mode" UserID="0"/>
+    </Revisions>
+  </FixtureType>
+</GDTF>

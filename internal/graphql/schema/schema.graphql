@@ -1798,6 +1798,58 @@ input ImportOFLFixtureInput {
   replace: Boolean
 }
 
+"""
+One GDTF fixture type to import: the description.xml of a .gdtf file.
+Clients unzip the .gdtf (or a .zip of them) and send only description.xml.
+"""
+input GdtfFileInput {
+  "Original file name, e.g. Foo.gdtf or archive.zip/inner/Foo.gdtf"
+  fileName: String!
+  "Contents of the .gdtf's description.xml (at most 32 MB)"
+  descriptionXml: String!
+}
+
+input GdtfImportOptions {
+  "What to do when the same FixtureTypeID was imported before and changed"
+  onExisting: GdtfExistingPolicy = UPDATE
+}
+
+enum GdtfExistingPolicy {
+  "Rebuild the existing definition in place, keeping its ID"
+  UPDATE
+  "Keep the existing definition unchanged"
+  SKIP
+}
+
+enum GdtfImportStatus {
+  CREATED
+  UPDATED
+  UNCHANGED
+  SKIPPED
+  FAILED
+}
+
+type GdtfImportFileResult {
+  fileName: String!
+  status: GdtfImportStatus!
+  "The created, updated or existing definition; null when FAILED"
+  definition: FixtureDefinition
+  manufacturer: String
+  model: String
+  modeCount: Int
+  warnings: [String!]!
+  error: String
+}
+
+type GdtfImportResult {
+  results: [GdtfImportFileResult!]!
+  createdCount: Int!
+  updatedCount: Int!
+  unchangedCount: Int!
+  skippedCount: Int!
+  failedCount: Int!
+}
+
 input CreateFixtureInstanceInput {
   name: String!
   description: String
@@ -2638,6 +2690,11 @@ type Mutation {
     input: CreateFixtureDefinitionInput!
   ): FixtureDefinition!
   importOFLFixture(input: ImportOFLFixtureInput!): FixtureDefinition!
+  """
+  Import GDTF fixture types (description.xml contents). Each file is imported
+  in its own transaction; a failed file does not fail the others.
+  """
+  importGdtfFixtures(files: [GdtfFileInput!]!, options: GdtfImportOptions): GdtfImportResult!
   updateFixtureDefinition(
     id: ID!
     input: CreateFixtureDefinitionInput!

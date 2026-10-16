@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic GDTF description written for LacyLights tests. Not from GDTF Share. -->
+<GDTF DataVersion="1.2">
+  <FixtureType Name="TestCells" LongName="Test Two Cell Unit" Manufacturer="Synthetic Lighting Co" FixtureTypeID="5a1c0b7e-0000-4000-8000-000000000005">
+    <AttributeDefinitions>
+      <Attributes>
+        <Attribute Name="Dimmer" Pretty="Dimmer" Feature="Dimmer.Dimmer"/>
+        <Attribute Name="Shutter1" Pretty="Shutter" Feature="Beam.Beam"/>
+      </Attributes>
+    </AttributeDefinitions>
+    <Geometries>
+      <Geometry Name="Unit">
+        <GeometryReference Name="Cell A" Geometry="Cell">
+          <Break DMXBreak="1" DMXOffset="1"/>
+          <Break DMXBreak="2" DMXOffset="1"/>
+        </GeometryReference>
+        <GeometryReference Name="Cell B" Geometry="Cell">
+          <Break DMXBreak="1" DMXOffset="3"/>
+          <Break DMXBreak="3" DMXOffset="5"/>
+        </GeometryReference>
+      </Geometry>
+      <Geometry Name="Cell"/>
+    </Geometries>
+    <DMXModes>
+      <DMXMode Name="Cells" Geometry="Unit">
+        <DMXChannels>
+          <DMXChannel DMXBreak="1" Offset="1" Geometry="Cell">
+            <LogicalChannel Attribute="Shutter1">
+              <ChannelFunction Name="Shutter" Attribute="Shutter1" DMXFrom="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel DMXBreak="Overwrite" Offset="1" Geometry="Cell">
+            <LogicalChannel Attribute="Dimmer">
+              <ChannelFunction Name="Dimmer" Attribute="Dimmer" DMXFrom="0/1"/>
+            </LogicalChannel>
+          </DMXChannel>
+        </DMXChannels>
+      </DMXMode>
+    </DMXModes>
+  </FixtureType>
+</GDTF>
