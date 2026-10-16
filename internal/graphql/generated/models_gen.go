@@ -662,11 +662,12 @@ type FixtureDataChangedPayload struct {
 }
 
 type FixtureDefinitionFilter struct {
-	Manufacturer graphql.Omittable[*string]       `json:"manufacturer,omitempty"`
-	Model        graphql.Omittable[*string]       `json:"model,omitempty"`
-	Type         graphql.Omittable[*FixtureType]  `json:"type,omitempty"`
-	IsBuiltIn    graphql.Omittable[*bool]         `json:"isBuiltIn,omitempty"`
-	ChannelTypes graphql.Omittable[[]ChannelType] `json:"channelTypes,omitempty"`
+	Manufacturer graphql.Omittable[*string]        `json:"manufacturer,omitempty"`
+	Model        graphql.Omittable[*string]        `json:"model,omitempty"`
+	Type         graphql.Omittable[*FixtureType]   `json:"type,omitempty"`
+	IsBuiltIn    graphql.Omittable[*bool]          `json:"isBuiltIn,omitempty"`
+	ChannelTypes graphql.Omittable[[]ChannelType]  `json:"channelTypes,omitempty"`
+	Source       graphql.Omittable[*FixtureSource] `json:"source,omitempty"`
 }
 
 type FixtureDefinitionUpdateItem struct {
@@ -2317,6 +2318,78 @@ func (e *FixtureConflictStrategy) UnmarshalJSON(b []byte) error {
 }
 
 func (e FixtureConflictStrategy) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Where a fixture definition came from. When several definitions share a
+// manufacturer and model, the configured source precedence decides which one
+// is preferred.
+type FixtureSource string
+
+const (
+	// Shipped with LacyLights
+	FixtureSourceBuiltin FixtureSource = "BUILTIN"
+	// Imported from the Open Fixture Library
+	FixtureSourceOfl FixtureSource = "OFL"
+	// Imported from a user-supplied GDTF file
+	FixtureSourceGdtf FixtureSource = "GDTF"
+	// Imported from a user-supplied Eos fixture library (reserved)
+	FixtureSourceEos FixtureSource = "EOS"
+	// Created or edited by a user
+	FixtureSourceUser FixtureSource = "USER"
+	// Synthesized from an Eos ASCII show file personality
+	FixtureSourceSynthesized FixtureSource = "SYNTHESIZED"
+)
+
+var AllFixtureSource = []FixtureSource{
+	FixtureSourceBuiltin,
+	FixtureSourceOfl,
+	FixtureSourceGdtf,
+	FixtureSourceEos,
+	FixtureSourceUser,
+	FixtureSourceSynthesized,
+}
+
+func (e FixtureSource) IsValid() bool {
+	switch e {
+	case FixtureSourceBuiltin, FixtureSourceOfl, FixtureSourceGdtf, FixtureSourceEos, FixtureSourceUser, FixtureSourceSynthesized:
+		return true
+	}
+	return false
+}
+
+func (e FixtureSource) String() string {
+	return string(e)
+}
+
+func (e *FixtureSource) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = FixtureSource(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid FixtureSource", str)
+	}
+	return nil
+}
+
+func (e FixtureSource) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *FixtureSource) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e FixtureSource) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

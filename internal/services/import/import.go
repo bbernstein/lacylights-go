@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
@@ -274,12 +275,13 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 	fixtureIDMap := make(map[string]string)       // old ID -> new ID
 	lookIDMap := make(map[string]string)          // old ID -> new ID
 	modeRefIDToNameMap := make(map[string]string) // old mode refID -> new mode name
+	createdDefSources := make(map[string]string)  // new definition ID -> source, for definitions created by this import
 
 	// Import fixture definitions
 	for _, def := range exported.FixtureDefinitions {
 		if def.IsBuiltIn && !options.ImportBuiltInFixtures {
 			// Use existing built-in definition
-			existing, err := s.fixtureRepo.FindDefinitionByManufacturerModel(ctx, def.Manufacturer, def.Model)
+			existing, err := s.findExistingDefinition(ctx, def, createdDefSources)
 			if err != nil {
 				return "", nil, nil, err
 			}
@@ -302,7 +304,7 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 		}
 
 		// Check for existing definition
-		existing, err := s.fixtureRepo.FindDefinitionByManufacturerModel(ctx, def.Manufacturer, def.Model)
+		existing, err := s.findExistingDefinition(ctx, def, createdDefSources)
 		if err != nil {
 			return "", nil, nil, err
 		}
@@ -353,10 +355,13 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 
 		// Create new definition
 		newDef := &models.FixtureDefinition{
-			Manufacturer: def.Manufacturer,
-			Model:        def.Model,
-			Type:         def.Type,
-			IsBuiltIn:    false, // Imported definitions are not built-in
+			Manufacturer:  def.Manufacturer,
+			Model:         def.Model,
+			Type:          def.Type,
+			IsBuiltIn:     false, // Imported definitions are not built-in
+			Source:        importedDefinitionSource(def.Source),
+			SourceID:      def.SourceID,
+			SourceVersion: def.SourceVersion,
 		}
 
 		// Build channels and track RefID -> new ID mapping
@@ -393,6 +398,7 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 			return "", nil, nil, err
 		}
 		definitionIDMap[def.RefID] = newDef.ID
+		createdDefSources[newDef.ID] = newDef.Source
 		stats.FixtureDefinitionsCreated++
 
 		// Import modes for this definition
@@ -777,4 +783,56 @@ func (s *Service) ImportProject(ctx context.Context, jsonContent string, options
 	stats.SceneBoardsCreated = stats.LookBoardsCreated
 
 	return projectID, stats, warnings, nil
+}
+
+// findExistingDefinition returns the definition an imported one should map
+// onto, or nil when none exists. In order it tries: the definition with the
+// same source and source ID (source IDs such as a GDTF FixtureTypeID survive
+// manufacturer/model renames), a definition with the same source,
+// manufacturer and model, and finally the highest-precedence definition with
+// the same manufacturer and model.
+//
+// createdThisImport maps the IDs of definitions created earlier in the same
+// import to their source. When the exported definition names a source, the
+// cross-source fallback skips definitions created in this import for a
+// different source, so an archive holding same-name USER and OFL
+// definitions keeps both instead of collapsing one onto the other. Fallback
+// to definitions already in the library is unchanged.
+func (s *Service) findExistingDefinition(ctx context.Context, def export.ExportedFixtureDefinition, createdThisImport map[string]string) (*models.FixtureDefinition, error) {
+	if def.Source != "" && def.SourceID != nil && *def.SourceID != "" {
+		bySourceID, err := s.fixtureRepo.FindDefinitionBySourceID(ctx, def.Source, *def.SourceID)
+		if err != nil || bySourceID != nil {
+			return bySourceID, err
+		}
+	}
+	candidates, err := s.fixtureRepo.FindDefinitionsByManufacturerModel(ctx, def.Manufacturer, def.Model)
+	if err != nil || len(candidates) == 0 {
+		return nil, err
+	}
+	if def.Source == "" {
+		return &candidates[0], nil
+	}
+	for i := range candidates {
+		if candidates[i].Source == def.Source {
+			return &candidates[i], nil
+		}
+	}
+	for i := range candidates {
+		if src, created := createdThisImport[candidates[i].ID]; created && src != def.Source {
+			continue
+		}
+		return &candidates[i], nil
+	}
+	return nil, nil
+}
+
+// importedDefinitionSource keeps a known exported source and maps anything
+// else (missing, unrecognized or BUILTIN) to USER.
+func importedDefinitionSource(source string) string {
+	// Imported definitions are never built-in (IsBuiltIn is false), so an
+	// exported BUILTIN source must not let one outrank OFL or GDTF.
+	if source != models.FixtureSourceBuiltIn && slices.Contains(models.DefaultFixtureSourcePrecedence, source) {
+		return source
+	}
+	return models.FixtureSourceUser
 }

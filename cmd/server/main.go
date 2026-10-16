@@ -115,7 +115,7 @@ func main() {
 		model      interface{}
 		keyColumns []string // columns that must exist for schema to be considered complete
 	}{
-		{"fixture_definitions", &models.FixtureDefinition{}, []string{"id", "ref_id"}},
+		{"fixture_definitions", &models.FixtureDefinition{}, []string{"id", "ref_id", "source", "source_id", "source_version", "source_hash", "source_payload"}},
 		{"channel_definitions", &models.ChannelDefinition{}, []string{"id", "definition_id"}},
 		{"fixture_modes", &models.FixtureMode{}, []string{"id", "definition_id"}},
 		{"mode_channels", &models.ModeChannel{}, []string{"id", "mode_id", "channel_id"}},
@@ -191,6 +191,16 @@ func main() {
 	}
 	if err := migrations.CreateRefIDIndexes(db); err != nil {
 		log.Fatalf("Failed to create ref_id indexes: %v", err)
+	}
+
+	// Classify fixture definitions created before the source column existed.
+	if err := migrations.BackfillFixtureSources(db); err != nil {
+		log.Fatalf("Failed to backfill fixture sources: %v", err)
+	}
+	// Definitions from the original OFL startup loader carry no OFL hash;
+	// match them against the embedded OFL bundle to restore their source.
+	if _, err := ofl.ReclassifyLegacyImportsFromBundle(context.Background(), db); err != nil {
+		log.Printf("Warning: legacy OFL source backfill failed: %v", err)
 	}
 
 	// Backfill default layout canvas dimensions for existing projects

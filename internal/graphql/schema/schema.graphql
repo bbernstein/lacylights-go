@@ -66,6 +66,26 @@ enum EasingType {
 }
 
 """
+Where a fixture definition came from. When several definitions share a
+manufacturer and model, the configured source precedence decides which one
+is preferred.
+"""
+enum FixtureSource {
+  "Shipped with LacyLights"
+  BUILTIN
+  "Imported from the Open Fixture Library"
+  OFL
+  "Imported from a user-supplied GDTF file"
+  GDTF
+  "Imported from a user-supplied Eos fixture library (reserved)"
+  EOS
+  "Created or edited by a user"
+  USER
+  "Synthesized from an Eos ASCII show file personality"
+  SYNTHESIZED
+}
+
+"""
 Determines how a channel behaves during look transitions.
 FADE - Interpolate smoothly between values (default for intensity, colors)
 SNAP - Jump to target value at start of transition (for gobos, macros, effects)
@@ -600,6 +620,12 @@ type FixtureDefinition {
   channels: [ChannelDefinition!]!
   modes: [FixtureMode!]!
   isBuiltIn: Boolean!
+  "Where this definition came from"
+  source: FixtureSource!
+  "Identifier within the source (OFL key, GDTF FixtureTypeID, ...)"
+  sourceId: String
+  "Version of the source library or file when imported"
+  sourceVersion: String
   createdAt: String!
 }
 
@@ -1915,6 +1941,7 @@ input FixtureDefinitionFilter {
   type: FixtureType
   isBuiltIn: Boolean
   channelTypes: [ChannelType!]
+  source: FixtureSource
 }
 
 input FixtureFilterInput {
@@ -2330,6 +2357,8 @@ type Query {
   # Fixtures
   fixtureDefinitions(filter: FixtureDefinitionFilter): [FixtureDefinition!]!
   fixtureDefinition(id: ID!): FixtureDefinition
+  "Fixture sources in preference order, highest first"
+  fixtureSourcePrecedence: [FixtureSource!]!
   fixtureInstances(
     projectId: ID!
     page: Int = 1
@@ -2598,6 +2627,13 @@ type Mutation {
   bulkDeleteProjects(projectIds: [ID!]!): BulkDeleteResult!
 
   # Fixture Definitions
+  """
+  Set the fixture source preference order, highest first. Sources left out
+  are appended in default order. Returns the stored order. Admin only when
+  authentication is enabled. Affects future definition matching (project and
+  Eos imports, model pickers); existing fixtures keep their definitions.
+  """
+  setFixtureSourcePrecedence(order: [FixtureSource!]!): [FixtureSource!]!
   createFixtureDefinition(
     input: CreateFixtureDefinitionInput!
   ): FixtureDefinition!

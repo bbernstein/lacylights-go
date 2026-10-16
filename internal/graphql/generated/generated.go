@@ -464,15 +464,18 @@ type ComplexityRoot struct {
 	}
 
 	FixtureDefinition struct {
-		Channels     func(childComplexity int) int
-		CreatedAt    func(childComplexity int) int
-		ID           func(childComplexity int) int
-		IsBuiltIn    func(childComplexity int) int
-		Manufacturer func(childComplexity int) int
-		Model        func(childComplexity int) int
-		Modes        func(childComplexity int) int
-		RefID        func(childComplexity int) int
-		Type         func(childComplexity int) int
+		Channels      func(childComplexity int) int
+		CreatedAt     func(childComplexity int) int
+		ID            func(childComplexity int) int
+		IsBuiltIn     func(childComplexity int) int
+		Manufacturer  func(childComplexity int) int
+		Model         func(childComplexity int) int
+		Modes         func(childComplexity int) int
+		RefID         func(childComplexity int) int
+		Source        func(childComplexity int) int
+		SourceID      func(childComplexity int) int
+		SourceVersion func(childComplexity int) int
+		Type          func(childComplexity int) int
 	}
 
 	FixtureGroup struct {
@@ -856,6 +859,7 @@ type ComplexityRoot struct {
 		RevokeSession                          func(childComplexity int, sessionID string) int
 		SetArtNetEnabled                       func(childComplexity int, enabled bool, fadeTime *float64) int
 		SetChannelValue                        func(childComplexity int, universe int, channel int, value int) int
+		SetFixtureSourcePrecedence             func(childComplexity int, order []FixtureSource) int
 		SetGrandMaster                         func(childComplexity int, value float64) int
 		SetLookLive                            func(childComplexity int, lookID string) int
 		SetWiFiEnabled                         func(childComplexity int, enabled bool) int
@@ -1111,6 +1115,7 @@ type ComplexityRoot struct {
 		FixtureGroups                   func(childComplexity int, projectID string) int
 		FixtureInstance                 func(childComplexity int, id string) int
 		FixtureInstances                func(childComplexity int, projectID string, page *int, perPage *int, filter *FixtureFilterInput) int
+		FixtureSourcePrecedence         func(childComplexity int) int
 		FixtureUsage                    func(childComplexity int, fixtureID string) int
 		FixturesByIds                   func(childComplexity int, ids []string) int
 		GetQLCFixtureMappingSuggestions func(childComplexity int, projectID string) int
@@ -1368,6 +1373,8 @@ type FixtureDefinitionResolver interface {
 	Channels(ctx context.Context, obj *models.FixtureDefinition) ([]*models.ChannelDefinition, error)
 	Modes(ctx context.Context, obj *models.FixtureDefinition) ([]*models.FixtureMode, error)
 
+	Source(ctx context.Context, obj *models.FixtureDefinition) (FixtureSource, error)
+
 	CreatedAt(ctx context.Context, obj *models.FixtureDefinition) (string, error)
 }
 type FixtureGroupResolver interface {
@@ -1481,6 +1488,7 @@ type MutationResolver interface {
 	BulkCreateProjects(ctx context.Context, input BulkProjectCreateInput) ([]*models.Project, error)
 	BulkUpdateProjects(ctx context.Context, input BulkProjectUpdateInput) ([]*models.Project, error)
 	BulkDeleteProjects(ctx context.Context, projectIds []string) (*BulkDeleteResult, error)
+	SetFixtureSourcePrecedence(ctx context.Context, order []FixtureSource) ([]FixtureSource, error)
 	CreateFixtureDefinition(ctx context.Context, input CreateFixtureDefinitionInput) (*models.FixtureDefinition, error)
 	ImportOFLFixture(ctx context.Context, input ImportOFLFixtureInput) (*models.FixtureDefinition, error)
 	UpdateFixtureDefinition(ctx context.Context, id string, input CreateFixtureDefinitionInput) (*models.FixtureDefinition, error)
@@ -1663,6 +1671,7 @@ type QueryResolver interface {
 	DeletedProjects(ctx context.Context) ([]*models.Project, error)
 	FixtureDefinitions(ctx context.Context, filter *FixtureDefinitionFilter) ([]*models.FixtureDefinition, error)
 	FixtureDefinition(ctx context.Context, id string) (*models.FixtureDefinition, error)
+	FixtureSourcePrecedence(ctx context.Context) ([]FixtureSource, error)
 	FixtureInstances(ctx context.Context, projectID string, page *int, perPage *int, filter *FixtureFilterInput) (*FixtureInstancePage, error)
 	FixtureInstance(ctx context.Context, id string) (*models.FixtureInstance, error)
 	SearchFixtures(ctx context.Context, projectID string, query string, filter *FixtureFilterInput, page *int, perPage *int) (*FixtureInstancePage, error)
@@ -3427,6 +3436,24 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.FixtureDefinition.RefID(childComplexity), true
+	case "FixtureDefinition.source":
+		if e.complexity.FixtureDefinition.Source == nil {
+			break
+		}
+
+		return e.complexity.FixtureDefinition.Source(childComplexity), true
+	case "FixtureDefinition.sourceId":
+		if e.complexity.FixtureDefinition.SourceID == nil {
+			break
+		}
+
+		return e.complexity.FixtureDefinition.SourceID(childComplexity), true
+	case "FixtureDefinition.sourceVersion":
+		if e.complexity.FixtureDefinition.SourceVersion == nil {
+			break
+		}
+
+		return e.complexity.FixtureDefinition.SourceVersion(childComplexity), true
 	case "FixtureDefinition.type":
 		if e.complexity.FixtureDefinition.Type == nil {
 			break
@@ -5843,6 +5870,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.SetChannelValue(childComplexity, args["universe"].(int), args["channel"].(int), args["value"].(int)), true
+	case "Mutation.setFixtureSourcePrecedence":
+		if e.complexity.Mutation.SetFixtureSourcePrecedence == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setFixtureSourcePrecedence_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.SetFixtureSourcePrecedence(childComplexity, args["order"].([]FixtureSource)), true
 	case "Mutation.setGrandMaster":
 		if e.complexity.Mutation.SetGrandMaster == nil {
 			break
@@ -7375,6 +7413,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.FixtureInstances(childComplexity, args["projectId"].(string), args["page"].(*int), args["perPage"].(*int), args["filter"].(*FixtureFilterInput)), true
+	case "Query.fixtureSourcePrecedence":
+		if e.complexity.Query.FixtureSourcePrecedence == nil {
+			break
+		}
+
+		return e.complexity.Query.FixtureSourcePrecedence(childComplexity), true
 	case "Query.fixtureUsage":
 		if e.complexity.Query.FixtureUsage == nil {
 			break
@@ -8753,6 +8797,26 @@ enum EasingType {
 }
 
 """
+Where a fixture definition came from. When several definitions share a
+manufacturer and model, the configured source precedence decides which one
+is preferred.
+"""
+enum FixtureSource {
+  "Shipped with LacyLights"
+  BUILTIN
+  "Imported from the Open Fixture Library"
+  OFL
+  "Imported from a user-supplied GDTF file"
+  GDTF
+  "Imported from a user-supplied Eos fixture library (reserved)"
+  EOS
+  "Created or edited by a user"
+  USER
+  "Synthesized from an Eos ASCII show file personality"
+  SYNTHESIZED
+}
+
+"""
 Determines how a channel behaves during look transitions.
 FADE - Interpolate smoothly between values (default for intensity, colors)
 SNAP - Jump to target value at start of transition (for gobos, macros, effects)
@@ -9287,6 +9351,12 @@ type FixtureDefinition {
   channels: [ChannelDefinition!]!
   modes: [FixtureMode!]!
   isBuiltIn: Boolean!
+  "Where this definition came from"
+  source: FixtureSource!
+  "Identifier within the source (OFL key, GDTF FixtureTypeID, ...)"
+  sourceId: String
+  "Version of the source library or file when imported"
+  sourceVersion: String
   createdAt: String!
 }
 
@@ -10602,6 +10672,7 @@ input FixtureDefinitionFilter {
   type: FixtureType
   isBuiltIn: Boolean
   channelTypes: [ChannelType!]
+  source: FixtureSource
 }
 
 input FixtureFilterInput {
@@ -11017,6 +11088,8 @@ type Query {
   # Fixtures
   fixtureDefinitions(filter: FixtureDefinitionFilter): [FixtureDefinition!]!
   fixtureDefinition(id: ID!): FixtureDefinition
+  "Fixture sources in preference order, highest first"
+  fixtureSourcePrecedence: [FixtureSource!]!
   fixtureInstances(
     projectId: ID!
     page: Int = 1
@@ -11285,6 +11358,13 @@ type Mutation {
   bulkDeleteProjects(projectIds: [ID!]!): BulkDeleteResult!
 
   # Fixture Definitions
+  """
+  Set the fixture source preference order, highest first. Sources left out
+  are appended in default order. Returns the stored order. Admin only when
+  authentication is enabled. Affects future definition matching (project and
+  Eos imports, model pickers); existing fixtures keep their definitions.
+  """
+  setFixtureSourcePrecedence(order: [FixtureSource!]!): [FixtureSource!]!
   createFixtureDefinition(
     input: CreateFixtureDefinitionInput!
   ): FixtureDefinition!
@@ -13161,6 +13241,17 @@ func (ec *executionContext) field_Mutation_setChannelValue_args(ctx context.Cont
 		return nil, err
 	}
 	args["value"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_setFixtureSourcePrecedence_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "order", ec.unmarshalNFixtureSource2ᚕgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureSourceᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["order"] = arg0
 	return args, nil
 }
 
@@ -23110,6 +23201,93 @@ func (ec *executionContext) fieldContext_FixtureDefinition_isBuiltIn(_ context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _FixtureDefinition_source(ctx context.Context, field graphql.CollectedField, obj *models.FixtureDefinition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureDefinition_source,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.FixtureDefinition().Source(ctx, obj)
+		},
+		nil,
+		ec.marshalNFixtureSource2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureSource,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureDefinition_source(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureDefinition",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type FixtureSource does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FixtureDefinition_sourceId(ctx context.Context, field graphql.CollectedField, obj *models.FixtureDefinition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureDefinition_sourceId,
+		func(ctx context.Context) (any, error) {
+			return obj.SourceID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureDefinition_sourceId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureDefinition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FixtureDefinition_sourceVersion(ctx context.Context, field graphql.CollectedField, obj *models.FixtureDefinition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FixtureDefinition_sourceVersion,
+		func(ctx context.Context) (any, error) {
+			return obj.SourceVersion, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FixtureDefinition_sourceVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FixtureDefinition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _FixtureDefinition_createdAt(ctx context.Context, field graphql.CollectedField, obj *models.FixtureDefinition) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -30922,6 +31100,47 @@ func (ec *executionContext) fieldContext_Mutation_bulkDeleteProjects(ctx context
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_setFixtureSourcePrecedence(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_setFixtureSourcePrecedence,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Mutation().SetFixtureSourcePrecedence(ctx, fc.Args["order"].([]FixtureSource))
+		},
+		nil,
+		ec.marshalNFixtureSource2ᚕgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureSourceᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_setFixtureSourcePrecedence(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type FixtureSource does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setFixtureSourcePrecedence_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_createFixtureDefinition(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -30963,6 +31182,12 @@ func (ec *executionContext) fieldContext_Mutation_createFixtureDefinition(ctx co
 				return ec.fieldContext_FixtureDefinition_modes(ctx, field)
 			case "isBuiltIn":
 				return ec.fieldContext_FixtureDefinition_isBuiltIn(ctx, field)
+			case "source":
+				return ec.fieldContext_FixtureDefinition_source(ctx, field)
+			case "sourceId":
+				return ec.fieldContext_FixtureDefinition_sourceId(ctx, field)
+			case "sourceVersion":
+				return ec.fieldContext_FixtureDefinition_sourceVersion(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_FixtureDefinition_createdAt(ctx, field)
 			}
@@ -31024,6 +31249,12 @@ func (ec *executionContext) fieldContext_Mutation_importOFLFixture(ctx context.C
 				return ec.fieldContext_FixtureDefinition_modes(ctx, field)
 			case "isBuiltIn":
 				return ec.fieldContext_FixtureDefinition_isBuiltIn(ctx, field)
+			case "source":
+				return ec.fieldContext_FixtureDefinition_source(ctx, field)
+			case "sourceId":
+				return ec.fieldContext_FixtureDefinition_sourceId(ctx, field)
+			case "sourceVersion":
+				return ec.fieldContext_FixtureDefinition_sourceVersion(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_FixtureDefinition_createdAt(ctx, field)
 			}
@@ -31085,6 +31316,12 @@ func (ec *executionContext) fieldContext_Mutation_updateFixtureDefinition(ctx co
 				return ec.fieldContext_FixtureDefinition_modes(ctx, field)
 			case "isBuiltIn":
 				return ec.fieldContext_FixtureDefinition_isBuiltIn(ctx, field)
+			case "source":
+				return ec.fieldContext_FixtureDefinition_source(ctx, field)
+			case "sourceId":
+				return ec.fieldContext_FixtureDefinition_sourceId(ctx, field)
+			case "sourceVersion":
+				return ec.fieldContext_FixtureDefinition_sourceVersion(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_FixtureDefinition_createdAt(ctx, field)
 			}
@@ -31187,6 +31424,12 @@ func (ec *executionContext) fieldContext_Mutation_bulkCreateFixtureDefinitions(c
 				return ec.fieldContext_FixtureDefinition_modes(ctx, field)
 			case "isBuiltIn":
 				return ec.fieldContext_FixtureDefinition_isBuiltIn(ctx, field)
+			case "source":
+				return ec.fieldContext_FixtureDefinition_source(ctx, field)
+			case "sourceId":
+				return ec.fieldContext_FixtureDefinition_sourceId(ctx, field)
+			case "sourceVersion":
+				return ec.fieldContext_FixtureDefinition_sourceVersion(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_FixtureDefinition_createdAt(ctx, field)
 			}
@@ -31248,6 +31491,12 @@ func (ec *executionContext) fieldContext_Mutation_bulkUpdateFixtureDefinitions(c
 				return ec.fieldContext_FixtureDefinition_modes(ctx, field)
 			case "isBuiltIn":
 				return ec.fieldContext_FixtureDefinition_isBuiltIn(ctx, field)
+			case "source":
+				return ec.fieldContext_FixtureDefinition_source(ctx, field)
+			case "sourceId":
+				return ec.fieldContext_FixtureDefinition_sourceId(ctx, field)
+			case "sourceVersion":
+				return ec.fieldContext_FixtureDefinition_sourceVersion(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_FixtureDefinition_createdAt(ctx, field)
 			}
@@ -42436,6 +42685,12 @@ func (ec *executionContext) fieldContext_Query_fixtureDefinitions(ctx context.Co
 				return ec.fieldContext_FixtureDefinition_modes(ctx, field)
 			case "isBuiltIn":
 				return ec.fieldContext_FixtureDefinition_isBuiltIn(ctx, field)
+			case "source":
+				return ec.fieldContext_FixtureDefinition_source(ctx, field)
+			case "sourceId":
+				return ec.fieldContext_FixtureDefinition_sourceId(ctx, field)
+			case "sourceVersion":
+				return ec.fieldContext_FixtureDefinition_sourceVersion(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_FixtureDefinition_createdAt(ctx, field)
 			}
@@ -42497,6 +42752,12 @@ func (ec *executionContext) fieldContext_Query_fixtureDefinition(ctx context.Con
 				return ec.fieldContext_FixtureDefinition_modes(ctx, field)
 			case "isBuiltIn":
 				return ec.fieldContext_FixtureDefinition_isBuiltIn(ctx, field)
+			case "source":
+				return ec.fieldContext_FixtureDefinition_source(ctx, field)
+			case "sourceId":
+				return ec.fieldContext_FixtureDefinition_sourceId(ctx, field)
+			case "sourceVersion":
+				return ec.fieldContext_FixtureDefinition_sourceVersion(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_FixtureDefinition_createdAt(ctx, field)
 			}
@@ -42513,6 +42774,35 @@ func (ec *executionContext) fieldContext_Query_fixtureDefinition(ctx context.Con
 	if fc.Args, err = ec.field_Query_fixtureDefinition_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_fixtureSourcePrecedence(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_fixtureSourcePrecedence,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.Query().FixtureSourcePrecedence(ctx)
+		},
+		nil,
+		ec.marshalNFixtureSource2ᚕgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureSourceᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_fixtureSourcePrecedence(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type FixtureSource does not have child fields")
+		},
 	}
 	return fc, nil
 }
@@ -45536,6 +45826,12 @@ func (ec *executionContext) fieldContext_Query_fixtureDefinitionsByIds(ctx conte
 				return ec.fieldContext_FixtureDefinition_modes(ctx, field)
 			case "isBuiltIn":
 				return ec.fieldContext_FixtureDefinition_isBuiltIn(ctx, field)
+			case "source":
+				return ec.fieldContext_FixtureDefinition_source(ctx, field)
+			case "sourceId":
+				return ec.fieldContext_FixtureDefinition_sourceId(ctx, field)
+			case "sourceVersion":
+				return ec.fieldContext_FixtureDefinition_sourceVersion(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_FixtureDefinition_createdAt(ctx, field)
 			}
@@ -52922,7 +53218,7 @@ func (ec *executionContext) unmarshalInputFixtureDefinitionFilter(ctx context.Co
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"manufacturer", "model", "type", "isBuiltIn", "channelTypes"}
+	fieldsInOrder := [...]string{"manufacturer", "model", "type", "isBuiltIn", "channelTypes", "source"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -52964,6 +53260,13 @@ func (ec *executionContext) unmarshalInputFixtureDefinitionFilter(ctx context.Co
 				return it, err
 			}
 			it.ChannelTypes = graphql.OmittableOf(data)
+		case "source":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("source"))
+			data, err := ec.unmarshalOFixtureSource2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureSource(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Source = graphql.OmittableOf(data)
 		}
 	}
 
@@ -58408,6 +58711,46 @@ func (ec *executionContext) _FixtureDefinition(ctx context.Context, sel ast.Sele
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "source":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._FixtureDefinition_source(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "sourceId":
+			out.Values[i] = ec._FixtureDefinition_sourceId(ctx, field, obj)
+		case "sourceVersion":
+			out.Values[i] = ec._FixtureDefinition_sourceVersion(ctx, field, obj)
 		case "createdAt":
 			field := field
 
@@ -61688,6 +62031,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "setFixtureSourcePrecedence":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setFixtureSourcePrecedence(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "createFixtureDefinition":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createFixtureDefinition(ctx, field)
@@ -64916,6 +65266,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_fixtureDefinition(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "fixtureSourcePrecedence":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_fixtureSourcePrecedence(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
 				return res
 			}
 
@@ -70460,6 +70832,75 @@ func (ec *executionContext) unmarshalNFixturePositionInput2ᚖgithubᚗcomᚋbbe
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNFixtureSource2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureSource(ctx context.Context, v any) (FixtureSource, error) {
+	var res FixtureSource
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNFixtureSource2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureSource(ctx context.Context, sel ast.SelectionSet, v FixtureSource) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNFixtureSource2ᚕgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureSourceᚄ(ctx context.Context, v any) ([]FixtureSource, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]FixtureSource, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNFixtureSource2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureSource(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNFixtureSource2ᚕgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureSourceᚄ(ctx context.Context, sel ast.SelectionSet, v []FixtureSource) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNFixtureSource2githubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureSource(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
 func (ec *executionContext) unmarshalNFixtureSpecInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureSpecInputᚄ(ctx context.Context, v any) ([]*FixtureSpecInput, error) {
 	var vSlice []any
 	vSlice = graphql.CoerceList(v)
@@ -73787,6 +74228,22 @@ func (ec *executionContext) unmarshalOFixtureMappingInput2ᚕᚖgithubᚗcomᚋb
 		}
 	}
 	return res, nil
+}
+
+func (ec *executionContext) unmarshalOFixtureSource2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureSource(ctx context.Context, v any) (*FixtureSource, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(FixtureSource)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOFixtureSource2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureSource(ctx context.Context, sel ast.SelectionSet, v *FixtureSource) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) unmarshalOFixtureType2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureType(ctx context.Context, v any) (*FixtureType, error) {

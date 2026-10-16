@@ -108,6 +108,27 @@ func TestDefinitionSource(t *testing.T) {
 	if definitionSource(nil) != "" {
 		t.Error("nil def")
 	}
+	hash := "h"
+	cases := []struct {
+		def  models.FixtureDefinition
+		want string
+	}{
+		{models.FixtureDefinition{Source: models.FixtureSourceGDTF}, "GDTF"},
+		{models.FixtureDefinition{Source: models.FixtureSourceOFL}, "OFL"},
+		{models.FixtureDefinition{Source: models.FixtureSourceBuiltIn}, "Built-in"},
+		{models.FixtureDefinition{Source: models.FixtureSourceSynthesized}, "Synthesized"},
+		{models.FixtureDefinition{Source: models.FixtureSourceEOS}, "Eos"},
+		{models.FixtureDefinition{Source: models.FixtureSourceUser}, "Custom"},
+		// Rows not yet backfilled still classify by the legacy fields.
+		{models.FixtureDefinition{Source: models.FixtureSourceUser, OFLSourceHash: &hash}, "OFL"},
+		{models.FixtureDefinition{Source: models.FixtureSourceUser, IsBuiltIn: true}, "Built-in"},
+	}
+	for _, c := range cases {
+		def := c.def
+		if got := definitionSource(&def); got != c.want {
+			t.Errorf("definitionSource(%+v) = %q, want %q", c.def.Source, got, c.want)
+		}
+	}
 }
 
 func TestLookDetailsTable(t *testing.T) {
