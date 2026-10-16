@@ -44,6 +44,7 @@ func TestImportProject_CreatesDefinitionWithExportedSource(t *testing.T) {
 		{"gdtf", export.ExportedFixtureDefinition{Source: models.FixtureSourceGDTF, SourceID: &sid, SourceVersion: &ver}, models.FixtureSourceGDTF},
 		{"missing source", export.ExportedFixtureDefinition{}, models.FixtureSourceUser},
 		{"unknown source", export.ExportedFixtureDefinition{Source: "BOGUS"}, models.FixtureSourceUser},
+		{"builtin source is not trusted", export.ExportedFixtureDefinition{Source: models.FixtureSourceBuiltIn}, models.FixtureSourceUser},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

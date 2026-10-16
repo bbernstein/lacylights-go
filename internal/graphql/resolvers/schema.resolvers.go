@@ -290,10 +290,7 @@ func (r *fixtureDefinitionResolver) Modes(ctx context.Context, obj *models.Fixtu
 
 // Source is the resolver for the source field.
 func (r *fixtureDefinitionResolver) Source(ctx context.Context, obj *models.FixtureDefinition) (generated.FixtureSource, error) {
-	if obj.Source == "" {
-		return generated.FixtureSourceUser, nil
-	}
-	return generated.FixtureSource(obj.Source), nil
+	return toFixtureSource(obj.Source), nil
 }
 
 // CreatedAt is the resolver for the createdAt field.

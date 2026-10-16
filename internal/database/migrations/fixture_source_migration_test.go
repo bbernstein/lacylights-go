@@ -102,3 +102,28 @@ func TestBackfillFixtureSources_RunsOnceWithSettingsTable(t *testing.T) {
 		t.Errorf("completion marks = %d, want 1", marks)
 	}
 }
+
+func TestBackfillFixtureSources_RollsBackWhenMarkFails(t *testing.T) {
+	db := openTestDB(t)
+	if err := db.Exec(fixtureDefsDDL).Error; err != nil {
+		t.Fatal(err)
+	}
+	// A settings table whose insert fails (missing columns) makes the
+	// completion mark fail after the updates ran.
+	if err := db.Exec(`CREATE TABLE settings (key TEXT)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`INSERT INTO fixture_definitions (id, ref_id, source) VALUES ('old', 'def-A-B', 'USER')`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := BackfillFixtureSources(db); err == nil {
+		t.Fatal("expected the completion mark to fail")
+	}
+	var source string
+	if err := db.Raw(`SELECT source FROM fixture_definitions WHERE id = 'old'`).Scan(&source).Error; err != nil {
+		t.Fatal(err)
+	}
+	if source != "USER" {
+		t.Errorf("source = %s, want USER (updates rolled back with the failed mark)", source)
+	}
+}

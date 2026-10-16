@@ -53,16 +53,20 @@ func BackfillFixtureSources(db *gorm.DB) error {
 		`UPDATE fixture_definitions SET source = 'SYNTHESIZED'
 		  WHERE source = 'USER' AND ref_id LIKE 'def-%'`,
 	}
-	for _, stmt := range stmts {
-		if err := db.Exec(stmt).Error; err != nil {
-			return fmt.Errorf("backfill fixture sources: %w", err)
+	// The updates and the completion mark commit together, so a crash
+	// in between cannot leave the heuristic to run again on a later start.
+	return db.Transaction(func(tx *gorm.DB) error {
+		for _, stmt := range stmts {
+			if err := tx.Exec(stmt).Error; err != nil {
+				return fmt.Errorf("backfill fixture sources: %w", err)
+			}
 		}
-	}
-	if hasSettings {
-		mark := models.Setting{ID: cuid.New(), Key: fixtureSourceBackfillSettingKey, Value: "done"}
-		if err := db.Create(&mark).Error; err != nil {
-			return fmt.Errorf("backfill fixture sources: record completion: %w", err)
+		if hasSettings {
+			mark := models.Setting{ID: cuid.New(), Key: fixtureSourceBackfillSettingKey, Value: "done"}
+			if err := tx.Create(&mark).Error; err != nil {
+				return fmt.Errorf("backfill fixture sources: record completion: %w", err)
+			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
