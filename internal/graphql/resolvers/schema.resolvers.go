@@ -1085,6 +1085,10 @@ func (r *mutationResolver) BulkDeleteProjects(ctx context.Context, projectIds []
 
 // SetFixtureSourcePrecedence is the resolver for the setFixtureSourcePrecedence field.
 func (r *mutationResolver) SetFixtureSourcePrecedence(ctx context.Context, order []generated.FixtureSource) ([]generated.FixtureSource, error) {
+	// Server-wide preference: affects fixture matching for every project.
+	if err := r.requireAdmin(ctx); err != nil {
+		return nil, err
+	}
 	in := make([]string, len(order))
 	for i, s := range order {
 		in[i] = string(s)

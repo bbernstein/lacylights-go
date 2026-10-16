@@ -308,3 +308,74 @@ func TestUpdatesService_IsFixtureInUse(t *testing.T) {
 		t.Errorf("Count should be 1, got %d", count)
 	}
 }
+
+func TestUpdatesService_UsageChecksTargetOFLDefinition(t *testing.T) {
+	// Same-name USER and OFL definitions coexist; only one of them is in use.
+	// Usage must be reported for the OFL definition, which is the one an OFL
+	// update replaces.
+	for _, inUse := range []string{models.FixtureSourceUser, models.FixtureSourceOFL} {
+		t.Run(inUse+"_in_use", func(t *testing.T) {
+			testDB, cleanup := testutil.SetupTestDB(t)
+			defer cleanup()
+			ctx := context.Background()
+
+			hash := "oldhash"
+			ids := map[string]string{}
+			for _, src := range []string{models.FixtureSourceUser, models.FixtureSourceOFL} {
+				def := &models.FixtureDefinition{Manufacturer: "TestMfg", Model: "TestModel", Type: "LED_PAR", Source: src}
+				if src == models.FixtureSourceOFL {
+					def.OFLSourceHash = &hash
+				}
+				if err := testDB.FixtureRepo.CreateDefinition(ctx, def); err != nil {
+					t.Fatal(err)
+				}
+				ids[src] = def.ID
+			}
+			project := &models.Project{Name: "P"}
+			if err := testDB.DB.Create(project).Error; err != nil {
+				t.Fatal(err)
+			}
+			fi := &models.FixtureInstance{Name: "F", DefinitionID: ids[inUse], ProjectID: project.ID,
+				Universe: 1, StartChannel: 1}
+			if err := testDB.DB.Create(fi).Error; err != nil {
+				t.Fatal(err)
+			}
+
+			service := NewUpdatesService(testDB.DB, testDB.FixtureRepo)
+			id, err := service.GetOFLDefinitionIDByManufacturerModel(ctx, "TestMfg", "TestModel")
+			if err != nil || id != ids[models.FixtureSourceOFL] {
+				t.Fatalf("OFL definition ID = %q, %v; want %q", id, err, ids[models.FixtureSourceOFL])
+			}
+
+			hashes, err := service.GetCurrentFixtureHashes(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			counts, err := service.GetFixtureInstanceCounts(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			upd, err := service.CompareFixture(ctx, "TestMfg", "TestModel", "newhash", hashes, counts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if wantInUse := inUse == models.FixtureSourceOFL; upd.IsInUse != wantInUse {
+				t.Errorf("IsInUse = %v, want %v", upd.IsInUse, wantInUse)
+			}
+		})
+	}
+}
+
+func TestUpdatesService_GetOFLDefinitionIDByManufacturerModel_NoOFL(t *testing.T) {
+	testDB, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	def := &models.FixtureDefinition{Manufacturer: "TestMfg", Model: "TestModel", Type: "LED_PAR"}
+	if err := testDB.FixtureRepo.CreateDefinition(ctx, def); err != nil {
+		t.Fatal(err)
+	}
+	id, err := NewUpdatesService(testDB.DB, testDB.FixtureRepo).GetOFLDefinitionIDByManufacturerModel(ctx, "TestMfg", "TestModel")
+	if err != nil || id != "" {
+		t.Errorf("got %q, %v; want no OFL definition", id, err)
+	}
+}
