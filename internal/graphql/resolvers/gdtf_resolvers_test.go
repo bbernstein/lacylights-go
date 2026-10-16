@@ -1,6 +1,8 @@
 package resolvers
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -156,5 +158,25 @@ func TestImportGdtfFixtures_GDTFDefinitionIsFilterable(t *testing.T) {
 	}
 	if len(list.FixtureDefinitions) != 1 || list.FixtureDefinitions[0].Model != "TestSpot" {
 		t.Errorf("GDTF definitions = %+v", list.FixtureDefinitions)
+	}
+}
+
+func TestImportGdtfFixtures_RequiresAuthentication(t *testing.T) {
+	r, cleanup := setupGroupAdminTestResolver(t, true)
+	defer cleanup()
+	m := r.Mutation().(*mutationResolver)
+
+	if _, err := m.ImportGdtfFixtures(context.Background(), nil, nil); !errors.Is(err, ErrNotAuthenticated) {
+		t.Errorf("anonymous: err = %v, want ErrNotAuthenticated", err)
+	}
+	if r.GDTFService == nil {
+		t.Skip("GDTF service not configured in this resolver")
+	}
+	res, err := m.ImportGdtfFixtures(createMemberContext("u", "u@test.com", "g"), nil, nil)
+	if err != nil {
+		t.Fatalf("authenticated: %v", err)
+	}
+	if len(res.Results) != 0 {
+		t.Errorf("results = %v, want none", res.Results)
 	}
 }

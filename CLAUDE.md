@@ -124,7 +124,10 @@ The fade engine (`internal/services/fade/`) handles smooth DMX transitions:
 - GraphQL: `importGdtfFixtures(files: [GdtfFileInput!]!, options)` takes description.xml
   strings (clients unzip the `.gdtf`); each file is its own transaction and gets a status
   CREATED / UPDATED / UNCHANGED / SKIPPED / FAILED.
-- `ExtractDescriptions` reads `.gdtf` or `.zip` (nested ≤ 2) in memory with entry/size limits.
+- `ExtractDescriptions` reads `.gdtf` or `.zip` (nested ≤ 2) in memory with per-entry limits and a
+  per-call budget (`MaxTotalFiles`, `MaxTotalDescriptionBytes`).
+- The mutation requires authentication (`requireAuthenticated`); `setFixtureSourcePrecedence`
+  requires an admin. Mode expansion is capped at `maxModeInstances` channel instances.
 - Definitions are `source = GDTF`, `source_id` = upper-cased FixtureTypeID. Re-import updates
   in place (same ID and RefID); `onExisting: SKIP` keeps the old one.
 - GDTF 1.2 supported; 1.1 and 1.3+ import with a warning; 1.0 is rejected.

@@ -9,6 +9,10 @@ import (
 
 // importGdtfFixtures implements the importGdtfFixtures mutation.
 func (r *mutationResolver) importGdtfFixtures(ctx context.Context, files []*generated.GdtfFileInput, options *generated.GdtfImportOptions) (*generated.GdtfImportResult, error) {
+	// Definitions are global and an update overwrites one by FixtureTypeID.
+	if err := r.requireAuthenticated(ctx); err != nil {
+		return nil, err
+	}
 	opts := gdtf.Options{OnExisting: gdtf.OnExistingUpdate}
 	if options != nil {
 		if p := options.OnExisting.Value(); p != nil && *p == generated.GdtfExistingPolicySkip {

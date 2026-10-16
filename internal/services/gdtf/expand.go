@@ -13,6 +13,12 @@ const (
 	maxBreakChannels = 512
 	// maxGeometryDepth bounds the geometry tree walk.
 	maxGeometryDepth = 64
+	// maxModeInstances bounds the channel instances one mode may expand to.
+	// Geometry references multiply template channels, so a small
+	// description could otherwise allocate millions of instances.
+	maxModeInstances = 8192
+	// maxDMXUniverse bounds the universe of a "universe.address" DMXOffset.
+	maxDMXUniverse = 1 << 15
 )
 
 // channelInstance is one DMX channel as patched: a DMXChannel of the mode,
@@ -55,6 +61,7 @@ type modeExpander struct {
 	instances  []channelInstance
 	warnings   []string
 	warned     map[string]bool
+	tooMany    bool // instance budget exceeded; expansion stops
 }
 
 // expandMode returns the patched channel instances of a mode grouped by
@@ -81,6 +88,9 @@ func expandMode(geoms *geometryIndex, mode *xmlDMXMode) (map[int][]channelInstan
 		e.warn(fmt.Sprintf("mode %q: geometry %q not found; using %q", mode.Name, mode.Geometry, root.Name))
 	}
 	e.walk(root, 0)
+	if e.tooMany {
+		return nil, nil, fmt.Errorf("mode %q expands to more than %d DMX channels", mode.Name, maxModeInstances)
+	}
 
 	// Channels outside the mode's geometry tree are invalid GDTF, but their
 	// offsets are explicit, so use them as declared rather than lose them.
@@ -112,7 +122,7 @@ func (e *modeExpander) warn(msg string) {
 }
 
 func (e *modeExpander) walk(node *xmlGeometry, depth int) {
-	if depth > maxGeometryDepth || node.isBreak() {
+	if e.tooMany || depth > maxGeometryDepth || node.isBreak() {
 		return
 	}
 	if node.isReference() {
@@ -139,7 +149,7 @@ func (e *modeExpander) reference(ref *xmlGeometry) {
 	breaks := referenceBreaks(ref)
 	var visit func(n *xmlGeometry, depth int)
 	visit = func(n *xmlGeometry, depth int) {
-		if depth > maxGeometryDepth || n.isBreak() || n.isReference() {
+		if e.tooMany || depth > maxGeometryDepth || n.isBreak() || n.isReference() {
 			return
 		}
 		for _, i := range e.byGeometry[n.Name] {
@@ -188,7 +198,7 @@ func parseDMXAddress(s string) (int, bool) {
 	if u, a, ok := strings.Cut(s, "."); ok {
 		un, err1 := strconv.Atoi(u)
 		an, err2 := strconv.Atoi(a)
-		if err1 != nil || err2 != nil || un < 1 || an < 1 {
+		if err1 != nil || err2 != nil || un < 1 || an < 1 || un > maxDMXUniverse || an > maxBreakChannels {
 			return 0, false
 		}
 		return (un-1)*512 + an, true
@@ -253,13 +263,19 @@ func (e *modeExpander) add(ch *xmlDMXChannel, geometry string, brk, shift int) {
 	if offsets == nil {
 		return // virtual channel
 	}
+	if len(e.instances) >= maxModeInstances {
+		e.tooMany = true
+		return
+	}
 	shifted := make([]int, len(offsets))
 	for i, o := range offsets {
-		shifted[i] = o + shift
-		if shifted[i] > maxBreakChannels {
+		// Compare before adding so a huge Offset or DMXOffset cannot
+		// overflow into an accepted address. shift is never negative.
+		if o > maxBreakChannels-shift {
 			e.warn(fmt.Sprintf("mode %q: channel %s on %q is beyond address %d; channel skipped", e.mode.Name, channelName(ch), geometry, maxBreakChannels))
 			return
 		}
+		shifted[i] = o + shift
 	}
 	e.instances = append(e.instances, channelInstance{ch: ch, geometry: geometry, dmxBreak: brk, offsets: shifted})
 }

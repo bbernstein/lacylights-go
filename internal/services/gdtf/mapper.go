@@ -323,10 +323,9 @@ func isDiscrete(lc *xmlLogicalChannel) bool {
 		groups[key]++
 		largest = max(largest, groups[key])
 	}
-	if ungated > 0 {
-		return ungated > 1
-	}
-	return largest > 1
+	// Ungated functions are always in effect, alongside whichever gated
+	// group is active.
+	return ungated+largest > 1
 }
 
 // defaultValue returns the instance's default at its full resolution

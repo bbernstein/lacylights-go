@@ -29,6 +29,12 @@ const (
 	// MaxNestedArchiveBytes caps the decompressed size of one nested
 	// archive, which has to be held in memory to be opened.
 	MaxNestedArchiveBytes = 512 << 20
+	// MaxTotalDescriptionBytes caps the description.xml bytes one
+	// ExtractDescriptions call returns, across all nested archives.
+	MaxTotalDescriptionBytes = 256 << 20
+	// MaxTotalFiles caps how many descriptions one ExtractDescriptions call
+	// returns, across all nested archives.
+	MaxTotalFiles = MaxArchiveEntries
 )
 
 // descriptionFileName is the GDTF description at the root of a .gdtf.
@@ -42,6 +48,8 @@ var (
 	ErrDescriptionTooLarge = fmt.Errorf("description.xml is larger than %d MB", MaxDescriptionBytes>>20)
 	ErrNestingTooDeep      = fmt.Errorf("archives nested more than %d levels deep", MaxNestingDepth)
 	ErrNestedTooLarge      = fmt.Errorf("nested archive is larger than %d MB", MaxNestedArchiveBytes>>20)
+	ErrExtractionTooLarge  = fmt.Errorf("archive holds more than %d fixture files or %d MB of descriptions",
+		MaxTotalFiles, MaxTotalDescriptionBytes>>20)
 )
 
 // File is one GDTF description to import.
@@ -64,12 +72,29 @@ type File struct {
 // Problems with individual entries of a container do not stop the others:
 // the files that could be read are returned together with a non-nil error
 // that joins one error per failed entry. A nil slice with an error means
-// nothing could be read.
+// nothing could be read. Once MaxTotalFiles or MaxTotalDescriptionBytes is
+// reached, extraction stops and the error includes ErrExtractionTooLarge.
 func ExtractDescriptions(r io.ReaderAt, size int64, name string) ([]File, error) {
-	return extract(r, size, name, 0)
+	return extract(r, size, name, 0, &extractBudget{})
 }
 
-func extract(r io.ReaderAt, size int64, name string, depth int) ([]File, error) {
+// extractBudget tracks what one ExtractDescriptions call has returned so far.
+type extractBudget struct {
+	files int
+	bytes int64
+}
+
+// take reserves room for one description of n bytes.
+func (b *extractBudget) take(n int64) bool {
+	if b.files >= MaxTotalFiles || b.bytes+n > MaxTotalDescriptionBytes {
+		return false
+	}
+	b.files++
+	b.bytes += n
+	return true
+}
+
+func extract(r io.ReaderAt, size int64, name string, depth int, budget *extractBudget) ([]File, error) {
 	if depth > MaxNestingDepth {
 		return nil, fmt.Errorf("%s: %w", name, ErrNestingTooDeep)
 	}
@@ -85,6 +110,9 @@ func extract(r io.ReaderAt, size int64, name string, depth int) ([]File, error) 
 		xmlText, err := readDescription(desc)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		if !budget.take(int64(len(xmlText))) {
+			return nil, fmt.Errorf("%s: %w", name, ErrExtractionTooLarge)
 		}
 		return []File{{FileName: name, DescriptionXML: xmlText}}, nil
 	}
@@ -103,10 +131,13 @@ func extract(r io.ReaderAt, size int64, name string, depth int) ([]File, error) 
 			continue
 		}
 		entryName := name + "/" + f.Name
-		got, err := extractEntry(f, entryName, depth+1)
+		got, err := extractEntry(f, entryName, depth+1, budget)
 		files = append(files, got...)
 		if err != nil {
 			errs = append(errs, err)
+			if errors.Is(err, ErrExtractionTooLarge) {
+				break
+			}
 		}
 	}
 	if len(files) == 0 && len(errs) == 0 {
@@ -116,7 +147,7 @@ func extract(r io.ReaderAt, size int64, name string, depth int) ([]File, error) 
 }
 
 // extractEntry loads a nested archive into memory and extracts from it.
-func extractEntry(f *zip.File, name string, depth int) ([]File, error) {
+func extractEntry(f *zip.File, name string, depth int, budget *extractBudget) ([]File, error) {
 	if depth > MaxNestingDepth {
 		return nil, fmt.Errorf("%s: %w", name, ErrNestingTooDeep)
 	}
@@ -130,7 +161,7 @@ func extractEntry(f *zip.File, name string, depth int) ([]File, error) {
 		}
 		return nil, fmt.Errorf("%s: %w", name, err)
 	}
-	return extract(bytes.NewReader(data), int64(len(data)), name, depth)
+	return extract(bytes.NewReader(data), int64(len(data)), name, depth, budget)
 }
 
 // rootDescription returns the description.xml entry at the archive root.

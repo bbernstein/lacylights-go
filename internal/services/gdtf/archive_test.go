@@ -182,3 +182,39 @@ func TestReadLimited_HeaderLies(t *testing.T) {
 		t.Errorf("read %d bytes, err %v", len(got), err)
 	}
 }
+
+func TestExtractDescriptions_TotalFileBudget(t *testing.T) {
+	one := gdtfArchive(t, "<GDTF/>")
+	inner := func() []byte {
+		entries := make([]zipEntry, MaxTotalFiles/2+1)
+		for i := range entries {
+			entries[i] = zipEntry{"F" + strconv.Itoa(i) + ".gdtf", one}
+		}
+		return buildZip(t, entries...)
+	}
+	outer := buildZip(t,
+		zipEntry{"a.zip", inner()},
+		zipEntry{"b.zip", inner()},
+		zipEntry{"c.zip", inner()}, // never opened: the budget is spent first
+	)
+	files, err := extractBytes(outer, "all.zip")
+	if !errors.Is(err, ErrExtractionTooLarge) {
+		t.Fatalf("err = %v, want ErrExtractionTooLarge", err)
+	}
+	if len(files) != MaxTotalFiles {
+		t.Errorf("files = %d, want %d", len(files), MaxTotalFiles)
+	}
+}
+
+func TestExtractBudget_Bytes(t *testing.T) {
+	b := &extractBudget{}
+	if !b.take(MaxTotalDescriptionBytes - 10) {
+		t.Fatal("first description should fit")
+	}
+	if b.take(11) {
+		t.Error("description past the byte budget should not fit")
+	}
+	if !b.take(10) {
+		t.Error("description that exactly fills the budget should fit")
+	}
+}

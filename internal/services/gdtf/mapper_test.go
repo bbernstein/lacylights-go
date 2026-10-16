@@ -1,6 +1,7 @@
 package gdtf
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -296,6 +297,7 @@ func TestBuildPlan_SnapAndDiscrete(t *testing.T) {
 		{"multiple functions", dmxChannel("1", "Dimmer", "", `<ChannelFunction Name="A" Attribute="Dimmer" DMXFrom="0/1"/><ChannelFunction Name="B" Attribute="Dimmer" DMXFrom="128/1"/>`), "SNAP", true},
 		{"ModeMaster alternatives", dmxChannel("1", "Dimmer", "", `<ChannelFunction Name="A" Attribute="Dimmer" DMXFrom="0/1" ModeMaster="Beam_Pan" ModeFrom="0/1" ModeTo="127/1"/><ChannelFunction Name="B" Attribute="Dimmer" DMXFrom="0/1" ModeMaster="Beam_Pan" ModeFrom="128/1" ModeTo="255/1"/>`), "FADE", false},
 		{"ModeMaster group with two functions", dmxChannel("1", "Dimmer", "", `<ChannelFunction Name="A" Attribute="Dimmer" DMXFrom="0/1" ModeMaster="Beam_Pan" ModeFrom="0/1" ModeTo="127/1"/><ChannelFunction Name="B" Attribute="Dimmer" DMXFrom="100/1" ModeMaster="Beam_Pan" ModeFrom="0/1" ModeTo="127/1"/>`), "SNAP", true},
+		{"ungated function plus a ModeMaster group", dmxChannel("1", "Dimmer", "", `<ChannelFunction Name="U" Attribute="Dimmer" DMXFrom="0/1"/><ChannelFunction Name="A" Attribute="Dimmer" DMXFrom="0/1" ModeMaster="Beam_Pan" ModeFrom="0/1" ModeTo="127/1"/><ChannelFunction Name="B" Attribute="Dimmer" DMXFrom="100/1" ModeMaster="Beam_Pan" ModeFrom="0/1" ModeTo="127/1"/>`), "SNAP", true},
 		{"wheel slot sets", dmxChannel("1", "Dimmer", "", `<ChannelFunction Name="A" Attribute="Dimmer" DMXFrom="0/1"><ChannelSet Name="x" DMXFrom="0/1" WheelSlotIndex="1"/></ChannelFunction>`), "SNAP", true},
 	}
 	for _, tt := range tests {
@@ -418,7 +420,7 @@ func TestParseDMXAddress(t *testing.T) {
 			t.Errorf("parseDMXAddress(%q) = %d, %v", in, got, ok)
 		}
 	}
-	for _, bad := range []string{"", "x", "0", "1.x", "0.1"} {
+	for _, bad := range []string{"", "x", "0", "1.x", "0.1", "1.513", "99999999.1", "9223372036854775807.1"} {
 		if _, ok := parseDMXAddress(bad); ok {
 			t.Errorf("parseDMXAddress(%q) should fail", bad)
 		}
@@ -474,5 +476,46 @@ func TestBuildPlan_ReferenceWithoutMatchingBreak(t *testing.T) {
 	p := mustPlan(t, x)
 	if !hasWarning(p.Warnings, `"Pixel 1" has no Break for DMX break 1`) {
 		t.Errorf("warnings = %v", p.Warnings)
+	}
+}
+
+func TestBuildPlan_HugeOffsetsDoNotOverflow(t *testing.T) {
+	// Offset + DMXOffset would wrap to a negative address on 64-bit if added
+	// before the bounds check.
+	for _, tc := range []struct{ offset, dmxOffset string }{
+		{"9223372036854775807", "2"},
+		{"2", "9223372036854775807"},
+	} {
+		x := strings.Replace(readTestdata(t, "pixelbar.xml"),
+			`<GeometryReference Name="Pixel 1" Geometry="Pixel"><Break DMXBreak="1" DMXOffset="2"/>`,
+			`<GeometryReference Name="Pixel 1" Geometry="Pixel"><Break DMXBreak="1" DMXOffset="`+tc.dmxOffset+`"/>`, 1)
+		x = strings.Replace(x, `<DMXChannel DMXBreak="1" Offset="1" Geometry="Pixel">`,
+			`<DMXChannel DMXBreak="1" Offset="`+tc.offset+`" Geometry="Pixel">`, 1)
+		p := mustPlan(t, x)
+		if !hasWarning(p.Warnings, "beyond address 512") {
+			t.Errorf("offset %s + DMXOffset %s: warnings = %v", tc.offset, tc.dmxOffset, p.Warnings)
+		}
+		for _, m := range p.Modes {
+			if n := len(m.channelIdx); n > maxBreakChannels {
+				t.Errorf("mode %s has %d channels", m.Name, n)
+			}
+		}
+	}
+}
+
+func TestBuildPlan_ExpansionBudget(t *testing.T) {
+	var refs strings.Builder
+	for i := range maxModeInstances + 1 {
+		fmt.Fprintf(&refs, `<GeometryReference Name="P%d" Geometry="Pixel"><Break DMXBreak="1" DMXOffset="1"/></GeometryReference>`, i)
+	}
+	x := strings.Replace(readTestdata(t, "pixelbar.xml"),
+		`<GeometryReference Name="Pixel 1" Geometry="Pixel"><Break DMXBreak="1" DMXOffset="2"/></GeometryReference>`,
+		refs.String(), 1)
+	doc, w, err := parseDescription(x)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buildPlan(doc, w); err == nil || !strings.Contains(err.Error(), "expands to more than") {
+		t.Errorf("err = %v, want expansion budget error", err)
 	}
 }
