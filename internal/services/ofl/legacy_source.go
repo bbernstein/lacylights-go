@@ -18,6 +18,9 @@ import (
 // reclassified, so the bundle is only scanned once.
 const legacySourceBackfillSettingKey = "ofl_legacy_source_backfill"
 
+// reclassifyChunkSize is how many definition IDs one UPDATE binds.
+const reclassifyChunkSize = 500
+
 // ReclassifyLegacyImportsFromBundle runs ReclassifyLegacyImports against the
 // embedded OFL bundle. Without a bundle it does nothing and leaves the
 // backfill pending, so a later build that embeds one can still run it.
@@ -39,11 +42,17 @@ func ReclassifyLegacyImportsFromBundle(ctx context.Context, db *gorm.DB) (int, e
 //
 // Names alone are not evidence: a USER definition is reclassified only when
 // the OFL archive has a fixture with the same manufacturer and model and the
-// OFL import of that fixture yields exactly the same set of channel names.
+// OFL import of that fixture yields exactly the same channel names in the
+// same offset order. Channel types are not compared because the OFL type
+// mapping has changed between releases.
 // The result is recorded in settings, so later calls return immediately.
 func ReclassifyLegacyImports(ctx context.Context, db *gorm.DB, zr *zip.Reader) (int, error) {
 	settings := repositories.NewSettingRepository(db)
-	if done, err := settings.FindByKey(ctx, legacySourceBackfillSettingKey); err == nil && done != nil {
+	done, err := settings.FindByKey(ctx, legacySourceBackfillSettingKey)
+	if err != nil {
+		return 0, fmt.Errorf("read %s: %w", legacySourceBackfillSettingKey, err)
+	}
+	if done != nil {
 		return 0, nil
 	}
 
@@ -89,7 +98,7 @@ func reclassifyCandidates(ctx context.Context, db *gorm.DB, zr *zip.Reader, cand
 		candidateMfrs[c.Manufacturer] = true
 	}
 
-	var ids []string
+	var matched []*models.FixtureDefinition
 	for _, f := range zr.File {
 		parts := strings.Split(f.Name, "/")
 		if len(parts) != 4 || parts[1] != "fixtures" || !strings.HasSuffix(f.Name, ".json") || parts[3] == ManufacturersFile {
@@ -118,18 +127,33 @@ func reclassifyCandidates(ctx context.Context, db *gorm.DB, zr *zip.Reader, cand
 		want := planChannelNames(plan)
 		for _, d := range defs {
 			if slices.Equal(definitionChannelNames(d), want) {
-				ids = append(ids, d.ID)
+				matched = append(matched, d)
 			}
 		}
 	}
 
-	if len(ids) == 0 {
+	if len(matched) == 0 {
 		return 0, nil
 	}
-	if err := db.WithContext(ctx).Model(&models.FixtureDefinition{}).
-		Where("id IN ? AND source = ?", ids, models.FixtureSourceUser).
-		Update("source", models.FixtureSourceOFL).Error; err != nil {
-		return 0, fmt.Errorf("reclassify legacy OFL definitions: %w", err)
+	ids := make([]string, len(matched))
+	for i, d := range matched {
+		ids[i] = d.ID
+		log.Printf("📋 Legacy OFL definition %s %q/%q matches the OFL bundle; source set to OFL", d.ID, d.Manufacturer, d.Model)
+	}
+	// One transaction, chunked to stay well below SQLite's bound-parameter limit.
+	err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for start := 0; start < len(ids); start += reclassifyChunkSize {
+			chunk := ids[start:min(start+reclassifyChunkSize, len(ids))]
+			if err := tx.Model(&models.FixtureDefinition{}).
+				Where("id IN ? AND source = ?", chunk, models.FixtureSourceUser).
+				Update("source", models.FixtureSourceOFL).Error; err != nil {
+				return fmt.Errorf("reclassify legacy OFL definitions: %w", err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
 	}
 	return len(ids), nil
 }
@@ -147,20 +171,24 @@ func readZipFile(f *zip.File) (string, error) {
 	return string(data), nil
 }
 
+// planChannelNames lists the plan's channel names in offset order.
 func planChannelNames(plan *importPlan) []string {
-	names := make([]string, len(plan.Channels))
-	for i, c := range plan.Channels {
+	chans := slices.Clone(plan.Channels)
+	slices.SortStableFunc(chans, func(a, b ChannelDefinition) int { return a.Offset - b.Offset })
+	names := make([]string, len(chans))
+	for i, c := range chans {
 		names[i] = c.Name
 	}
-	slices.Sort(names)
 	return names
 }
 
+// definitionChannelNames lists the definition's channel names in offset order.
 func definitionChannelNames(def *models.FixtureDefinition) []string {
-	names := make([]string, len(def.Channels))
-	for i, c := range def.Channels {
+	chans := slices.Clone(def.Channels)
+	slices.SortStableFunc(chans, func(a, b models.ChannelDefinition) int { return a.Offset - b.Offset })
+	names := make([]string, len(chans))
+	for i, c := range chans {
 		names[i] = c.Name
 	}
-	slices.Sort(names)
 	return names
 }

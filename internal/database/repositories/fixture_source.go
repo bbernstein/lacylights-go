@@ -108,7 +108,7 @@ func (r *FixtureRepository) FindDefinitionsByManufacturerModel(ctx context.Conte
 	var defs []models.FixtureDefinition
 	if err := r.db.WithContext(ctx).
 		Where("manufacturer = ? AND model = ?", manufacturer, model).
-		Order("created_at ASC").
+		Order("created_at ASC").Order("id ASC").
 		Find(&defs).Error; err != nil {
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func (r *FixtureRepository) FindDefinitionBySourceID(ctx context.Context, source
 
 func (r *FixtureRepository) firstDefinition(ctx context.Context, query string, args ...any) (*models.FixtureDefinition, error) {
 	var def models.FixtureDefinition
-	err := r.db.WithContext(ctx).Where(query, args...).Order("created_at ASC").First(&def).Error
+	err := r.db.WithContext(ctx).Where(query, args...).Order("created_at ASC").Order("id ASC").First(&def).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, nil
 	}

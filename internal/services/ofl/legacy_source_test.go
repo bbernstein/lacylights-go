@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
@@ -144,5 +145,72 @@ func TestReclassifyLegacyImportsFromBundle(t *testing.T) {
 	defer cleanup()
 	if _, err := ReclassifyLegacyImportsFromBundle(context.Background(), testDB.DB); err != nil {
 		t.Errorf("bundle backfill: %v", err)
+	}
+}
+
+func TestReclassifyLegacyImports_RequiresChannelOrder(t *testing.T) {
+	testDB, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	fixture, err := parseOFLFixture(complexOFLFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := buildImportPlan(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := planChannelNames(plan)
+	if len(names) < 2 {
+		t.Fatalf("complex fixture needs several channels, got %v", names)
+	}
+	create := func(order []string) string {
+		def := &models.FixtureDefinition{Manufacturer: "Test", Model: fixture.Name, Type: "OTHER"}
+		var chans []models.ChannelDefinition
+		for i, n := range order {
+			chans = append(chans, models.ChannelDefinition{Name: n, Type: "OTHER", Offset: i, MaxValue: 255})
+		}
+		if err := testDB.FixtureRepo.CreateDefinitionWithChannels(ctx, def, chans); err != nil {
+			t.Fatal(err)
+		}
+		return def.ID
+	}
+	reversed := slices.Clone(names)
+	slices.Reverse(reversed)
+	same := create(names)
+	shuffled := create(reversed)
+
+	if n, err := ReclassifyLegacyImports(ctx, testDB.DB, legacyArchive(t)); err != nil || n != 1 {
+		t.Fatalf("reclassified = %d, %v; want 1", n, err)
+	}
+	for id, want := range map[string]string{same: models.FixtureSourceOFL, shuffled: models.FixtureSourceUser} {
+		def, _ := testDB.FixtureRepo.FindDefinitionByID(ctx, id)
+		if def == nil || def.Source != want {
+			t.Errorf("definition %s source = %v, want %s", id, def, want)
+		}
+	}
+}
+
+func TestReclassifyLegacyImports_ManyMatchesAreChunked(t *testing.T) {
+	testDB, cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	total := reclassifyChunkSize + 3
+	for range total {
+		def := &models.FixtureDefinition{Manufacturer: "Test", Model: "Test Fixture", Type: "OTHER"}
+		chans := []models.ChannelDefinition{{Name: "Dimmer", Type: "INTENSITY", MaxValue: 255}}
+		if err := testDB.FixtureRepo.CreateDefinitionWithChannels(ctx, def, chans); err != nil {
+			t.Fatal(err)
+		}
+	}
+	n, err := ReclassifyLegacyImports(ctx, testDB.DB, legacyArchive(t))
+	if err != nil || n != total {
+		t.Fatalf("reclassified = %d, %v; want %d", n, err, total)
+	}
+	var left int64
+	testDB.DB.Model(&models.FixtureDefinition{}).Where("source = ?", models.FixtureSourceUser).Count(&left)
+	if left != 0 {
+		t.Errorf("%d definitions left as USER", left)
 	}
 }

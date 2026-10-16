@@ -177,3 +177,17 @@ func TestSetFixtureSourcePrecedence_RequiresAdmin(t *testing.T) {
 		t.Errorf("admin result = %v, want OFL first", got)
 	}
 }
+
+func TestToFixtureSource(t *testing.T) {
+	cases := map[string]generated.FixtureSource{
+		"":        generated.FixtureSourceUser,
+		"GDTF":    generated.FixtureSourceGdtf,
+		"FUTURE":  generated.FixtureSourceUser,
+		"BUILTIN": generated.FixtureSourceBuiltin,
+	}
+	for in, want := range cases {
+		if got := toFixtureSource(in); got != want {
+			t.Errorf("toFixtureSource(%q) = %s, want %s", in, got, want)
+		}
+	}
+}

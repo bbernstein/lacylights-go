@@ -827,9 +827,11 @@ func (s *Service) findExistingDefinition(ctx context.Context, def export.Exporte
 }
 
 // importedDefinitionSource keeps a known exported source and maps anything
-// else (missing or unrecognized) to USER.
+// else (missing, unrecognized or BUILTIN) to USER.
 func importedDefinitionSource(source string) string {
-	if slices.Contains(models.DefaultFixtureSourcePrecedence, source) {
+	// Imported definitions are never built-in (IsBuiltIn is false), so an
+	// exported BUILTIN source must not let one outrank OFL or GDTF.
+	if source != models.FixtureSourceBuiltIn && slices.Contains(models.DefaultFixtureSourcePrecedence, source) {
 		return source
 	}
 	return models.FixtureSourceUser
