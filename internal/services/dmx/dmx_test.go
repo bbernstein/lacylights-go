@@ -1814,44 +1814,43 @@ func TestForceImmediateTransmissionMultipleCalls(t *testing.T) {
 // package's coverage flaky on CI.
 func TestTransmitLoopResetsTickerOnSignal(t *testing.T) {
 	svc := NewService(Config{Enabled: false, RefreshRateHz: 60, IdleRateHz: 1, HighRateDuration: time.Second})
+
+	// Change the rate and queue the reset signal before the loop starts, as
+	// ForceImmediateTransmission does. 2 Hz differs from the loop's initial
+	// lastRate (0), so the reset body runs, and its 500 ms interval means no
+	// tick can be ready when the loop first selects: the queued signal is the
+	// only ready case.
+	svc.mu.Lock()
+	svc.currentRate = 2
+	svc.mu.Unlock()
+	svc.resetTickerChan <- struct{}{}
+
 	done := make(chan struct{})
 	go func() {
 		svc.transmitLoop()
 		close(done)
 	}()
 
-	// Switch to the high rate and signal the loop, as ForceImmediateTransmission does.
-	svc.mu.Lock()
-	svc.currentRate = 60
-	svc.mu.Unlock()
-	svc.resetTickerChan <- struct{}{}
-
-	// The test relies on the idle ticker (1 Hz) not firing between the loop
-	// starting and the signal being taken (microseconds). If it did, the
-	// ticker case would see the rate change and rebuild the ticker itself, so
-	// the reset branch could be skipped (the test would still pass).
+	// resetTickerChan holds one signal, so this send completes only once the
+	// loop has received the first one, and the loop receives the second only
+	// after it has finished handling the first.
+	select {
+	case svc.resetTickerChan <- struct{}{}:
+	case <-time.After(2 * time.Second):
+		t.Fatal("transmitLoop did not take the reset signal")
+	}
 	deadline := time.Now().Add(2 * time.Second)
-	waitForResetTaken(t, svc, deadline, "transmitLoop did not take the reset signal")
-	// A second signal is only taken once the first one has been handled.
-	svc.resetTickerChan <- struct{}{}
-	waitForResetTaken(t, svc, deadline, "transmitLoop did not take the second reset signal")
+	for len(svc.resetTickerChan) > 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("transmitLoop did not finish handling the reset signal")
+		}
+		time.Sleep(time.Millisecond)
+	}
 
 	close(svc.stopChan)
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("transmitLoop did not stop")
-	}
-}
-
-// waitForResetTaken waits until transmitLoop has received the pending
-// reset-ticker signal, failing with msg after deadline.
-func waitForResetTaken(t *testing.T, svc *Service, deadline time.Time, msg string) {
-	t.Helper()
-	for len(svc.resetTickerChan) > 0 {
-		if time.Now().After(deadline) {
-			t.Fatal(msg)
-		}
-		time.Sleep(time.Millisecond)
 	}
 }
