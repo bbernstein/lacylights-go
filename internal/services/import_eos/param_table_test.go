@@ -58,8 +58,13 @@ func TestParamTable_ColorModelAndSpeedTypes(t *testing.T) {
 		{"Speed", 6, generated.ChannelTypeSpeed},
 		{"Effect_Speed", 6, generated.ChannelTypeSpeed},
 		{"Position_MSpeed", 2, generated.ChannelTypeSpeed},
+		{"MSpeed", 2, generated.ChannelTypeSpeed},
 		// Index/speed combo channels are not pure speed channels.
 		{"Gobo_Index/Speed", 5, generated.ChannelTypeOther},
+		// "speed" must be a whole trailing word.
+		{"Speed_Mode", 5, generated.ChannelTypeOther},
+		{"Gamspeed", 5, generated.ChannelTypeOther},
+		{"Wheelspeed", 5, generated.ChannelTypeOther},
 	}
 	for _, c := range cases {
 		if got := mapParamTypeName(c.name, c.category); got != c.want {

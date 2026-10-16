@@ -684,7 +684,7 @@ func TestUpgradeLegacySynthChannels(t *testing.T) {
 	fresh := []models.ChannelDefinition{
 		{Offset: 0, Type: "INTENSITY"},
 		{Offset: 1, Type: "HUE"},
-		{Offset: 1, Type: "SPEED"}, // duplicate offset: first one wins
+		{Offset: 2, Type: "OTHER"},
 		{Offset: 3, Type: "GREEN"}, // non-OTHER stored types are kept
 	}
 	got := upgradeLegacySynthChannels(stored, fresh)
@@ -696,5 +696,21 @@ func TestUpgradeLegacySynthChannels(t *testing.T) {
 	}
 	if stored[1].Type != "OTHER" {
 		t.Error("input slice was modified")
+	}
+}
+
+func TestUpgradeLegacySynthChannels_LayoutMismatchLeavesStored(t *testing.T) {
+	stored := []models.ChannelDefinition{{Offset: 0, Type: "OTHER"}, {Offset: 1, Type: "OTHER"}}
+	cases := map[string][]models.ChannelDefinition{
+		"different count":   {{Offset: 0, Type: "HUE"}},
+		"different offsets": {{Offset: 0, Type: "HUE"}, {Offset: 5, Type: "SATURATION"}},
+	}
+	for name, fresh := range cases {
+		got := upgradeLegacySynthChannels(stored, fresh)
+		for _, c := range got {
+			if c.Type != "OTHER" {
+				t.Errorf("%s: offset %d upgraded to %s", name, c.Offset, c.Type)
+			}
+		}
 	}
 }

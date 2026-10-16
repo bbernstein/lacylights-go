@@ -95,9 +95,9 @@ func mapParamTypeName(name string, category int) generated.ChannelType {
 }
 
 // isSpeedParamName reports whether an EOS parameter long name is a pure speed
-// control ("Speed", "Effect_Speed", "Position_MSpeed"). Combined index/speed
+// control ("Speed", "MSpeed", "Effect_Speed", "Position_MSpeed"). Combined index/speed
 // parameters such as "Gobo_Index/Speed" are not treated as speed channels.
 func isSpeedParamName(name string) bool {
 	n := strings.ToLower(name)
-	return n == "speed" || strings.HasSuffix(n, "_speed") || strings.HasSuffix(n, "mspeed")
+	return n == "speed" || n == "mspeed" || strings.HasSuffix(n, "_speed") || strings.HasSuffix(n, "_mspeed")
 }

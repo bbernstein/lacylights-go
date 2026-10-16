@@ -344,22 +344,34 @@ func applyDenormalizedDefFields(instance *models.FixtureInstance, def *models.Fi
 // offset. Synthesized definitions created before a channel type existed (for
 // example HUE or SPEED) store those channels as OTHER; without this, look
 // values for those parameters would find no channel of the new type and be
-// dropped on re-import. The stored definition itself is left unchanged.
+// dropped on re-import.
+//
+// The upgrade only applies when stored and fresh have the same channel
+// count and offsets; if the layout differs (the definition was edited, or
+// the personality changed) stored is returned unchanged.
+//
+// The stored definition itself is not modified. Instance channels created
+// from the returned slice carry the new types, so a re-imported fixture's
+// channel types can be newer than its definition's; playback and export use
+// the instance channels.
 func upgradeLegacySynthChannels(stored, fresh []models.ChannelDefinition) []models.ChannelDefinition {
+	if len(stored) != len(fresh) {
+		return stored
+	}
 	freshType := make(map[int]string, len(fresh))
 	for _, c := range fresh {
-		if _, seen := freshType[c.Offset]; !seen {
-			freshType[c.Offset] = c.Type
+		freshType[c.Offset] = c.Type
+	}
+	for _, c := range stored {
+		if _, ok := freshType[c.Offset]; !ok {
+			return stored
 		}
 	}
 	out := make([]models.ChannelDefinition, len(stored))
 	copy(out, stored)
 	for i := range out {
-		if out[i].Type != string(generated.ChannelTypeOther) {
-			continue
-		}
-		if t, ok := freshType[out[i].Offset]; ok && t != "" {
-			out[i].Type = t
+		if out[i].Type == string(generated.ChannelTypeOther) && freshType[out[i].Offset] != "" {
+			out[i].Type = freshType[out[i].Offset]
 		}
 	}
 	return out
