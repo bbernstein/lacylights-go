@@ -831,9 +831,6 @@ type ComplexityRoot struct {
 		DeleteUserGroup                        func(childComplexity int, id string) int
 		DisconnectWiFi                         func(childComplexity int) int
 		DuplicateLook                          func(childComplexity int, id string) int
-		ExportProject                          func(childComplexity int, projectID string, options *ExportOptionsInput) int
-		ExportProjectToEos                     func(childComplexity int, projectID string) int
-		ExportProjectToQlc                     func(childComplexity int, projectID string, fixtureMappings []*FixtureMappingInput) int
 		FadeToBlack                            func(childComplexity int, fadeOutTime float64) int
 		ForgetWiFiNetwork                      func(childComplexity int, ssid string) int
 		GoToCue                                func(childComplexity int, cueListID string, cueIndex int, fadeInTime *float64) int
@@ -1595,12 +1592,9 @@ type MutationResolver interface {
 	GoToCue(ctx context.Context, cueListID string, cueIndex int, fadeInTime *float64) (bool, error)
 	StopCueList(ctx context.Context, cueListID string) (bool, error)
 	ResumeCueList(ctx context.Context, cueListID string) (bool, error)
-	ExportProject(ctx context.Context, projectID string, options *ExportOptionsInput) (*ExportResult, error)
 	ImportProject(ctx context.Context, jsonContent string, options ImportOptionsInput) (*ImportResult, error)
 	ImportProjectFromQlc(ctx context.Context, xmlContent string, originalFileName string) (*QLCImportResult, error)
-	ExportProjectToQlc(ctx context.Context, projectID string, fixtureMappings []*FixtureMappingInput) (*QLCExportResult, error)
 	ImportProjectFromEos(ctx context.Context, asciiContent string, options *EosImportOptionsInput) (*EosImportResult, error)
-	ExportProjectToEos(ctx context.Context, projectID string) (*EosExportResult, error)
 	UpdateSetting(ctx context.Context, input UpdateSettingInput) (*models.Setting, error)
 	UpdateFadeUpdateRate(ctx context.Context, rateHz int) (bool, error)
 	SetArtNetEnabled(ctx context.Context, enabled bool, fadeTime *float64) (*ArtNetStatus, error)
@@ -5470,39 +5464,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.DuplicateLook(childComplexity, args["id"].(string)), true
-	case "Mutation.exportProject":
-		if e.complexity.Mutation.ExportProject == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_exportProject_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Mutation.ExportProject(childComplexity, args["projectId"].(string), args["options"].(*ExportOptionsInput)), true
-	case "Mutation.exportProjectToEos":
-		if e.complexity.Mutation.ExportProjectToEos == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_exportProjectToEos_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Mutation.ExportProjectToEos(childComplexity, args["projectId"].(string)), true
-	case "Mutation.exportProjectToQLC":
-		if e.complexity.Mutation.ExportProjectToQlc == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_exportProjectToQLC_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Mutation.ExportProjectToQlc(childComplexity, args["projectId"].(string), args["fixtureMappings"].([]*FixtureMappingInput)), true
 	case "Mutation.fadeToBlack":
 		if e.complexity.Mutation.FadeToBlack == nil {
 			break
@@ -11374,9 +11335,7 @@ type Query {
   # QLC+ Fixture Mapping Suggestions (read-only)
   getQLCFixtureMappingSuggestions(projectId: ID!): QLCFixtureMappingResult!
 
-  # Project export (read-only). Replace the deprecated export Mutations
-  # (exportProject, exportProjectToQLC, exportProjectToEos) and share
-  # their implementation.
+  # Project export (read-only). Exports are Queries; imports stay Mutations.
   "Export a project as LacyLights JSON"
   projectExport(projectId: ID!, options: ExportOptionsInput): ExportResult!
   "Export a project as a QLC+ workspace (not available on all platforms; currently always returns an error)"
@@ -11712,28 +11671,20 @@ type Mutation {
   "Resume a paused cue list by snapping to the current cue's look values instantly"
   resumeCueList(cueListId: ID!): Boolean!
 
-  # Native LacyLights Import/Export
-  exportProject(projectId: ID!, options: ExportOptionsInput): ExportResult!
-    @deprecated(reason: "Use Query.projectExport")
+  # Native LacyLights Import (export is Query.projectExport)
   importProject(jsonContent: String!, options: ImportOptionsInput!): ImportResult!
 
-  # QLC+ Import/Export (data-modifying operations)
+  # QLC+ Import (export is Query.projectExportQLC)
   importProjectFromQLC(
     xmlContent: String!
     originalFileName: String!
   ): QLCImportResult!
-  exportProjectToQLC(
-    projectId: ID!
-    fixtureMappings: [FixtureMappingInput!]
-  ): QLCExportResult! @deprecated(reason: "Use Query.projectExportQLC")
 
-  # ETC Eos ASCII Import/Export
+  # ETC Eos ASCII Import (export is Query.projectExportEos)
   importProjectFromEos(
     asciiContent: String!
     options: EosImportOptionsInput
   ): EosImportResult!
-  exportProjectToEos(projectId: ID!): EosExportResult!
-    @deprecated(reason: "Use Query.projectExportEos")
 
   # Settings
   updateSetting(input: UpdateSettingInput!): Setting!
@@ -12790,49 +12741,6 @@ func (ec *executionContext) field_Mutation_duplicateLook_args(ctx context.Contex
 		return nil, err
 	}
 	args["id"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_exportProjectToEos_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["projectId"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_exportProjectToQLC_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["projectId"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "fixtureMappings", ec.unmarshalOFixtureMappingInput2ᚕᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐFixtureMappingInputᚄ)
-	if err != nil {
-		return nil, err
-	}
-	args["fixtureMappings"] = arg1
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_exportProject_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["projectId"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "options", ec.unmarshalOExportOptionsInput2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐExportOptionsInput)
-	if err != nil {
-		return nil, err
-	}
-	args["options"] = arg1
 	return args, nil
 }
 
@@ -36440,57 +36348,6 @@ func (ec *executionContext) fieldContext_Mutation_resumeCueList(ctx context.Cont
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_exportProject(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Mutation_exportProject,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().ExportProject(ctx, fc.Args["projectId"].(string), fc.Args["options"].(*ExportOptionsInput))
-		},
-		nil,
-		ec.marshalNExportResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐExportResult,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Mutation_exportProject(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "projectId":
-				return ec.fieldContext_ExportResult_projectId(ctx, field)
-			case "projectName":
-				return ec.fieldContext_ExportResult_projectName(ctx, field)
-			case "jsonContent":
-				return ec.fieldContext_ExportResult_jsonContent(ctx, field)
-			case "stats":
-				return ec.fieldContext_ExportResult_stats(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type ExportResult", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_exportProject_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Mutation_importProject(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -36595,59 +36452,6 @@ func (ec *executionContext) fieldContext_Mutation_importProjectFromQLC(ctx conte
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_exportProjectToQLC(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Mutation_exportProjectToQLC,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().ExportProjectToQlc(ctx, fc.Args["projectId"].(string), fc.Args["fixtureMappings"].([]*FixtureMappingInput))
-		},
-		nil,
-		ec.marshalNQLCExportResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐQLCExportResult,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Mutation_exportProjectToQLC(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "projectName":
-				return ec.fieldContext_QLCExportResult_projectName(ctx, field)
-			case "xmlContent":
-				return ec.fieldContext_QLCExportResult_xmlContent(ctx, field)
-			case "fixtureCount":
-				return ec.fieldContext_QLCExportResult_fixtureCount(ctx, field)
-			case "lookCount":
-				return ec.fieldContext_QLCExportResult_lookCount(ctx, field)
-			case "cueListCount":
-				return ec.fieldContext_QLCExportResult_cueListCount(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type QLCExportResult", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_exportProjectToQLC_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Mutation_importProjectFromEos(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -36703,59 +36507,6 @@ func (ec *executionContext) fieldContext_Mutation_importProjectFromEos(ctx conte
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_importProjectFromEos_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Mutation_exportProjectToEos(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Mutation_exportProjectToEos,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.resolvers.Mutation().ExportProjectToEos(ctx, fc.Args["projectId"].(string))
-		},
-		nil,
-		ec.marshalNEosExportResult2ᚖgithubᚗcomᚋbbernsteinᚋlacylightsᚑgoᚋinternalᚋgraphqlᚋgeneratedᚐEosExportResult,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Mutation_exportProjectToEos(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "projectId":
-				return ec.fieldContext_EosExportResult_projectId(ctx, field)
-			case "projectName":
-				return ec.fieldContext_EosExportResult_projectName(ctx, field)
-			case "asciiContent":
-				return ec.fieldContext_EosExportResult_asciiContent(ctx, field)
-			case "filenameSuffix":
-				return ec.fieldContext_EosExportResult_filenameSuffix(ctx, field)
-			case "warnings":
-				return ec.fieldContext_EosExportResult_warnings(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type EosExportResult", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_exportProjectToEos_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -63520,13 +63271,6 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "exportProject":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_exportProject(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "importProject":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_importProject(ctx, field)
@@ -63541,23 +63285,9 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "exportProjectToQLC":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_exportProjectToQLC(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "importProjectFromEos":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_importProjectFromEos(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "exportProjectToEos":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_exportProjectToEos(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++

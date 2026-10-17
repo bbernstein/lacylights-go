@@ -2522,9 +2522,7 @@ type Query {
   # QLC+ Fixture Mapping Suggestions (read-only)
   getQLCFixtureMappingSuggestions(projectId: ID!): QLCFixtureMappingResult!
 
-  # Project export (read-only). Replace the deprecated export Mutations
-  # (exportProject, exportProjectToQLC, exportProjectToEos) and share
-  # their implementation.
+  # Project export (read-only). Exports are Queries; imports stay Mutations.
   "Export a project as LacyLights JSON"
   projectExport(projectId: ID!, options: ExportOptionsInput): ExportResult!
   "Export a project as a QLC+ workspace (not available on all platforms; currently always returns an error)"
@@ -2860,28 +2858,20 @@ type Mutation {
   "Resume a paused cue list by snapping to the current cue's look values instantly"
   resumeCueList(cueListId: ID!): Boolean!
 
-  # Native LacyLights Import/Export
-  exportProject(projectId: ID!, options: ExportOptionsInput): ExportResult!
-    @deprecated(reason: "Use Query.projectExport")
+  # Native LacyLights Import (export is Query.projectExport)
   importProject(jsonContent: String!, options: ImportOptionsInput!): ImportResult!
 
-  # QLC+ Import/Export (data-modifying operations)
+  # QLC+ Import (export is Query.projectExportQLC)
   importProjectFromQLC(
     xmlContent: String!
     originalFileName: String!
   ): QLCImportResult!
-  exportProjectToQLC(
-    projectId: ID!
-    fixtureMappings: [FixtureMappingInput!]
-  ): QLCExportResult! @deprecated(reason: "Use Query.projectExportQLC")
 
-  # ETC Eos ASCII Import/Export
+  # ETC Eos ASCII Import (export is Query.projectExportEos)
   importProjectFromEos(
     asciiContent: String!
     options: EosImportOptionsInput
   ): EosImportResult!
-  exportProjectToEos(projectId: ID!): EosExportResult!
-    @deprecated(reason: "Use Query.projectExportEos")
 
   # Settings
   updateSetting(input: UpdateSettingInput!): Setting!
