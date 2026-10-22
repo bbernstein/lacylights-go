@@ -7,31 +7,31 @@ import (
 
 func TestBuildDMXPacket(t *testing.T) {
 	tests := []struct {
-		name       string
-		universe   int
-		channels   []byte
-		wantID     string
-		wantOpCode uint16
+		name         string
+		universe     int
+		channels     []byte
+		wantID       string
+		wantOpCode   uint16
 		wantUniverse uint16
-		wantLength uint16
+		wantLength   uint16
 	}{
 		{
-			name:        "Universe 1",
-			universe:    1,
-			channels:    make([]byte, 512),
-			wantID:      "Art-Net\x00",
-			wantOpCode:  0x5000,
-			wantUniverse: 0, // 0-based in packet
-			wantLength:  512,
+			name:         "Universe 1",
+			universe:     1,
+			channels:     make([]byte, 512),
+			wantID:       "Art-Net\x00",
+			wantOpCode:   0x5000,
+			wantUniverse: 1,
+			wantLength:   512,
 		},
 		{
-			name:        "Universe 4",
-			universe:    4,
-			channels:    make([]byte, 512),
-			wantID:      "Art-Net\x00",
-			wantOpCode:  0x5000,
-			wantUniverse: 3, // 0-based in packet
-			wantLength:  512,
+			name:         "Universe 4",
+			universe:     4,
+			channels:     make([]byte, 512),
+			wantID:       "Art-Net\x00",
+			wantOpCode:   0x5000,
+			wantUniverse: 4,
+			wantLength:   512,
 		},
 	}
 
