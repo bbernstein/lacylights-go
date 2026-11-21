@@ -3,6 +3,7 @@ package migrations
 import (
 	"testing"
 
+	"github.com/bbernstein/lacylights-go/internal/testsupport"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -10,12 +11,9 @@ import (
 
 func openTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+	db := testsupport.OpenMemoryDB(t, sqlite.Open(":memory:"), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
 	return db
 }
 

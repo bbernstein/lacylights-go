@@ -41,11 +41,6 @@ func writeOFLZip(t *testing.T, files map[string]string) string {
 // and logs a summary listing every failure by category.
 func TestLoaderImportFromZip_SummaryByCategory(t *testing.T) {
 	db := setupLoaderTestDB(t)
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatal(err)
-	}
-	sqlDB.SetMaxOpenConns(1) // one shared in-memory database for all goroutines
 	loader := NewLoader(db, repositories.NewFixtureRepository(db), t.TempDir())
 
 	zipPath := writeOFLZip(t, map[string]string{

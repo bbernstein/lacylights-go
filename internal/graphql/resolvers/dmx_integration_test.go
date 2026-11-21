@@ -19,6 +19,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/services/dmx"
 	"github.com/bbernstein/lacylights-go/internal/services/modulator"
 	"github.com/bbernstein/lacylights-go/internal/services/playback"
+	"github.com/bbernstein/lacylights-go/internal/testsupport"
 )
 
 // testSetup creates a test GraphQL server with an in-memory database
@@ -26,15 +27,12 @@ func testSetup(t *testing.T) (*client.Client, *Resolver, func()) {
 	t.Helper()
 
 	// Create in-memory SQLite database
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+	db := testsupport.OpenMemoryDB(t, sqlite.Open(":memory:"), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
-	if err != nil {
-		t.Fatalf("Failed to open in-memory database: %v", err)
-	}
 
 	// Auto-migrate models
-	err = db.AutoMigrate(
+	err := db.AutoMigrate(
 		&models.Project{},
 		&models.FixtureDefinition{},
 		&models.ChannelDefinition{},

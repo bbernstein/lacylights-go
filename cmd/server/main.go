@@ -298,7 +298,6 @@ func main() {
 
 	// Middleware
 	router.Use(middleware.RequestID)
-	router.Use(middleware.RealIP)
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
 	// Note: We intentionally do NOT use middleware.Timeout here because:

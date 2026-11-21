@@ -8,6 +8,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
 	"github.com/bbernstein/lacylights-go/internal/graphql/generated"
+	"github.com/bbernstein/lacylights-go/internal/testsupport"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -20,12 +21,9 @@ func strPtr(s string) *string { return &s }
 // repo-lookup fallback path in lookupDefinition.
 func newResolverWithFixtureRepo(t *testing.T) (*fixtureInstanceResolver, *gorm.DB) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+	db := testsupport.OpenMemoryDB(t, sqlite.Open(":memory:"), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
-	if err != nil {
-		t.Fatalf("failed to open in-memory db: %v", err)
-	}
 	if err := db.AutoMigrate(
 		&models.FixtureDefinition{},
 		&models.ChannelDefinition{},

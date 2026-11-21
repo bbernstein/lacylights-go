@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bbernstein/lacylights-go/internal/database/models"
+	"github.com/bbernstein/lacylights-go/internal/testsupport"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -14,12 +15,9 @@ import (
 
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+	db := testsupport.OpenMemoryDB(t, sqlite.Open(":memory:"), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
-	if err != nil {
-		t.Fatalf("failed to connect to test database: %v", err)
-	}
 
 	// Migrate the schema - include Session for full auth tests, and group tables for personal group creation
 	if err := db.AutoMigrate(&models.User{}, &models.UserCredential{}, &models.Session{}, &models.UserGroup{}, &models.UserGroupMember{}); err != nil {

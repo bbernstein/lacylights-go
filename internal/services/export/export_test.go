@@ -9,6 +9,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/database/migrations"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
+	"github.com/bbernstein/lacylights-go/internal/testsupport"
 	"github.com/glebarez/sqlite"
 	"github.com/lucsky/cuid"
 	"gorm.io/gorm"
@@ -1743,14 +1744,11 @@ func TestExportedFixtureInstance_WithNilOptionals(t *testing.T) {
 func setupTestDB(t *testing.T) (*gorm.DB, func()) {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+	db := testsupport.OpenMemoryDB(t, sqlite.Open(":memory:"), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
-	if err != nil {
-		t.Fatalf("Failed to open in-memory database: %v", err)
-	}
 
-	err = db.AutoMigrate(
+	err := db.AutoMigrate(
 		&models.Project{},
 		&models.FixtureDefinition{},
 		&models.ChannelDefinition{},

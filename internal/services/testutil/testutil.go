@@ -12,6 +12,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/database/migrations"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
+	"github.com/bbernstein/lacylights-go/internal/testsupport"
 )
 
 // TestDB holds the test database and repositories.
@@ -30,15 +31,12 @@ func SetupTestDB(t *testing.T) (*TestDB, func()) {
 	t.Helper()
 
 	// Create in-memory SQLite database
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+	db := testsupport.OpenMemoryDB(t, sqlite.Open(":memory:"), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
-	if err != nil {
-		t.Fatalf("Failed to open in-memory database: %v", err)
-	}
 
 	// Auto-migrate all models
-	err = db.AutoMigrate(
+	err := db.AutoMigrate(
 		&models.Project{},
 		&models.FixtureDefinition{},
 		&models.ChannelDefinition{},

@@ -19,6 +19,7 @@ get_threshold() {
         "internal/config") echo 100 ;;
         "internal/database/models") echo 100 ;;  # TableName methods
         "internal/services/pubsub") echo 100 ;;
+        "internal/testsupport") echo 100 ;;  # Shared test helpers
         "internal/services/fade") echo 97 ;;  # Fade engine with comprehensive timing tests
         "internal/services/preview") echo 91 ;;  # Integration tests provide good coverage
         "internal/services/dmx") echo 88 ;;  # Network retry loop tested with configurable intervals
