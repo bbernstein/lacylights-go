@@ -1,6 +1,8 @@
 module github.com/bbernstein/lacylights-go
 
-go 1.25.0
+go 1.26.0
+
+toolchain go1.27.4
 
 require (
 	github.com/99designs/gqlgen v0.17.84
