@@ -7,6 +7,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/database/migrations"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
+	"github.com/bbernstein/lacylights-go/internal/testsupport"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -14,15 +15,12 @@ import (
 
 // setupTestDB creates a fresh in-memory SQLite database for testing
 func setupLoaderTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+	db := testsupport.OpenMemoryDB(t, sqlite.Open(":memory:"), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
-	if err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
-	}
 
 	// Run migrations
-	err = db.AutoMigrate(
+	err := db.AutoMigrate(
 		&models.FixtureDefinition{},
 		&models.ChannelDefinition{},
 		&models.FixtureMode{},

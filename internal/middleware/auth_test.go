@@ -10,6 +10,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/auth"
 	"github.com/bbernstein/lacylights-go/internal/auth/session"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
+	"github.com/bbernstein/lacylights-go/internal/testsupport"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -17,13 +18,10 @@ import (
 // createTestDB creates an in-memory SQLite database for testing.
 func createTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("failed to create test database: %v", err)
-	}
+	db := testsupport.OpenMemoryDB(t, sqlite.Open(":memory:"), &gorm.Config{})
 
 	// Run migrations for session and user tables
-	err = db.AutoMigrate(&models.Session{}, &models.User{})
+	err := db.AutoMigrate(&models.Session{}, &models.User{})
 	if err != nil {
 		t.Fatalf("failed to migrate database: %v", err)
 	}
@@ -813,13 +811,10 @@ func TestContextKeys(t *testing.T) {
 // createTestDBWithDevice creates a test database with Device model migrated.
 func createTestDBWithDevice(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("failed to create test database: %v", err)
-	}
+	db := testsupport.OpenMemoryDB(t, sqlite.Open(":memory:"), &gorm.Config{})
 
 	// Run migrations for all required tables including group membership tables
-	err = db.AutoMigrate(
+	err := db.AutoMigrate(
 		&models.Session{}, &models.User{}, &models.Device{},
 		&models.UserGroup{}, &models.UserGroupMember{}, &models.DeviceGroupMember{},
 	)

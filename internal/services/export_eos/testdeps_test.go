@@ -6,6 +6,7 @@ import (
 	"github.com/bbernstein/lacylights-go/internal/database/migrations"
 	"github.com/bbernstein/lacylights-go/internal/database/models"
 	"github.com/bbernstein/lacylights-go/internal/database/repositories"
+	"github.com/bbernstein/lacylights-go/internal/testsupport"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -24,12 +25,9 @@ type testDeps struct {
 
 func newTestDeps(t *testing.T) *testDeps {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+	db := testsupport.OpenMemoryDB(t, sqlite.Open(":memory:"), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
 	if err := db.AutoMigrate(
 		&models.Project{},
 		&models.FixtureDefinition{},

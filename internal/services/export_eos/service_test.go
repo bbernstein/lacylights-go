@@ -562,12 +562,6 @@ func TestExport_SidecarFadeBehavior(t *testing.T) {
 func TestExport_ConcurrentAutoAssignIsStable(t *testing.T) {
 	deps := newTestDeps(t)
 	defer deps.close()
-	// One connection keeps every goroutine on the same in-memory database.
-	sqlDB, err := deps.db.DB()
-	if err != nil {
-		t.Fatalf("db: %v", err)
-	}
-	sqlDB.SetMaxOpenConns(1)
 	ctx := context.Background()
 
 	proj := &models.Project{Name: "C"}
