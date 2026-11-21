@@ -3,8 +3,8 @@ package migrations
 import (
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"github.com/bbernstein/lacylights-go/internal/testsupport"
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
