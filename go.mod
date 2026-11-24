@@ -10,6 +10,8 @@ require (
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
+	// Untagged upstream main: v1.5.3 is affected by GO-2026-6278 and no fixed release is tagged yet.
+	// TODO: switch back to a tagged release once gorilla/websocket v1.5.4 or later is published.
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/joho/godotenv v1.5.1
 	github.com/lucsky/cuid v1.2.1
