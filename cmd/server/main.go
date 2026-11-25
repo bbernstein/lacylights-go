@@ -19,9 +19,9 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/lru"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
+	"github.com/coder/websocket"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
 	"github.com/rs/cors"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -391,16 +391,7 @@ func main() {
 	}))
 
 	// Configure transport handlers
-	srv.AddTransport(transport.Websocket{
-		Upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool {
-				return true // Allow all origins for WebSocket
-			},
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
-		},
-		KeepAlivePingInterval: 10 * time.Second,
-	})
+	srv.AddTransport(newWebsocketTransport())
 	srv.AddTransport(transport.Options{})
 	srv.AddTransport(transport.GET{})
 	srv.AddTransport(transport.POST{})
@@ -462,6 +453,29 @@ func main() {
 	}
 
 	log.Println("Server stopped")
+}
+
+// newWebsocketTransport builds the GraphQL WebSocket transport used for
+// subscriptions. It accepts connections from any Origin (InsecureSkipVerify
+// only skips coder/websocket's Origin check, not TLS), matching the previous
+// gorilla/websocket CheckOrigin that always returned true.
+//
+// Subprotocols lists graphql-transport-ws first because coder/websocket picks
+// by server order (gorilla picked by client order), so a client that offers
+// both still gets the modern protocol rather than legacy graphql-ws.
+//
+// Client messages are limited to gqlgen's default PayloadReadLimit of 1 MB
+// (gorilla had no limit); subscription documents are far smaller than that.
+func newWebsocketTransport() transport.Websocket {
+	return transport.Websocket{
+		Implementation: transport.CoderWebsocketImplementation{
+			AcceptOptions: websocket.AcceptOptions{
+				InsecureSkipVerify: true,
+				Subprotocols:       []string{"graphql-transport-ws", "graphql-ws"},
+			},
+		},
+		KeepAlivePingInterval: 10 * time.Second,
+	}
 }
 
 // healthCheckHandler returns the server health status.
