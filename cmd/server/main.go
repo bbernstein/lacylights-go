@@ -19,9 +19,9 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/lru"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
+	"github.com/coder/websocket"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/gorilla/websocket"
 	"github.com/joho/godotenv"
 	"github.com/rs/cors"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -392,12 +392,12 @@ func main() {
 
 	// Configure transport handlers
 	srv.AddTransport(transport.Websocket{
-		Upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool {
-				return true // Allow all origins for WebSocket
+		Implementation: transport.CoderWebsocketImplementation{
+			AcceptOptions: websocket.AcceptOptions{
+				// Allow all origins for WebSocket (same as the previous
+				// gorilla CheckOrigin that always returned true).
+				InsecureSkipVerify: true,
 			},
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
 		},
 		KeepAlivePingInterval: 10 * time.Second,
 	})

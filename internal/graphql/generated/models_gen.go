@@ -1488,7 +1488,7 @@ func (e *ChannelType) UnmarshalGQL(v any) error {
 }
 
 func (e ChannelType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *ChannelType) UnmarshalJSON(b []byte) error {
@@ -1549,7 +1549,7 @@ func (e *CompositionMode) UnmarshalGQL(v any) error {
 }
 
 func (e CompositionMode) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *CompositionMode) UnmarshalJSON(b []byte) error {
@@ -1612,7 +1612,7 @@ func (e *CueListDataChangeType) UnmarshalGQL(v any) error {
 }
 
 func (e CueListDataChangeType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *CueListDataChangeType) UnmarshalJSON(b []byte) error {
@@ -1668,7 +1668,7 @@ func (e *DataExportFormat) UnmarshalGQL(v any) error {
 }
 
 func (e DataExportFormat) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *DataExportFormat) UnmarshalJSON(b []byte) error {
@@ -1743,7 +1743,7 @@ func (e *DataExportTable) UnmarshalGQL(v any) error {
 }
 
 func (e DataExportTable) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *DataExportTable) UnmarshalJSON(b []byte) error {
@@ -1804,7 +1804,7 @@ func (e *DevicePermissions) UnmarshalGQL(v any) error {
 }
 
 func (e DevicePermissions) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *DevicePermissions) UnmarshalJSON(b []byte) error {
@@ -1862,7 +1862,7 @@ func (e *DeviceRole) UnmarshalGQL(v any) error {
 }
 
 func (e DeviceRole) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *DeviceRole) UnmarshalJSON(b []byte) error {
@@ -1923,7 +1923,7 @@ func (e *DeviceStatus) UnmarshalGQL(v any) error {
 }
 
 func (e DeviceStatus) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *DeviceStatus) UnmarshalJSON(b []byte) error {
@@ -1980,7 +1980,7 @@ func (e *DifferenceType) UnmarshalGQL(v any) error {
 }
 
 func (e DifferenceType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *DifferenceType) UnmarshalJSON(b []byte) error {
@@ -2043,7 +2043,7 @@ func (e *EasingType) UnmarshalGQL(v any) error {
 }
 
 func (e EasingType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *EasingType) UnmarshalJSON(b []byte) error {
@@ -2107,7 +2107,7 @@ func (e *EffectType) UnmarshalGQL(v any) error {
 }
 
 func (e EffectType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *EffectType) UnmarshalJSON(b []byte) error {
@@ -2168,7 +2168,7 @@ func (e *EntityDataChangeType) UnmarshalGQL(v any) error {
 }
 
 func (e EntityDataChangeType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *EntityDataChangeType) UnmarshalJSON(b []byte) error {
@@ -2223,7 +2223,7 @@ func (e *EosWarningSeverity) UnmarshalGQL(v any) error {
 }
 
 func (e EosWarningSeverity) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *EosWarningSeverity) UnmarshalJSON(b []byte) error {
@@ -2284,7 +2284,7 @@ func (e *FadeBehavior) UnmarshalGQL(v any) error {
 }
 
 func (e FadeBehavior) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *FadeBehavior) UnmarshalJSON(b []byte) error {
@@ -2341,7 +2341,7 @@ func (e *FixtureConflictStrategy) UnmarshalGQL(v any) error {
 }
 
 func (e FixtureConflictStrategy) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *FixtureConflictStrategy) UnmarshalJSON(b []byte) error {
@@ -2413,7 +2413,7 @@ func (e *FixtureSource) UnmarshalGQL(v any) error {
 }
 
 func (e FixtureSource) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *FixtureSource) UnmarshalJSON(b []byte) error {
@@ -2474,7 +2474,7 @@ func (e *FixtureType) UnmarshalGQL(v any) error {
 }
 
 func (e FixtureType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *FixtureType) UnmarshalJSON(b []byte) error {
@@ -2531,7 +2531,7 @@ func (e *GdtfExistingPolicy) UnmarshalGQL(v any) error {
 }
 
 func (e GdtfExistingPolicy) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *GdtfExistingPolicy) UnmarshalJSON(b []byte) error {
@@ -2592,7 +2592,7 @@ func (e *GdtfImportStatus) UnmarshalGQL(v any) error {
 }
 
 func (e GdtfImportStatus) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *GdtfImportStatus) UnmarshalJSON(b []byte) error {
@@ -2647,7 +2647,7 @@ func (e *GroupMemberRole) UnmarshalGQL(v any) error {
 }
 
 func (e GroupMemberRole) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *GroupMemberRole) UnmarshalJSON(b []byte) error {
@@ -2702,7 +2702,7 @@ func (e *ImportMode) UnmarshalGQL(v any) error {
 }
 
 func (e ImportMode) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *ImportMode) UnmarshalJSON(b []byte) error {
@@ -2761,7 +2761,7 @@ func (e *InvitationStatus) UnmarshalGQL(v any) error {
 }
 
 func (e InvitationStatus) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *InvitationStatus) UnmarshalJSON(b []byte) error {
@@ -2818,7 +2818,7 @@ func (e *LookSortField) UnmarshalGQL(v any) error {
 }
 
 func (e LookSortField) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *LookSortField) UnmarshalJSON(b []byte) error {
@@ -2872,7 +2872,7 @@ func (e *OAuthProvider) UnmarshalGQL(v any) error {
 }
 
 func (e OAuthProvider) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *OAuthProvider) UnmarshalJSON(b []byte) error {
@@ -2930,7 +2930,7 @@ func (e *OFLFixtureChangeType) UnmarshalGQL(v any) error {
 }
 
 func (e OFLFixtureChangeType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *OFLFixtureChangeType) UnmarshalJSON(b []byte) error {
@@ -2998,7 +2998,7 @@ func (e *OFLImportPhase) UnmarshalGQL(v any) error {
 }
 
 func (e OFLImportPhase) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *OFLImportPhase) UnmarshalJSON(b []byte) error {
@@ -3058,7 +3058,7 @@ func (e *OperationType) UnmarshalGQL(v any) error {
 }
 
 func (e OperationType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *OperationType) UnmarshalJSON(b []byte) error {
@@ -3119,7 +3119,7 @@ func (e *PriorityBand) UnmarshalGQL(v any) error {
 }
 
 func (e PriorityBand) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *PriorityBand) UnmarshalJSON(b []byte) error {
@@ -3176,7 +3176,7 @@ func (e *ProjectRole) UnmarshalGQL(v any) error {
 }
 
 func (e ProjectRole) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *ProjectRole) UnmarshalJSON(b []byte) error {
@@ -3240,7 +3240,7 @@ func (e *TransitionBehavior) UnmarshalGQL(v any) error {
 }
 
 func (e TransitionBehavior) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *TransitionBehavior) UnmarshalJSON(b []byte) error {
@@ -3310,7 +3310,7 @@ func (e *UndoEntityType) UnmarshalGQL(v any) error {
 }
 
 func (e UndoEntityType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *UndoEntityType) UnmarshalJSON(b []byte) error {
@@ -3365,7 +3365,7 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 }
 
 func (e UserRole) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *UserRole) UnmarshalJSON(b []byte) error {
@@ -3423,7 +3423,7 @@ func (e *VerificationTokenType) UnmarshalGQL(v any) error {
 }
 
 func (e VerificationTokenType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *VerificationTokenType) UnmarshalJSON(b []byte) error {
@@ -3487,7 +3487,7 @@ func (e *WaveformType) UnmarshalGQL(v any) error {
 }
 
 func (e WaveformType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *WaveformType) UnmarshalJSON(b []byte) error {
@@ -3548,7 +3548,7 @@ func (e *WiFiMode) UnmarshalGQL(v any) error {
 }
 
 func (e WiFiMode) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *WiFiMode) UnmarshalJSON(b []byte) error {
@@ -3613,7 +3613,7 @@ func (e *WiFiSecurityType) UnmarshalGQL(v any) error {
 }
 
 func (e WiFiSecurityType) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 func (e *WiFiSecurityType) UnmarshalJSON(b []byte) error {
