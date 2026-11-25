@@ -455,7 +455,6 @@ func main() {
 	log.Println("Server stopped")
 }
 
-// healthCheckHandler returns the server health status.
 // newWebsocketTransport builds the GraphQL WebSocket transport used for
 // subscriptions. It accepts connections from any Origin (InsecureSkipVerify
 // only skips coder/websocket's Origin check, not TLS), matching the previous
@@ -471,6 +470,7 @@ func newWebsocketTransport() transport.Websocket {
 	}
 }
 
+// healthCheckHandler returns the server health status.
 func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
