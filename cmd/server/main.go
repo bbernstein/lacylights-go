@@ -459,11 +459,19 @@ func main() {
 // subscriptions. It accepts connections from any Origin (InsecureSkipVerify
 // only skips coder/websocket's Origin check, not TLS), matching the previous
 // gorilla/websocket CheckOrigin that always returned true.
+//
+// Subprotocols lists graphql-transport-ws first because coder/websocket picks
+// by server order (gorilla picked by client order), so a client that offers
+// both still gets the modern protocol rather than legacy graphql-ws.
+//
+// Client messages are limited to gqlgen's default PayloadReadLimit of 1 MB
+// (gorilla had no limit); subscription documents are far smaller than that.
 func newWebsocketTransport() transport.Websocket {
 	return transport.Websocket{
 		Implementation: transport.CoderWebsocketImplementation{
 			AcceptOptions: websocket.AcceptOptions{
 				InsecureSkipVerify: true,
+				Subprotocols:       []string{"graphql-transport-ws", "graphql-ws"},
 			},
 		},
 		KeepAlivePingInterval: 10 * time.Second,

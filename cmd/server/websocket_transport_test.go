@@ -36,13 +36,25 @@ func TestNewWebsocketTransport_Handshake(t *testing.T) {
 
 	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http")
 
-	for _, proto := range []string{"graphql-transport-ws", "graphql-ws"} {
-		t.Run(proto, func(t *testing.T) {
+	cases := []struct {
+		name    string
+		offered []string
+		want    string
+	}{
+		{"graphql-transport-ws", []string{"graphql-transport-ws"}, "graphql-transport-ws"},
+		{"graphql-ws", []string{"graphql-ws"}, "graphql-ws"},
+		// A client offering both (in either order) must get the modern protocol.
+		{"both, modern first", []string{"graphql-transport-ws", "graphql-ws"}, "graphql-transport-ws"},
+		{"both, legacy first", []string{"graphql-ws", "graphql-transport-ws"}, "graphql-transport-ws"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
-				Subprotocols: []string{proto},
+				Subprotocols: tc.offered,
 				HTTPHeader:   http.Header{"Origin": []string{"http://other-origin.example"}},
 			})
 			if err != nil {
@@ -50,8 +62,8 @@ func TestNewWebsocketTransport_Handshake(t *testing.T) {
 			}
 			defer func() { _ = conn.CloseNow() }()
 
-			if conn.Subprotocol() != proto {
-				t.Fatalf("negotiated subprotocol = %q, want %q", conn.Subprotocol(), proto)
+			if conn.Subprotocol() != tc.want {
+				t.Fatalf("negotiated subprotocol = %q, want %q", conn.Subprotocol(), tc.want)
 			}
 
 			if err := wsjson.Write(ctx, conn, map[string]any{"type": "connection_init", "payload": map[string]any{}}); err != nil {
