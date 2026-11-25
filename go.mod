@@ -6,6 +6,7 @@ toolchain go1.27.4
 
 require (
 	github.com/99designs/gqlgen v0.17.98
+	github.com/coder/websocket v1.8.15
 	github.com/glebarez/sqlite v1.11.0
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -20,8 +21,6 @@ require (
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.2
 )
-
-require github.com/coder/websocket v1.8.15
 
 require (
 	github.com/agnivade/levenshtein v1.2.2 // indirect

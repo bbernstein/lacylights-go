@@ -391,16 +391,7 @@ func main() {
 	}))
 
 	// Configure transport handlers
-	srv.AddTransport(transport.Websocket{
-		Implementation: transport.CoderWebsocketImplementation{
-			AcceptOptions: websocket.AcceptOptions{
-				// Allow all origins for WebSocket (same as the previous
-				// gorilla CheckOrigin that always returned true).
-				InsecureSkipVerify: true,
-			},
-		},
-		KeepAlivePingInterval: 10 * time.Second,
-	})
+	srv.AddTransport(newWebsocketTransport())
 	srv.AddTransport(transport.Options{})
 	srv.AddTransport(transport.GET{})
 	srv.AddTransport(transport.POST{})
@@ -465,6 +456,21 @@ func main() {
 }
 
 // healthCheckHandler returns the server health status.
+// newWebsocketTransport builds the GraphQL WebSocket transport used for
+// subscriptions. It accepts connections from any Origin (InsecureSkipVerify
+// only skips coder/websocket's Origin check, not TLS), matching the previous
+// gorilla/websocket CheckOrigin that always returned true.
+func newWebsocketTransport() transport.Websocket {
+	return transport.Websocket{
+		Implementation: transport.CoderWebsocketImplementation{
+			AcceptOptions: websocket.AcceptOptions{
+				InsecureSkipVerify: true,
+			},
+		},
+		KeepAlivePingInterval: 10 * time.Second,
+	}
+}
+
 func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
