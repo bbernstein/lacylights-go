@@ -97,7 +97,7 @@ jobs:
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o lacylights-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/server
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lacylights-${{ matrix.goos }}-${{ matrix.goarch }}
           path: lacylights-${{ matrix.goos }}-${{ matrix.goarch }}
